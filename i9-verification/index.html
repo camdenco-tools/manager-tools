@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Popcorn Chez — I-9 Verification</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f0ec; min-height: 100vh; }
+
+header { background: #fff; border-bottom: 1px solid #e8e8e4; padding: 0 32px; display: flex; align-items: center; justify-content: space-between; height: 64px; position: sticky; top: 0; z-index: 100; }
+.header-left { display: flex; align-items: center; gap: 16px; }
+.back-link { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #999; text-decoration: none; display: flex; align-items: center; gap: 6px; transition: color 0.15s; }
+.back-link:hover { color: #1a1a1a; }
+.hdivider { width: 1px; height: 20px; background: #e8e8e4; }
+.header-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+.header-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: #1a1a1a; color: white; padding: 3px 8px; border-radius: 20px; }
+
+.page-body { padding: 20px 16px 60px; }
+
+#i9ver { max-width: 1100px; margin: 0 auto; color: #222; }
+.page-sub { font-size: 14px; color: #666; margin: 0 0 20px; }
+.layout { display: flex; gap: 20px; align-items: flex-start; }
+.panel-left { width: 300px; flex-shrink: 0; }
+.panel-right { flex: 1; min-width: 0; }
+@media (max-width: 700px) { .layout { flex-direction: column; } .panel-left { width: 100%; } header { padding: 0 16px; height: auto; flex-wrap: wrap; padding: 12px 16px; gap: 10px; } }
+.panel-label { font-size: 11px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+#i9ver input[type=text], #i9ver input[type=date], #i9ver input[type=password], #i9ver select, #i9ver textarea { width: 100%; padding: 9px 11px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; background: #fff; color: #222; font-family: inherit; }
+#i9ver input:focus, #i9ver select:focus, #i9ver textarea:focus { outline: none; border-color: #4a90e2; }
+.btn { display: inline-block; padding: 9px 18px; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; border: 1px solid #ccc; background: #f5f5f5; color: #333; }
+.btn-primary { background: #2d7dd2; color: #fff; border-color: #2d7dd2; }
+.btn-primary:hover { background: #2569b8; }
+.btn-primary:disabled { background: #aaa; border-color: #aaa; cursor: not-allowed; }
+.btn-danger { background: #e74c3c; color: #fff; border-color: #e74c3c; }
+.btn-sm { padding: 5px 12px; font-size: 12px; }
+.card { background: #fff; border: 1px solid #e0e0e0; border-radius: 10px; overflow: hidden; margin-bottom: 12px; }
+.card-section { padding: 14px 16px; border-bottom: 1px solid #eee; }
+.card-section:last-child { border-bottom: none; }
+.emp-row { background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px 12px; margin-bottom: 6px; cursor: pointer; transition: border-color 0.15s; }
+.emp-row:hover { border-color: #2d7dd2; }
+.emp-row.selected { border-color: #2d7dd2; background: #f0f6ff; }
+.emp-name { font-size: 14px; font-weight: 500; }
+.emp-meta { font-size: 12px; color: #888; margin-top: 2px; }
+.badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 20px; font-weight: 500; }
+.badge-pending { background: #fff8e1; border: 1px solid #f5c842; color: #7a5c00; }
+.badge-verified { background: #eaf6ec; border: 1px solid #7dc98a; color: #1e6b2e; }
+.badge-flagged { background: #fdecea; border: 1px solid #f4b8b8; color: #8b1a1a; }
+.badge-minor { background: #fff3cd; border: 1px solid #ffc107; color: #856404; }
+.filter-pills { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.pill { font-size: 12px; padding: 4px 12px; border-radius: 20px; cursor: pointer; border: 1px solid #ddd; background: #f5f5f5; color: #555; }
+.pill.active { background: #2d7dd2; color: #fff; border-color: #2d7dd2; }
+.detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.detail-label { font-size: 11px; color: #888; margin-bottom: 3px; }
+.detail-value { font-size: 14px; font-weight: 500; color: #222; }
+.detail-value.mono { font-family: monospace; font-size: 13px; }
+.avatar { width: 40px; height: 40px; border-radius: 50%; background: #e6f1fb; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600; color: #0c447c; flex-shrink: 0; }
+.doc-photo { width: 100%; max-height: 180px; object-fit: contain; border-radius: 6px; border: 1px solid #ddd; background: #f5f5f5; display: block; cursor: zoom-in; }
+#i9ver-lightbox { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; z-index: 9999; cursor: zoom-out; overflow: hidden; }
+#i9ver-lightbox img { max-width: 92vw; max-height: 92vh; object-fit: contain; border-radius: 6px; box-shadow: 0 8px 40px rgba(0,0,0,0.5); transition: transform 0.1s; transform-origin: center center; cursor: grab; }
+#i9ver-lightbox img.dragging { cursor: grabbing; }
+.doc-photo-placeholder { background: #f5f5f5; border: 1px solid #ddd; border-radius: 6px; height: 100px; display: flex; align-items: center; justify-content: center; color: #aaa; font-size: 13px; }
+.name-match-ok { background: #eaf6ec; border: 1px solid #7dc98a; border-radius: 6px; padding: 8px 12px; font-size: 13px; color: #1e6b2e; margin-bottom: 10px; }
+.name-match-warn { background: #fff8e1; border: 1px solid #f5c842; border-radius: 6px; padding: 8px 12px; font-size: 13px; color: #7a5c00; margin-bottom: 10px; }
+.name-match-bad { background: #fdecea; border: 1px solid #f4b8b8; border-radius: 6px; padding: 8px 12px; font-size: 13px; color: #8b1a1a; margin-bottom: 10px; }
+.verified-stamp { background: #eaf6ec; border: 1px solid #7dc98a; border-radius: 8px; padding: 14px 16px; }
+.edited-tag { font-size: 10px; color: #e67e22; margin-top: 2px; }
+.spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: verspin 0.7s linear infinite; vertical-align: middle; margin-right: 6px; }
+@keyframes verspin { to { transform: rotate(360deg); } }
+.empty-state { text-align: center; padding: 40px 20px; color: #aaa; font-size: 14px; }
+.section-divider { font-size: 11px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
+.stat-row { display: flex; gap: 10px; margin-bottom: 16px; }
+.stat-box { flex: 1; background: #fff; border-radius: 8px; padding: 10px 12px; text-align: center; border: 1px solid #eee; }
+.stat-num { font-size: 22px; font-weight: 600; }
+.stat-lbl { font-size: 11px; color: #888; margin-top: 2px; }
+.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+.modal-box { background: #fff; border-radius: 10px; padding: 24px; max-width: 360px; width: 90%; }
+.modal-box h3 { margin: 0 0 8px; font-size: 16px; }
+.modal-box p { font-size: 14px; color: #555; margin: 0 0 16px; }
+.error-msg { color: #c0392b; font-size: 12px; margin-top: 4px; }
+.print-only { display: none; }
+@media print { .no-print { display: none !important; } .print-only { display: block; } .layout { display: block; } .panel-left { display: none; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <a href="/" class="back-link">&#8592; Toolkit</a>
+    <div class="hdivider"></div>
+    <span class="header-title">I-9 Verification</span>
+    <span class="header-badge">Documents</span>
+  </div>
+</header>
+
+<div class="page-body">
+<div id="i9ver">
+  <div id="i9ver-main"></div>
+  <div id="i9ver-modal"></div>
+</div>
+</div>
+<div id="i9ver-lightbox" style="display:none;"><img id="i9ver-lightbox-img" src="" /></div>
+
+<script>
+var SUPABASE_URL='https://aoazlttdjowhlfcksoyl.supabase.co';
+var SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvYXpsdHRkam93aGxmY2tzb3lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNzU4MjMsImV4cCI6MjA5MDg1MTgyM30.tagP_88g7R3d_p7a4Kp0NirnJgkAR5AQQImCt414SJg';
+var ADMIN_PASSWORD='popcorn2026';
+
+var pcI9Records=[],pcI9Selected=null,pcI9Filter='all',pcI9Search='',pcI9EditedFields={},pcI9Loading=true;
+
+function supabaseFetch(path,opts){var defaults={headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json'}};if(opts&&opts.headers){for(var k in opts.headers)defaults.headers[k]=opts.headers[k];}var merged={method:opts&&opts.method?opts.method:'GET',headers:defaults.headers};if(opts&&opts.body)merged.body=opts.body;return fetch(SUPABASE_URL+path,merged);}
+
+function loadRecords(){pcI9Loading=true;render();supabaseFetch('/rest/v1/i9_records?select=*&order=submitted_at.desc').then(function(r){return r.json();}).then(function(data){pcI9Records=data;pcI9Loading=false;if(pcI9Selected){for(var i=0;i<pcI9Records.length;i++){if(pcI9Records[i].id===pcI9Selected.id){pcI9Selected=pcI9Records[i];break;}}}render();}).catch(function(){pcI9Loading=false;render();});}
+
+function getInitials(name){if(!name)return'??';var parts=name.trim().split(' ');if(parts.length===1)return parts[0].substring(0,2).toUpperCase();return(parts[0][0]+parts[parts.length-1][0]).toUpperCase();}
+function formatDate(ts){if(!ts)return'--';return new Date(ts).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});}
+function formatDateShort(ts){if(!ts)return'--';return new Date(ts).toLocaleDateString('en-US',{month:'short',day:'numeric'});}
+function getDocSummary(rec){if(rec.list_type==='A')return rec.doc1_type||'List A';return(rec.doc1_type||'List B')+' + '+(rec.doc2_type||'List C');}
+function getRecordStatus(rec){if(rec.verification_status==='verified')return'verified';if(rec.verification_notes&&rec.verification_notes.indexOf('mismatch')>-1)return'flagged';return'pending';}
+function getFilteredRecords(){var filtered=[];for(var i=0;i<pcI9Records.length;i++){var rec=pcI9Records[i];var status=getRecordStatus(rec);var matchesFilter=pcI9Filter==='all'||status===pcI9Filter;var matchesSearch=!pcI9Search||rec.employee_name.toLowerCase().indexOf(pcI9Search.toLowerCase())>-1;if(matchesFilter&&matchesSearch)filtered.push(rec);}return filtered;}
+function countByStatus(status){var n=0;for(var i=0;i<pcI9Records.length;i++){if(getRecordStatus(pcI9Records[i])===status)n++;}return n;}
+
+function render(){document.getElementById('i9ver-main').innerHTML=renderMain();var photos=document.querySelectorAll('#i9ver img[data-storage-path]');for(var p=0;p<photos.length;p++)i9LoadSignedUrl(photos[p].getAttribute('data-storage-path'),photos[p].id);}
+
+function renderMain(){var filtered=getFilteredRecords();
+var html='<p class="page-sub">Review employee document submissions and verify on day one.</p>';
+html+='<div class="stat-row no-print"><div class="stat-box"><div class="stat-num">'+pcI9Records.length+'</div><div class="stat-lbl">Total records</div></div><div class="stat-box"><div class="stat-num" style="color:#c8860a;">'+countByStatus('pending')+'</div><div class="stat-lbl">Pending</div></div><div class="stat-box"><div class="stat-num" style="color:#c0392b;">'+countByStatus('flagged')+'</div><div class="stat-lbl">Flagged</div></div><div class="stat-box"><div class="stat-num" style="color:#1e6b2e;">'+countByStatus('verified')+'</div><div class="stat-lbl">Verified</div></div></div>';
+html+='<div class="layout"><div class="panel-left no-print"><div class="panel-label">Employees</div>';
+html+='<input type="text" placeholder="Search by name..." value="'+pcI9Search+'" oninput="i9SearchChanged(this.value)" style="margin-bottom:10px;" />';
+html+='<div class="filter-pills"><span class="pill'+(pcI9Filter==='all'?' active':'')+'" onclick="i9SetFilter(\'all\')">All ('+pcI9Records.length+')</span><span class="pill'+(pcI9Filter==='pending'?' active':'')+'" onclick="i9SetFilter(\'pending\')">Pending</span><span class="pill'+(pcI9Filter==='flagged'?' active':'')+'" onclick="i9SetFilter(\'flagged\')">Flagged</span><span class="pill'+(pcI9Filter==='verified'?' active':'')+'" onclick="i9SetFilter(\'verified\')">Verified</span></div>';
+if(pcI9Loading){html+='<div class="empty-state">Loading...</div>';}
+else if(filtered.length===0){html+='<div class="empty-state">No records found.</div>';}
+else{for(var i=0;i<filtered.length;i++){var rec=filtered[i];var status=getRecordStatus(rec);var isSelected=pcI9Selected&&pcI9Selected.id===rec.id;var badgeHtml=status==='verified'?'<span class="badge badge-verified">Verified</span>':(status==='flagged'?'<span class="badge badge-flagged">Flagged</span>':'<span class="badge badge-pending">Pending</span>');html+='<div class="emp-row'+(isSelected?' selected':'')+'" onclick="i9SelectRecord(\''+rec.id+'\')"><div style="display:flex;justify-content:space-between;align-items:center;gap:6px;"><div class="emp-name">'+rec.employee_name+(rec.is_minor?' <span class="badge badge-minor">Minor</span>':'')+'</div>'+badgeHtml+'</div><div class="emp-meta">'+formatDateShort(rec.submitted_at)+' &middot; '+getDocSummary(rec)+'</div></div>';}}
+html+='<div style="margin-top:12px;padding-top:10px;border-top:1px solid #eee;display:flex;justify-content:space-between;align-items:center;"><span style="font-size:12px;color:#888;">'+filtered.length+' record'+(filtered.length!==1?'s':'')+'</span><button class="btn btn-sm" onclick="i9ExportCSV()">Export CSV</button></div></div>';
+html+='<div class="panel-right">';
+if(!pcI9Selected){html+='<div class="empty-state" style="padding:60px 20px;background:#f9f9f9;border-radius:10px;border:1px solid #eee;">Select an employee to view their record.</div>';}
+else{html+=renderRecord(pcI9Selected);}
+html+='</div></div>';return html;}
+
+function renderRecord(rec){var status=getRecordStatus(rec);var isVerified=status==='verified';var statusBadge=isVerified?'<span class="badge badge-verified">Verified</span>':(status==='flagged'?'<span class="badge badge-flagged">Name flagged</span>':'<span class="badge badge-pending">Pending verification</span>');
+var html='<div class="card"><div class="card-section" style="display:flex;align-items:center;gap:12px;"><div class="avatar">'+getInitials(rec.employee_name)+'</div><div style="flex:1;"><div style="font-size:16px;font-weight:600;">'+rec.employee_name+'</div><div style="font-size:12px;color:#888;margin-top:2px;">DOB: '+formatDate(rec.date_of_birth)+(rec.is_minor?' &middot; <span style="color:#856404;font-weight:500;">Minor</span>':'')+' &middot; Submitted '+formatDate(rec.submitted_at)+'</div></div>'+statusBadge+'</div>';
+html+=renderDocSection(rec,1,isVerified);
+if(rec.list_type==='B+C')html+=renderDocSection(rec,2,isVerified);
+if(isVerified){html+='<div class="card-section"><div class="verified-stamp"><div style="font-size:13px;font-weight:600;color:#1e6b2e;margin-bottom:6px;">Verified</div><div style="font-size:13px;color:#2d6b3a;">Verified by <strong>'+rec.verified_by+'</strong> on '+formatDate(rec.verified_at)+'</div>'+(rec.hire_date?'<div style="font-size:13px;color:#2d6b3a;margin-top:4px;">Hire date: '+formatDate(rec.hire_date)+'</div>':'')+(rec.fields_edited_during_verification?'<div style="font-size:12px;color:#e67e22;margin-top:6px;">Some fields were edited during verification</div>':'')+(rec.verification_notes?'<div style="font-size:12px;color:#888;margin-top:6px;">Note: '+rec.verification_notes+'</div>':'')+'</div><div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-sm no-print" onclick="i9PrintRecord()">Print record</button><button class="btn btn-sm no-print" onclick="i9UnlockEdit()">Edit (admin)</button></div></div>';}
+else{html+=renderVerifySection(rec);}
+html+='</div>';return html;}
+
+function renderDocSection(rec,docNum,isVerified){var prefix=docNum===1?'doc1':'doc2';var listLabel=rec[prefix+'_list']?'List '+rec[prefix+'_list']+' -- ':'';var docType=rec[prefix+'_type']||'--';var docNumber=rec[prefix+'_number']||'--';var docExp=rec[prefix+'_expiration']?formatDate(rec[prefix+'_expiration']):'N/A';var docAuth=rec[prefix+'_issuing_authority']||'--';var photoUrl=rec[prefix+'_photo_url']||'';
+var nameMatchHtml='';if(rec.verification_notes&&rec.verification_notes.indexOf('mismatch')>-1){var docKey='doc'+docNum;if(rec.verification_notes.indexOf(docKey)>-1||(docNum===1&&rec.verification_notes.indexOf('doc2')===-1)){nameMatchHtml='<div class="name-match-bad">Name mismatch flagged on submission -- compare carefully with physical document in hand.</div>';}}
+var html='<div class="card-section"><div class="section-divider">'+listLabel+docType+'</div>';
+if(photoUrl){var storagePath=photoUrl.indexOf('/i9-photos/')>-1?photoUrl.split('/i9-photos/')[1]:'';if(storagePath){html+='<img id="photo-'+prefix+'" src="" class="doc-photo" style="margin-bottom:12px;" data-storage-path="'+storagePath+'" onclick="i9OpenLightbox(this.src)" />';}else{html+='<img src="'+photoUrl+'" class="doc-photo" style="margin-bottom:12px;" />';}}else{html+='<div class="doc-photo-placeholder" style="margin-bottom:12px;">No photo available</div>';}
+html+=nameMatchHtml+'<div class="detail-grid">';
+if(isVerified){html+='<div><div class="detail-label">Document type</div><div class="detail-value">'+docType+'</div></div><div><div class="detail-label">Document number</div><div class="detail-value mono">'+docNumber+'</div></div><div><div class="detail-label">Expiration</div><div class="detail-value">'+docExp+'</div></div><div><div class="detail-label">Issuing authority</div><div class="detail-value">'+docAuth+'</div></div>';}
+else{html+='<div><div class="detail-label">Document type</div><input type="text" value="'+docType+'" onchange="i9FieldEdited(\''+prefix+'_type\',this.value)" />'+(pcI9EditedFields[prefix+'_type']?'<div class="edited-tag">Edited</div>':'')+'</div><div><div class="detail-label">Document number</div><input type="text" value="'+(docNumber==='--'?'':docNumber)+'" onchange="i9FieldEdited(\''+prefix+'_number\',this.value)" />'+(pcI9EditedFields[prefix+'_number']?'<div class="edited-tag">Edited</div>':'')+'</div><div><div class="detail-label">Expiration</div><input type="text" placeholder="MM/YYYY or N/A" value="'+(docExp==='N/A'?'':docExp)+'" onchange="i9FieldEdited(\''+prefix+'_expiration\',this.value)" />'+(pcI9EditedFields[prefix+'_expiration']?'<div class="edited-tag">Edited</div>':'')+'</div><div><div class="detail-label">Issuing authority</div><input type="text" value="'+(docAuth==='--'?'':docAuth)+'" onchange="i9FieldEdited(\''+prefix+'_issuing_authority\',this.value)" />'+(pcI9EditedFields[prefix+'_issuing_authority']?'<div class="edited-tag">Edited</div>':'')+'</div>';}
+html+='</div></div>';return html;}
+
+function renderVerifySection(rec){return'<div class="card-section"><div class="section-divider" style="margin-bottom:12px;">Verify</div><p style="font-size:13px;color:#555;margin:0 0 14px;">Confirm that the physical documents match the record above. Correct any fields that do not match before verifying.</p><div style="margin-bottom:14px;"><div class="detail-label" style="margin-bottom:4px;">Your name</div><input type="text" id="verifier-name" placeholder="Enter your name" /><div class="error-msg" id="verify-err"></div></div><button class="btn btn-primary" style="width:100%;" id="verify-btn" onclick="i9VerifyRecord()">Mark as verified</button></div>';}
+
+function i9FieldEdited(field,value){pcI9EditedFields[field]=value;if(pcI9Selected)pcI9Selected[field]=value;}
+
+function i9VerifyRecord(){var nameEl=document.getElementById('verifier-name');var errEl=document.getElementById('verify-err');if(!nameEl)return;var verifierName=nameEl.value.trim();if(!verifierName){errEl.innerHTML='Please enter your name.';return;}var btn=document.getElementById('verify-btn');btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Saving...';var hasEdits=false;for(var k in pcI9EditedFields){if(pcI9EditedFields[k]){hasEdits=true;break;}}var updates={verification_status:'verified',verified_by:verifierName,verified_at:new Date().toISOString(),fields_edited_during_verification:hasEdits,hire_date:pcI9Selected.submitted_at?pcI9Selected.submitted_at.substring(0,10):new Date().toISOString().substring(0,10)};for(var field in pcI9EditedFields)updates[field]=pcI9EditedFields[field];if(hasEdits){var existingNote=pcI9Selected.verification_notes||'';updates.verification_notes=existingNote?(existingNote+' | Fields edited during verification by '+verifierName):('Fields edited during verification by '+verifierName);}supabaseFetch('/rest/v1/i9_records?id=eq.'+pcI9Selected.id,{method:'PATCH',headers:{'Prefer':'return=minimal'},body:JSON.stringify(updates)}).then(function(r){if(r.ok||r.status===204){pcI9EditedFields={};loadRecords();}else{return r.text().then(function(t){throw new Error(t);});}}).catch(function(err){errEl.innerHTML='Save failed: '+err.message;btn.disabled=false;btn.innerHTML='Mark as verified';});}
+
+function i9UnlockEdit(){document.getElementById('i9ver-modal').innerHTML='<div class="modal-overlay" onclick="i9CloseModal(event)"><div class="modal-box"><h3>Admin access required</h3><p>Enter the admin password to edit this verified record.</p><input type="password" id="admin-pw-input" placeholder="Admin password" style="margin-bottom:8px;" /><div class="error-msg" id="admin-pw-err"></div><div style="display:flex;gap:8px;margin-top:12px;"><button class="btn" style="flex:1;" onclick="i9CloseModal(null)">Cancel</button><button class="btn btn-primary" style="flex:1;" onclick="i9CheckAdminPw()">Unlock</button></div></div></div>';}
+function i9CheckAdminPw(){var pw=document.getElementById('admin-pw-input').value;if(pw===ADMIN_PASSWORD){i9CloseModal(null);pcI9Selected.verification_status='pending';pcI9EditedFields={};render();}else{document.getElementById('admin-pw-err').innerHTML='Incorrect password.';}}
+function i9CloseModal(e){if(e?e.target===e.currentTarget:true)document.getElementById('i9ver-modal').innerHTML='';}
+function i9PrintRecord(){window.print();}
+
+function i9ExportCSV(){var filtered=getFilteredRecords();var cols=['employee_name','date_of_birth','is_minor','list_type','doc1_list','doc1_type','doc1_number','doc1_expiration','doc1_issuing_authority','doc1_ai_confidence','doc2_list','doc2_type','doc2_number','doc2_expiration','doc2_issuing_authority','doc2_ai_confidence','compliance_status','verification_status','verified_by','verified_at','hire_date','fields_edited_during_verification','verification_notes','submitted_at'];var rows=[cols.join(',')];for(var i=0;i<filtered.length;i++){var rec=filtered[i];var row=[];for(var j=0;j<cols.length;j++){var val=rec[cols[j]];if(val===null||val===undefined)val='';val=String(val).replace(/"/g,'""');if(val.indexOf(',')>-1||val.indexOf('"')>-1)val='"'+val+'"';row.push(val);}rows.push(row.join(','));}var csv=rows.join('\n');var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='i9-records-'+new Date().toISOString().substring(0,10)+'.csv';a.click();}
+
+function i9SelectRecord(id){for(var i=0;i<pcI9Records.length;i++){if(pcI9Records[i].id===id){pcI9Selected=pcI9Records[i];pcI9EditedFields={};break;}}render();var rp=document.querySelector('#i9ver .panel-right');if(rp&&window.innerWidth<701)rp.scrollIntoView({behavior:'smooth'});}
+function i9SetFilter(f){pcI9Filter=f;render();}
+function i9SearchChanged(val){pcI9Search=val;render();}
+
+function i9LoadSignedUrl(storagePath,imgId){fetch(SUPABASE_URL+'/storage/v1/object/sign/i9-photos/'+storagePath,{method:'POST',headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json'},body:JSON.stringify({expiresIn:3600})}).then(function(r){return r.json();}).then(function(data){var el=document.getElementById(imgId);if(!el)return;if(data.signedURL){var signed=data.signedURL;el.src=signed.indexOf('http')===0?signed:SUPABASE_URL+'/storage/v1'+(signed.indexOf('/')===0?signed:'/'+signed);}else if(data.error){el.parentNode.innerHTML='<div style="background:#fdecea;border:1px solid #f4b8b8;border-radius:6px;padding:10px;font-size:12px;color:#8b1a1a;">Photo unavailable: '+data.error+'</div>';}}).catch(function(){var el=document.getElementById(imgId);if(el)el.parentNode.innerHTML='<div style="background:#fdecea;border:1px solid #f4b8b8;border-radius:6px;padding:10px;font-size:12px;color:#8b1a1a;">Could not load photo</div>';});}
+
+loadRecords();
+
+// Lightbox
+(function(){var lb=document.getElementById('i9ver-lightbox');var lbImg=document.getElementById('i9ver-lightbox-img');var lbScale=1,lbDragX=0,lbDragY=0,lbStartX=0,lbStartY=0,lbDragging=false;function lbApplyTransform(){lbImg.style.transform='translate('+lbDragX+'px, '+lbDragY+'px) scale('+lbScale+')';}function lbReset(){lbScale=1;lbDragX=0;lbDragY=0;lbImg.style.transform='';}lb.addEventListener('click',function(e){if(e.target===lb){lb.style.display='none';lbReset();}});lbImg.addEventListener('wheel',function(e){e.preventDefault();var delta=e.deltaY>0?0.9:1.1;lbScale=Math.min(Math.max(lbScale*delta,0.5),5);lbApplyTransform();});lbImg.addEventListener('mousedown',function(e){if(lbScale<=1)return;lbDragging=true;lbStartX=e.clientX-lbDragX;lbStartY=e.clientY-lbDragY;lbImg.classList.add('dragging');e.preventDefault();});document.addEventListener('mousemove',function(e){if(!lbDragging)return;lbDragX=e.clientX-lbStartX;lbDragY=e.clientY-lbStartY;lbApplyTransform();});document.addEventListener('mouseup',function(){lbDragging=false;lbImg.classList.remove('dragging');});lbImg.addEventListener('dblclick',function(){if(lbScale>1)lbReset();else{lbScale=2.5;lbApplyTransform();}});document.addEventListener('keydown',function(e){if(lb.style.display==='none')return;if(e.key==='Escape'){lb.style.display='none';lbReset();}});window.i9OpenLightbox=function(src){lbReset();lbImg.src=src;lb.style.display='flex';};})();
+</script>
+</body>
+</html>
