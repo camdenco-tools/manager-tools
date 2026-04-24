@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Popcorn Chez — Sales History</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f0ec; min-height: 100vh; }
+
+header {
+  background: #fff; border-bottom: 1px solid #e8e8e4;
+  padding: 0 32px; display: flex; align-items: center;
+  justify-content: space-between; height: 64px;
+  position: sticky; top: 0; z-index: 100;
+}
+.header-left { display: flex; align-items: center; gap: 16px; }
+.back-link { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #999; text-decoration: none; display: flex; align-items: center; gap: 6px; transition: color 0.15s; }
+.back-link:hover { color: #1a1a1a; }
+.hdivider { width: 1px; height: 20px; background: #e8e8e4; }
+.header-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+.header-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: #1a1a1a; color: white; padding: 3px 8px; border-radius: 20px; }
+
+.page-body { padding: 20px 16px 60px; }
+.container { max-width: 800px; margin: 0 auto; }
+.card { background: white; border-radius: 16px; padding: 20px; margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); }
+.card-title { font-size: 10px; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 16px; }
+.field { margin-bottom: 13px; }
+label { display: block; font-size: 13px; font-weight: 500; color: #555; margin-bottom: 4px; }
+select, input[type=text], input[type=number], input[type=date], input[type=password] { width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 10px; font-size: 15px; color: #1a1a1a; background: #fafafa; appearance: none; -webkit-appearance: none; font-family: inherit; transition: border-color 0.15s; }
+select:focus, input:focus { outline: none; border-color: #1a1a1a; background: white; }
+.search-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.search-btn { width: 100%; padding: 11px; background: #1a1a1a; color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; margin-bottom: 14px; }
+.summary-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
+.summary-box { background: #f8f8f8; border-radius: 12px; padding: 12px; text-align: center; }
+.summary-box .s-label { font-size: 10px; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+.summary-box .s-val { font-size: 20px; font-weight: 700; color: #1a1a1a; }
+.result-venue { border: 1px solid #eee; border-radius: 12px; overflow: hidden; margin-bottom: 10px; }
+.result-venue-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; background: #fafafa; cursor: pointer; }
+.result-venue-name { font-size: 15px; font-weight: 600; color: #1a1a1a; }
+.result-venue-meta { font-size: 11px; color: #bbb; margin-top: 2px; }
+.result-venue-total { font-size: 18px; font-weight: 700; color: #1a1a1a; }
+.chevron { font-size: 10px; color: #ccc; margin-left: 6px; }
+.result-stand-table { width: 100%; border-collapse: collapse; display: none; }
+.result-stand-table th { font-size: 10px; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 0.05em; padding: 8px 14px; text-align: left; background: #f5f5f5; border-top: 1px solid #eee; }
+.result-stand-table td { padding: 8px 14px; font-size: 13px; border-top: 1px solid #f5f5f5; color: #444; vertical-align: middle; }
+.result-stand-table tr:hover td { background: #fafafa; }
+.amt-cell { font-weight: 700; color: #1a1a1a; text-align: right; }
+.photo-link { font-size: 11px; background: #EAF3DE; color: #27500A; padding: 3px 7px; border-radius: 6px; text-decoration: none; font-weight: 600; margin-right: 3px; display: inline-block; }
+.no-photo { font-size: 11px; color: #ddd; }
+.export-btn { float: right; padding: 6px 12px; background: #f5f5f5; color: #555; border: 1px solid #ddd; border-radius: 8px; font-size: 12px; cursor: pointer; }
+.edit-btn { font-size: 11px; background: #E6F1FB; color: #0C447C; padding: 3px 8px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; margin-right: 3px; }
+.del-btn { font-size: 11px; background: #FCEBEB; color: #A32D2D; padding: 3px 8px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; }
+.empty-state { text-align: center; padding: 24px 0; font-size: 14px; color: #ccc; }
+.loading-state { text-align: center; padding: 16px; font-size: 13px; color: #ccc; }
+
+/* Modals */
+.modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
+.modal-overlay.open { display: flex; }
+.modal { background: white; border-radius: 16px; padding: 24px; width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto; }
+.modal h2 { font-size: 16px; font-weight: 700; color: #1a1a1a; margin-bottom: 16px; }
+.modal-field { margin-bottom: 12px; }
+.modal-field label { font-size: 12px; font-weight: 500; color: #666; margin-bottom: 4px; display: block; }
+.modal-field select, .modal-field input { width: 100%; padding: 9px 11px; border: 1px solid #ddd; border-radius: 9px; font-size: 14px; color: #1a1a1a; background: #fafafa; appearance: none; -webkit-appearance: none; font-family: inherit; }
+.modal-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.photo-action { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: #f8f8f8; border-radius: 8px; margin-bottom: 8px; }
+.photo-action span { font-size: 12px; color: #666; flex: 1; }
+.photo-clear-btn { font-size: 11px; background: #FCEBEB; color: #A32D2D; padding: 2px 8px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; }
+.photo-upload-btn { font-size: 11px; background: #E6F1FB; color: #0C447C; padding: 2px 8px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; }
+.modal-actions { display: flex; gap: 10px; margin-top: 16px; }
+.modal-save { flex: 1; padding: 11px; background: #1a1a1a; color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.modal-cancel { padding: 11px 16px; background: #f5f5f5; color: #555; border: 1px solid #ddd; border-radius: 10px; font-size: 14px; cursor: pointer; }
+.modal-error { color: #c0392b; font-size: 12px; margin-top: 8px; display: none; }
+
+.pw-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2000; align-items: center; justify-content: center; padding: 20px; }
+.pw-overlay.open { display: flex; }
+.pw-box { background: white; border-radius: 16px; padding: 24px; width: 100%; max-width: 340px; text-align: center; }
+.pw-box h3 { font-size: 15px; font-weight: 700; color: #1a1a1a; margin-bottom: 6px; }
+.pw-box p { font-size: 13px; color: #888; margin-bottom: 16px; }
+.pw-box input { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 10px; font-size: 15px; margin-bottom: 10px; text-align: center; letter-spacing: 0.1em; }
+.pw-submit { width: 100%; padding: 11px; background: #1a1a1a; color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; margin-bottom: 8px; }
+.pw-cancel { width: 100%; padding: 9px; background: none; color: #888; border: none; font-size: 13px; cursor: pointer; }
+.pw-error { color: #c0392b; font-size: 12px; margin-bottom: 8px; display: none; }
+
+@media (max-width: 600px) {
+  header { padding: 0 16px; height: auto; flex-wrap: wrap; padding: 12px 16px; gap: 10px; }
+  .search-grid { grid-template-columns: 1fr; }
+  .summary-row { grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+  .result-stand-table th, .result-stand-table td { padding: 6px 8px; font-size: 12px; }
+}
+</style>
+</head>
+<body>
+
+<!-- PASSWORD OVERLAY -->
+<div class="pw-overlay" id="pw-overlay">
+  <div class="pw-box">
+    <h3>Admin access required</h3>
+    <p id="pw-action-desc">Enter your admin password to continue.</p>
+    <input type="password" id="pw-input" placeholder="password" onkeydown="if(event.key==='Enter')checkPassword()">
+    <div class="pw-error" id="pw-error">Incorrect password. Try again.</div>
+    <button class="pw-submit" onclick="checkPassword()">Continue</button>
+    <button class="pw-cancel" onclick="closePwOverlay()">Cancel</button>
+  </div>
+</div>
+
+<!-- EDIT MODAL -->
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal">
+    <h2>Edit submission</h2>
+    <input type="hidden" id="edit-id">
+    <div class="modal-row">
+      <div class="modal-field"><label>Event date</label><input type="date" id="edit-date"></div>
+      <div class="modal-field"><label>Amount ($)</label><input type="number" id="edit-amount" step="0.01" min="0"></div>
+    </div>
+    <div class="modal-field"><label>Event name</label><input type="text" id="edit-event"></div>
+    <div class="modal-row">
+      <div class="modal-field"><label>Venue</label>
+        <select id="edit-venue" onchange="updateEditStands()">
+          <option value="">Select...</option>
+          <option value="Mann">Mann Music Center</option><option value="FMP">FMP</option>
+          <option value="ACCC">ACCC</option><option value="BWH">Boardwalk Hall</option>
+          <option value="Cure">Cure Insurance Arena</option><option value="DE">DE Chase Field House</option>
+          <option value="Subaru">Subaru Park</option><option value="Villanova">Villanova</option>
+          <option value="Montage">Montage</option><option value="SATB">Sports at the Beach</option>
+          <option value="Kirkwood">Kirkwood</option>
+        </select>
+      </div>
+      <div class="modal-field"><label>Stand</label><select id="edit-stand"></select></div>
+    </div>
+    <div class="modal-field"><label>Staff count</label><input type="number" id="edit-staff" min="0" step="1"></div>
+    <div class="modal-field"><label>Tips collected ($)</label><input type="number" id="edit-tip" step="0.01" min="0"></div>
+    <div class="modal-field">
+      <label>Register photo</label>
+      <div class="photo-action">
+        <span id="edit-reg-label">No photo</span>
+        <button class="photo-upload-btn" onclick="document.getElementById('edit-reg-file').click()">Replace</button>
+        <button class="photo-clear-btn" id="edit-reg-clear" onclick="clearPhoto('register')" style="display:none;">Clear</button>
+      </div>
+      <input type="file" id="edit-reg-file" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none;" onchange="handleEditFile(this,'register')">
+    </div>
+    <div class="modal-field">
+      <label>Units sold photo</label>
+      <div class="photo-action">
+        <span id="edit-units-label">No photo</span>
+        <button class="photo-upload-btn" onclick="document.getElementById('edit-units-file').click()">Replace</button>
+        <button class="photo-clear-btn" id="edit-units-clear" onclick="clearPhoto('units')" style="display:none;">Clear</button>
+      </div>
+      <input type="file" id="edit-units-file" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none;" onchange="handleEditFile(this,'units')">
+    </div>
+    <div class="modal-error" id="edit-error"></div>
+    <div class="modal-actions">
+      <button class="modal-cancel" onclick="closeEditModal()">Cancel</button>
+      <button class="modal-save" onclick="saveEdit()">Save changes</button>
+    </div>
+  </div>
+</div>
+
+<header>
+  <div class="header-left">
+    <a href="/" class="back-link">&#8592; Toolkit</a>
+    <div class="hdivider"></div>
+    <span class="header-title">Sales History</span>
+    <span class="header-badge">Search</span>
+  </div>
+</header>
+
+<div class="page-body">
+  <div class="container">
+    <div class="card">
+      <div class="card-title">Search past sales</div>
+      <div class="search-grid">
+        <div class="field" style="margin-bottom:0;">
+          <label>From date</label>
+          <input type="date" id="s-from">
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label>To date</label>
+          <input type="date" id="s-to">
+        </div>
+      </div>
+      <div class="search-grid" style="margin-top:10px;">
+        <div class="field" style="margin-bottom:0;">
+          <label>Event name</label>
+          <input type="text" id="s-event" placeholder="e.g. MMRBQ...">
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label>Venue</label>
+          <select id="s-venue">
+            <option value="">All venues</option>
+            <option value="Mann">Mann Music Center</option><option value="FMP">FMP</option>
+            <option value="ACCC">ACCC</option><option value="BWH">Boardwalk Hall</option>
+            <option value="Cure">Cure Insurance Arena</option><option value="DE">DE Chase Field House</option>
+            <option value="Subaru">Subaru Park</option><option value="Villanova">Villanova</option>
+            <option value="Montage">Montage</option><option value="SATB">Sports at the Beach</option>
+            <option value="Kirkwood">Kirkwood</option>
+          </select>
+        </div>
+      </div>
+      <div style="margin-top:12px;">
+        <button class="search-btn" onclick="searchHistory()">Search</button>
+      </div>
+      <div id="search-results"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+var SUPA_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
+var SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvYXpsdHRkam93aGxmY2tzb3lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNzU4MjMsImV4cCI6MjA5MDg1MTgyM30.tagP_88g7R3d_p7a4Kp0NirnJgkAR5AQQImCt414SJg';
+var ADMIN_PASSWORD = 'popcorn2026';
+
+var VENUE_LABELS = {
+  'Mann': 'Mann Music Center', 'FMP': 'FMP', 'ACCC': 'ACCC',
+  'BWH': 'Boardwalk Hall', 'Cure': 'Cure Insurance Arena',
+  'DE': 'DE Chase Field House', 'Subaru': 'Subaru Park',
+  'Villanova': 'Villanova', 'Montage': 'Montage',
+  'SATB': 'Sports at the Beach', 'Kirkwood': 'Kirkwood'
+};
+
+var STANDS = {
+  'Mann': ['Food Court Bar 2','Parkside Tent Bar','Parkside GA View Bar','Upper Concession','Upper Popcorn','Lower Popcorn','Upper Pizza','Lower Pizza','Farm & Fry Truck','Crescendo','Lawn Portable','Stage Left Bar','Upper Linear Bar','Hawking','Support Staff'],
+  'FMP': ['Stand 782','SC1','LM1','LM2','WWI','Ben Kettle','Walt Kettle','IC1','BWI','Ziggys','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4','Mobile Cart 5','Hawking','Support Staff'],
+  'ACCC': ['Stand 1','Stand 2','Hawking','Support Staff'],
+  'BWH': ['North Stand','South Stand','Hawking','Support Staff'],
+  'Cure': ['Popcorn','Candy','Cotton Candy','Hawking','Support Staff'],
+  'DE': ['VIP Bar','Cafe','Popcorn','Bar','Farm & Fry','Hawking','Support Staff'],
+  'Subaru': ['Popcorn','VIP','Hawking','Support Staff'],
+  'Villanova': ['Stand 1','Hawking','Support Staff'],
+  'Montage': ['BW Pizza','Midway Pizza','Midway Popcorn','Boardwalk Popcorn','Festival Foods','Potato Stand','Boardwalk New Food','Mobile Cart 1','Mobile Cart 2','Hawking','Support Staff'],
+  'SATB': ['Stand 1','Ice Cream 1','Stand 2','Stand 3','Catering','Hawking','Support Staff'],
+  'Kirkwood': ['Stand 1','Hawking','Support Staff']
+};
+
+var currentSearchData = [];
+var pendingPwAction = null;
+var adminUnlocked = false;
+var editRegisterFile = null;
+var editUnitsFile = null;
+var editRegClear = false;
+var editUnitsClear = false;
+
+function todayLocal() {
+  var d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+document.getElementById('s-from').value = '2023-01-01';
+document.getElementById('s-to').value = todayLocal();
+
+// ── Admin password ──
+function requirePassword(actionDesc, callback) {
+  if (adminUnlocked) { callback(); return; }
+  pendingPwAction = callback;
+  document.getElementById('pw-action-desc').textContent = actionDesc;
+  document.getElementById('pw-input').value = '';
+  document.getElementById('pw-error').style.display = 'none';
+  document.getElementById('pw-overlay').classList.add('open');
+  setTimeout(function() { document.getElementById('pw-input').focus(); }, 100);
+}
+
+function checkPassword() {
+  if (document.getElementById('pw-input').value === ADMIN_PASSWORD) {
+    adminUnlocked = true;
+    document.getElementById('pw-overlay').classList.remove('open');
+    if (pendingPwAction) { pendingPwAction(); pendingPwAction = null; }
+  } else {
+    document.getElementById('pw-error').style.display = 'block';
+    document.getElementById('pw-input').value = '';
+    document.getElementById('pw-input').focus();
+  }
+}
+
+function closePwOverlay() {
+  document.getElementById('pw-overlay').classList.remove('open');
+  pendingPwAction = null;
+}
+
+// ── Search ──
+async function searchHistory() {
+  var from = document.getElementById('s-from').value;
+  var to = document.getElementById('s-to').value;
+  var event = document.getElementById('s-event').value.trim();
+  var venue = document.getElementById('s-venue').value;
+  var resultsEl = document.getElementById('search-results');
+  resultsEl.innerHTML = '<div class="loading-state">Searching...</div>';
+
+  var url = SUPA_URL + '/rest/v1/sales?select=*&order=event_date.asc,submitted_at.asc';
+  if (from) url += '&event_date=gte.' + from;
+  if (to) url += '&event_date=lte.' + to;
+  if (venue) url += '&venue=eq.' + encodeURIComponent(venue);
+  if (event) url += '&event_name=ilike.' + encodeURIComponent('%' + event + '%');
+
+  try {
+    var res = await fetch(url, { headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY } });
+    var rows = await res.json();
+    currentSearchData = rows;
+
+    if (!Array.isArray(rows) || !rows.length) {
+      resultsEl.innerHTML = '<div class="empty-state" style="padding:16px;">No results found.</div>';
+      return;
+    }
+
+    var grandTotal = rows.reduce(function(s,r) { return s+parseFloat(r.amount); }, 0);
+    var grandTips = rows.reduce(function(s,r) { return s+(parseFloat(r.tip_amount)||0); }, 0);
+
+    var html = '<div class="summary-row">';
+    html += '<div class="summary-box"><div class="s-label">Total sales</div><div class="s-val">$' + Math.round(grandTotal).toLocaleString() + '</div></div>';
+    html += '<div class="summary-box"><div class="s-label">Tips</div><div class="s-val">$' + Math.round(grandTips).toLocaleString() + '</div></div>';
+    html += '<div class="summary-box"><div class="s-label">Submissions</div><div class="s-val">' + rows.length + '</div></div>';
+    html += '</div>';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
+    html += '<div style="font-size:11px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:0.06em;">By event</div>';
+    html += '<button class="export-btn" onclick="exportCSV()">Export CSV</button>';
+    html += '</div>';
+
+    var byEvent = {};
+    rows.forEach(function(r) {
+      var key = r.event_date + '||' + (r.event_name || 'Unknown') + '||' + r.venue;
+      if (!byEvent[key]) byEvent[key] = [];
+      byEvent[key].push(r);
+    });
+
+    var eventKeys = Object.keys(byEvent);
+    eventKeys.sort(function(a,b) { return b.localeCompare(a); });
+
+    eventKeys.forEach(function(key, i) {
+      var stands = byEvent[key];
+      var parts = key.split('||');
+      var evtDate = parts[0];
+      var evtName = parts[1];
+      var evtVenue = parts[2];
+      var total = stands.reduce(function(s,r) { return s+parseFloat(r.amount); }, 0);
+      var dateStr = evtDate.slice(5,7) + '/' + evtDate.slice(8,10) + '/' + evtDate.slice(0,4);
+      var id = 're' + i;
+      var totalStaff = stands.reduce(function(s,r) { return s+(parseInt(r.staff_count)||0); }, 0);
+      var eventTips = stands.reduce(function(s,r) { return s+(parseFloat(r.tip_amount)||0); }, 0);
+      var hasStaff = stands.some(function(r) { return r.staff_count && r.staff_count > 0; });
+      var evtPerPerson = hasStaff && totalStaff > 0 ? ' - $' + Math.round(total/totalStaff).toLocaleString() + '/person' : '';
+      var staffMeta = hasStaff ? ' - ' + totalStaff + ' staff' + evtPerPerson : '';
+      var tipsMeta = eventTips > 0 ? ' - Tips: $' + Math.round(eventTips).toLocaleString() : '';
+      var venueLabel = VENUE_LABELS[evtVenue] || evtVenue;
+
+      html += '<div class="result-venue">';
+      html += '<div class="result-venue-header" onclick="toggleResult(\'' + id + '\',\'rch' + i + '\')">';
+      html += '<div><div class="result-venue-name">' + evtName + '</div>';
+      html += '<div class="result-venue-meta">' + dateStr + ' - ' + venueLabel + ' - ' + stands.length + ' stand' + (stands.length > 1 ? 's' : '') + staffMeta + tipsMeta + '</div></div>';
+      html += '<div style="display:flex;align-items:center;gap:8px;">';
+      html += '<div class="result-venue-total">$' + Math.round(total).toLocaleString() + '</div>';
+      html += '<div class="chevron" id="rch' + i + '">&#9654;</div></div></div>';
+      html += '<table class="result-stand-table" id="' + id + '">';
+      html += '<thead><tr><th>Stand</th><th style="text-align:right;">Amount</th><th style="text-align:right;">Tips</th><th>Photos</th><th>Actions</th></tr></thead><tbody>';
+
+      stands.sort(function(a,b) { return parseFloat(b.amount)-parseFloat(a.amount); });
+      stands.forEach(function(r) {
+        var perPerson = r.staff_count && r.staff_count > 0 ? '$' + Math.round(parseFloat(r.amount)/r.staff_count).toLocaleString() + '/person' : '';
+        var staffLabel = r.staff_count ? (r.staff_count + ' staff' + (perPerson ? ' - ' + perPerson : '')) : '';
+        html += '<tr>';
+        html += '<td><strong>' + r.stand + '</strong>' + (staffLabel ? '<div style="font-size:11px;color:#888;margin-top:2px;">' + staffLabel + '</div>' : '') + '</td>';
+        html += '<td class="amt-cell">$' + Math.round(parseFloat(r.amount)).toLocaleString() + '</td>';
+        var tipVal = parseFloat(r.tip_amount) || 0;
+        html += '<td class="amt-cell">' + (tipVal > 0 ? '$' + Math.round(tipVal).toLocaleString() : '<span style="color:#ddd;">--</span>') + '</td>';
+        html += '<td>';
+        if (r.photo_url) html += '<a href="' + r.photo_url + '" target="_blank" class="photo-link">Reg</a>';
+        if (r.units_photo_url) html += '<a href="' + r.units_photo_url + '" target="_blank" class="photo-link">Units</a>';
+        if (!r.photo_url && !r.units_photo_url) html += '<span class="no-photo">none</span>';
+        html += '</td>';
+        html += '<td>';
+        html += '<button class="edit-btn" onclick="triggerEdit(\'' + r.id + '\')">Edit</button>';
+        html += '<button class="del-btn" onclick="triggerDelete(\'' + r.id + '\',\'' + r.stand.replace(/'/g, "\\'") + ' at ' + evtVenue + '\')">Delete</button>';
+        html += '</td></tr>';
+      });
+      html += '</tbody></table></div>';
+    });
+
+    resultsEl.innerHTML = html;
+  } catch(e) {
+    resultsEl.innerHTML = '<div class="empty-state" style="padding:16px;">Error loading results.</div>';
+  }
+}
+
+function toggleResult(id, chId) {
+  var el = document.getElementById(id);
+  var ch = document.getElementById(chId);
+  var open = el.style.display === 'table';
+  el.style.display = open ? 'none' : 'table';
+  ch.innerHTML = open ? '&#9654;' : '&#9660;';
+}
+
+// ── Edit ──
+function triggerEdit(id) {
+  requirePassword('Enter your admin password to edit this submission.', function() { openEditModal(id); });
+}
+
+function openEditModal(id) {
+  var row = null;
+  for (var i = 0; i < currentSearchData.length; i++) {
+    if (currentSearchData[i].id === id) { row = currentSearchData[i]; break; }
+  }
+  if (!row) return;
+  document.getElementById('edit-id').value = id;
+  document.getElementById('edit-date').value = row.event_date;
+  document.getElementById('edit-amount').value = row.amount;
+  document.getElementById('edit-event').value = row.event_name || '';
+  document.getElementById('edit-venue').value = row.venue;
+  document.getElementById('edit-staff').value = row.staff_count || '';
+  document.getElementById('edit-tip').value = row.tip_amount || '';
+  updateEditStands(row.stand);
+
+  editRegisterFile = null; editUnitsFile = null; editRegClear = false; editUnitsClear = false;
+  document.getElementById('edit-reg-file').value = '';
+  document.getElementById('edit-units-file').value = '';
+
+  var regLabel = document.getElementById('edit-reg-label');
+  var regClear = document.getElementById('edit-reg-clear');
+  if (row.photo_url) {
+    regLabel.innerHTML = '<a href="' + row.photo_url + '" target="_blank">View current photo</a>';
+    regClear.style.display = 'inline-block';
+  } else { regLabel.textContent = 'No photo'; regClear.style.display = 'none'; }
+
+  var unitsLabel = document.getElementById('edit-units-label');
+  var unitsClear = document.getElementById('edit-units-clear');
+  if (row.units_photo_url) {
+    unitsLabel.innerHTML = '<a href="' + row.units_photo_url + '" target="_blank">View current photo</a>';
+    unitsClear.style.display = 'inline-block';
+  } else { unitsLabel.textContent = 'No photo'; unitsClear.style.display = 'none'; }
+
+  document.getElementById('edit-error').style.display = 'none';
+  document.getElementById('edit-modal').classList.add('open');
+}
+
+function updateEditStands(selectedStand) {
+  var venue = document.getElementById('edit-venue').value;
+  var standSel = document.getElementById('edit-stand');
+  standSel.innerHTML = '';
+  if (STANDS[venue]) {
+    STANDS[venue].forEach(function(s) {
+      var o = document.createElement('option');
+      o.textContent = s;
+      if (s === selectedStand) o.selected = true;
+      standSel.appendChild(o);
+    });
+  }
+}
+
+function handleEditFile(input, type) {
+  if (input.files && input.files[0]) {
+    if (type === 'register') {
+      editRegisterFile = input.files[0];
+      document.getElementById('edit-reg-label').textContent = 'New: ' + editRegisterFile.name;
+      editRegClear = false;
+    } else {
+      editUnitsFile = input.files[0];
+      document.getElementById('edit-units-label').textContent = 'New: ' + editUnitsFile.name;
+      editUnitsClear = false;
+    }
+  }
+}
+
+function clearPhoto(type) {
+  if (type === 'register') {
+    editRegClear = true; editRegisterFile = null;
+    document.getElementById('edit-reg-label').textContent = 'Will be removed on save';
+    document.getElementById('edit-reg-clear').style.display = 'none';
+  } else {
+    editUnitsClear = true; editUnitsFile = null;
+    document.getElementById('edit-units-label').textContent = 'Will be removed on save';
+    document.getElementById('edit-units-clear').style.display = 'none';
+  }
+}
+
+function closeEditModal() { document.getElementById('edit-modal').classList.remove('open'); }
+
+async function uploadPhoto(file, path) {
+  var res = await fetch(SUPA_URL + '/storage/v1/object/sale-photos/' + path, {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': file.type },
+    body: file
+  });
+  if (!res.ok) return null;
+  return SUPA_URL + '/storage/v1/object/public/sale-photos/' + path;
+}
+
+async function saveEdit() {
+  var id = document.getElementById('edit-id').value;
+  var date = document.getElementById('edit-date').value;
+  var amount = parseFloat(document.getElementById('edit-amount').value);
+  var evtName = document.getElementById('edit-event').value.trim();
+  var venue = document.getElementById('edit-venue').value;
+  var stand = document.getElementById('edit-stand').value;
+  var staffVal = parseInt(document.getElementById('edit-staff').value) || null;
+  var tipVal = parseFloat(document.getElementById('edit-tip').value) || null;
+  var errEl = document.getElementById('edit-error');
+  errEl.style.display = 'none';
+
+  if (!date || !venue || !stand || !amount || isNaN(amount)) {
+    errEl.textContent = 'Please fill in all required fields.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  var original = null;
+  for (var i = 0; i < currentSearchData.length; i++) {
+    if (currentSearchData[i].id === id) { original = currentSearchData[i]; break; }
+  }
+
+  var photoUrl = original ? (original.photo_url || null) : null;
+  var unitsUrl = original ? (original.units_photo_url || null) : null;
+  if (editRegClear) photoUrl = null;
+  if (editUnitsClear) unitsUrl = null;
+  if (editRegisterFile) photoUrl = await uploadPhoto(editRegisterFile, id + '-register.' + editRegisterFile.name.split('.').pop());
+  if (editUnitsFile) unitsUrl = await uploadPhoto(editUnitsFile, id + '-units.' + editUnitsFile.name.split('.').pop());
+
+  try {
+    var res = await fetch(SUPA_URL + '/rest/v1/sales?id=eq.' + id, {
+      method: 'PATCH',
+      headers: {
+        'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY,
+        'Content-Type': 'application/json', 'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify({
+        event_date: date, amount: amount, event_name: evtName || null,
+        venue: venue, stand: stand, staff_count: staffVal,
+        tip_amount: tipVal, photo_url: photoUrl, units_photo_url: unitsUrl
+      })
+    });
+    if (!res.ok) throw new Error(await res.text());
+    closeEditModal();
+    searchHistory();
+  } catch(e) {
+    errEl.textContent = 'Save failed. Try again.';
+    errEl.style.display = 'block';
+  }
+}
+
+// ── Delete ──
+function triggerDelete(id, label) {
+  requirePassword('Enter your admin password to delete "' + label + '".', function() { confirmDelete(id, label); });
+}
+
+async function confirmDelete(id, label) {
+  if (!confirm('Delete this entry?\n\n' + label + '\n\nThis cannot be undone.')) return;
+  try {
+    var res = await fetch(SUPA_URL + '/rest/v1/sales?id=eq.' + id, {
+      method: 'DELETE',
+      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Prefer': 'return=minimal' }
+    });
+    if (!res.ok) throw new Error();
+    searchHistory();
+  } catch(e) {
+    alert('Delete failed. Try again.');
+  }
+}
+
+// ── Export ──
+function exportCSV() {
+  if (!currentSearchData.length) return;
+  var headers = ['Date','Event','Venue','Stand','Amount','Tips','Staff Count','Sales Per Person','Register Photo','Units Photo','Submitted At'];
+  var csvRows = currentSearchData.map(function(r) {
+    var perPerson = r.staff_count && r.staff_count > 0 ? (parseFloat(r.amount)/r.staff_count).toFixed(2) : '';
+    return [
+      r.event_date, r.event_name || '', r.venue, r.stand, r.amount,
+      r.tip_amount || '', r.staff_count || '', perPerson,
+      r.photo_url ? 'Yes' : 'No', r.units_photo_url ? 'Yes' : 'No', r.submitted_at
+    ];
+  });
+  var csv = [headers].concat(csvRows).map(function(r) {
+    return r.map(function(v) { return '"' + (v || '') + '"'; }).join(',');
+  }).join('\n');
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  a.download = 'sales-history-' + new Date().toISOString().split('T')[0] + '.csv';
+  a.click();
+}
+</script>
+</body>
+</html>
