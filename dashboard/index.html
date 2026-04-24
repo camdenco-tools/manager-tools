@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Popcorn Chez — Staffing Dashboard</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #f0f0ec; --card: #ffffff; --primary: #1a1a1a;
+  --green: #1D9E75; --green-light: #e8f7f2; --label: #999;
+  --border: #e8e8e4; --shadow: 0 2px 12px rgba(0,0,0,0.06);
+  --radius: 16px; --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --red: #c0392b; --red-light: #fde8e8;
+  --amber: #856404; --amber-light: #fff3cd;
+  --blue: #2471a3; --blue-light: #deeef9;
+}
+body { background: var(--bg); font-family: var(--font); color: var(--primary); min-height: 100vh; }
+header { background: var(--card); border-bottom: 1px solid var(--border); padding: 0 32px; display: flex; align-items: center; justify-content: space-between; height: 64px; position: sticky; top: 0; z-index: 50; }
+.header-left { display: flex; align-items: center; gap: 16px; }
+.back-link { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--label); text-decoration: none; display: flex; align-items: center; gap: 6px; transition: color 0.15s; }
+.back-link:hover { color: var(--primary); }
+.hdivider { width: 1px; height: 20px; background: var(--border); }
+.header-title { font-size: 15px; font-weight: 700; }
+.header-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: var(--primary); color: white; padding: 3px 8px; border-radius: 20px; }
+.header-right { display: flex; align-items: center; gap: 10px; }
+.last-updated { font-size: 11px; color: var(--label); }
+.refresh-btn { font-size: 12px; font-weight: 700; color: var(--label); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 6px 14px; cursor: pointer; font-family: var(--font); }
+.refresh-btn:hover { color: var(--primary); background: var(--border); }
+.main { max-width: 1280px; margin: 0 auto; padding: 24px 32px 80px; }
+.section { margin-bottom: 28px; }
+.section-hdr { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+.section-title { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--label); }
+.section-sub { font-size: 11px; color: #bbb; }
+.metric-row { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin-bottom: 16px; }
+.metric-card { background: var(--card); border-radius: 12px; border: 1px solid var(--border); padding: 16px 18px; box-shadow: var(--shadow); cursor: default; }
+.metric-card.clickable { cursor: pointer; }
+.metric-card.clickable:hover { border-color: #999; }
+.metric-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--label); margin-bottom: 8px; }
+.metric-val { font-size: 28px; font-weight: 800; color: var(--primary); line-height: 1; margin-bottom: 4px; }
+.metric-val .denom { font-size: 16px; font-weight: 400; color: var(--label); }
+.metric-sub { font-size: 11px; color: var(--label); }
+.metric-trend { font-size: 11px; font-weight: 700; margin-top: 4px; }
+.trend-up { color: var(--green); }
+.trend-down { color: var(--red); }
+.metric-detail { font-size: 10px; color: var(--blue); margin-top: 4px; }
+.donut-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 0; }
+.donut-card { background: var(--card); border-radius: 14px; border: 1px solid var(--border); padding: 20px 24px; box-shadow: var(--shadow); cursor: pointer; display: flex; align-items: center; gap: 20px; transition: border-color 0.15s; }
+.donut-card:hover { border-color: #999; }
+.donut-svg-wrap { flex-shrink: 0; }
+.donut-info { flex: 1; min-width: 0; }
+.donut-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--label); margin-bottom: 6px; }
+.donut-fraction { font-size: 36px; font-weight: 800; color: var(--primary); line-height: 1; margin-bottom: 4px; }
+.donut-fraction .denom { font-size: 20px; font-weight: 400; color: var(--label); }
+.donut-status { font-size: 12px; font-weight: 700; margin-bottom: 6px; }
+.donut-hint { font-size: 11px; color: var(--blue); }
+.donut-legend { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.donut-legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--label); }
+.donut-legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.drill-panel { display: none; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-top: 8px; margin-bottom: 12px; box-shadow: var(--shadow); }
+.drill-panel.open { display: block; }
+.drill-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--label); margin-bottom: 10px; }
+.drill-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.drill-row:last-child { border-bottom: none; }
+.drill-venue { color: var(--primary); font-weight: 600; }
+.drill-status { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
+.ds-missing { background: var(--red-light); color: var(--red); }
+.ds-pending { background: var(--amber-light); color: var(--amber); }
+.week-block { margin-bottom: 16px; }
+.week-label { font-size: 11px; font-weight: 700; color: var(--label); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+.week-line { flex: 1; height: 1px; background: var(--border); }
+.venue-status-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; }
+.vs-card { background: var(--card); border-radius: 10px; border: 1px solid var(--border); padding: 12px 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
+.vs-venue { font-size: 12px; font-weight: 700; color: var(--primary); margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vs-no-events { font-size: 11px; color: #ccc; font-style: italic; }
+.vs-evt-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 4px; }
+.vs-evt-row:last-child { margin-bottom: 0; }
+.vs-evt-name { font-size: 11px; color: #555; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+.status-pill { font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 8px; white-space: nowrap; flex-shrink: 0; letter-spacing: 0.04em; text-transform: uppercase; }
+.sp-staffed { background: #e8f7f2; color: #0f6e56; }
+.sp-submitted { background: #deeef9; color: #0e3f6a; }
+.sp-pending { background: var(--amber-light); color: var(--amber); }
+.sp-missing { background: var(--red-light); color: var(--red); }
+.table-card { background: var(--card); border-radius: 12px; border: 1px solid var(--border); overflow: hidden; box-shadow: var(--shadow); }
+.data-table { width: 100%; border-collapse: collapse; }
+.data-table th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--label); padding: 10px 14px; text-align: left; background: var(--bg); border-bottom: 1px solid var(--border); }
+.data-table td { font-size: 13px; padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; color: var(--primary); }
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tbody tr:hover td { background: #fafaf8; }
+.bar-wrap { width: 80px; height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; display: inline-block; vertical-align: middle; margin-right: 5px; }
+.bar-fill { height: 100%; border-radius: 3px; }
+.bf-green { background: var(--green); }
+.bf-amber { background: #e8c94e; }
+.bf-red { background: var(--red); }
+.conf-badge { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 8px; }
+.cb-yes { background: #e8f7f2; color: #0f6e56; }
+.cb-no { background: var(--bg); color: var(--label); }
+.muted { color: var(--label); font-size: 11px; }
+.tag-sub { font-size: 11px; color: var(--label); }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 28px; }
+.sales-header { display: flex; align-items: baseline; justify-content: space-between; padding: 16px 18px 12px; border-bottom: 1px solid var(--border); }
+.sales-grand-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--label); }
+.sales-grand-total { font-size: 32px; font-weight: 800; color: var(--primary); }
+.sales-grand-date { font-size: 12px; color: var(--label); margin-top: 2px; }
+.sales-table-header { display: grid; grid-template-columns: 1fr 100px 100px 120px; gap: 0; background: var(--bg); border-bottom: 1px solid var(--border); }
+.sales-table-header span { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--label); padding: 8px 14px; }
+.sales-table-header span:not(:first-child) { text-align: right; }
+.sales-row { display: grid; grid-template-columns: 1fr 100px 100px 120px; gap: 0; border-bottom: 1px solid var(--border); align-items: center; }
+.sales-row:last-child { border-bottom: none; }
+.sales-row:hover { background: #fafaf8; }
+.sales-venue-cell { padding: 12px 14px; }
+.sales-venue-name { font-size: 13px; font-weight: 700; }
+.sales-venue-meta { font-size: 11px; color: var(--label); margin-top: 1px; }
+.sales-num-cell { padding: 12px 14px; text-align: right; font-size: 13px; font-weight: 700; }
+.sales-num-cell.muted { color: var(--label); font-weight: 400; font-style: italic; font-size: 12px; }
+.sales-num-cell.total { font-size: 15px; }
+.perf-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.perf-row:last-child { border-bottom: none; }
+.perf-venue { font-size: 13px; font-weight: 600; }
+.perf-right { display: flex; align-items: center; gap: 16px; }
+.perf-val { font-size: 14px; font-weight: 800; color: var(--primary); min-width: 50px; text-align: right; }
+.perf-trend { font-size: 11px; font-weight: 700; min-width: 48px; text-align: right; }
+.perf-period { font-size: 10px; color: var(--label); min-width: 70px; text-align: right; }
+.toast { position: fixed; bottom: 28px; right: 28px; background: var(--primary); color: white; padding: 12px 20px; border-radius: 10px; font-size: 13px; font-weight: 600; box-shadow: 0 8px 24px rgba(0,0,0,0.2); z-index: 999; transform: translateY(80px); opacity: 0; transition: all 0.25s ease; }
+.toast.show { transform: translateY(0); opacity: 1; }
+.loading-state { text-align: center; padding: 32px; font-size: 13px; color: var(--label); }
+.empty-state { text-align: center; padding: 24px; font-size: 13px; color: #ccc; font-style: italic; }
+@media (max-width: 900px) {
+  header { padding: 12px 16px; height: auto; flex-wrap: wrap; gap: 8px; }
+  .main { padding: 16px 12px 60px; }
+  .metric-row { grid-template-columns: repeat(2, 1fr); }
+  .venue-status-grid { grid-template-columns: repeat(2, 1fr); }
+  .two-col { grid-template-columns: 1fr; }
+  .sales-table-header { grid-template-columns: 1fr 80px 80px 90px; }
+  .sales-row { grid-template-columns: 1fr 80px 80px 90px; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="header-left">
+    <a href="/" class="back-link">&#8592; Toolkit</a>
+    <div class="hdivider"></div>
+    <span class="header-title">Staffing Dashboard</span>
+    <span class="header-badge">Live</span>
+  </div>
+  <div class="header-right">
+    <span class="last-updated" id="last-updated">Loading...</span>
+    <button class="refresh-btn" onclick="init()">&#8635; Refresh</button>
+  </div>
+</header>
+
+<div class="main">
+  <div class="donut-row" id="donut-row">
+    <div class="donut-card" onclick="toggleDrill()">
+      <div class="donut-svg-wrap"><svg width="90" height="90" viewBox="0 0 90 90" id="donut-requests-svg"><circle cx="45" cy="45" r="36" fill="none" stroke="#f0f0ec" stroke-width="10"/><circle cx="45" cy="45" r="36" fill="none" stroke="#e8e8e4" stroke-width="10" id="donut-requests-track"/><circle cx="45" cy="45" r="36" fill="none" stroke="#1D9E75" stroke-width="10" stroke-linecap="round" stroke-dasharray="226" stroke-dashoffset="226" id="donut-requests-fill" transform="rotate(-90 45 45)" style="transition: stroke-dashoffset 0.8s ease;"/><text x="45" y="49" text-anchor="middle" font-size="16" font-weight="800" fill="#1a1a1a" id="donut-requests-pct">--</text></svg></div>
+      <div class="donut-info"><div class="donut-label">Staffing requests</div><div class="donut-fraction"><span id="m-requests">--</span><span class="denom" id="m-requests-denom"></span></div><div class="donut-status" id="m-requests-sub">Loading...</div><div class="donut-legend"><div class="donut-legend-item"><div class="donut-legend-dot" style="background:#1D9E75;"></div>Submitted</div><div class="donut-legend-item"><div class="donut-legend-dot" style="background:#e8e8e4;"></div>Outstanding</div></div><div class="donut-hint" id="m-requests-detail"></div></div>
+    </div>
+    <div class="donut-card" onclick="toggleDrillConfirmed()">
+      <div class="donut-svg-wrap"><svg width="90" height="90" viewBox="0 0 90 90"><circle cx="45" cy="45" r="36" fill="none" stroke="#f0f0ec" stroke-width="10"/><circle cx="45" cy="45" r="36" fill="none" stroke="#e8e8e4" stroke-width="10"/><circle cx="45" cy="45" r="36" fill="none" stroke="#1D9E75" stroke-width="10" stroke-linecap="round" stroke-dasharray="226" stroke-dashoffset="226" id="donut-confirmed-fill" transform="rotate(-90 45 45)" style="transition: stroke-dashoffset 0.8s ease;"/><text x="45" y="49" text-anchor="middle" font-size="16" font-weight="800" fill="#1a1a1a" id="donut-confirmed-pct">--</text></svg></div>
+      <div class="donut-info"><div class="donut-label">Events confirmed staffed</div><div class="donut-fraction"><span id="m-confirmed">--</span><span class="denom" id="m-confirmed-denom"></span></div><div class="donut-status" id="m-confirmed-sub">Loading...</div><div class="donut-legend"><div class="donut-legend-item"><div class="donut-legend-dot" style="background:#1D9E75;"></div>Confirmed staffed</div><div class="donut-legend-item"><div class="donut-legend-dot" style="background:#e8e8e4;"></div>Pending</div></div><div class="donut-hint" id="m-confirmed-detail"></div></div>
+    </div>
+  </div>
+  <div class="drill-panel open" id="drill-panel"><div class="drill-title">Venues with outstanding staffing requests</div><div id="drill-content"><div class="loading-state">Loading...</div></div></div>
+  <div class="metric-row" style="margin-top: 16px;">
+    <div class="metric-card"><div class="metric-label">Latest date sales</div><div class="metric-val" id="m-sales">--</div><div class="metric-sub" id="m-sales-sub">Loading...</div></div>
+    <div class="metric-card"><div class="metric-label">SPE -- current fiscal period</div><div class="metric-val" id="m-spe">--</div><div class="metric-sub" id="m-spe-sub">Sales per employee</div><div class="metric-trend" id="m-spe-trend"></div></div>
+    <div class="metric-card" id="m-percap-card"><div class="metric-label">Per cap -- current fiscal period</div><div class="metric-val" id="m-percap">--</div><div class="metric-sub" id="m-percap-sub">Loading...</div><div class="metric-trend" id="m-percap-trend"></div></div>
+    <div class="metric-card"><div class="metric-label">Latest date total staff</div><div class="metric-val" id="m-staff">--</div><div class="metric-sub" id="m-staff-sub">Across all venues</div></div>
+  </div>
+  <div class="drill-panel open" id="drill-panel-confirmed"><div class="drill-title">Events not yet confirmed staffed</div><div id="drill-confirmed-content"><div class="loading-state">Loading...</div></div></div>
+  <div class="section"><div class="section-hdr"><span class="section-title">Staffing request status</span><span class="section-sub" id="weeks-label">Upcoming 2 weeks</span></div><div id="weeks-container"><div class="loading-state">Loading...</div></div></div>
+  <div class="section"><div class="section-hdr"><span class="section-title">Staffing coverage -- availability vs requested</span><span class="section-sub">Next 14 days</span></div><div class="table-card"><div id="coverage-table"><div class="loading-state">Loading...</div></div></div></div>
+  <div class="two-col">
+    <div><div class="section-hdr"><span class="section-title">Requested vs actual staff</span><span class="section-sub">Last 30 days -- per event</span></div><div class="table-card"><div id="req-vs-actual"><div class="loading-state">Loading...</div></div></div></div>
+    <div><div class="section-hdr"><span class="section-title">Per cap by venue</span><span class="section-sub" id="percap-period-label">Current fiscal period</span></div><div class="table-card"><div id="percap-table"><div class="loading-state">Loading...</div></div></div></div>
+  </div>
+  <div class="section"><div class="section-hdr"><span class="section-title">Latest date sales</span><span class="section-sub" id="latest-date-label">--</span></div><div class="table-card" id="latest-sales-card"><div class="loading-state">Loading...</div></div></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SB_URL='https://aoazlttdjowhlfcksoyl.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvYXpsdHRkam93aGxmY2tzb3lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNzU4MjMsImV4cCI6MjA5MDg1MTgyM30.tagP_88g7R3d_p7a4Kp0NirnJgkAR5AQQImCt414SJg';
+const VENUE_LABELS={FMP:'Freedom Mortgage Pavilion',Mann:'Mann Music Center',BWH:'Boardwalk Hall',ACCC:'AC Convention Center',Cure:'Cure Insurance Arena',Subaru:'Subaru Park',DE:'DE Chase Field House',Montage:'Montage Mountain',SATB:'Sports at the Beach',Villanova:'Villanova',Kirkwood:'Kirkwood'};
+const ALL_VENUES=Object.keys(VENUE_LABELS);
+const SUPPORT_STAND='Support Staff';
+const HAWKING_STAND='Hawking';
+const VENUE_STANDS={Mann:[SUPPORT_STAND,HAWKING_STAND,'Upper Concession','Upper Popcorn','Lower Popcorn','Upper Pizza','Lower Pizza','Farm & Fry Truck','Crescendo','Lawn Portable','Stage Left Bar','Upper Linear Bar','Food Court Bar 2','Parkside Tent Bar','Parkside GA View Bar'],FMP:[SUPPORT_STAND,HAWKING_STAND,'Stand 782','SC1','LM1','LM2','WWI','Ben Kettle','Walt Kettle','IC1','BWI','Ziggys','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4','Mobile Cart 5'],Cure:[SUPPORT_STAND,HAWKING_STAND,'Popcorn','Candy','Cotton Candy'],ACCC:[SUPPORT_STAND,HAWKING_STAND,'Stand 1','Stand 2'],BWH:[SUPPORT_STAND,HAWKING_STAND,'North Stand','South Stand'],DE:[SUPPORT_STAND,HAWKING_STAND,'VIP Bar','Cafe','Popcorn','Bar','Farm & Fry'],Subaru:[SUPPORT_STAND,HAWKING_STAND,'Popcorn','VIP'],Villanova:[SUPPORT_STAND,HAWKING_STAND,'Stand 1'],Montage:[SUPPORT_STAND,HAWKING_STAND,'BW Pizza','Midway Pizza','Midway Popcorn','Boardwalk Popcorn','Festival Foods','Potato Stand','Boardwalk New Food','Mobile Cart 1','Mobile Cart 2'],SATB:[SUPPORT_STAND,HAWKING_STAND,'Stand 1','Ice Cream 1','Stand 2','Stand 3','Catering'],Kirkwood:[SUPPORT_STAND,HAWKING_STAND,'Stand 1']};
+const FISCAL_PERIODS=[{name:'June 2025',start:'2025-05-25',end:'2025-06-28'},{name:'July 2025',start:'2025-06-29',end:'2025-08-02'},{name:'August 2025',start:'2025-08-03',end:'2025-08-30'},{name:'September 2025',start:'2025-08-31',end:'2025-09-27'},{name:'October 2025',start:'2025-09-28',end:'2025-11-01'},{name:'November 2025',start:'2025-11-02',end:'2025-11-29'},{name:'December 2025',start:'2025-11-30',end:'2026-01-03'},{name:'January 2026',start:'2026-01-04',end:'2026-01-31'},{name:'February 2026',start:'2026-02-01',end:'2026-02-28'},{name:'March 2026',start:'2026-03-01',end:'2026-04-04'},{name:'April 2026',start:'2026-04-05',end:'2026-05-02'},{name:'May 2026',start:'2026-05-03',end:'2026-05-30'},{name:'June 2026',start:'2026-05-31',end:'2026-07-04'},{name:'July 2026',start:'2026-07-05',end:'2026-08-01'},{name:'August 2026',start:'2026-08-02',end:'2026-09-05'},{name:'September 2026',start:'2026-09-06',end:'2026-10-03'},{name:'October 2026',start:'2026-10-04',end:'2026-10-31'},{name:'November 2026',start:'2026-11-01',end:'2026-11-28'},{name:'December 2026',start:'2026-12-06',end:'2027-01-02'}];
+
+function getCurrentFiscalPeriod(){const today=todayStr();for(const p of FISCAL_PERIODS){if(today>=p.start&&today<=p.end)return p;}return FISCAL_PERIODS[FISCAL_PERIODS.length-1];}
+function getPriorFiscalPeriod(){const curr=getCurrentFiscalPeriod();const idx=FISCAL_PERIODS.indexOf(curr);return idx>0?FISCAL_PERIODS[idx-1]:null;}
+function todayStr(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
+function addDays(dateStr,n){const d=new Date(dateStr+'T12:00:00');d.setDate(d.getDate()+n);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
+function getWeekBounds(offsetWeeks){const today=new Date();const dow=today.getDay();const monday=new Date(today);monday.setDate(today.getDate()-(dow===0?6:dow-1)+offsetWeeks*7);const sunday=new Date(monday);sunday.setDate(monday.getDate()+6);const fmt=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;const fmtLabel=d=>d.toLocaleDateString('en-US',{month:'short',day:'numeric'});return{start:fmt(monday),end:fmt(sunday),label:`${fmtLabel(monday)} – ${fmtLabel(sunday)}`};}
+function fmtDateShort(ds){return new Date(ds+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'numeric',day:'numeric'});}
+function fmtDateFull(ds){return new Date(ds+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});}
+function fmtMoney(n){return '$'+Math.round(n).toLocaleString();}
+function fmtMoneyDec(n){return '$'+n.toFixed(2);}
+async function sbFetch(p){const r=await fetch(SB_URL+'/rest/v1/'+p,{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});if(!r.ok)throw new Error(await r.text());return r.json();}
+
+let drillOpen=true;
+let drillConfirmedOpen=true;
+let drillData=[];
+function toggleDrill(){drillOpen=!drillOpen;document.getElementById('drill-panel').classList.toggle('open',drillOpen);}
+function toggleDrillConfirmed(){drillConfirmedOpen=!drillConfirmedOpen;document.getElementById('drill-panel-confirmed').classList.toggle('open',drillConfirmedOpen);}
+
+async function init(){document.getElementById('last-updated').textContent='Loading...';try{const today=todayStr();const twoWeeksOut=addDays(today,14);const thirtyDaysAgo=addDays(today,-30);const fiscalPeriod=getCurrentFiscalPeriod();const priorPeriod=getPriorFiscalPeriod();const[events,submissions,availability,staffingStatus,salesRecent,salesFiscal,salesPrior]=await Promise.all([sbFetch('events?order=event_date.asc'),sbFetch('staffing_requests?select=event_id,venue,stand,role,headcount,manager_name,submitted_at'),sbFetch('availability?select=staff_name,event_id'),sbFetch('event_staffing_status?select=event_id,venue,is_confirmed,confirmed_by,confirmed_at'),sbFetch('sales?order=event_date.desc&limit=500&select=event_date,venue,stand,amount,staff_count,event_name'),sbFetch(`sales?event_date=gte.${fiscalPeriod.start}&event_date=lte.${fiscalPeriod.end}&select=venue,amount,staff_count,event_date`),priorPeriod?sbFetch(`sales?event_date=gte.${priorPeriod.start}&event_date=lte.${priorPeriod.end}&select=venue,amount,staff_count,event_date`):Promise.resolve([])]);const subsByEvt={};submissions.forEach(r=>{if(!subsByEvt[r.event_id])subsByEvt[r.event_id]=[];subsByEvt[r.event_id].push(r);});const availByEvt={};availability.forEach(r=>{if(!availByEvt[r.event_id])availByEvt[r.event_id]=[];availByEvt[r.event_id].push(r);});const statusByKey={};staffingStatus.forEach(r=>{statusByKey[r.event_id+'||'+r.venue]=r;});const upcomingEvts=events.filter(e=>e.event_date>=today&&e.event_date<=twoWeeksOut);const latestDate=salesRecent.length>0?salesRecent[0].event_date:null;const latestSales=latestDate?salesRecent.filter(r=>r.event_date===latestDate):[];renderMetrics(upcomingEvts,subsByEvt,statusByKey,salesFiscal,salesPrior,priorPeriod,fiscalPeriod,latestSales,latestDate,events);renderWeeks(upcomingEvts,subsByEvt,statusByKey);renderCoverageTable(upcomingEvts,subsByEvt,availByEvt,statusByKey);renderReqVsActual(events,subsByEvt,salesRecent,thirtyDaysAgo);renderPerCap(events,salesFiscal,salesPrior,priorPeriod,fiscalPeriod);renderLatestSales(latestSales,latestDate,events);document.getElementById('last-updated').textContent='Updated '+new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});}catch(e){console.error(e);showToast('Error loading dashboard data.');document.getElementById('last-updated').textContent='Error loading';}}
+
+function getReqTotal(evtId,venue,subs){const rows=(subs[evtId]||[]).filter(r=>r.venue===venue&&r.stand!==SUPPORT_STAND);return rows.reduce((s,r)=>s+(r.headcount||0),0);}
+function isSubmitted(evtId,subs){return!!(subs[evtId]&&subs[evtId].length>0);}
+
+function renderMetrics(upcomingEvts,subs,statusByKey,salesFiscal,salesPrior,priorPeriod,fiscalPeriod,latestSales,latestDate,events){const latestTotal=latestSales.reduce((s,r)=>s+parseFloat(r.amount),0);document.getElementById('m-sales').textContent=fmtMoney(latestTotal);document.getElementById('m-sales-sub').textContent=latestDate?fmtDateFull(latestDate):'No sales logged yet';const latestStaff=latestSales.reduce((s,r)=>s+(parseInt(r.staff_count)||0),0);document.getElementById('m-staff').textContent=latestStaff||'--';document.getElementById('m-staff-sub').textContent=latestDate?fmtDateFull(latestDate):'No data yet';const fiscalDates=[...new Set(salesFiscal.map(r=>r.event_date))];const fiscalEvts=events.filter(e=>fiscalDates.includes(e.event_date)&&e.actual_attendance);const totalAtt=fiscalEvts.reduce((s,e)=>s+(e.actual_attendance||0),0);const totalFiscalSales=salesFiscal.reduce((s,r)=>s+parseFloat(r.amount),0);const perCap=totalAtt>0?totalFiscalSales/totalAtt:null;document.getElementById('m-percap').textContent=perCap?fmtMoneyDec(perCap):'--';document.getElementById('m-percap-sub').textContent=perCap?fiscalPeriod.name:'Attendance not yet entered';if(perCap&&priorPeriod){const priorDates=[...new Set((salesPrior||[]).map(r=>r.event_date))];const priorEvts=events.filter(e=>priorDates.includes(e.event_date)&&e.actual_attendance);const priorAtt=priorEvts.reduce((s,e)=>s+(e.actual_attendance||0),0);const priorSales=(salesPrior||[]).reduce((s,r)=>s+parseFloat(r.amount),0);const priorPerCap=priorAtt>0?priorSales/priorAtt:null;if(priorPerCap){const diff=perCap-priorPerCap;const trendEl=document.getElementById('m-percap-trend');trendEl.textContent=(diff>=0?'↑':'↓')+' '+fmtMoneyDec(Math.abs(diff))+' vs '+priorPeriod.name;trendEl.className='metric-trend '+(diff>=0?'trend-up':'trend-down');}}const submitted=upcomingEvts.filter(e=>isSubmitted(e.id,subs)).length;const total=upcomingEvts.length;const reqPct=total>0?Math.round((submitted/total)*100):0;const reqOffset=226-(226*submitted/Math.max(total,1));document.getElementById('m-requests').textContent=submitted;document.getElementById('m-requests-denom').textContent=' / '+total;document.getElementById('donut-requests-pct').textContent=reqPct+'%';const reqFill=document.getElementById('donut-requests-fill');reqFill.style.stroke=reqPct===100?'#1D9E75':reqPct>=70?'#e8c94e':'#c0392b';setTimeout(()=>{reqFill.style.strokeDashoffset=reqOffset;},100);const outstanding=total-submitted;document.getElementById('m-requests-sub').textContent=outstanding===0?'All submitted ✓':`${outstanding} venue${outstanding!==1?'s':''} outstanding`;document.getElementById('m-requests-sub').style.color=outstanding>0?'var(--red)':'var(--green)';if(outstanding>0){document.getElementById('m-requests-detail').textContent='Tap to collapse ↑';drillData=upcomingEvts.filter(e=>!isSubmitted(e.id,subs));renderDrill(drillData);}else{document.getElementById('m-requests-detail').textContent='';drillData=[];document.getElementById('drill-content').innerHTML='<div class="empty-state">All submissions are in.</div>';}const confirmed=upcomingEvts.filter(e=>{const s=statusByKey[e.id+'||'+e.venue];return s&&s.is_confirmed;}).length;const confPct=total>0?Math.round((confirmed/total)*100):0;const confOffset=226-(226*confirmed/Math.max(total,1));document.getElementById('m-confirmed').textContent=confirmed;document.getElementById('m-confirmed-denom').textContent=' / '+total;document.getElementById('donut-confirmed-pct').textContent=confPct+'%';const confFill=document.getElementById('donut-confirmed-fill');confFill.style.stroke=confPct===100?'#1D9E75':confPct>=70?'#e8c94e':'#c0392b';setTimeout(()=>{confFill.style.strokeDashoffset=confOffset;},200);const notConfirmed=total-confirmed;document.getElementById('m-confirmed-sub').textContent=notConfirmed===0?'All confirmed ✓':`${notConfirmed} not yet confirmed`;document.getElementById('m-confirmed-sub').style.color=notConfirmed>0?'var(--amber)':'var(--green)';if(notConfirmed>0)document.getElementById('m-confirmed-detail').textContent='Tap to collapse ↑';const notConfirmedEvts=upcomingEvts.filter(e=>{const s=statusByKey[e.id+'||'+e.venue];return!(s&&s.is_confirmed);});if(notConfirmedEvts.length===0){document.getElementById('drill-confirmed-content').innerHTML='<div class="empty-state">All events confirmed staffed.</div>';}else{document.getElementById('drill-confirmed-content').innerHTML=notConfirmedEvts.map(e=>{const sub=isSubmitted(e.id,subs);return `<div class="drill-row"><span class="drill-venue">${VENUE_LABELS[e.venue]||e.venue} -- ${e.event_name}</span><div style="display:flex;align-items:center;gap:8px;"><span class="tag-sub">${fmtDateShort(e.event_date)}</span><span class="drill-status ${sub?'ds-pending':'ds-missing'}">${sub?'Submitted -- awaiting confirmation':'Not submitted'}</span></div></div>`;}).join('');}const fiscalTotal=salesFiscal.reduce((s,r)=>s+parseFloat(r.amount),0);const fiscalStaff=salesFiscal.reduce((s,r)=>s+(parseInt(r.staff_count)||0),0);const spe=fiscalStaff>0?fiscalTotal/fiscalStaff:null;document.getElementById('m-spe').textContent=spe?fmtMoneyDec(spe):'--';document.getElementById('m-spe-sub').textContent=`Sales per employee -- ${fiscalPeriod.name}`;if(spe&&priorPeriod){const priorTotal=salesPrior.reduce((s,r)=>s+parseFloat(r.amount),0);const priorStaff=salesPrior.reduce((s,r)=>s+(parseInt(r.staff_count)||0),0);const priorSpe=priorStaff>0?priorTotal/priorStaff:null;if(priorSpe){const diff=spe-priorSpe;const trendEl=document.getElementById('m-spe-trend');trendEl.textContent=(diff>=0?'↑':'↓')+' '+fmtMoneyDec(Math.abs(diff))+' vs '+priorPeriod.name;trendEl.className='metric-trend '+(diff>=0?'trend-up':'trend-down');}}}
+
+function renderDrill(evts){if(evts.length===0){document.getElementById('drill-content').innerHTML='<div class="empty-state">All submissions are in.</div>';return;}document.getElementById('drill-content').innerHTML=evts.map(e=>`<div class="drill-row"><span class="drill-venue">${VENUE_LABELS[e.venue]||e.venue} -- ${e.event_name}</span><div style="display:flex;align-items:center;gap:8px;"><span class="tag-sub">${fmtDateShort(e.event_date)}</span><span class="drill-status ds-missing">Not submitted</span></div></div>`).join('');}
+
+function renderWeeks(upcomingEvts,subs,statusByKey){const week1=getWeekBounds(0);const week2=getWeekBounds(1);function buildWeekBlock(week,label){const evtsThisWeek=upcomingEvts.filter(e=>e.event_date>=week.start&&e.event_date<=week.end);const venuesWithEvts=[...new Set(evtsThisWeek.map(e=>e.venue))];let innerHtml;if(venuesWithEvts.length===0){innerHtml='<div class="empty-state" style="padding:20px;">No events scheduled this week.</div>';}else{innerHtml=`<div class="venue-status-grid">${venuesWithEvts.map(venue=>{const evts=evtsThisWeek.filter(e=>e.venue===venue);return `<div class="vs-card"><div class="vs-venue">${VENUE_LABELS[venue]||venue}</div>${evts.map(e=>{const confirmed=statusByKey[e.id+'||'+e.venue]?.is_confirmed;const submitted=isSubmitted(e.id,subs);let pillClass,pillText;if(confirmed){pillClass='sp-staffed';pillText='✓ Staffed';}else if(submitted){pillClass='sp-submitted';pillText='Submitted';}else{pillClass='sp-missing';pillText='Not submitted';}return `<div class="vs-evt-row"><span class="vs-evt-name">${e.event_name}</span><span class="status-pill ${pillClass}">${pillText}</span></div>`;}).join('')}</div>`;}).join('')}</div>`;}return `<div class="week-block"><div class="week-label"><span>${label}: ${week.label}</span><div class="week-line"></div></div>${innerHtml}</div>`;}document.getElementById('weeks-container').innerHTML=buildWeekBlock(week1,'This week')+buildWeekBlock(week2,'Next week');}
+
+function renderCoverageTable(evts,subs,avail,statusByKey){if(evts.length===0){document.getElementById('coverage-table').innerHTML='<div class="empty-state">No upcoming events in next 14 days.</div>';return;}let html=`<table class="data-table"><thead><tr><th>Event</th><th>Venue</th><th>Date</th><th>Requested</th><th>Signed up</th><th>Coverage</th><th>Confirmed</th></tr></thead><tbody>`;evts.forEach(e=>{const req=getReqTotal(e.id,e.venue,subs);const signed=(avail[e.id]||[]).length;const submitted=isSubmitted(e.id,subs);const confirmed=statusByKey[e.id+'||'+e.venue]?.is_confirmed;const pct=req>0?Math.min(100,Math.round((signed/req)*100)):null;const barClass=pct===null?'':pct>=100?'bf-green':pct>=60?'bf-amber':'bf-red';const pctLabel=pct===null?'<span class="muted">No request</span>':`<div class="bar-wrap"><div class="bar-fill ${barClass}" style="width:${pct}%"></div></div>${pct}%`;html+=`<tr><td><strong>${e.event_name}</strong></td><td class="muted">${e.venue}</td><td class="muted">${fmtDateShort(e.event_date)}</td><td>${submitted?req:'<span class="muted">--</span>'}</td><td>${signed}</td><td>${pctLabel}</td><td><span class="conf-badge ${confirmed?'cb-yes':'cb-no'}">${confirmed?'✓ Staffed':'Pending'}</span></td></tr>`;});html+='</tbody></table>';document.getElementById('coverage-table').innerHTML=html;}
+
+function renderReqVsActual(events,subs,salesRecent,thirtyDaysAgo){const recentEvts=events.filter(e=>e.event_date>=thirtyDaysAgo&&e.event_date<todayStr());const rows=[];recentEvts.forEach(e=>{const req=getReqTotal(e.id,e.venue,subs);if(req===0)return;const salesRows=salesRecent.filter(s=>s.event_date===e.event_date&&s.venue===(VENUE_LABELS[e.venue]||e.venue));const actual=salesRows.reduce((s,r)=>s+(parseInt(r.staff_count)||0),0);rows.push({venue:VENUE_LABELS[e.venue]||e.venue,event:e.event_name,date:e.event_date,req,actual,gap:actual-req});});if(rows.length===0){document.getElementById('req-vs-actual').innerHTML='<div class="empty-state">No data for last 30 days yet.</div>';return;}rows.sort((a,b)=>b.date.localeCompare(a.date));let html=`<table class="data-table"><thead><tr><th>Event</th><th>Date</th><th>Requested</th><th>Actual</th><th>Gap</th></tr></thead><tbody>`;rows.slice(0,10).forEach(r=>{const gapColor=r.gap>0?'color:var(--green);font-weight:700;':r.gap<0?'color:var(--red);font-weight:700;':'color:var(--label);';const gapText=r.gap>0?'+'+r.gap:r.gap===0?'--':r.gap;html+=`<tr><td><strong style="font-size:12px;">${r.event}</strong><div class="tag-sub">${r.venue}</div></td><td class="muted">${fmtDateShort(r.date)}</td><td>${r.req}</td><td>${r.actual||'<span class="muted">--</span>'}</td><td style="${gapColor}">${gapText}</td></tr>`;});html+='</tbody></table>';document.getElementById('req-vs-actual').innerHTML=html;}
+
+function renderPerCap(events,salesFiscal,salesPrior,priorPeriod,fiscalPeriod){document.getElementById('percap-period-label').textContent=fiscalPeriod.name;const byVenue={};salesFiscal.forEach(r=>{if(!byVenue[r.venue])byVenue[r.venue]={sales:0,dates:new Set()};byVenue[r.venue].sales+=parseFloat(r.amount);byVenue[r.venue].dates.add(r.event_date);});const fiscalDates=[...new Set(salesFiscal.map(r=>r.event_date))];const fiscalEvts=events.filter(e=>fiscalDates.includes(e.event_date)&&e.actual_attendance);const venueAttendance={};fiscalEvts.forEach(e=>{const vLabel=VENUE_LABELS[e.venue];if(!venueAttendance[vLabel])venueAttendance[vLabel]=0;venueAttendance[vLabel]+=(e.actual_attendance||0);});const priorByVenue={};(salesPrior||[]).forEach(r=>{if(!priorByVenue[r.venue])priorByVenue[r.venue]=0;priorByVenue[r.venue]+=parseFloat(r.amount);});const priorDates=[...new Set((salesPrior||[]).map(r=>r.event_date))];const priorEvts=events.filter(e=>priorDates.includes(e.event_date)&&e.actual_attendance);const priorAttendance={};priorEvts.forEach(e=>{const vLabel=VENUE_LABELS[e.venue];if(!priorAttendance[vLabel])priorAttendance[vLabel]=0;priorAttendance[vLabel]+=(e.actual_attendance||0);});const rows=Object.entries(byVenue).map(([venue,d])=>{const att=venueAttendance[venue]||0;const perCap=att>0?d.sales/att:null;const priorAtt=priorAttendance[venue]||0;const priorSales=priorByVenue[venue]||0;const priorPerCap=priorAtt>0?priorSales/priorAtt:null;return{venue,sales:d.sales,perCap,priorPerCap};}).filter(r=>r.sales>0).sort((a,b)=>(b.perCap||0)-(a.perCap||0));if(rows.length===0){document.getElementById('percap-table').innerHTML='<div class="empty-state">No sales data for this fiscal period yet.</div>';return;}let html='';rows.forEach(r=>{const perCapStr=r.perCap?fmtMoneyDec(r.perCap):'<span class="muted" style="font-size:11px;">--</span>';let trendHtml='';if(r.perCap&&r.priorPerCap){const diff=r.perCap-r.priorPerCap;trendHtml=`<span class="perf-trend ${diff>=0?'trend-up':'trend-down'}">${diff>=0?'↑':'↓'} ${fmtMoneyDec(Math.abs(diff))}</span>`;}else{trendHtml='<span class="perf-trend" style="color:var(--label);">--</span>';}html+=`<div class="perf-row"><span class="perf-venue">${r.venue}</span><div class="perf-right"><span class="perf-val">${perCapStr}</span>${trendHtml}</div></div>`;});document.getElementById('percap-table').innerHTML=html;}
+
+function renderLatestSales(latestSales,latestDate,events){const card=document.getElementById('latest-sales-card');if(!latestDate||latestSales.length===0){card.innerHTML='<div class="empty-state">No sales logged yet.</div>';return;}const grandTotal=latestSales.reduce((s,r)=>s+parseFloat(r.amount),0);const dateEvts=events.filter(e=>e.event_date===latestDate);const byVenue={};latestSales.forEach(r=>{if(!byVenue[r.venue])byVenue[r.venue]={sales:0,staff:0,stands:0,eventName:r.event_name||''};byVenue[r.venue].sales+=parseFloat(r.amount);byVenue[r.venue].staff+=parseInt(r.staff_count)||0;byVenue[r.venue].stands++;});const attByVenueLabel={};dateEvts.forEach(e=>{const lbl=VENUE_LABELS[e.venue]||e.venue;attByVenueLabel[lbl]=(attByVenueLabel[lbl]||0)+(e.actual_attendance||0);});const venueRows=Object.entries(byVenue).sort((a,b)=>b[1].sales-a[1].sales);const grandStaff=venueRows.reduce((s,[,v])=>s+v.staff,0);const grandSPE=grandStaff>0?grandTotal/grandStaff:null;let html=`<div class="sales-header"><div><div class="sales-grand-label">Company total</div><div class="sales-grand-date">${fmtDateFull(latestDate)}</div></div><div style="text-align:right;"><div class="sales-grand-total">${fmtMoney(grandTotal)}</div>${grandSPE?`<div style="font-size:12px;color:var(--label);margin-top:2px;">SPE: ${fmtMoneyDec(grandSPE)}</div>`:''}</div></div><div class="sales-table-header"><span>Venue</span><span>SPE</span><span>Per cap</span><span>Total sales</span></div>`;venueRows.forEach(([venue,d])=>{const spe=d.staff>0?fmtMoneyDec(d.sales/d.staff):null;const att=attByVenueLabel[venue]||0;const perCap=att>0?fmtMoneyDec(d.sales/att):null;html+=`<div class="sales-row"><div class="sales-venue-cell"><div class="sales-venue-name">${venue}</div><div class="sales-venue-meta">${d.eventName}${d.stands>0?' -- '+d.stands+' stand'+(d.stands!==1?'s':''):''}</div></div><div class="sales-num-cell ${spe?'':'muted'}">${spe||'--'}</div><div class="sales-num-cell ${perCap?'':'muted'}">${perCap||'--'}</div><div class="sales-num-cell total">${fmtMoney(d.sales)}</div></div>`;});document.getElementById('latest-date-label').textContent=fmtDateFull(latestDate);card.innerHTML=html;}
+
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3500);}
+
+init();
+setInterval(init,300000);
+</script>
+</body>
+</html>
