@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Popcorn Chez — Availability Responses</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #f0f0ec; --card: #ffffff; --primary: #1a1a1a;
+    --green: #1D9E75; --green-light: #e8f7f2; --label: #999;
+    --border: #e8e8e4; --shadow: 0 2px 12px rgba(0,0,0,0.06);
+    --radius: 16px; --font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --blue: #378ADD; --blue-light: #E6F1FB; --blue-dark: #0C447C;
+    --red: #c0392b; --red-light: #fde8e8;
+    --amber: #856404; --amber-light: #fff3cd;
+  }
+  body { background: var(--bg); font-family: var(--font); color: var(--primary); min-height: 100vh; }
+  header { background: var(--card); border-bottom: 1px solid var(--border); padding: 0 32px; display: flex; align-items: center; justify-content: space-between; height: 64px; position: sticky; top: 0; z-index: 50; }
+  .header-left { display: flex; align-items: center; gap: 16px; }
+  .back-link { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--label); text-decoration: none; display: flex; align-items: center; gap: 6px; transition: color 0.15s; }
+  .back-link:hover { color: var(--primary); }
+  .hdivider { width: 1px; height: 20px; background: var(--border); }
+  .header-title { font-size: 15px; font-weight: 700; }
+  .header-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: #607d8b; color: white; padding: 3px 8px; border-radius: 20px; }
+  .main { max-width: 960px; margin: 0 auto; padding: 28px 24px 80px; }
+  .filter-section { background: var(--card); border-radius: 12px; border: 1px solid var(--border); padding: 16px 20px; margin-bottom: 20px; box-shadow: var(--shadow); }
+  .filter-label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--label); margin-bottom: 12px; }
+  .venue-pills { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+  .venue-pill { padding: 7px 16px; border-radius: 20px; font-size: 13px; font-weight: 700; cursor: pointer; border: 2px solid var(--blue); background: var(--blue); color: white; transition: all 0.15s; font-family: var(--font); }
+  .venue-pill.off { background: var(--card); color: var(--label); border-color: var(--border); }
+  .filter-actions { display: flex; justify-content: flex-end; }
+  .deselect-all { font-size: 12px; color: var(--blue); background: none; border: none; cursor: pointer; font-family: var(--font); font-weight: 600; }
+  .deselect-all:hover { text-decoration: underline; }
+  .print-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
+  .page-desc { font-size: 13px; color: var(--label); line-height: 1.6; }
+  .event-card { background: var(--card); border-radius: 12px; border: 1px solid var(--border); margin-bottom: 10px; overflow: hidden; box-shadow: var(--shadow); }
+  .event-card-header { padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; border-bottom: 1px solid transparent; transition: background 0.12s; flex-wrap: wrap; }
+  .event-card-header:hover { background: #fafaf8; }
+  .event-card-header.open { border-bottom-color: var(--border); }
+  .evt-left { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+  .evt-date { font-size: 11px; font-weight: 700; color: var(--label); white-space: nowrap; min-width: 60px; }
+  .vbadge { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 11px; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
+  .evt-name { font-size: 14px; font-weight: 700; color: var(--primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .evt-time { font-size: 12px; color: var(--label); flex-shrink: 0; }
+  .evt-right { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+  .coverage-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+  .coverage-counts { font-size: 13px; font-weight: 800; white-space: nowrap; }
+  .coverage-bar-wrap { width: 80px; height: 4px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .coverage-bar { height: 100%; border-radius: 3px; }
+  .cov-green { color: var(--green); } .cov-amber { color: var(--amber); } .cov-red { color: var(--red); }
+  .bar-green { background: var(--green); } .bar-amber { background: #e8c94e; } .bar-red { background: var(--red); }
+  .chevron { font-size: 12px; color: var(--label); }
+  .event-card-body { display: none; }
+  .event-card-body.open { display: block; }
+  .panel-section { padding: 14px 18px 0; }
+  .panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .panel-title { font-size: 11px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; }
+  .panel-title-signed { color: var(--green); }
+  .panel-title-not { color: var(--amber); }
+  .display-btn { font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: 20px; border: 1.5px solid var(--border); background: var(--bg); color: var(--primary); cursor: pointer; font-family: var(--font); }
+  .display-btn:hover { background: var(--border); }
+  .names-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+  .name-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--bg); border-radius: 20px; padding: 5px 10px 5px 6px; border: 1px solid var(--border); }
+  .name-avatar { width: 24px; height: 24px; border-radius: 50%; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .name-text { font-size: 12px; font-weight: 600; color: var(--primary); }
+  .name-note { font-size: 11px; color: var(--blue-dark); font-style: italic; }
+  .delete-btn { background: none; border: none; cursor: pointer; color: #ccc; font-size: 13px; padding: 0 0 0 4px; line-height: 1; font-family: var(--font); }
+  .delete-btn:hover { color: #e05c5c; }
+  .no-signups { font-size: 13px; color: var(--label); font-style: italic; padding-bottom: 14px; }
+  .not-panel-toggle { display: flex; align-items: center; justify-content: space-between; padding: 10px 18px; cursor: pointer; border-top: 1px solid var(--border); margin-top: 14px; }
+  .not-panel-toggle:hover { background: #fafaf8; }
+  .not-panel-toggle-label { font-size: 11px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--amber); }
+  .not-panel-toggle-right { display: flex; align-items: center; gap: 10px; }
+  .not-panel-body { display: none; padding: 0 18px 14px; border-top: 1px solid var(--border); }
+  .not-panel-body.open { display: block; }
+  .not-name-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); }
+  .not-name-row:last-child { border-bottom: none; }
+  .not-name-left { display: flex; align-items: center; gap: 8px; }
+  .not-rank { font-size: 11px; font-weight: 700; color: var(--label); min-width: 18px; text-align: right; }
+  .not-name-text { font-size: 13px; font-weight: 600; color: var(--primary); }
+  .not-phone { font-size: 12px; color: var(--label); }
+  .not-count-badge { font-size: 10px; color: var(--label); background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 1px 7px; white-space: nowrap; }
+  .show-more-not { font-size: 12px; font-weight: 700; color: var(--blue); background: none; border: none; cursor: pointer; font-family: var(--font); padding: 8px 0 0; display: block; }
+  .show-more-not:hover { opacity: 0.75; }
+  .signed-panel-body { padding-bottom: 14px; }
+  .confirm-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 300; align-items: center; justify-content: center; padding: 20px; }
+  .confirm-backdrop.open { display: flex; }
+  .confirm-modal { background: var(--card); border-radius: var(--radius); width: 100%; max-width: 380px; padding: 28px; box-shadow: 0 24px 64px rgba(0,0,0,0.2); }
+  .confirm-title { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+  .confirm-desc { font-size: 13px; color: var(--label); line-height: 1.6; margin-bottom: 6px; }
+  .confirm-name { font-weight: 700; color: var(--primary); }
+  .confirm-warning { font-size: 12px; color: var(--red); font-weight: 700; margin-bottom: 20px; }
+  .confirm-btns { display: flex; gap: 10px; justify-content: flex-end; }
+  .cancel-btn { padding: 9px 18px; border-radius: 8px; background: var(--bg); border: none; font-size: 13px; font-weight: 700; cursor: pointer; font-family: var(--font); color: var(--primary); }
+  .cancel-btn:hover { background: var(--border); }
+  .delete-confirm-btn { padding: 9px 18px; border-radius: 8px; background: #e05c5c; border: none; font-size: 13px; font-weight: 700; cursor: pointer; font-family: var(--font); color: #fff; }
+  .delete-confirm-btn:hover { opacity: 0.85; }
+  .print-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 400; align-items: flex-start; justify-content: center; padding: 40px 20px; overflow-y: auto; }
+  .print-overlay.open { display: flex; }
+  .print-panel { background: #fff; border-radius: 12px; max-width: 580px; width: 100%; padding: 32px; }
+  .print-panel-type { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 6px; }
+  .print-panel-type.signed { color: var(--green); }
+  .print-panel-type.not-signed { color: var(--amber); }
+  .print-panel-title { font-size: 20px; font-weight: 800; color: var(--primary); margin-bottom: 4px; }
+  .print-panel-meta { font-size: 12px; color: var(--label); margin-bottom: 4px; }
+  .print-panel-stamp { font-size: 11px; color: var(--label); margin-bottom: 20px; padding-bottom: 16px; border-bottom: 2px solid var(--primary); }
+  .print-name-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; font-size: 14px; }
+  .print-name-row:last-child { border-bottom: none; }
+  .print-name-left { display: flex; align-items: center; gap: 10px; }
+  .print-num { font-size: 12px; color: #999; min-width: 20px; text-align: right; }
+  .print-name { font-weight: 600; color: var(--primary); }
+  .print-note { font-size: 12px; color: var(--blue-dark); font-style: italic; margin-left: 6px; }
+  .print-phone { font-size: 13px; color: #666; }
+  .print-actions { display: flex; gap: 10px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
+  .btn-print { padding: 9px 20px; background: var(--primary); color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: var(--font); }
+  .btn-close-print { padding: 9px 20px; background: var(--bg); color: var(--primary); border: 1px solid var(--border); border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: var(--font); }
+  .empty-print { font-size: 13px; color: var(--label); font-style: italic; padding: 12px 0; }
+  .loading { text-align: center; padding: 40px; font-size: 14px; color: var(--label); }
+  .toast { position: fixed; bottom: 28px; right: 28px; background: var(--primary); color: white; padding: 12px 20px; border-radius: 10px; font-size: 13px; font-weight: 600; z-index: 999; transform: translateY(80px); opacity: 0; transition: all 0.25s ease; }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.green { background: var(--green); }
+  @media print {
+    header, .print-bar, .filter-section, .confirm-backdrop, .print-overlay, .toast { display: none !important; }
+    body { background: white; }
+    .main { padding: 0; max-width: 100%; }
+  }
+  @media (max-width: 600px) {
+    header { padding: 0 16px; height: auto; flex-wrap: wrap; padding: 12px 16px; gap: 10px; }
+    .main { padding: 16px 12px 60px; }
+    .evt-name { max-width: 120px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <a href="/" class="back-link">&#8592; Toolkit</a>
+    <div class="hdivider"></div>
+    <span class="header-title">Availability Responses</span>
+    <span class="header-badge">Manager View</span>
+  </div>
+</header>
+
+<div class="main">
+  <div class="filter-section" id="filter-section">
+    <div class="filter-label">Filter by venue</div>
+    <div class="venue-pills" id="venue-pills"></div>
+    <div class="filter-actions">
+      <button class="deselect-all" id="toggle-all-btn">Deselect all</button>
+    </div>
+  </div>
+  <div class="print-bar">
+    <p class="page-desc">Click an event to see who signed up. Expand the not signed up section to see who else may be available to call.</p>
+  </div>
+  <div id="events-container"><div class="loading">Loading...</div></div>
+</div>
+
+<div class="confirm-backdrop" id="confirm-backdrop">
+  <div class="confirm-modal">
+    <div class="confirm-title">Remove this signup?</div>
+    <div class="confirm-desc">You are about to remove <span class="confirm-name" id="confirm-name">--</span> from this event.</div>
+    <div class="confirm-warning">This cannot be undone.</div>
+    <div class="confirm-btns">
+      <button class="cancel-btn" id="confirm-cancel-btn">Cancel</button>
+      <button class="delete-confirm-btn" id="confirm-delete-btn">Yes, remove them</button>
+    </div>
+  </div>
+</div>
+
+<div class="print-overlay" id="print-overlay">
+  <div class="print-panel">
+    <div class="print-panel-type" id="print-type"></div>
+    <div class="print-panel-title" id="print-evt-name"></div>
+    <div class="print-panel-meta" id="print-evt-meta"></div>
+    <div class="print-panel-stamp" id="print-stamp"></div>
+    <div id="print-list"></div>
+    <div class="print-actions">
+      <button class="btn-print" id="do-print-btn">Print</button>
+      <button class="btn-close-print" id="close-print-btn">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var SB_URL='https://aoazlttdjowhlfcksoyl.supabase.co';
+var SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvYXpsdHRkam93aGxmY2tzb3lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNzU4MjMsImV4cCI6MjA5MDg1MTgyM30.tagP_88g7R3d_p7a4Kp0NirnJgkAR5AQQImCt414SJg';
+
+var VENUE_LABELS={FMP:'Freedom Mortgage Pavilion',Mann:'Mann Music Center',BWH:'Boardwalk Hall',ACCC:'AC Convention Center',Cure:'Cure Insurance Arena',Subaru:'Subaru Park',DE:'DE Chase Field House',Montage:'Montage Mountain',SATB:'Sports at the Beach',Villanova:'Villanova',Kirkwood:'Kirkwood'};
+var VENUE_BADGE_STYLES={FMP:'background:#fde8e6;color:#7a1a12;',Mann:'background:#e8f5d8;color:#2d5a08;',Cure:'background:#deeef9;color:#0e3f6a;',Subaru:'background:#f0e8fa;color:#4a1a7a;',Villanova:'background:#e8eaf6;color:#0d1257;',Montage:'background:#eceff1;color:#2c3e47;',DE:'background:#e0f2f0;color:#004d40;',BWH:'background:#fdeede;color:#8a3e00;',ACCC:'background:#fde4cc;color:#7a3200;',SATB:'background:#f4f4f2;color:#444441;',Kirkwood:'background:#fde8e8;color:#7a1212;'};
+var AVATAR_COLORS=[['#E6F1FB','#0C447C'],['#EAF3DE','#27500A'],['#FAEEDA','#633806'],['#EEEDFE','#3C3489'],['#FBEAF0','#72243E'],['#E1F5EE','#085041'],['#FCEBEB','#501313'],['#eceff1','#2c3e47']];
+var DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+var SUPPORT_STAND='Support Staff';
+var NOT_SHOW_INITIAL=4;
+
+var pcEvents=[],pcEmployees=[],pcAvailability={},pcStaffingRequests={},pcParLevels={},pcHistoryCounts={};
+var selectedVenues={},pendingDeleteId=null,pendingDeleteName=null;
+
+function sbFetch(path){return fetch(SB_URL+'/rest/v1/'+path,{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}}).then(function(r){if(!r.ok)throw new Error(r.status);return r.json();});}
+
+function init(){
+var today=new Date();var ds=today.getFullYear()+'-'+pad(today.getMonth()+1)+'-'+pad(today.getDate());
+var p1=sbFetch('events?event_date=gte.'+ds+'&order=event_date.asc').catch(function(){return[];});
+var p2=sbFetch('availability?select=id,staff_name,event_id,submitted_at,note&order=submitted_at.asc').catch(function(){return[];});
+var p3=sbFetch('employees?is_active=eq.true&order=last_name.asc').catch(function(){return[];});
+var p4=sbFetch('staffing_requests?select=event_id,venue,stand,role,headcount').catch(function(){return[];});
+var p5=sbFetch('par_levels?select=venue,stand,role,default_count,excluded_from_total,tier').catch(function(){return[];});
+var p6=sbFetch('availability?select=staff_name').catch(function(){return[];});
+Promise.all([p1,p2,p3,p4,p5,p6]).then(function(res){
+pcEvents=res[0]||[];var avail=res[1]||[];pcEmployees=res[2]||[];var subs=res[3]||[];var pars=res[4]||[];var allAvail=res[5]||[];
+pcAvailability={};avail.forEach(function(r){if(!pcAvailability[r.event_id])pcAvailability[r.event_id]=[];pcAvailability[r.event_id].push(r);});
+pcStaffingRequests={};subs.forEach(function(r){var key=r.event_id+'||'+r.venue;if(!pcStaffingRequests[key])pcStaffingRequests[key]=[];pcStaffingRequests[key].push(r);});
+pcParLevels={};pars.forEach(function(r){var tier=r.tier||'full';pcParLevels[r.venue+'||'+r.stand+'||'+r.role+'||'+tier]=r;});
+pcHistoryCounts={};allAvail.forEach(function(r){pcHistoryCounts[r.staff_name]=(pcHistoryCounts[r.staff_name]||0)+1;});
+var venuesInEvents=[];pcEvents.forEach(function(e){if(venuesInEvents.indexOf(e.venue)===-1)venuesInEvents.push(e.venue);});
+venuesInEvents.forEach(function(v){selectedVenues[v]=true;});
+buildVenuePills(venuesInEvents);render();
+}).catch(function(e){console.error(e);document.getElementById('events-container').innerHTML='<div class="loading">Error loading data.</div>';});}
+
+function buildVenuePills(venues){var container=document.getElementById('venue-pills');container.innerHTML='';venues.forEach(function(v){var btn=document.createElement('button');btn.className='venue-pill';btn.id='pill-'+v;btn.textContent=VENUE_LABELS[v]||v;btn.setAttribute('data-venue',v);container.appendChild(btn);});if(venues.length===0)document.getElementById('filter-section').style.display='none';}
+
+function getRequestedCount(evt){var key=evt.id+'||'+evt.venue;var rows=pcStaffingRequests[key];if(rows&&rows.length>=1){var total=0;rows.forEach(function(r){if(r.stand!==SUPPORT_STAND)total+=(r.headcount||0);});return total;}var tier=evt.staffing_tier||'full';var total=0;Object.keys(pcParLevels).forEach(function(k){var parts=k.split('||');if(parts[0]===evt.venue&&parts[3]===tier&&parts[1]!==SUPPORT_STAND){var row=pcParLevels[k];if(!row.excluded_from_total)total+=(row.default_count||0);}});return total;}
+
+function getSignedUpOnDate(dateStr){var signed={};pcEvents.forEach(function(e){if(e.event_date===dateStr){(pcAvailability[e.id]||[]).forEach(function(r){signed[r.staff_name]=true;});}});return signed;}
+
+function getNotSignedUp(dateStr){var signedOnDate=getSignedUpOnDate(dateStr);var notList=pcEmployees.filter(function(e){return!signedOnDate[e.first_name+' '+e.last_name];});notList.sort(function(a,b){var cntA=pcHistoryCounts[a.first_name+' '+a.last_name]||0;var cntB=pcHistoryCounts[b.first_name+' '+b.last_name]||0;if(cntB!==cntA)return cntB-cntA;return a.first_name.localeCompare(b.first_name);});return notList;}
+
+function render(){var container=document.getElementById('events-container');var filtered=pcEvents.filter(function(e){return selectedVenues[e.venue];});if(filtered.length===0){container.innerHTML='<div class="loading">No events match your venue selection.</div>';return;}container.innerHTML='';filtered.forEach(function(evt){container.appendChild(buildCard(evt));});}
+
+function buildCard(evt){var avList=pcAvailability[evt.id]||[];var cnt=avList.length;var requested=getRequestedCount(evt);var dateObj=new Date(evt.event_date+'T12:00:00');var dateStr=DAYS[dateObj.getDay()]+' '+(dateObj.getMonth()+1)+'/'+dateObj.getDate();var timeStr=evt.gates_open?fmtTime(evt.gates_open):(evt.show_time?fmtTime(evt.show_time):'--');var badgeStyle=VENUE_BADGE_STYLES[evt.venue]||'';var pct=requested>=1?Math.round((cnt/requested)*100):(cnt>=1?100:0);var barPct=pct>=100?100:pct;var covClass,barClass;if(cnt>=requested&&requested>=1){covClass='cov-green';barClass='bar-green';}else if(pct>=30){covClass='cov-amber';barClass='bar-amber';}else{covClass='cov-red';barClass='bar-red';}if(requested===0){covClass='';barClass='bar-green';barPct=0;}var countLabel=cnt+' signed up';if(requested>=1)countLabel+=' / '+requested+' needed';
+var card=document.createElement('div');card.className='event-card';card.id='card-'+evt.id;
+var hdr=document.createElement('div');hdr.className='event-card-header';hdr.setAttribute('data-evtid',evt.id);
+hdr.innerHTML='<div class="evt-left"><span class="evt-date">'+dateStr+'</span><span class="vbadge" style="'+badgeStyle+'">'+evt.venue+'</span><span class="evt-name">'+evt.event_name+'</span></div><div class="evt-right"><span class="evt-time">'+timeStr+'</span><div class="coverage-wrap"><span class="coverage-counts '+covClass+'">'+countLabel+'</span>'+(requested>=1?'<div class="coverage-bar-wrap"><div class="coverage-bar '+barClass+'" style="width:'+barPct+'%;"></div></div>':'')+'</div><span class="chevron" id="chev-'+evt.id+'">v</span></div>';
+
+var body=document.createElement('div');body.className='event-card-body';body.id='body-'+evt.id;
+var signedSection=document.createElement('div');signedSection.className='panel-section';
+signedSection.innerHTML='<div class="panel-header"><span class="panel-title panel-title-signed">Signed up ('+cnt+')</span><button class="display-btn" data-evtid="'+evt.id+'" data-type="signed">Display / Print</button></div>';
+var signedBody=document.createElement('div');signedBody.className='signed-panel-body';
+if(cnt===0){signedBody.innerHTML='<div class="no-signups">Nobody signed up yet.</div>';}
+else{var namesGrid=document.createElement('div');namesGrid.className='names-grid';avList.forEach(function(r,i){var col=AVATAR_COLORS[i%AVATAR_COLORS.length];var parts=r.staff_name.split(' ');var initials=parts.map(function(p){return p[0]||'';}).join('').toUpperCase().slice(0,2);namesGrid.innerHTML+='<div class="name-chip"><div class="name-avatar" style="background:'+col[0]+';color:'+col[1]+';">'+initials+'</div><span class="name-text">'+r.staff_name+'</span>'+(r.note?'<span class="name-note">'+r.note+'</span>':'')+'<button class="delete-btn" data-sid="'+r.id+'" data-name="'+r.staff_name+'" title="Remove signup">x</button></div>';});signedBody.appendChild(namesGrid);}
+signedSection.appendChild(signedBody);
+
+var notList=getNotSignedUp(evt.event_date);
+var notToggle=document.createElement('div');notToggle.className='not-panel-toggle';notToggle.setAttribute('data-evtid',evt.id);
+notToggle.innerHTML='<span class="not-panel-toggle-label">Not signed up for this date ('+notList.length+')</span><div class="not-panel-toggle-right"><button class="display-btn" data-evtid="'+evt.id+'" data-type="not">Display / Print</button><span class="chevron" id="notchev-'+evt.id+'">v</span></div>';
+
+var notBody=document.createElement('div');notBody.className='not-panel-body';notBody.id='notbody-'+evt.id;
+buildNotList(notBody,notList,evt,false);
+
+body.appendChild(signedSection);body.appendChild(notToggle);body.appendChild(notBody);
+card.appendChild(hdr);card.appendChild(body);return card;}
+
+function buildNotList(container,notList,evt,showAll){container.innerHTML='';var toShow=showAll?notList:notList.slice(0,NOT_SHOW_INITIAL);toShow.forEach(function(emp,i){var fullName=emp.first_name+' '+emp.last_name;var histCount=pcHistoryCounts[fullName]||0;container.innerHTML+='<div class="not-name-row"><div class="not-name-left"><span class="not-rank">'+(i+1)+'</span><span class="not-name-text">'+fullName+'</span></div><div style="display:flex;align-items:center;gap:8px;">'+(emp.phone?'<span class="not-phone">'+emp.phone+'</span>':'')+(histCount>=1?'<span class="not-count-badge">'+histCount+' past</span>':'')+'</div></div>';});if(!showAll&&notList.length>=NOT_SHOW_INITIAL+1){container.innerHTML+='<button class="show-more-not" data-evtid="'+evt.id+'">+ Show '+(notList.length-NOT_SHOW_INITIAL)+' more</button>';}}
+
+function attachHandlers(){
+document.addEventListener('click',function(e){var el;
+el=e.target.closest('.event-card-header');if(el){toggleCard(el.getAttribute('data-evtid'));return;}
+el=e.target.closest('.not-panel-toggle');if(el){if(!e.target.closest('.display-btn')){toggleNotPanel(el.getAttribute('data-evtid'));}return;}
+el=e.target.closest('.display-btn');if(el){e.stopPropagation();openPrintPanel(el.getAttribute('data-evtid'),el.getAttribute('data-type'));return;}
+el=e.target.closest('.delete-btn');if(el){e.stopPropagation();pendingDeleteId=el.getAttribute('data-sid');pendingDeleteName=el.getAttribute('data-name');document.getElementById('confirm-name').textContent=pendingDeleteName;document.getElementById('confirm-backdrop').classList.add('open');return;}
+el=e.target.closest('.show-more-not');if(el){var eid=el.getAttribute('data-evtid');var evt=pcEvents.filter(function(e){return e.id===eid;})[0];if(evt){buildNotList(document.getElementById('notbody-'+eid),getNotSignedUp(evt.event_date),evt,true);}return;}});
+document.getElementById('toggle-all-btn').addEventListener('click',function(){var allOn=Object.keys(selectedVenues).every(function(v){return selectedVenues[v];});Object.keys(selectedVenues).forEach(function(v){selectedVenues[v]=!allOn;var pill=document.getElementById('pill-'+v);if(pill)pill.className='venue-pill'+(selectedVenues[v]?'':' off');});document.getElementById('toggle-all-btn').textContent=allOn?'Select all':'Deselect all';render();});
+document.getElementById('venue-pills').addEventListener('click',function(e){var pill=e.target.closest('.venue-pill');if(!pill)return;var v=pill.getAttribute('data-venue');selectedVenues[v]=!selectedVenues[v];pill.className='venue-pill'+(selectedVenues[v]?'':' off');var allOn=Object.keys(selectedVenues).every(function(v2){return selectedVenues[v2];});document.getElementById('toggle-all-btn').textContent=allOn?'Deselect all':'Select all';render();});
+document.getElementById('confirm-cancel-btn').addEventListener('click',function(){pendingDeleteId=null;pendingDeleteName=null;document.getElementById('confirm-backdrop').classList.remove('open');});
+document.getElementById('confirm-delete-btn').addEventListener('click',function(){if(!pendingDeleteId)return;var btn=document.getElementById('confirm-delete-btn');btn.disabled=true;btn.textContent='Removing...';var delId=pendingDeleteId;fetch(SB_URL+'/rest/v1/availability?id=eq.'+delId,{method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}}).then(function(){Object.keys(pcAvailability).forEach(function(eid){pcAvailability[eid]=pcAvailability[eid].filter(function(r){return r.id!==delId;});});pendingDeleteId=null;pendingDeleteName=null;document.getElementById('confirm-backdrop').classList.remove('open');btn.disabled=false;btn.textContent='Yes, remove them';render();showToast('Signup removed.');}).catch(function(e){console.error(e);showToast('Error removing signup. Please try again.');btn.disabled=false;btn.textContent='Yes, remove them';});});
+document.getElementById('do-print-btn').addEventListener('click',function(){window.print();});
+document.getElementById('close-print-btn').addEventListener('click',function(){document.getElementById('print-overlay').classList.remove('open');});}
+
+function toggleCard(evtId){var body=document.getElementById('body-'+evtId);var chev=document.getElementById('chev-'+evtId);var hdr=document.getElementById('card-'+evtId).querySelector('.event-card-header');var isOpen=body.classList.contains('open');body.classList.toggle('open',!isOpen);hdr.classList.toggle('open',!isOpen);chev.textContent=isOpen?'v':'^';}
+function toggleNotPanel(evtId){var body=document.getElementById('notbody-'+evtId);var chev=document.getElementById('notchev-'+evtId);var isOpen=body.classList.contains('open');body.classList.toggle('open',!isOpen);chev.textContent=isOpen?'v':'^';}
+function getEmployeePhone(name){for(var i=0;i<pcEmployees.length;i++){if((pcEmployees[i].first_name+' '+pcEmployees[i].last_name)===name)return pcEmployees[i].phone||'';}return'';}
+
+function openPrintPanel(evtId,type){var evt=null;for(var i=0;i<pcEvents.length;i++){if(pcEvents[i].id===evtId){evt=pcEvents[i];break;}}if(!evt)return;var dateObj=new Date(evt.event_date+'T12:00:00');var dateStr=DAYS[dateObj.getDay()]+', '+['January','February','March','April','May','June','July','August','September','October','November','December'][dateObj.getMonth()]+' '+dateObj.getDate()+', '+dateObj.getFullYear();var metaStr=(VENUE_LABELS[evt.venue]||evt.venue)+' -- '+(evt.show_time?'Show '+fmtTime(evt.show_time):'');var now=new Date();var stamp='Printed '+now.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})+' at '+now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});document.getElementById('print-evt-name').textContent=evt.event_name;document.getElementById('print-evt-meta').textContent=metaStr;document.getElementById('print-stamp').textContent=stamp;var typeEl=document.getElementById('print-type');var listEl=document.getElementById('print-list');listEl.innerHTML='';
+if(type==='signed'){typeEl.className='print-panel-type signed';typeEl.textContent='Signed Up';var avList=pcAvailability[evtId]||[];if(avList.length===0){listEl.innerHTML='<div class="empty-print">Nobody signed up yet.</div>';}else{avList.forEach(function(r,i){var phone=getEmployeePhone(r.staff_name);listEl.innerHTML+='<div class="print-name-row"><div class="print-name-left"><span class="print-num">'+(i+1)+'</span><span class="print-name">'+r.staff_name+'</span>'+(r.note?'<span class="print-note">'+r.note+'</span>':'')+'</div><span class="print-phone">'+phone+'</span></div>';});}}
+else{typeEl.className='print-panel-type not-signed';typeEl.textContent='Not Signed Up -- Available to Call';var notList=getNotSignedUp(evt.event_date);if(notList.length===0){listEl.innerHTML='<div class="empty-print">Everyone has signed up!</div>';}else{notList.forEach(function(emp,i){var fullName=emp.first_name+' '+emp.last_name;var histCount=pcHistoryCounts[fullName]||0;listEl.innerHTML+='<div class="print-name-row"><div class="print-name-left"><span class="print-num">'+(i+1)+'</span><span class="print-name">'+fullName+'</span>'+(histCount>=1?'<span class="not-count-badge" style="margin-left:6px;">'+histCount+' past</span>':'')+'</div><span class="print-phone">'+(emp.phone||'')+'</span></div>';});}}
+document.getElementById('print-overlay').classList.add('open');}
+
+function fmtTime(t){if(!t)return'--';var parts=t.split(':');var h=parseInt(parts[0]);return(h%12||12)+':'+parts[1]+' '+(h>=12?'PM':'AM');}
+function pad(n){return n<=9?'0'+n:''+n;}
+function showToast(msg,good){var t=document.getElementById('toast');t.textContent=msg;t.className='toast'+(good?' green':'');t.classList.add('show');setTimeout(function(){t.classList.remove('show');},3500);}
+
+attachHandlers();
+init();
+</script>
+</body>
+</html>
