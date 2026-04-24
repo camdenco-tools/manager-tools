@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Popcorn Chez — Event Master List</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #f0f0ec; --card: #ffffff; --primary: #1a1a1a;
+  --green: #1D9E75; --green-light: #e8f7f2; --label: #999;
+  --border: #e8e8e4; --shadow: 0 2px 12px rgba(0,0,0,0.06);
+  --radius: 16px; --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --red: #c0392b; --red-light: #fde8e8;
+  --amber: #856404; --amber-light: #fff3cd;
+}
+body { background: var(--bg); font-family: var(--font); color: var(--primary); min-height: 100vh; }
+
+#login-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; }
+.login-card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 48px 40px; width: 100%; max-width: 380px; text-align: center; }
+.login-logo { font-size: 28px; font-weight: 800; letter-spacing: -0.03em; margin-bottom: 4px; }
+.login-sub { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--label); margin-bottom: 36px; }
+.login-card input[type="password"] { width: 100%; padding: 14px 16px; border: 1.5px solid var(--border); border-radius: 10px; font-size: 15px; font-family: var(--font); outline: none; transition: border-color 0.15s; margin-bottom: 12px; background: var(--bg); }
+.login-card input[type="password"]:focus { border-color: var(--primary); }
+.login-error { font-size: 12px; color: #e05c5c; margin-bottom: 12px; min-height: 16px; }
+
+#app { display: none; }
+
+header { background: var(--card); border-bottom: 1px solid var(--border); padding: 0 32px; display: flex; align-items: center; justify-content: space-between; height: 64px; position: sticky; top: 0; z-index: 100; }
+.header-left { display: flex; align-items: center; gap: 16px; }
+.back-link { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--label); text-decoration: none; display: flex; align-items: center; gap: 6px; transition: color 0.15s; }
+.back-link:hover { color: var(--primary); }
+.header-divider { width: 1px; height: 20px; background: var(--border); }
+.header-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+.header-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: var(--primary); color: white; padding: 3px 8px; border-radius: 20px; }
+
+.main-content { max-width: 1200px; margin: 0 auto; padding: 32px 32px 80px; }
+
+.btn-primary { background: var(--primary); color: white; border: none; padding: 10px 20px; border-radius: 10px; font-size: 13px; font-weight: 700; font-family: var(--font); cursor: pointer; display: flex; align-items: center; gap: 8px; transition: opacity 0.15s; }
+.btn-primary:hover { opacity: 0.85; }
+.btn-secondary { background: transparent; color: var(--primary); border: 1.5px solid var(--border); padding: 9px 18px; border-radius: 10px; font-size: 13px; font-weight: 700; font-family: var(--font); cursor: pointer; transition: all 0.15s; }
+.btn-secondary:hover { border-color: var(--primary); }
+
+.stat-strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 28px; }
+.stat-card { background: var(--card); border-radius: 12px; padding: 18px 20px; box-shadow: var(--shadow); }
+.stat-label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--label); margin-bottom: 6px; }
+.stat-value { font-size: 26px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
+.stat-value.green { color: var(--green); }
+.stat-value.red { color: var(--red); }
+.stat-value.amber { color: var(--amber); }
+.stat-sub { font-size: 11px; color: var(--label); margin-top: 4px; }
+.stat-card.clickable { cursor: pointer; transition: border-color 0.15s; border: 1px solid transparent; }
+.stat-card.clickable:hover { border-color: #999; }
+
+.drill-panel { display: none; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-top: -20px; margin-bottom: 8px; box-shadow: var(--shadow); }
+.drill-panel.open { display: block; }
+.drill-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--label); margin-bottom: 10px; }
+.drill-row { display: flex; align-items: center; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.drill-row:last-child { border-bottom: none; }
+.drill-venue { color: var(--primary); font-weight: 600; }
+.drill-date { font-size: 11px; color: var(--label); }
+.drill-badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
+.db-red { background: var(--red-light); color: var(--red); }
+.db-amber { background: var(--amber-light); color: var(--amber); }
+.drill-empty { font-size: 13px; color: #ccc; font-style: italic; text-align: center; padding: 12px 0; }
+
+.toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; gap: 12px; flex-wrap: wrap; }
+.toolbar-left { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.filter-btn { font-size: 12px; font-weight: 700; letter-spacing: 0.04em; padding: 8px 14px; border-radius: 8px; border: 1.5px solid var(--border); background: var(--card); color: var(--primary); cursor: pointer; transition: all 0.15s; }
+.filter-btn:hover, .filter-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+.table-card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); overflow-x: auto; }
+.event-table { width: 100%; min-width: 900px; border-collapse: collapse; }
+.event-table thead th { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--label); padding: 14px 16px; text-align: left; background: var(--bg); border-bottom: 1px solid var(--border); white-space: nowrap; }
+.event-table tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; }
+.event-table tbody tr:last-child { border-bottom: none; }
+.event-table tbody tr:hover { background: #fafaf8; }
+.event-table td { padding: 14px 16px; font-size: 13px; vertical-align: middle; }
+.event-name { font-weight: 700; font-size: 13px; }
+.venue-chip { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 8px; border-radius: 6px; background: var(--bg); color: var(--label); }
+.venue-chip.fmp { background: #fde8e6; color: #c0392b; }
+.venue-chip.mann { background: #e8f5d8; color: #2d5a08; }
+.venue-chip.bwh { background: #fdeede; color: #e67e22; }
+.venue-chip.accc { background: #fde4cc; color: #c0620a; }
+.venue-chip.cure { background: #deeef9; color: #2471a3; }
+.venue-chip.subaru { background: #f0e8fa; color: #7d3fbf; }
+.venue-chip.de { background: #e0f2f0; color: #00796b; }
+.venue-chip.montage { background: #eceff1; color: #607d8b; }
+.venue-chip.satb { background: #f4f4f2; color: #888780; }
+.venue-chip.villanova { background: #e8eaf6; color: #1a237e; }
+.venue-chip.kirkwood { background: #fde8e8; color: #b71c1c; }
+.att-actual { color: var(--green); font-weight: 700; }
+.att-pending { color: var(--label); font-style: italic; }
+.time-cell { font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.date-cell { white-space: nowrap; }
+.date-main { font-weight: 800; font-size: 14px; color: #1a1a1a; }
+.date-day { font-size: 11px; color: var(--label); margin-top: 2px; }
+.past-row td { opacity: 0.5; }
+.row-actions { display: flex; gap: 6px; white-space: nowrap; flex-shrink: 0; }
+.action-btn { font-size: 11px; font-weight: 700; padding: 5px 10px; border-radius: 6px; border: 1.5px solid var(--primary); background: var(--primary); color: white; cursor: pointer; font-family: var(--font); transition: all 0.12s; white-space: nowrap; }
+.action-btn.danger { border-color: #e05c5c; background: #e05c5c; color: white; }
+.action-btn:hover { opacity: 0.85; }
+.reduced-badge { display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; background: #fff3e0; color: #d4720a; border: 1px solid #f5d9a0; padding: 2px 6px; border-radius: 4px; margin-left: 6px; vertical-align: middle; }
+.empty-state { padding: 80px 20px; text-align: center; color: var(--label); }
+.empty-state-icon { font-size: 40px; margin-bottom: 16px; }
+.empty-state h3 { font-size: 16px; font-weight: 700; color: var(--primary); margin-bottom: 6px; }
+.empty-state p { font-size: 13px; }
+
+.modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 200; align-items: flex-start; justify-content: center; padding: 40px 20px; overflow-y: auto; }
+.modal-backdrop.open { display: flex; }
+.modal { background: var(--card); border-radius: var(--radius); width: 100%; max-width: 560px; box-shadow: 0 20px 60px rgba(0,0,0,0.15); animation: slideUp 0.2s ease; margin: auto; }
+@keyframes slideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+.modal-header { padding: 24px 28px 0; display: flex; align-items: center; justify-content: space-between; }
+.modal-title { font-size: 18px; font-weight: 800; letter-spacing: -0.02em; }
+.modal-close { width: 32px; height: 32px; border-radius: 8px; border: none; background: var(--bg); font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--label); transition: all 0.12s; }
+.modal-close:hover { background: var(--primary); color: white; }
+.modal-body { padding: 24px 28px 28px; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+.form-row.full { grid-template-columns: 1fr; }
+.form-row.three { grid-template-columns: 1fr 1fr 1fr; }
+.form-group { display: flex; flex-direction: column; gap: 6px; }
+.form-label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--label); }
+.form-input, .form-select { padding: 11px 14px; border: 1.5px solid var(--border); border-radius: 10px; font-size: 14px; font-family: var(--font); color: var(--primary); background: var(--bg); outline: none; transition: border-color 0.15s; width: 100%; }
+.form-input:focus, .form-select:focus { border-color: var(--primary); background: white; }
+.form-input.green-focus:focus { border-color: var(--green); background: var(--green-light); }
+.modal-footer { padding: 0 28px 28px; display: flex; gap: 10px; justify-content: flex-end; }
+.section-divider { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--label); padding: 8px 0 12px; border-top: 1px solid var(--border); margin: 8px 0 4px; }
+
+.toast { position: fixed; bottom: 28px; right: 28px; background: var(--primary); color: white; padding: 12px 20px; border-radius: 10px; font-size: 13px; font-weight: 600; box-shadow: 0 8px 24px rgba(0,0,0,0.2); z-index: 999; transform: translateY(80px); opacity: 0; transition: all 0.25s ease; display: flex; align-items: center; gap: 8px; }
+.toast.show { transform: translateY(0); opacity: 1; }
+.toast.green { background: var(--green); }
+
+@media (max-width: 768px) {
+  header { padding: 12px 16px; height: auto; flex-wrap: wrap; gap: 10px; }
+  .main-content { padding: 20px 16px 80px; }
+  .stat-strip { grid-template-columns: repeat(2, 1fr); }
+  .event-table thead th:nth-child(5), .event-table tbody td:nth-child(5),
+  .event-table thead th:nth-child(7), .event-table tbody td:nth-child(7) { display: none; }
+  .form-row, .form-row.three { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">Popcorn Chez</div>
+    <div class="login-sub">Event Master List</div>
+    <input type="password" id="pw-input" placeholder="Password" autocomplete="current-password">
+    <div class="login-error" id="login-error"></div>
+    <button class="btn-primary" style="width:100%;justify-content:center;" onclick="checkLogin()">Enter</button>
+  </div>
+</div>
+
+<div id="app">
+  <header>
+    <div class="header-left">
+      <a href="/" class="back-link">&#8592; Toolkit</a>
+      <div class="header-divider"></div>
+      <span class="header-title">Event Master List</span>
+      <span class="header-badge">Admin</span>
+    </div>
+    <button class="btn-primary" onclick="openAddModal()"><span>+</span> Add Event</button>
+  </header>
+
+  <div class="main-content">
+    <div class="stat-strip">
+      <div class="stat-card">
+        <div class="stat-label">Upcoming events (14 days)</div>
+        <div class="stat-value green" id="stat-total">--</div>
+        <div class="stat-sub" id="stat-total-sub"></div>
+      </div>
+      <div class="stat-card clickable" onclick="toggleDrill('outstanding')">
+        <div class="stat-label">Requests outstanding</div>
+        <div class="stat-value" id="stat-outstanding">--</div>
+        <div class="stat-sub" id="stat-outstanding-sub">No staffing request submitted</div>
+      </div>
+      <div class="stat-card clickable" onclick="toggleDrill('unconfirmed')">
+        <div class="stat-label">Not yet confirmed staffed</div>
+        <div class="stat-value" id="stat-unconfirmed">--</div>
+        <div class="stat-sub" id="stat-unconfirmed-sub">Awaiting staffing confirmation</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Actuals logged</div>
+        <div class="stat-value" id="stat-actuals">--</div>
+        <div class="stat-sub">Past events with attendance entered</div>
+      </div>
+    </div>
+
+    <div class="drill-panel" id="drill-outstanding">
+      <div class="drill-title">Events missing a staffing request</div>
+      <div id="drill-outstanding-content"><div class="drill-empty">Loading...</div></div>
+    </div>
+    <div class="drill-panel" id="drill-unconfirmed">
+      <div class="drill-title">Events not yet confirmed staffed</div>
+      <div id="drill-unconfirmed-content"><div class="drill-empty">Loading...</div></div>
+    </div>
+
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <button class="filter-btn active" data-filter="upcoming" onclick="setFilter('upcoming',this)">Upcoming</button>
+        <button class="filter-btn" data-filter="all" onclick="setFilter('all',this)">All</button>
+        <button class="filter-btn" data-filter="past" onclick="setFilter('past',this)">Past</button>
+        <select class="filter-btn" id="venue-filter" onchange="renderTable()" style="font-size:12px;"><option value="">All Venues</option></select>
+      </div>
+      <button class="btn-secondary" onclick="exportCSV()">Export CSV</button>
+    </div>
+
+    <div class="table-card">
+      <table class="event-table">
+        <thead>
+          <tr>
+            <th>Date</th><th>Venue</th><th>Event Name</th><th>Gates Open</th>
+            <th>Est. End Time</th><th>Exp. Attendance</th><th>Act. Attendance</th>
+            <th>Notes</th><th style="min-width:110px;"></th>
+          </tr>
+        </thead>
+        <tbody id="event-tbody"></tbody>
+      </table>
+      <div id="empty-state" class="empty-state" style="display:none;">
+        <div class="empty-state-icon">&#128197;</div>
+        <h3>No events yet</h3>
+        <p>Click "Add Event" to create your first event.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="modal-backdrop" onclick="handleBackdropClick(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">Add Event</div>
+      <button class="modal-close" onclick="closeModal()">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row full"><div class="form-group">
+        <label class="form-label">Venue</label>
+        <select class="form-select" id="f-venue" required onchange="onVenueChange(this.value)">
+          <option value="">Select venue...</option>
+          <option value="FMP">Freedom Mortgage Pavilion (FMP)</option>
+          <option value="Mann">Mann Music Center</option>
+          <option value="BWH">Boardwalk Hall (BWH)</option>
+          <option value="ACCC">AC Convention Center (ACCC)</option>
+          <option value="Cure">Cure Insurance Arena</option>
+          <option value="Subaru">Subaru Park</option>
+          <option value="DE">DE Chase Field House</option>
+          <option value="Montage">Montage Mountain</option>
+          <option value="SATB">Sports at the Beach</option>
+          <option value="Villanova">Villanova</option>
+          <option value="Kirkwood">Kirkwood</option>
+        </select>
+      </div></div>
+      <div class="form-row full" id="f-tier-row" style="display:none;"><div class="form-group">
+        <label class="form-label">Staffing Level</label>
+        <select class="form-select" id="f-tier">
+          <option value="full">Full -- Sold Out / Full Staffing</option>
+          <option value="reduced">Reduced -- Lower Attendance</option>
+        </select>
+      </div></div>
+      <div class="form-row full"><div class="form-group">
+        <label class="form-label">Event Name</label>
+        <input type="text" class="form-input" id="f-name" placeholder="e.g. Dave Matthews Band">
+      </div></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Date</label><input type="date" class="form-input" id="f-date"></div>
+        <div class="form-group"><label class="form-label">Expected Attendance</label><input type="number" class="form-input" id="f-exp-att" placeholder="e.g. 15000" min="0"></div>
+      </div>
+      <div class="form-row three">
+        <div class="form-group"><label class="form-label">Gates Open</label><input type="time" class="form-input" id="f-gates"></div>
+        <div class="form-group"><label class="form-label">Show Time</label><input type="time" class="form-input" id="f-show-time"></div>
+        <div class="form-group"><label class="form-label">Est. End Time</label><input type="time" class="form-input" id="f-end-time"></div>
+      </div>
+      <div class="section-divider">Post-Event (fill in after)</div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Actual Attendance</label><input type="number" class="form-input green-focus" id="f-act-att" placeholder="Fill in after event" min="0"></div>
+        <div class="form-group"><label class="form-label">Notes</label><input type="text" class="form-input" id="f-notes" placeholder="Optional notes"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn-primary" onclick="saveEvent()">Save Event</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var SB_URL='https://aoazlttdjowhlfcksoyl.supabase.co';
+var SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvYXpsdHRkam93aGxmY2tzb3lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNzU4MjMsImV4cCI6MjA5MDg1MTgyM30.tagP_88g7R3d_p7a4Kp0NirnJgkAR5AQQImCt414SJg';
+var ADMIN_PW='popcorn2026';
+var TIERED_VENUES={'Mann':true,'FMP':true};
+var VENUE_LABELS={FMP:'Freedom Mortgage Pavilion',Mann:'Mann Music Center',BWH:'Boardwalk Hall',ACCC:'AC Convention Center',Cure:'Cure Insurance Arena',Subaru:'Subaru Park',DE:'DE Chase Field House',Montage:'Montage Mountain',SATB:'Sports at the Beach',Villanova:'Villanova',Kirkwood:'Kirkwood'};
+var VENUE_CLASS={FMP:'fmp',Mann:'mann',BWH:'bwh',ACCC:'accc',Cure:'cure',Subaru:'subaru',DE:'de',Montage:'montage',SATB:'satb',Villanova:'villanova',Kirkwood:'kirkwood'};
+
+var pcEvents=[];
+var currentFilter='upcoming';
+var editingId=null;
+var drillState={outstanding:false,unconfirmed:false};
+
+function checkLogin(){var pw=document.getElementById('pw-input').value;if(pw===ADMIN_PW){document.getElementById('login-screen').style.display='none';document.getElementById('app').style.display='block';init();}else{document.getElementById('login-error').textContent='Incorrect password.';document.getElementById('pw-input').value='';}}
+document.getElementById('pw-input').addEventListener('keydown',function(e){if(e.key==='Enter')checkLogin();});
+
+function sbFetch(method,path,body){return fetch(SB_URL+'/rest/v1/'+path,{method:method,headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:body?JSON.stringify(body):undefined}).then(function(res){if(!res.ok)return res.text().then(function(t){throw new Error(t);});return res.status===204?null:res.json();});}
+function sbGet(path){return fetch(SB_URL+'/rest/v1/'+path,{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}}).then(function(res){if(!res.ok)return res.text().then(function(t){throw new Error(t);});return res.json();});}
+
+function pad(n){return n<=9?'0'+n:''+n;}
+function addDays(dateStr,n){var d=new Date(dateStr+'T12:00:00');d.setDate(d.getDate()+n);return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
+function todayStr(){return new Date().toISOString().split('T')[0];}
+function formatTime(t){if(!t)return'--';var parts=t.split(':');var h=parseInt(parts[0]);return(h%12||12)+':'+parts[1]+' '+(h>=12?'PM':'AM');}
+
+function init(){var today=todayStr();var twoWeeksOut=addDays(today,14);Promise.all([sbFetch('GET','events?event_type=neq.adhoc&order=event_date.asc'),sbGet('staffing_requests?select=event_id,venue&order=submitted_at.desc'),sbGet('event_staffing_status?select=event_id,venue,is_confirmed')]).then(function(res){pcEvents=res[0]||[];var submittedEvtIds={};(res[1]||[]).forEach(function(r){submittedEvtIds[r.event_id]=true;});var confirmedKeys={};(res[2]||[]).filter(function(r){return r.is_confirmed;}).forEach(function(r){confirmedKeys[r.event_id+'||'+r.venue]=true;});renderStats(today,twoWeeksOut,submittedEvtIds,confirmedKeys);renderTable();populateVenueFilter();}).catch(function(e){showToast('Error loading data.');console.error(e);});}
+
+function toggleDrill(which){drillState[which]=!drillState[which];document.getElementById('drill-'+which).classList.toggle('open',drillState[which]);}
+
+function renderStats(today,twoWeeksOut,submittedEvtIds,confirmedKeys){var next14=pcEvents.filter(function(e){return e.event_date>=today&&e.event_date<=twoWeeksOut;});var withActuals=pcEvents.filter(function(e){return e.actual_attendance;});var outstanding=next14.filter(function(e){return!submittedEvtIds[e.id];});var unconfirmed=next14.filter(function(e){return!confirmedKeys[e.id+'||'+e.venue];});var wdays=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];function fmtDs(ds){var d=new Date(ds+'T12:00:00');return wdays[d.getDay()]+' '+(d.getMonth()+1)+'/'+d.getDate();}
+document.getElementById('stat-total').textContent=next14.length;document.getElementById('stat-outstanding').textContent=outstanding.length;document.getElementById('stat-outstanding').className='stat-value '+(outstanding.length>0?'red':'green');document.getElementById('stat-outstanding-sub').textContent=outstanding.length===0?'All submitted':outstanding.length+' event'+(outstanding.length!==1?'s':'')+' -- tap to see';document.getElementById('stat-unconfirmed').textContent=unconfirmed.length;document.getElementById('stat-unconfirmed').className='stat-value '+(unconfirmed.length>0?'amber':'green');document.getElementById('stat-unconfirmed-sub').textContent=unconfirmed.length===0?'All confirmed':unconfirmed.length+' event'+(unconfirmed.length!==1?'s':'')+' -- tap to see';document.getElementById('stat-actuals').textContent=withActuals.length;
+document.getElementById('drill-outstanding-content').innerHTML=outstanding.length===0?'<div class="drill-empty">All staffing requests submitted</div>':outstanding.map(function(e){return'<div class="drill-row"><span class="drill-venue">'+(VENUE_LABELS[e.venue]||e.venue)+' -- '+e.event_name+'</span><div style="display:flex;align-items:center;gap:8px;"><span class="drill-date">'+fmtDs(e.event_date)+'</span><span class="drill-badge db-red">Not submitted</span></div></div>';}).join('');
+document.getElementById('drill-unconfirmed-content').innerHTML=unconfirmed.length===0?'<div class="drill-empty">All events confirmed staffed</div>':unconfirmed.map(function(e){var sub=submittedEvtIds[e.id]||false;return'<div class="drill-row"><span class="drill-venue">'+(VENUE_LABELS[e.venue]||e.venue)+' -- '+e.event_name+'</span><div style="display:flex;align-items:center;gap:8px;"><span class="drill-date">'+fmtDs(e.event_date)+'</span><span class="drill-badge '+(sub?'db-amber':'db-red')+'">'+(sub?'Submitted -- awaiting confirm':'Not submitted')+'</span></div></div>';}).join('');}
+
+function renderTable(){var today=todayStr();var venueFilter=document.getElementById('venue-filter').value;var filtered=pcEvents.filter(function(e){if(currentFilter==='upcoming')return e.event_date>=today;if(currentFilter==='past')return e.event_date<today;return true;});if(venueFilter)filtered=filtered.filter(function(e){return e.venue===venueFilter;});if(currentFilter==='past')filtered.sort(function(a,b){return b.event_date.localeCompare(a.event_date);});else filtered.sort(function(a,b){return a.event_date.localeCompare(b.event_date);});var tbody=document.getElementById('event-tbody');var empty=document.getElementById('empty-state');if(!filtered.length){tbody.innerHTML='';empty.style.display='block';return;}empty.style.display='none';var wdays=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];tbody.innerHTML=filtered.map(function(evt){var isPast=evt.event_date<today;var dateObj=new Date(evt.event_date+'T12:00:00');var dateFormatted=dateObj.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});var gatesDisplay=evt.gates_open?formatTime(evt.gates_open):'<span style="color:var(--label)">--</span>';var endDisplay=evt.estimated_end_time?formatTime(evt.estimated_end_time):'<span style="color:var(--label)">--</span>';var expAtt=evt.expected_attendance?Number(evt.expected_attendance).toLocaleString():'<span style="color:var(--label)">--</span>';var actAtt=evt.actual_attendance?'<span class="att-actual">&#8593; '+Number(evt.actual_attendance).toLocaleString()+'</span>':'<span class="att-pending">Pending</span>';return'<tr class="'+(isPast?'past-row':'')+'"><td class="date-cell"><div class="date-main">'+dateFormatted+'</div><div class="date-day">'+wdays[dateObj.getDay()]+'</div></td><td><span class="venue-chip '+(VENUE_CLASS[evt.venue]||'')+'">'+evt.venue+'</span></td><td><span class="event-name">'+(evt.event_name||'--')+'</span>'+(evt.staffing_tier==='reduced'?'<span class="reduced-badge">Reduced</span>':'')+'</td><td class="time-cell">'+gatesDisplay+'</td><td class="time-cell">'+endDisplay+'</td><td class="att-cell">'+expAtt+'</td><td class="att-cell">'+actAtt+'</td><td style="font-size:12px;color:var(--label);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+(evt.notes||'')+'</td><td><div class="row-actions"><button class="action-btn" onclick="openEditModal(\''+evt.id+'\')">Edit</button><button class="action-btn danger" onclick="deleteEvent(\''+evt.id+'\')">Del</button></div></td></tr>';}).join('');}
+
+function setFilter(f,btn){currentFilter=f;document.querySelectorAll('.filter-btn[data-filter]').forEach(function(b){b.classList.remove('active');});btn.classList.add('active');renderTable();}
+
+function populateVenueFilter(){var venues=[];var seen={};pcEvents.forEach(function(e){if(e.venue&&!seen[e.venue]){seen[e.venue]=true;venues.push(e.venue);}});venues.sort();var sel=document.getElementById('venue-filter');var current=sel.value;sel.innerHTML='<option value="">All Venues</option>'+venues.map(function(v){return'<option value="'+v+'"'+(v===current?' selected':'')+'>'+v+'</option>';}).join('');}
+
+function openAddModal(){editingId=null;document.getElementById('modal-title').textContent='Add Event';clearForm();document.getElementById('modal-backdrop').classList.add('open');}
+function openEditModal(id){editingId=id;var evt=null;for(var i=0;i<pcEvents.length;i++){if(pcEvents[i].id==id){evt=pcEvents[i];break;}}if(!evt)return;document.getElementById('modal-title').textContent='Edit Event';document.getElementById('f-venue').value=evt.venue||'';document.getElementById('f-name').value=evt.event_name||'';document.getElementById('f-date').value=evt.event_date||'';document.getElementById('f-gates').value=evt.gates_open||'';document.getElementById('f-show-time').value=evt.show_time||'';document.getElementById('f-end-time').value=evt.estimated_end_time||'';document.getElementById('f-exp-att').value=evt.expected_attendance||'';document.getElementById('f-act-att').value=evt.actual_attendance||'';document.getElementById('f-notes').value=evt.notes||'';onVenueChange(evt.venue||'');var tierSel=document.getElementById('f-tier');if(tierSel)tierSel.value=evt.staffing_tier||'full';document.getElementById('modal-backdrop').classList.add('open');}
+function closeModal(){document.getElementById('modal-backdrop').classList.remove('open');}
+function handleBackdropClick(e){if(e.target===document.getElementById('modal-backdrop'))closeModal();}
+function clearForm(){['f-venue','f-name','f-date','f-gates','f-show-time','f-end-time','f-exp-att','f-act-att','f-notes'].forEach(function(id){document.getElementById(id).value='';});}
+
+function saveEvent(){var venue=document.getElementById('f-venue').value;var name=document.getElementById('f-name').value.trim();var date=document.getElementById('f-date').value;if(!venue){showToast('Please select a venue.');return;}if(!name){showToast('Please enter an event name.');return;}if(!date){showToast('Please select a date.');return;}var tierSel=document.getElementById('f-tier');var staffingTier=TIERED_VENUES[venue]?tierSel.value:'full';var payload={venue:venue,event_name:name,event_date:date,gates_open:document.getElementById('f-gates').value||null,show_time:document.getElementById('f-show-time').value||null,estimated_end_time:document.getElementById('f-end-time').value||null,expected_attendance:parseInt(document.getElementById('f-exp-att').value)||null,actual_attendance:parseInt(document.getElementById('f-act-att').value)||null,notes:document.getElementById('f-notes').value.trim()||null,staffing_tier:staffingTier,event_type:'calendar'};var method=editingId?'PATCH':'POST';var path=editingId?'events?id=eq.'+editingId:'events';sbFetch(method,path,payload).then(function(){showToast(editingId?'Event updated':'Event added',true);closeModal();init();}).catch(function(e){showToast('Error saving event.');console.error(e);});}
+
+function deleteEvent(id){if(!confirm('Delete this event?'))return;sbFetch('DELETE','events?id=eq.'+id).then(function(){showToast('Event deleted');init();}).catch(function(){showToast('Error deleting event.');});}
+
+function exportCSV(){var headers=['Date','Day','Venue','Event Name','Gates Open','Show Time','Est. End Time','Expected Attendance','Actual Attendance','Notes'];var wdays=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];var rows=pcEvents.map(function(e){var d=new Date(e.event_date+'T12:00:00');return[e.event_date,wdays[d.getDay()],e.venue,e.event_name,e.gates_open||'',e.show_time||'',e.estimated_end_time||'',e.expected_attendance||'',e.actual_attendance||'',e.notes||''].map(function(v){return'"'+String(v).replace(/"/g,'""')+'"';}).join(',');});var csv=[headers.join(',')].concat(rows).join('\n');var a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='popcorn-chez-events-'+todayStr()+'.csv';a.click();showToast('CSV exported',true);}
+
+function onVenueChange(venue){var tr=document.getElementById('f-tier-row');if(tr)tr.style.display=TIERED_VENUES[venue]?'block':'none';}
+
+function showToast(msg,good){var t=document.getElementById('toast');t.textContent=msg;t.className='toast'+(good?' green':'');t.classList.add('show');setTimeout(function(){t.classList.remove('show');},3000);}
+</script>
+</body>
+</html>
