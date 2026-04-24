@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Popcorn Chez — Interview Scheduling</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f0ec; min-height: 100vh; }
+
+header { background: #fff; border-bottom: 1px solid #e8e8e4; padding: 0 32px; display: flex; align-items: center; justify-content: space-between; height: 64px; position: sticky; top: 0; z-index: 100; }
+.header-left { display: flex; align-items: center; gap: 16px; }
+.back-link { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #999; text-decoration: none; display: flex; align-items: center; gap: 6px; transition: color 0.15s; }
+.back-link:hover { color: #1a1a1a; }
+.hdivider { width: 1px; height: 20px; background: #e8e8e4; }
+.header-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+.header-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: #1a1a1a; color: white; padding: 3px 8px; border-radius: 20px; }
+
+.page-body { padding: 20px 16px 60px; }
+
+#pcInterviewAdmin { max-width: 1000px; margin: 0 auto; color: #222; }
+.page-sub { font-size: 14px; color: #666; margin: 0 0 20px; }
+
+input[type=text], input[type=password], input[type=date], input[type=time], select { width: 100%; padding: 9px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 13px; background: #fff; color: #222; font-family: inherit; }
+input:focus, select:focus { outline: none; border-color: #2d7dd2; }
+.btn { display: inline-block; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; border: 1px solid #ccc; background: #f5f5f5; color: #333; }
+.btn:hover { background: #eee; }
+.btn-primary { background: #2d7dd2; color: #fff; border-color: #2d7dd2; }
+.btn-primary:hover { background: #2569b8; }
+.btn-green { background: #1D9E75; color: #fff; border-color: #1D9E75; }
+.btn-green:hover { background: #0F6E56; }
+.btn-danger { background: #e74c3c; color: #fff; border-color: #e74c3c; }
+.btn-danger:hover { background: #c0392b; }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.error-msg { color: #c0392b; font-size: 12px; margin-top: 6px; }
+.success-msg { color: #1D9E75; font-size: 12px; margin-top: 6px; }
+
+.section-card { background: #fff; border: 1px solid #e0e0e0; border-radius: 10px; padding: 20px; margin-bottom: 20px; }
+.section-card h3 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
+.section-card .sec-sub { font-size: 12px; color: #888; margin: 0 0 16px; }
+
+.builder-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+.builder-field { display: flex; flex-direction: column; gap: 3px; }
+.builder-field label { font-size: 11px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.4px; }
+
+.presets { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 14px; padding-top: 14px; border-top: 1px solid #f0f0f0; }
+.preset-pill { padding: 5px 14px; background: #e6f1fb; color: #185fa5; border: none; border-radius: 20px; font-size: 12px; font-weight: 500; cursor: pointer; }
+.preset-pill:hover { background: #b5d4f4; }
+
+.cal-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+.cal-nav h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.cal-nav-btns { display: flex; gap: 6px; }
+
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.cal-day-hdr { text-align: center; font-size: 11px; font-weight: 600; color: #888; padding: 4px 0; text-transform: uppercase; }
+.cal-day { min-height: 60px; border: 1px solid #eee; border-radius: 6px; padding: 4px; background: #fafafa; }
+.cal-day.today { border-color: #2d7dd2; }
+.cal-day-num { font-size: 11px; font-weight: 600; color: #666; margin-bottom: 3px; }
+.cal-slot { font-size: 10px; padding: 3px 5px; border-radius: 4px; margin-bottom: 2px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-slot.open { background: #eaf6ec; color: #1e6b2e; }
+.cal-slot.booked { background: #fff8e1; color: #7a5c00; }
+.cal-slot.past { background: #f0f0f0; color: #aaa; }
+.cal-more { font-size: 10px; color: #2d7dd2; cursor: pointer; padding: 1px 5px; }
+
+.upcoming-row { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid #f0f0f0; }
+.upcoming-row:last-child { border-bottom: none; }
+.upcoming-avatar { width: 36px; height: 36px; border-radius: 50%; background: #e6f1fb; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: #0c447c; flex-shrink: 0; }
+.upcoming-name { font-size: 14px; font-weight: 500; }
+.upcoming-time { font-size: 12px; color: #888; }
+.upcoming-phone { font-size: 12px; color: #2d7dd2; }
+.upcoming-badge { font-size: 10px; padding: 2px 8px; border-radius: 20px; white-space: nowrap; }
+
+.stat-row { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+.stat-box { flex: 1; min-width: 100px; background: #fff; border-radius: 8px; padding: 10px 14px; text-align: center; border: 1px solid #eee; }
+.stat-num { font-size: 22px; font-weight: 600; }
+.stat-lbl { font-size: 11px; color: #888; margin-top: 2px; }
+
+.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+.modal-box { background: #fff; border-radius: 10px; padding: 24px; max-width: 420px; width: 95%; max-height: 90vh; overflow-y: auto; }
+.modal-box h3 { margin: 0 0 8px; font-size: 16px; }
+.modal-box p { font-size: 13px; color: #555; margin: 0 0 14px; line-height: 1.6; }
+
+.empty-state { text-align: center; padding: 30px 20px; color: #aaa; font-size: 13px; }
+
+@media (max-width: 700px) {
+  header { padding: 0 16px; height: auto; flex-wrap: wrap; padding: 12px 16px; gap: 10px; }
+  .cal-grid { gap: 3px; }
+  .cal-day { min-height: 44px; padding: 3px; }
+  .cal-slot { font-size: 9px; padding: 2px 3px; }
+  .builder-row { flex-direction: column; }
+  .builder-field { width: 100%; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <a href="/" class="back-link">&#8592; Toolkit</a>
+    <div class="hdivider"></div>
+    <span class="header-title">Interview Scheduling</span>
+    <span class="header-badge">Admin</span>
+  </div>
+</header>
+
+<div class="page-body">
+<div id="pcInterviewAdmin">
+  <div id="ia-main"></div>
+  <div id="ia-modal"></div>
+</div>
+</div>
+
+<script>
+var SUPABASE_URL='https://aoazlttdjowhlfcksoyl.supabase.co';
+var SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvYXpsdHRkam93aGxmY2tzb3lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNzU4MjMsImV4cCI6MjA5MDg1MTgyM30.tagP_88g7R3d_p7a4Kp0NirnJgkAR5AQQImCt414SJg';
+
+var DAY_NAMES=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+var MONTH_NAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+var iaSlots=[],iaBookings=[],iaWeekStart=null,iaLoading=true;
+
+function getSunday(d){var day=d.getDay();return new Date(d.getFullYear(),d.getMonth(),d.getDate()-day);}
+function initWeekStart(){iaWeekStart=getSunday(new Date());}
+function dateStr(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function parseDate(s){var p=s.split('-');return new Date(parseInt(p[0]),parseInt(p[1])-1,parseInt(p[2]));}
+function formatTime12(t){if(!t)return'';var p=t.split(':');var h=parseInt(p[0]);var m=p[1];var ampm=h>=12?'PM':'AM';if(h>12)h-=12;if(h===0)h=12;return h+':'+m+' '+ampm;}
+function formatTime24(h,m){return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');}
+function formatDateNice(s){var d=parseDate(s);return DAY_NAMES[d.getDay()]+', '+MONTH_NAMES[d.getMonth()]+' '+d.getDate();}
+function isToday(d){var now=new Date();return d.getFullYear()===now.getFullYear()&&d.getMonth()===now.getMonth()&&d.getDate()===now.getDate();}
+function isPast(slotDate,slotTime){var now=new Date();var p=slotTime.split(':');var sd=parseDate(slotDate);sd.setHours(parseInt(p[0]),parseInt(p[1]),0);return sd<now;}
+
+function sbFetch(path,opts){var method=opts&&opts.method?opts.method:'GET';var headers={'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json'};if(opts&&opts.prefer)headers['Prefer']=opts.prefer;var cfg={method:method,headers:headers};if(opts&&opts.body)cfg.body=JSON.stringify(opts.body);return fetch(SUPABASE_URL+path,cfg);}
+
+function loadData(){iaLoading=true;render();var p1=sbFetch('/rest/v1/interview_slots?select=*&order=slot_date.asc,start_time.asc').then(function(r){return r.json();}).catch(function(){return[];});var p2=sbFetch('/rest/v1/interview_bookings?select=*,interview_slots(*)&status=eq.scheduled&order=booked_at.desc').then(function(r){return r.json();}).catch(function(){return[];});Promise.all([p1,p2]).then(function(res){iaSlots=res[0]||[];iaBookings=res[1]||[];iaLoading=false;render();});}
+
+function getBookingForSlot(slotId){for(var i=0;i<iaBookings.length;i++){if(iaBookings[i].slot_id===slotId)return iaBookings[i];}return null;}
+function getSlotsForDate(ds){var out=[];for(var i=0;i<iaSlots.length;i++){if(iaSlots[i].slot_date===ds&&iaSlots[i].is_available)out.push(iaSlots[i]);}return out;}
+
+function getUpcomingBookings(){var now=new Date();var out=[];for(var i=0;i<iaBookings.length;i++){var b=iaBookings[i];if(b.status!=='scheduled')continue;var slot=b.interview_slots;if(!slot)continue;var p=slot.start_time.split(':');var sd=parseDate(slot.slot_date);sd.setHours(parseInt(p[0]),parseInt(p[1]),0);if(sd>=now)out.push(b);}out.sort(function(a,b){var sa=a.interview_slots;var sb2=b.interview_slots;var da=sa.slot_date+'T'+sa.start_time;var db=sb2.slot_date+'T'+sb2.start_time;return da<db?-1:da>db?1:0;});return out;}
+
+function countStats(){var now=new Date();var totalOpen=0,totalBooked=0,thisWeekBooked=0;for(var i=0;i<iaSlots.length;i++){var s=iaSlots[i];if(!s.is_available||isPast(s.slot_date,s.start_time))continue;var booking=getBookingForSlot(s.id);if(booking){totalBooked++;var sd=parseDate(s.slot_date);var weekEnd=new Date(iaWeekStart.getTime()+7*86400000);if(sd>=iaWeekStart&&sd<weekEnd)thisWeekBooked++;}else{totalOpen++;}}return{open:totalOpen,booked:totalBooked,thisWeek:thisWeekBooked};}
+
+function render(){document.getElementById('ia-main').innerHTML=renderMain();}
+
+function renderMain(){
+if(iaLoading)return'<div class="empty-state">Loading...</div>';
+var stats=countStats();
+var html='<p class="page-sub">Manage available phone interview times for candidates.</p>';
+html+='<div class="stat-row"><div class="stat-box"><div class="stat-num" style="color:#1D9E75;">'+stats.open+'</div><div class="stat-lbl">Open slots</div></div><div class="stat-box"><div class="stat-num" style="color:#d97706;">'+stats.booked+'</div><div class="stat-lbl">Booked</div></div><div class="stat-box"><div class="stat-num" style="color:#2d7dd2;">'+stats.thisWeek+'</div><div class="stat-lbl">This week</div></div></div>';
+
+html+='<div class="section-card"><h3>Add interview slots</h3><p class="sec-sub">Pick a date, time range, and slot duration to generate available times.</p><div class="builder-row"><div class="builder-field" style="min-width:140px;"><label>Date</label><input type="date" id="ia-build-date" value="'+dateStr(new Date())+'" /></div><div class="builder-field" style="min-width:110px;"><label>Start time</label><select id="ia-build-start">'+renderTimeOptions(9,0)+'</select></div><div class="builder-field" style="min-width:110px;"><label>End time</label><select id="ia-build-end">'+renderTimeOptions(17,0)+'</select></div><div class="builder-field" style="min-width:90px;"><label>Duration</label><select id="ia-build-dur"><option value="15">15 min</option><option value="30" selected>30 min</option><option value="45">45 min</option><option value="60">60 min</option></select></div><div class="builder-field"><label>&nbsp;</label><button class="btn btn-green" onclick="iaBuildSlots()">Add slots</button></div></div><div id="ia-build-msg"></div><div class="presets"><span style="font-size:12px;color:#888;padding:4px 0;">Quick add:</span><button class="preset-pill" onclick="iaPreset(\'weekday_afternoon\')">Mon-Fri 2-5 PM</button><button class="preset-pill" onclick="iaPreset(\'weekday_morning\')">Mon-Fri 9 AM-12 PM</button><button class="preset-pill" onclick="iaPreset(\'all_week\')">Sun-Sat 10 AM-4 PM</button></div></div>';
+
+html+='<div class="section-card"><div class="cal-nav"><button class="btn btn-sm" onclick="iaWeekPrev()">&larr; Prev</button><h3>'+renderWeekLabel()+'</h3><div class="cal-nav-btns"><button class="btn btn-sm" onclick="iaWeekToday()">Today</button><button class="btn btn-sm" onclick="iaWeekNext()">Next &rarr;</button></div></div><div class="cal-grid">';
+for(var d=0;d<7;d++)html+='<div class="cal-day-hdr">'+DAY_NAMES[d]+'</div>';
+for(var d=0;d<7;d++){var dayDate=new Date(iaWeekStart.getTime()+d*86400000);var ds=dateStr(dayDate);var slots=getSlotsForDate(ds);html+='<div class="cal-day'+(isToday(dayDate)?' today':'')+'"><div class="cal-day-num">'+dayDate.getDate()+'</div>';var maxShow=4;for(var s=0;s<slots.length;s++){if(s>=maxShow){html+='<div class="cal-more" onclick="iaShowDayDetail(\''+ds+'\')">+'+(slots.length-maxShow)+' more</div>';break;}var slot=slots[s];var booking=getBookingForSlot(slot.id);var slotClass=isPast(slot.slot_date,slot.start_time)?'past':(booking?'booked':'open');html+='<div class="cal-slot '+slotClass+'" onclick="iaSlotClick(\''+slot.id+'\')" title="'+formatTime12(slot.start_time)+(booking?' - '+booking.candidate_name:'')+'">'+formatTime12(slot.start_time)+'</div>';}if(slots.length===0)html+='<div style="font-size:10px;color:#ccc;text-align:center;padding:6px 0;">--</div>';html+='</div>';}
+html+='</div></div>';
+
+var upcoming=getUpcomingBookings();
+html+='<div class="section-card"><h3>Upcoming interviews</h3><p class="sec-sub">'+upcoming.length+' interview'+(upcoming.length!==1?'s':'')+' scheduled</p>';
+if(upcoming.length===0){html+='<div class="empty-state">No upcoming interviews.</div>';}
+else{for(var u=0;u<upcoming.length;u++){var b=upcoming[u];var slot=b.interview_slots;var nameParts=b.candidate_name.split(' ');var initials=((nameParts[0]?nameParts[0][0]:'')+(nameParts.length>1?nameParts[nameParts.length-1][0]:'')).toUpperCase();var slotDate=parseDate(slot.slot_date);var diffDays=Math.ceil((slotDate.getTime()-new Date().getTime())/86400000);var badge=diffDays<=0?'<span class="upcoming-badge" style="background:#fdecea;color:#8b1a1a;">Today</span>':diffDays===1?'<span class="upcoming-badge" style="background:#fff8e1;color:#7a5c00;">Tomorrow</span>':'<span class="upcoming-badge" style="background:#e6f1fb;color:#185fa5;">In '+diffDays+' days</span>';html+='<div class="upcoming-row"><div class="upcoming-avatar">'+initials+'</div><div style="flex:1;"><div class="upcoming-name">'+b.candidate_name+'</div><div class="upcoming-time">'+formatDateNice(slot.slot_date)+' at '+formatTime12(slot.start_time)+'</div>'+(b.candidate_phone?'<div class="upcoming-phone">'+b.candidate_phone+'</div>':'')+'</div>'+badge+'<button class="btn btn-sm" onclick="iaSlotClick(\''+b.slot_id+'\')">View</button></div>';}}
+html+='</div>';return html;}
+
+function renderTimeOptions(defaultH,defaultM){var html='';for(var h=6;h<=21;h++){for(var m=0;m<60;m+=30){var val=formatTime24(h,m);html+='<option value="'+val+'"'+(h===defaultH&&m===defaultM?' selected':'')+'>'+formatTime12(val)+'</option>';}}return html;}
+function renderWeekLabel(){if(!iaWeekStart)return'';var end=new Date(iaWeekStart.getTime()+6*86400000);var sm=MONTH_NAMES[iaWeekStart.getMonth()];var em=MONTH_NAMES[end.getMonth()];return sm===em?sm+' '+iaWeekStart.getDate()+' - '+end.getDate()+', '+iaWeekStart.getFullYear():sm+' '+iaWeekStart.getDate()+' - '+em+' '+end.getDate()+', '+end.getFullYear();}
+
+function iaBuildSlots(){var dateVal=document.getElementById('ia-build-date').value;var startVal=document.getElementById('ia-build-start').value;var endVal=document.getElementById('ia-build-end').value;var durVal=parseInt(document.getElementById('ia-build-dur').value);var msgEl=document.getElementById('ia-build-msg');if(!dateVal){msgEl.innerHTML='<div class="error-msg">Please select a date.</div>';return;}var sp=startVal.split(':');var ep=endVal.split(':');var startMin=parseInt(sp[0])*60+parseInt(sp[1]);var endMin=parseInt(ep[0])*60+parseInt(ep[1]);if(endMin<=startMin){msgEl.innerHTML='<div class="error-msg">End time must be after start time.</div>';return;}var slots=[];var cur=startMin;while(cur+durVal<=endMin){var h=Math.floor(cur/60);var m=cur%60;slots.push({slot_date:dateVal,start_time:formatTime24(h,m),duration_minutes:durVal,is_available:true,created_by:'admin'});cur+=durVal;}if(slots.length===0){msgEl.innerHTML='<div class="error-msg">No slots fit in that time range.</div>';return;}msgEl.innerHTML='<div class="success-msg">Adding '+slots.length+' slot'+(slots.length!==1?'s':'')+'...</div>';sbFetch('/rest/v1/interview_slots',{method:'POST',prefer:'return=minimal,resolution=ignore-duplicates',body:slots}).then(function(){msgEl.innerHTML='<div class="success-msg">Added '+slots.length+' slot'+(slots.length!==1?'s':'')+' for '+formatDateNice(dateVal)+'.</div>';loadData();}).catch(function(err){msgEl.innerHTML='<div class="error-msg">Error adding slots. Some may already exist.</div>';console.error(err);});}
+
+function iaPreset(type){var msgEl=document.getElementById('ia-build-msg');var now=new Date();var startDay=new Date(now.getFullYear(),now.getMonth(),now.getDate()+1);var dur=parseInt(document.getElementById('ia-build-dur').value)||30;var allSlots=[];if(type==='weekday_afternoon'){for(var d=0;d<7;d++){var day=new Date(startDay.getTime()+d*86400000);var dow=day.getDay();if(dow===0||dow===6)continue;allSlots=allSlots.concat(buildSlotsForDay(dateStr(day),'14:00','17:00',dur));}}else if(type==='weekday_morning'){for(var d=0;d<7;d++){var day=new Date(startDay.getTime()+d*86400000);var dow=day.getDay();if(dow===0||dow===6)continue;allSlots=allSlots.concat(buildSlotsForDay(dateStr(day),'09:00','12:00',dur));}}else if(type==='all_week'){for(var d=0;d<7;d++){var day=new Date(startDay.getTime()+d*86400000);allSlots=allSlots.concat(buildSlotsForDay(dateStr(day),'10:00','16:00',dur));}}if(allSlots.length===0){msgEl.innerHTML='<div class="error-msg">No slots generated.</div>';return;}msgEl.innerHTML='<div class="success-msg">Adding '+allSlots.length+' slots...</div>';sbFetch('/rest/v1/interview_slots',{method:'POST',prefer:'return=minimal,resolution=ignore-duplicates',body:allSlots}).then(function(){msgEl.innerHTML='<div class="success-msg">Added '+allSlots.length+' slots across the next 7 days.</div>';loadData();}).catch(function(err){msgEl.innerHTML='<div class="error-msg">Error. Some slots may already exist.</div>';console.error(err);});}
+
+function buildSlotsForDay(ds,startTime,endTime,dur){var sp=startTime.split(':');var ep=endTime.split(':');var startMin=parseInt(sp[0])*60+parseInt(sp[1]);var endMin=parseInt(ep[0])*60+parseInt(ep[1]);var slots=[];var cur=startMin;while(cur+dur<=endMin){var h=Math.floor(cur/60);var m=cur%60;slots.push({slot_date:ds,start_time:formatTime24(h,m),duration_minutes:dur,is_available:true,created_by:'admin'});cur+=dur;}return slots;}
+
+function iaWeekPrev(){iaWeekStart=new Date(iaWeekStart.getTime()-7*86400000);render();}
+function iaWeekNext(){iaWeekStart=new Date(iaWeekStart.getTime()+7*86400000);render();}
+function iaWeekToday(){initWeekStart();render();}
+
+function iaSlotClick(slotId){var slot=null;for(var i=0;i<iaSlots.length;i++){if(iaSlots[i].id===slotId){slot=iaSlots[i];break;}}if(!slot)return;var booking=getBookingForSlot(slotId);var html='<div class="modal-overlay" onclick="iaCloseModal(event)"><div class="modal-box"><h3>'+formatDateNice(slot.slot_date)+' at '+formatTime12(slot.start_time)+'</h3><p>'+slot.duration_minutes+' minute slot</p>';if(booking){html+='<div style="background:#fff8e1;border:1px solid #ffe082;border-radius:6px;padding:12px;margin-bottom:14px;"><div style="font-size:11px;color:#7a5c00;font-weight:600;text-transform:uppercase;margin-bottom:6px;">Booked by</div><div style="font-size:15px;font-weight:500;color:#78350f;">'+booking.candidate_name+'</div>'+(booking.candidate_phone?'<div style="font-size:13px;color:#92400e;margin-top:2px;">'+booking.candidate_phone+'</div>':'')+(booking.candidate_email?'<div style="font-size:13px;color:#92400e;margin-top:2px;">'+booking.candidate_email+'</div>':'')+'<div style="font-size:11px;color:#a16207;margin-top:6px;">Booked '+new Date(booking.booked_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+'</div></div><div style="display:flex;gap:8px;"><button class="btn" style="flex:1;" onclick="iaCloseModal(null)">Close</button><button class="btn btn-danger" style="flex:1;" onclick="iaCancelBooking(\''+booking.id+'\',\''+slotId+'\')">Cancel booking</button></div>';}else if(isPast(slot.slot_date,slot.start_time)){html+='<div style="background:#f0f0f0;border-radius:6px;padding:10px 12px;font-size:13px;color:#888;margin-bottom:14px;">This slot is in the past.</div><div style="display:flex;gap:8px;"><button class="btn" style="flex:1;" onclick="iaCloseModal(null)">Close</button><button class="btn btn-danger" style="flex:1;" onclick="iaDeleteSlot(\''+slotId+'\')">Remove slot</button></div>';}else{html+='<div style="background:#eaf6ec;border-radius:6px;padding:10px 12px;font-size:13px;color:#1e6b2e;margin-bottom:14px;">This slot is open and available for candidates to book.</div><div style="display:flex;gap:8px;"><button class="btn" style="flex:1;" onclick="iaCloseModal(null)">Close</button><button class="btn btn-danger" style="flex:1;" onclick="iaDeleteSlot(\''+slotId+'\')">Remove slot</button></div>';}html+='</div></div>';document.getElementById('ia-modal').innerHTML=html;}
+
+function iaShowDayDetail(ds){var slots=getSlotsForDate(ds);var html='<div class="modal-overlay" onclick="iaCloseModal(event)"><div class="modal-box"><h3>'+formatDateNice(ds)+'</h3><p>'+slots.length+' slot'+(slots.length!==1?'s':'')+'</p>';for(var i=0;i<slots.length;i++){var slot=slots[i];var booking=getBookingForSlot(slot.id);var past=isPast(slot.slot_date,slot.start_time);var bg=past?'#f0f0f0':(booking?'#fff8e1':'#eaf6ec');var color=past?'#aaa':(booking?'#7a5c00':'#1e6b2e');html+='<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:'+bg+';border-radius:6px;margin-bottom:4px;font-size:13px;color:'+color+';"><span>'+formatTime12(slot.start_time)+(booking?' - '+booking.candidate_name:(past?' (past)':' (open)'))+'</span><button class="btn btn-sm" style="font-size:11px;" onclick="iaSlotClick(\''+slot.id+'\')">View</button></div>';}html+='<div style="margin-top:12px;"><button class="btn" onclick="iaCloseModal(null)" style="width:100%;">Close</button></div></div></div>';document.getElementById('ia-modal').innerHTML=html;}
+
+function iaDeleteSlot(slotId){sbFetch('/rest/v1/interview_slots?id=eq.'+slotId,{method:'DELETE'}).then(function(){iaCloseModal(null);loadData();});}
+
+function iaCancelBooking(bookingId,slotId){sbFetch('/rest/v1/interview_bookings?id=eq.'+bookingId,{method:'PATCH',prefer:'return=minimal',body:{status:'cancelled',cancelled_at:new Date().toISOString()}}).then(function(){var booking=null;for(var i=0;i<iaBookings.length;i++){if(iaBookings[i].id===bookingId){booking=iaBookings[i];break;}}if(booking&&booking.candidate_id){sbFetch('/rest/v1/candidates?id=eq.'+booking.candidate_id,{method:'PATCH',prefer:'return=minimal',body:{pipeline_stage:'contacted',interview_scheduled_at:null,interview_slot_time:null,stage_updated_at:new Date().toISOString(),updated_at:new Date().toISOString()}});}iaCloseModal(null);loadData();});}
+
+function iaCloseModal(e){if(e?e.target===e.currentTarget:true)document.getElementById('ia-modal').innerHTML='';}
+
+initWeekStart();
+loadData();
+</script>
+</body>
+</html>
