@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Popcorn Chez — Purchases &amp; Transfers</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f0ec; min-height: 100vh; }
+
+header {
+  background: #fff; border-bottom: 1px solid #e8e8e4;
+  padding: 0 32px; display: flex; align-items: center;
+  justify-content: space-between; height: 64px;
+  position: sticky; top: 0; z-index: 100;
+}
+.header-left { display: flex; align-items: center; gap: 16px; }
+.back-link { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #999; text-decoration: none; display: flex; align-items: center; gap: 6px; transition: color 0.15s; }
+.back-link:hover { color: #1a1a1a; }
+.hdivider { width: 1px; height: 20px; background: #e8e8e4; }
+.header-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+.header-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: #1a1a1a; color: white; padding: 3px 8px; border-radius: 20px; }
+
+.page-body { padding: 20px 16px 60px; }
+.container { max-width: 560px; margin: 0 auto; }
+@media (min-width: 860px) {
+  .page-body { padding: 30px 32px 60px; }
+  .container { max-width: 1100px; display: grid; grid-template-columns: 440px 1fr; gap: 0 24px; align-items: start; }
+  .left-col { grid-column: 1; }
+  .right-col { grid-column: 2; }
+}
+.card { background: white; border-radius: 16px; padding: 20px; margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); }
+.card-title { font-size: 10px; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 16px; }
+.mode-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 18px; background: #f0f0ec; border-radius: 12px; padding: 4px; }
+.mode-btn { padding: 10px; border: none; border-radius: 9px; font-size: 13px; font-weight: 600; cursor: pointer; background: transparent; color: #888; transition: all 0.15s; }
+.mode-btn.active { background: white; color: #1a1a1a; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+.field { margin-bottom: 13px; }
+label { display: block; font-size: 13px; font-weight: 500; color: #555; margin-bottom: 4px; }
+select, input[type=text], input[type=number], input[type=date], input[type=password], input[type=month] { width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 10px; font-size: 15px; color: #1a1a1a; background: #fafafa; appearance: none; -webkit-appearance: none; font-family: inherit; }
+textarea { width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 10px; font-size: 14px; color: #1a1a1a; background: #fafafa; font-family: inherit; resize: vertical; min-height: 70px; }
+select:focus, input:focus, textarea:focus { outline: none; border-color: #1a1a1a; background: white; }
+
+/* Multi-file upload */
+.files-area { margin-bottom: 13px; }
+.file-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: #f0faf5; border: 1px solid #97C459; border-radius: 8px; margin-bottom: 6px; font-size: 13px; color: #27500A; }
+.file-item .file-name { flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-item .file-page { font-size: 11px; color: #3B6D11; flex-shrink: 0; }
+.file-remove { background: none; border: none; color: #A32D2D; font-size: 14px; cursor: pointer; padding: 0 4px; font-weight: 700; flex-shrink: 0; }
+.file-error-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: #fdf0ee; border: 1px solid #f0c0c0; border-radius: 8px; margin-bottom: 6px; font-size: 12px; color: #A32D2D; }
+.add-file-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; background: #fafafa; border: 1.5px dashed #ddd; border-radius: 8px; font-size: 13px; color: #888; cursor: pointer; transition: all 0.15s; }
+.add-file-btn:hover { border-color: #aaa; color: #555; }
+.upload-note { font-size: 11px; color: #bbb; font-style: italic; margin-top: 6px; }
+
+.submit-btn { width: 100%; padding: 14px; background: #1a1a1a; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 4px; }
+.submit-btn.amber { background: #BA7517; }
+.submit-btn:disabled { background: #ccc; cursor: not-allowed; }
+.error-msg { color: #c0392b; font-size: 13px; margin-bottom: 10px; display: none; padding: 10px 12px; background: #fdf0ee; border-radius: 8px; }
+.transfer-notice { font-size: 12px; color: #633806; background: #FAEEDA; border-radius: 8px; padding: 10px 12px; margin-bottom: 13px; line-height: 1.5; }
+.success-card { background: #f0faf5; border: 1px solid #97C459; border-radius: 16px; padding: 24px; text-align: center; display: none; margin-bottom: 14px; }
+.success-card.amber-success { background: #FAEEDA; border-color: #EF9F27; }
+.success-card h2 { font-size: 20px; color: #27500A; margin-bottom: 6px; }
+.success-card.amber-success h2 { color: #633806; }
+.success-card p { font-size: 14px; color: #3B6D11; line-height: 1.5; white-space: pre-line; }
+.success-card.amber-success p { color: #633806; }
+.another-btn { display: inline-block; margin-top: 14px; padding: 10px 24px; background: #1a1a1a; color: white; border-radius: 10px; font-size: 14px; font-weight: 500; cursor: pointer; border: none; }
+
+/* Monthly summary */
+.month-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px; }
+.month-label { font-size: 10px; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 0.08em; }
+.month-total { font-size: 26px; font-weight: 700; color: #1a1a1a; }
+.month-sub { font-size: 12px; color: #999; margin-bottom: 12px; min-height: 18px; }
+.month-picker { margin-bottom: 14px; }
+.venue-row { padding: 10px 0; border-bottom: 1px solid #f2f2f2; cursor: pointer; }
+.venue-row:last-child { border-bottom: none; }
+.venue-top { display: flex; justify-content: space-between; align-items: center; }
+.venue-name { font-size: 14px; font-weight: 600; color: #1a1a1a; }
+.venue-meta { font-size: 11px; color: #bbb; margin-top: 2px; }
+.venue-amt { font-size: 16px; font-weight: 700; color: #1a1a1a; }
+.amber-flag { display: inline-block; font-size: 10px; font-weight: 700; background: #FAEEDA; color: #633806; padding: 1px 7px; border-radius: 6px; margin-left: 6px; vertical-align: middle; }
+.chevron { font-size: 10px; color: #ccc; margin-left: 6px; }
+.receipt-list { display: none; background: #f8f8f8; border-radius: 10px; padding: 8px 12px; margin-top: 8px; }
+.receipt-item { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; font-size: 13px; border-bottom: 1px solid #eee; }
+.receipt-item:last-child { border-bottom: none; }
+.receipt-item.is-transfer { background: #FAEEDA; margin: 0 -12px; padding: 7px 12px; }
+.receipt-left { flex: 1; }
+.receipt-vendor { font-weight: 600; color: #1a1a1a; font-size: 13px; }
+.receipt-vendor.transfer-label { color: #633806; }
+.receipt-date { font-size: 11px; color: #aaa; }
+.receipt-amt { font-weight: 700; color: #1a1a1a; font-size: 13px; margin-left: 10px; }
+.receipt-amt.needs-value { color: #BA7517; font-style: italic; font-size: 11px; }
+.receipt-photo { font-size: 10px; background: #EAF3DE; color: #27500A; padding: 2px 7px; border-radius: 6px; text-decoration: none; font-weight: 600; margin-left: 6px; }
+
+/* Search */
+.section-divider { text-align: center; margin: 20px 0 14px; }
+.section-divider span { font-size: 11px; font-weight: 700; color: #bbb; text-transform: uppercase; letter-spacing: 0.08em; background: #f0f0ec; padding: 0 12px; }
+.section-divider hr { border: none; border-top: 1px solid #e0e0e0; margin-top: -8px; }
+.search-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.search-btn { width: 100%; padding: 11px; background: #1a1a1a; color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.summary-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
+.summary-box { background: #f8f8f8; border-radius: 12px; padding: 12px; text-align: center; }
+.s-label { font-size: 10px; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+.s-val { font-size: 20px; font-weight: 700; color: #1a1a1a; }
+.s-val.amber { color: #BA7517; }
+.result-block { border: 1px solid #eee; border-radius: 12px; overflow: hidden; margin-bottom: 10px; }
+.result-block.has-pending { border-color: #EF9F27; }
+.result-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; background: #fafafa; cursor: pointer; }
+.result-block.has-pending .result-header { background: #FAEEDA; }
+.result-name { font-size: 15px; font-weight: 600; color: #1a1a1a; }
+.result-meta { font-size: 11px; color: #888; margin-top: 2px; }
+.result-total { font-size: 18px; font-weight: 700; color: #1a1a1a; }
+.result-table { width: 100%; border-collapse: collapse; display: none; }
+.result-table th { font-size: 10px; font-weight: 700; color: #999; text-transform: uppercase; padding: 8px 14px; text-align: left; background: #f5f5f5; border-top: 1px solid #eee; }
+.result-table td { padding: 9px 14px; font-size: 13px; border-top: 1px solid #f5f5f5; color: #444; vertical-align: middle; }
+.result-table tr.transfer-row td { background: #FAEEDA; }
+.result-table tr:hover td { filter: brightness(0.97); }
+.amt-cell { font-weight: 700; color: #1a1a1a; text-align: right; }
+.amt-cell.pending { color: #BA7517; font-style: italic; font-weight: 500; }
+.photo-link { font-size: 11px; background: #EAF3DE; color: #27500A; padding: 3px 7px; border-radius: 6px; text-decoration: none; font-weight: 600; margin-right: 3px; }
+.transfer-badge { font-size: 10px; background: #FAEEDA; color: #633806; padding: 2px 7px; border-radius: 6px; font-weight: 700; }
+.no-file { font-size: 11px; color: #ddd; }
+.export-btn { padding: 6px 12px; background: #f5f5f5; color: #555; border: 1px solid #ddd; border-radius: 8px; font-size: 12px; cursor: pointer; }
+.edit-btn { font-size: 11px; background: #E6F1FB; color: #0C447C; padding: 3px 8px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; margin-right: 3px; }
+.del-btn { font-size: 11px; background: #FCEBEB; color: #A32D2D; padding: 3px 8px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; }
+.empty-state { text-align: center; padding: 24px 0; font-size: 14px; color: #ccc; }
+.loading-state { text-align: center; padding: 16px; font-size: 13px; color: #ccc; }
+
+/* Modals */
+.modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
+.modal-overlay.open { display: flex; }
+.modal { background: white; border-radius: 16px; padding: 24px; width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto; }
+.modal h2 { font-size: 16px; font-weight: 700; margin-bottom: 16px; }
+.modal-field { margin-bottom: 12px; }
+.modal-field label { font-size: 12px; font-weight: 500; color: #666; margin-bottom: 4px; display: block; }
+.modal-field select, .modal-field input, .modal-field textarea { width: 100%; padding: 9px 11px; border: 1px solid #ddd; border-radius: 9px; font-size: 14px; color: #1a1a1a; background: #fafafa; appearance: none; -webkit-appearance: none; font-family: inherit; }
+.modal-field textarea { min-height: 60px; resize: vertical; }
+.modal-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.photo-action { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: #f8f8f8; border-radius: 8px; }
+.photo-action span { font-size: 12px; color: #666; flex: 1; }
+.photo-clear-btn { font-size: 11px; background: #FCEBEB; color: #A32D2D; padding: 2px 8px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; }
+.photo-upload-btn { font-size: 11px; background: #E6F1FB; color: #0C447C; padding: 2px 8px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; }
+.modal-actions { display: flex; gap: 10px; margin-top: 16px; }
+.modal-save { flex: 1; padding: 11px; background: #1a1a1a; color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.modal-cancel { padding: 11px 16px; background: #f5f5f5; color: #555; border: 1px solid #ddd; border-radius: 10px; font-size: 14px; cursor: pointer; }
+.modal-error { color: #c0392b; font-size: 12px; margin-top: 8px; display: none; }
+.pw-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2000; align-items: center; justify-content: center; padding: 20px; }
+.pw-overlay.open { display: flex; }
+.pw-box { background: white; border-radius: 16px; padding: 24px; width: 100%; max-width: 340px; text-align: center; }
+.pw-box h3 { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+.pw-box p { font-size: 13px; color: #888; margin-bottom: 16px; }
+.pw-box input { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 10px; font-size: 15px; margin-bottom: 10px; text-align: center; letter-spacing: 0.1em; }
+.pw-submit { width: 100%; padding: 11px; background: #1a1a1a; color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; margin-bottom: 8px; }
+.pw-cancel { width: 100%; padding: 9px; background: none; color: #888; border: none; font-size: 13px; cursor: pointer; }
+.pw-error { color: #c0392b; font-size: 12px; margin-bottom: 8px; display: none; }
+
+@media (max-width: 600px) {
+  header { padding: 0 16px; height: auto; flex-wrap: wrap; padding: 12px 16px; gap: 10px; }
+}
+</style>
+</head>
+<body>
+
+<div class="pw-overlay" id="pw-overlay">
+  <div class="pw-box">
+    <h3>Admin access required</h3>
+    <p id="pw-desc">Enter your admin password.</p>
+    <input type="password" id="pw-input" placeholder="password" onkeydown="if(event.key==='Enter')checkPw()">
+    <div class="pw-error" id="pw-error">Incorrect password.</div>
+    <button class="pw-submit" onclick="checkPw()">Continue</button>
+    <button class="pw-cancel" onclick="closePw()">Cancel</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal">
+    <h2 id="edit-modal-title">Edit purchase</h2>
+    <input type="hidden" id="edit-id">
+    <input type="hidden" id="edit-type">
+    <div id="edit-invoice-fields">
+      <div class="modal-row">
+        <div class="modal-field"><label>Invoice date</label><input type="date" id="edit-date"></div>
+        <div class="modal-field"><label>Amount ($)</label><input type="number" id="edit-amount" step="0.01" min="0"></div>
+      </div>
+      <div class="modal-field"><label>Vendor</label><input type="text" id="edit-vendor"></div>
+      <div class="modal-field"><label>Venue</label>
+        <select id="edit-venue"><option value="">Select...</option><option>ACCC</option><option>Boardwalk Hall</option><option>Mann Music Center</option><option>FMP</option><option>Cure Insurance Arena</option><option>DE Chase Field House</option><option>Subaru Park</option><option>Villanova</option><option>Montage</option><option>Sports at the Beach</option></select>
+      </div>
+    </div>
+    <div id="edit-transfer-fields" style="display:none;">
+      <div class="modal-row">
+        <div class="modal-field"><label>Transfer date</label><input type="date" id="edit-transfer-date"></div>
+        <div class="modal-field"><label>Dollar value ($) <span style="color:#BA7517;font-size:11px;">admin only</span></label><input type="number" id="edit-transfer-amount" step="0.01" min="0" placeholder="Enter value..."></div>
+      </div>
+      <div class="modal-row">
+        <div class="modal-field"><label>From venue</label><select id="edit-from-venue"><option value="">Select...</option><option>ACCC</option><option>Boardwalk Hall</option><option>Mann Music Center</option><option>FMP</option><option>Cure Insurance Arena</option><option>DE Chase Field House</option><option>Subaru Park</option><option>Villanova</option><option>Montage</option><option>Sports at the Beach</option></select></div>
+        <div class="modal-field"><label>To venue</label><select id="edit-to-venue"><option value="">Select...</option><option>ACCC</option><option>Boardwalk Hall</option><option>Mann Music Center</option><option>FMP</option><option>Cure Insurance Arena</option><option>DE Chase Field House</option><option>Subaru Park</option><option>Villanova</option><option>Montage</option><option>Sports at the Beach</option></select></div>
+      </div>
+    </div>
+    <div class="modal-field"><label>Note</label><textarea id="edit-note"></textarea></div>
+    <div class="modal-field">
+      <label>Photo / file</label>
+      <div class="photo-action">
+        <span id="edit-photo-label">No file</span>
+        <button class="photo-upload-btn" onclick="document.getElementById('edit-photo-file').click()">Replace</button>
+        <button class="photo-clear-btn" id="edit-photo-clear" onclick="clearEditPhoto()" style="display:none;">Clear</button>
+      </div>
+      <input type="file" id="edit-photo-file" accept="image/jpeg,image/png,image/webp,image/gif,application/pdf" style="display:none;" onchange="handleEditFile(this)">
+    </div>
+    <div class="modal-error" id="edit-error"></div>
+    <div class="modal-actions">
+      <button class="modal-cancel" onclick="closeEditModal()">Cancel</button>
+      <button class="modal-save" onclick="saveEdit()">Save changes</button>
+    </div>
+  </div>
+</div>
+
+<header>
+  <div class="header-left">
+    <a href="/" class="back-link">&#8592; Toolkit</a>
+    <div class="hdivider"></div>
+    <span class="header-title">Purchases &amp; Transfers</span>
+    <span class="header-badge">Expenses</span>
+  </div>
+</header>
+
+<div class="page-body">
+  <div class="container">
+    <div class="left-col">
+      <div class="card" id="form-card">
+        <div class="mode-toggle">
+          <button class="mode-btn active" id="mode-invoice" onclick="setMode('invoice')">Vendor Invoice</button>
+          <button class="mode-btn" id="mode-transfer" onclick="setMode('transfer')">Internal Transfer</button>
+        </div>
+
+        <div id="invoice-fields">
+          <div class="field"><label>Invoice / delivery date</label><input type="date" id="inv-date"></div>
+          <div class="field"><label>Vendor</label><input type="text" id="vendor" placeholder="e.g. Pepsi, Hershey, US Foods..."></div>
+          <div class="field"><label>Venue</label>
+            <select id="venue-sel"><option value="">Select venue...</option><option>ACCC</option><option>Boardwalk Hall</option><option>Mann Music Center</option><option>FMP</option><option>Cure Insurance Arena</option><option>DE Chase Field House</option><option>Subaru Park</option><option>Villanova</option><option>Montage</option><option>Sports at the Beach</option></select>
+          </div>
+          <div class="field"><label>Amount ($)</label><input type="number" id="amount" placeholder="0.00" step="0.01" min="0"></div>
+          <div class="field"><label>Note <span style="font-weight:400;color:#bbb;">(optional)</span></label><textarea id="note" placeholder="e.g. partial delivery, price increase..."></textarea></div>
+          <div class="field">
+            <label>Receipt / invoice photos</label>
+            <div class="files-area" id="invoice-files-list"></div>
+            <div class="add-file-btn" onclick="document.getElementById('file-invoice-input').click()">&#128247; Add page</div>
+            <div class="upload-note">Attach receipt or invoice pages -- add as many as needed</div>
+            <input type="file" id="file-invoice-input" accept="image/jpeg,image/png,image/webp,image/gif,application/pdf" style="display:none;" onchange="addFile(this,'invoice')">
+          </div>
+        </div>
+
+        <div id="transfer-fields" style="display:none;">
+          <div class="transfer-notice">Dollar value is not entered here -- it will be added later by the office. Just log what moved and attach a photo if you have one.</div>
+          <div class="field"><label>Transfer date</label><input type="date" id="transfer-date"></div>
+          <div class="field"><label>From venue</label>
+            <select id="from-venue"><option value="">Select sending venue...</option><option>ACCC</option><option>Boardwalk Hall</option><option>Mann Music Center</option><option>FMP</option><option>Cure Insurance Arena</option><option>DE Chase Field House</option><option>Subaru Park</option><option>Villanova</option><option>Montage</option><option>Sports at the Beach</option></select>
+          </div>
+          <div class="field"><label>To venue</label>
+            <select id="to-venue"><option value="">Select receiving venue...</option><option>ACCC</option><option>Boardwalk Hall</option><option>Mann Music Center</option><option>FMP</option><option>Cure Insurance Arena</option><option>DE Chase Field House</option><option>Subaru Park</option><option>Villanova</option><option>Montage</option><option>Sports at the Beach</option></select>
+          </div>
+          <div class="field"><label>What was transferred <span style="color:#c0392b;">*</span></label><textarea id="transfer-desc" placeholder="e.g. 30 bags popcorn seed, 3 boxes oil, 2 cases hot dog buns..."></textarea></div>
+          <div class="field">
+            <label>Transfer photos</label>
+            <div class="files-area" id="transfer-files-list"></div>
+            <div class="add-file-btn" onclick="document.getElementById('file-transfer-input').click()">&#128247; Add page</div>
+            <div class="upload-note">Photo of handwritten note, packing slip, or whatever you have</div>
+            <input type="file" id="file-transfer-input" accept="image/jpeg,image/png,image/webp,image/gif,application/pdf" style="display:none;" onchange="addFile(this,'transfer')">
+          </div>
+        </div>
+
+        <div class="error-msg" id="error-msg"></div>
+        <button class="submit-btn" id="submit-btn" onclick="submitForm()">Submit Purchase</button>
+      </div>
+
+      <div class="success-card" id="success-card">
+        <h2 id="success-title">Purchase logged!</h2>
+        <p id="success-detail"></p>
+        <button class="another-btn" onclick="resetForm()">Log another</button>
+      </div>
+
+      <div class="card">
+        <div class="month-header">
+          <div class="month-label" id="summary-label">This month's purchases</div>
+          <div class="month-total" id="summary-total">$0</div>
+        </div>
+        <div class="month-sub" id="summary-sub"></div>
+        <div class="month-picker"><input type="month" id="summary-month" onchange="loadMonthlySummary()"></div>
+        <div id="summary-venues"><div class="loading-state">Loading...</div></div>
+      </div>
+    </div>
+
+    <div class="right-col">
+      <div class="section-divider"><hr><span>Purchase &amp; transfer history</span></div>
+      <div class="card">
+        <div class="card-title">Search</div>
+        <div class="search-grid">
+          <div class="field" style="margin-bottom:0;"><label>From date</label><input type="date" id="s-from"></div>
+          <div class="field" style="margin-bottom:0;"><label>To date</label><input type="date" id="s-to"></div>
+        </div>
+        <div class="search-grid" style="margin-top:10px;">
+          <div class="field" style="margin-bottom:0;"><label>Vendor / description</label><input type="text" id="s-vendor" placeholder="Search..."></div>
+          <div class="field" style="margin-bottom:0;"><label>Venue</label>
+            <select id="s-venue"><option value="">All venues</option><option>ACCC</option><option>Boardwalk Hall</option><option>Mann Music Center</option><option>FMP</option><option>Cure Insurance Arena</option><option>DE Chase Field House</option><option>Subaru Park</option><option>Villanova</option><option>Montage</option><option>Sports at the Beach</option></select>
+          </div>
+        </div>
+        <div class="search-grid" style="margin-top:10px;">
+          <div class="field" style="margin-bottom:0;"><label>Type</label>
+            <select id="s-type"><option value="">All types</option><option value="invoice">Vendor invoices only</option><option value="transfer">Transfers only</option><option value="pending">Transfers needing value</option></select>
+          </div>
+          <div style="display:flex;align-items:flex-end;"><button class="search-btn" onclick="searchPurchases()">Search</button></div>
+        </div>
+        <div style="margin-top:14px;" id="search-results"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+var SUPA_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
+var SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvYXpsdHRkam93aGxmY2tzb3lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNzU4MjMsImV4cCI6MjA5MDg1MTgyM30.tagP_88g7R3d_p7a4Kp0NirnJgkAR5AQQImCt414SJg';
+var ADMIN_PASSWORD = 'popcorn2026';
+var BLOCKED_EXTENSIONS = ['heic', 'heif'];
+
+var currentMode = 'invoice';
+var invoiceFiles = [];
+var transferFiles = [];
+var currentSearchData = [];
+var adminUnlocked = false;
+var pendingPwAction = null;
+var editPhotoFile = null;
+var editPhotoClear = false;
+
+function todayLocal() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+function thisMonth() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); }
+function firstOfMonth() { return todayLocal().slice(0,8) + '01'; }
+function fmtMoney(n) { return parseFloat(n).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}); }
+function fmtMoneyRound(n) { return Math.round(n).toLocaleString(); }
+
+document.getElementById('inv-date').value = todayLocal();
+document.getElementById('transfer-date').value = todayLocal();
+document.getElementById('s-from').value = firstOfMonth();
+document.getElementById('s-to').value = todayLocal();
+document.getElementById('summary-month').value = thisMonth();
+
+function isBlockedFile(file) {
+  var ext = file.name.toLowerCase().split('.').pop();
+  if (BLOCKED_EXTENSIONS.indexOf(ext) !== -1) return true;
+  var mime = (file.type || '').toLowerCase();
+  return mime.indexOf('heic') !== -1 || mime.indexOf('heif') !== -1;
+}
+
+// ── Multi-file upload ──
+function addFile(input, mode) {
+  if (!input.files || !input.files[0]) return;
+  var file = input.files[0];
+  var listId = mode === 'invoice' ? 'invoice-files-list' : 'transfer-files-list';
+  var arr = mode === 'invoice' ? invoiceFiles : transferFiles;
+
+  if (isBlockedFile(file)) {
+    var el = document.getElementById(listId);
+    var errDiv = document.createElement('div');
+    errDiv.className = 'file-error-item';
+    errDiv.textContent = 'HEIC not supported -- use JPG or PNG';
+    el.appendChild(errDiv);
+    setTimeout(function() { if (errDiv.parentNode) errDiv.parentNode.removeChild(errDiv); }, 4000);
+    input.value = '';
+    return;
+  }
+
+  arr.push(file);
+  input.value = '';
+  renderFileList(mode);
+}
+
+function removeFile(mode, index) {
+  var arr = mode === 'invoice' ? invoiceFiles : transferFiles;
+  arr.splice(index, 1);
+  renderFileList(mode);
+}
+
+function renderFileList(mode) {
+  var arr = mode === 'invoice' ? invoiceFiles : transferFiles;
+  var listId = mode === 'invoice' ? 'invoice-files-list' : 'transfer-files-list';
+  var el = document.getElementById(listId);
+  if (!arr.length) { el.innerHTML = ''; return; }
+  var html = '';
+  for (var i = 0; i < arr.length; i++) {
+    html += '<div class="file-item"><span class="file-page">Page ' + (i+1) + '</span><span class="file-name">' + arr[i].name + '</span><button class="file-remove" onclick="removeFile(\'' + mode + '\',' + i + ')">&times;</button></div>';
+  }
+  el.innerHTML = html;
+}
+
+// ── Mode toggle ──
+function setMode(mode) {
+  currentMode = mode;
+  document.getElementById('mode-invoice').classList.toggle('active', mode === 'invoice');
+  document.getElementById('mode-transfer').classList.toggle('active', mode === 'transfer');
+  document.getElementById('invoice-fields').style.display = mode === 'invoice' ? 'block' : 'none';
+  document.getElementById('transfer-fields').style.display = mode === 'transfer' ? 'block' : 'none';
+  var btn = document.getElementById('submit-btn');
+  if (mode === 'transfer') { btn.textContent = 'Log Transfer'; btn.className = 'submit-btn amber'; }
+  else { btn.textContent = 'Submit Purchase'; btn.className = 'submit-btn'; }
+  document.getElementById('error-msg').style.display = 'none';
+}
+
+// ── Admin password ──
+function requirePassword(desc, cb) {
+  if (adminUnlocked) { cb(); return; }
+  pendingPwAction = cb;
+  document.getElementById('pw-desc').textContent = desc;
+  document.getElementById('pw-input').value = '';
+  document.getElementById('pw-error').style.display = 'none';
+  document.getElementById('pw-overlay').classList.add('open');
+  setTimeout(function() { document.getElementById('pw-input').focus(); }, 100);
+}
+function checkPw() {
+  if (document.getElementById('pw-input').value === ADMIN_PASSWORD) {
+    adminUnlocked = true;
+    document.getElementById('pw-overlay').classList.remove('open');
+    if (pendingPwAction) { pendingPwAction(); pendingPwAction = null; }
+  } else {
+    document.getElementById('pw-error').style.display = 'block';
+    document.getElementById('pw-input').value = '';
+    document.getElementById('pw-input').focus();
+  }
+}
+function closePw() { document.getElementById('pw-overlay').classList.remove('open'); pendingPwAction = null; }
+
+// ── Photo upload helper ──
+async function uploadPhoto(file, path) {
+  var r = await fetch(SUPA_URL + '/storage/v1/object/purchase-receipts/' + path, {
+    method: 'POST', headers: {'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': file.type}, body: file
+  });
+  return r.ok ? SUPA_URL + '/storage/v1/object/public/purchase-receipts/' + path : null;
+}
+
+// ── Submit ──
+async function submitForm() {
+  if (currentMode === 'invoice') await submitInvoice();
+  else await submitTransfer();
+}
+
+async function submitInvoice() {
+  var date = document.getElementById('inv-date').value;
+  var vendor = document.getElementById('vendor').value.trim();
+  var venue = document.getElementById('venue-sel').value;
+  var amount = parseFloat(document.getElementById('amount').value);
+  var note = document.getElementById('note').value.trim();
+  var errEl = document.getElementById('error-msg');
+  errEl.style.display = 'none';
+  if (!date || !vendor || !venue || !amount || isNaN(amount)) {
+    errEl.textContent = 'Please fill in date, vendor, venue, and amount.';
+    errEl.style.display = 'block';
+    return;
+  }
+  var btn = document.getElementById('submit-btn');
+  btn.disabled = true; btn.textContent = 'Saving...';
+  try {
+    var id = crypto.randomUUID();
+    var photoUrl = null;
+    // Upload first file as main photo_url
+    if (invoiceFiles.length > 0) {
+      photoUrl = await uploadPhoto(invoiceFiles[0], id + '-p1.' + invoiceFiles[0].name.split('.').pop());
+    }
+    // Upload additional pages
+    var extraUrls = [];
+    for (var i = 1; i < invoiceFiles.length; i++) {
+      var url = await uploadPhoto(invoiceFiles[i], id + '-p' + (i+1) + '.' + invoiceFiles[i].name.split('.').pop());
+      if (url) extraUrls.push(url);
+    }
+    // Build note with extra photo URLs appended
+    var fullNote = note || '';
+    if (extraUrls.length) {
+      var suffix = '\n[Additional pages: ' + extraUrls.join(' , ') + ']';
+      fullNote = fullNote ? fullNote + suffix : suffix.trim();
+    }
+    var res = await fetch(SUPA_URL + '/rest/v1/purchases', {
+      method: 'POST',
+      headers: {'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal'},
+      body: JSON.stringify({id: id, type: 'invoice', invoice_date: date, vendor: vendor, venue: venue, amount: amount, note: fullNote || null, photo_url: photoUrl})
+    });
+    if (!res.ok) throw new Error(await res.text());
+    document.getElementById('form-card').style.display = 'none';
+    var sc = document.getElementById('success-card');
+    sc.className = 'success-card'; sc.style.display = 'block';
+    document.getElementById('success-title').textContent = 'Purchase logged!';
+    var fileCount = invoiceFiles.length;
+    document.getElementById('success-detail').textContent = vendor + ' -- ' + venue + '\n$' + fmtMoney(amount) + (fileCount ? '\n' + fileCount + ' page' + (fileCount > 1 ? 's' : '') + ' attached' : '');
+    loadMonthlySummary();
+  } catch(e) {
+    errEl.textContent = 'Something went wrong -- try again.';
+    errEl.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Submit Purchase';
+  }
+}
+
+async function submitTransfer() {
+  var date = document.getElementById('transfer-date').value;
+  var fromVenue = document.getElementById('from-venue').value;
+  var toVenue = document.getElementById('to-venue').value;
+  var desc = document.getElementById('transfer-desc').value.trim();
+  var errEl = document.getElementById('error-msg');
+  errEl.style.display = 'none';
+  if (!date || !fromVenue || !toVenue || !desc) {
+    errEl.textContent = 'Please fill in date, both venues, and a description of what was transferred.';
+    errEl.style.display = 'block';
+    return;
+  }
+  if (fromVenue === toVenue) {
+    errEl.textContent = 'From and To venue cannot be the same.';
+    errEl.style.display = 'block';
+    return;
+  }
+  var btn = document.getElementById('submit-btn');
+  btn.disabled = true; btn.textContent = 'Saving...';
+  try {
+    var id = crypto.randomUUID();
+    var photoUrl = null;
+    if (transferFiles.length > 0) {
+      photoUrl = await uploadPhoto(transferFiles[0], id + '-p1.' + transferFiles[0].name.split('.').pop());
+    }
+    var extraUrls = [];
+    for (var i = 1; i < transferFiles.length; i++) {
+      var url = await uploadPhoto(transferFiles[i], id + '-p' + (i+1) + '.' + transferFiles[i].name.split('.').pop());
+      if (url) extraUrls.push(url);
+    }
+    var fullNote = desc;
+    if (extraUrls.length) {
+      fullNote += '\n[Additional pages: ' + extraUrls.join(' , ') + ']';
+    }
+    var res = await fetch(SUPA_URL + '/rest/v1/purchases', {
+      method: 'POST',
+      headers: {'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal'},
+      body: JSON.stringify({id: id, type: 'transfer', invoice_date: date, vendor: null, venue: fromVenue, to_venue: toVenue, amount: null, note: fullNote, photo_url: photoUrl, transfer_valued: false})
+    });
+    if (!res.ok) throw new Error(await res.text());
+    document.getElementById('form-card').style.display = 'none';
+    var sc = document.getElementById('success-card');
+    sc.className = 'success-card amber-success'; sc.style.display = 'block';
+    document.getElementById('success-title').textContent = 'Transfer logged!';
+    document.getElementById('success-detail').textContent = fromVenue + ' to ' + toVenue + '\n' + desc + '\n\nDollar value will be added by the office.';
+    loadMonthlySummary();
+  } catch(e) {
+    errEl.textContent = 'Something went wrong -- try again.';
+    errEl.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Log Transfer';
+  }
+}
+
+function resetForm() {
+  document.getElementById('form-card').style.display = 'block';
+  document.getElementById('success-card').style.display = 'none';
+  document.getElementById('inv-date').value = todayLocal();
+  document.getElementById('vendor').value = '';
+  document.getElementById('venue-sel').value = '';
+  document.getElementById('amount').value = '';
+  document.getElementById('note').value = '';
+  document.getElementById('transfer-date').value = todayLocal();
+  document.getElementById('from-venue').value = '';
+  document.getElementById('to-venue').value = '';
+  document.getElementById('transfer-desc').value = '';
+  invoiceFiles = []; transferFiles = [];
+  renderFileList('invoice'); renderFileList('transfer');
+  document.getElementById('error-msg').style.display = 'none';
+  document.getElementById('submit-btn').disabled = false;
+  setMode(currentMode);
+}
+
+// ── Monthly summary ──
+async function loadMonthlySummary() {
+  var month = document.getElementById('summary-month').value;
+  if (!month) return;
+  var parts = month.split('-');
+  var lastDay = new Date(parseInt(parts[0]), parseInt(parts[1]), 0).getDate();
+  var from = month + '-01';
+  var to = month + '-' + String(lastDay).padStart(2,'0');
+  var monthName = new Date(parseInt(parts[0]), parseInt(parts[1])-1, 1).toLocaleString('en-US', {month:'long', year:'numeric'});
+  document.getElementById('summary-label').textContent = monthName + ' purchases';
+  try {
+    var res = await fetch(SUPA_URL + '/rest/v1/purchases?invoice_date=gte.' + from + '&invoice_date=lte.' + to + '&select=venue,vendor,amount,invoice_date,photo_url,type,to_venue,transfer_valued,note', {
+      headers: {'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY}
+    });
+    var rows = await res.json();
+    if (!Array.isArray(rows) || !rows.length) {
+      document.getElementById('summary-venues').innerHTML = '<div class="empty-state">No entries this month.</div>';
+      document.getElementById('summary-total').textContent = '$0';
+      document.getElementById('summary-sub').textContent = '';
+      return;
+    }
+    var invoices = rows.filter(function(r) { return r.type === 'invoice'; });
+    var transfers = rows.filter(function(r) { return r.type === 'transfer'; });
+    var pendingTransfers = transfers.filter(function(r) { return !r.transfer_valued; });
+    var gt = invoices.reduce(function(s,r) { return s+parseFloat(r.amount||0); }, 0);
+    document.getElementById('summary-total').textContent = '$' + fmtMoneyRound(gt);
+    var subText = invoices.length + ' invoice' + (invoices.length !== 1 ? 's' : '');
+    if (transfers.length) subText += ' -- ' + transfers.length + ' transfer' + (transfers.length !== 1 ? 's' : '');
+    if (pendingTransfers.length) subText += ' -- ' + pendingTransfers.length + ' need value';
+    document.getElementById('summary-sub').textContent = subText;
+
+    var byVenue = {};
+    invoices.forEach(function(r) { if (!byVenue[r.venue]) byVenue[r.venue] = {invoices:[], transfers:[]}; byVenue[r.venue].invoices.push(r); });
+    transfers.forEach(function(r) {
+      if (!byVenue[r.venue]) byVenue[r.venue] = {invoices:[], transfers:[]};
+      byVenue[r.venue].transfers.push({type:r.type, invoice_date:r.invoice_date, note:r.note, venue:r.venue, to_venue:r.to_venue, amount:r.amount, transfer_valued:r.transfer_valued, photo_url:r.photo_url, direction:'out'});
+      if (!byVenue[r.to_venue]) byVenue[r.to_venue] = {invoices:[], transfers:[]};
+      byVenue[r.to_venue].transfers.push({type:r.type, invoice_date:r.invoice_date, note:r.note, venue:r.venue, to_venue:r.to_venue, amount:r.amount, transfer_valued:r.transfer_valued, photo_url:r.photo_url, direction:'in'});
+    });
+    var venueEntries = Object.entries(byVenue).sort(function(a,b) {
+      var ta = a[1].invoices.reduce(function(s,r) { return s+parseFloat(r.amount||0); }, 0);
+      var tb = b[1].invoices.reduce(function(s,r) { return s+parseFloat(r.amount||0); }, 0);
+      return tb - ta;
+    });
+    var html = '';
+    for (var vi = 0; vi < venueEntries.length; vi++) {
+      var vname = venueEntries[vi][0]; var vdata = venueEntries[vi][1];
+      var vtotal = vdata.invoices.reduce(function(s,r) { return s+parseFloat(r.amount||0); }, 0);
+      var vhasPending = vdata.transfers.some(function(r) { return !r.transfer_valued; });
+      var vid = 'mv' + vi; var vchid = 'mch' + vi;
+      var allItems = vdata.invoices.concat(vdata.transfers);
+      html += '<div class="venue-row" onclick="toggleL(\'' + vid + '\',\'' + vchid + '\')">';
+      html += '<div class="venue-top"><div><div class="venue-name">' + vname + (vhasPending ? '<span class="amber-flag">transfer pending</span>' : '') + '</div>';
+      html += '<div class="venue-meta">' + allItems.length + ' entr' + (allItems.length !== 1 ? 'ies' : 'y') + '</div></div>';
+      html += '<div style="display:flex;align-items:center;"><div class="venue-amt">$' + fmtMoneyRound(vtotal) + '</div><div class="chevron" id="' + vchid + '">&#9654;</div></div></div>';
+      html += '<div class="receipt-list" id="' + vid + '">';
+      vdata.invoices.slice().sort(function(a,b) { return a.invoice_date.localeCompare(b.invoice_date); }).forEach(function(inv) {
+        var ds = inv.invoice_date.slice(5,7) + '/' + inv.invoice_date.slice(8,10);
+        html += '<div class="receipt-item"><div class="receipt-left"><div class="receipt-vendor">' + inv.vendor + '</div><div class="receipt-date">' + ds + '</div></div>';
+        html += '<div style="display:flex;align-items:center;"><div class="receipt-amt">$' + fmtMoney(inv.amount) + '</div>';
+        html += (inv.photo_url ? '<a href="' + inv.photo_url + '" target="_blank" class="receipt-photo">receipt</a>' : '') + '</div></div>';
+      });
+      vdata.transfers.forEach(function(tr) {
+        var tds = tr.invoice_date.slice(5,7) + '/' + tr.invoice_date.slice(8,10);
+        var tlabel = tr.direction === 'out' ? 'Transfer out to ' + tr.to_venue : 'Transfer in from ' + tr.venue;
+        html += '<div class="receipt-item is-transfer"><div class="receipt-left"><div class="receipt-vendor transfer-label">' + tlabel + '</div>';
+        html += '<div class="receipt-date">' + tds + ' -- ' + (tr.note || '').split('\n')[0] + '</div></div>';
+        html += '<div style="display:flex;align-items:center;">';
+        html += (tr.transfer_valued && tr.amount ? '<div class="receipt-amt">$' + fmtMoney(tr.amount) + '</div>' : '<div class="receipt-amt needs-value">needs value</div>');
+        html += (tr.photo_url ? '<a href="' + tr.photo_url + '" target="_blank" class="receipt-photo">photo</a>' : '') + '</div></div>';
+      });
+      html += '</div></div>';
+    }
+    document.getElementById('summary-venues').innerHTML = html;
+  } catch(e) { document.getElementById('summary-venues').innerHTML = '<div class="empty-state">Could not load.</div>'; }
+}
+
+function toggleL(id, chId) { var el = document.getElementById(id); var ch = document.getElementById(chId); var open = el.style.display === 'block'; el.style.display = open ? 'none' : 'block'; ch.innerHTML = open ? '&#9654;' : '&#9660;'; }
+
+// ── Search ──
+async function searchPurchases() {
+  var from = document.getElementById('s-from').value;
+  var to = document.getElementById('s-to').value;
+  var vendor = document.getElementById('s-vendor').value.trim();
+  var venue = document.getElementById('s-venue').value;
+  var type = document.getElementById('s-type').value;
+  var rEl = document.getElementById('search-results');
+  rEl.innerHTML = '<div class="loading-state">Searching...</div>';
+  var url = SUPA_URL + '/rest/v1/purchases?select=*&order=invoice_date.asc,submitted_at.asc';
+  if (from) url += '&invoice_date=gte.' + from;
+  if (to) url += '&invoice_date=lte.' + to;
+  if (venue) url += '&venue=eq.' + encodeURIComponent(venue);
+  if (type === 'invoice') url += '&type=eq.invoice';
+  else if (type === 'transfer' || type === 'pending') url += '&type=eq.transfer';
+  try {
+    var res = await fetch(url, {headers: {'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY}});
+    var rows = await res.json();
+    if (vendor) {
+      var vl = vendor.toLowerCase();
+      rows = rows.filter(function(r) { return (r.vendor || '').toLowerCase().includes(vl) || (r.note || '').toLowerCase().includes(vl); });
+    }
+    if (type === 'pending') rows = rows.filter(function(r) { return r.type === 'transfer' && !r.transfer_valued; });
+    currentSearchData = rows;
+    if (!Array.isArray(rows) || !rows.length) { rEl.innerHTML = '<div class="empty-state" style="padding:16px;">No results found.</div>'; return; }
+    var invoices = rows.filter(function(r) { return r.type === 'invoice'; });
+    var transfers = rows.filter(function(r) { return r.type === 'transfer'; });
+    var pending = transfers.filter(function(r) { return !r.transfer_valued; });
+    var gt = invoices.reduce(function(s,r) { return s+parseFloat(r.amount||0); }, 0);
+    var html = '';
+    if (pending.length) html += '<div style="background:#FAEEDA;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#633806;font-weight:500;">' + pending.length + ' transfer' + (pending.length !== 1 ? 's' : '') + ' need a dollar value</div>';
+    html += '<div class="summary-row"><div class="summary-box"><div class="s-label">Invoice total</div><div class="s-val">$' + fmtMoneyRound(gt) + '</div></div>';
+    html += '<div class="summary-box"><div class="s-label">Invoices</div><div class="s-val">' + invoices.length + '</div></div>';
+    html += '<div class="summary-box"><div class="s-label">Transfers</div><div class="s-val' + (pending.length ? ' amber' : '') + '">' + transfers.length + (pending.length ? ' (' + pending.length + ' pending)' : '') + '</div></div></div>';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><div style="font-size:11px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:0.06em;">Results</div><button class="export-btn" onclick="exportCSV()">Export CSV</button></div>';
+    var byVenue = {};
+    rows.forEach(function(r) { if (!byVenue[r.venue]) byVenue[r.venue] = []; byVenue[r.venue].push(r); });
+    Object.keys(byVenue).forEach(function(vname, vi) {
+      var items = byVenue[vname];
+      var invoiceItems = items.filter(function(r) { return r.type === 'invoice'; });
+      var transferItems = items.filter(function(r) { return r.type === 'transfer'; });
+      var vtotal = invoiceItems.reduce(function(s,r) { return s+parseFloat(r.amount||0); }, 0);
+      var vhasPending = transferItems.some(function(r) { return !r.transfer_valued; });
+      var vid = 'rv' + vi; var vchid = 'rch' + vi;
+      html += '<div class="result-block' + (vhasPending ? ' has-pending' : '') + '">';
+      html += '<div class="result-header" onclick="toggleR(\'' + vid + '\',\'' + vchid + '\')">';
+      html += '<div><div class="result-name">' + vname + (vhasPending ? '<span class="amber-flag" style="margin-left:8px;">needs value</span>' : '') + '</div>';
+      html += '<div class="result-meta">' + items.length + ' entr' + (items.length !== 1 ? 'ies' : 'y') + '</div></div>';
+      html += '<div style="display:flex;align-items:center;"><div class="result-total">$' + fmtMoneyRound(vtotal) + '</div><div class="chevron" id="' + vchid + '">&#9654;</div></div></div>';
+      html += '<table class="result-table" id="' + vid + '"><thead><tr><th>Date</th><th>Type</th><th>Details</th><th style="text-align:right;">Amount</th><th>File</th><th>Actions</th></tr></thead><tbody>';
+      items.forEach(function(r) {
+        var ds = r.invoice_date.slice(5,7) + '/' + r.invoice_date.slice(8,10) + '/' + r.invoice_date.slice(0,4);
+        var isTransfer = r.type === 'transfer';
+        var isPending = isTransfer && !r.transfer_valued;
+        var details = isTransfer ? r.venue + ' to ' + r.to_venue + ': ' + ((r.note || '').split('\n')[0]) : (r.vendor || '');
+        var amtCell = isTransfer ? (isPending ? '<span style="color:#BA7517;font-style:italic;font-size:12px;">needs value</span>' : '$' + fmtMoney(r.amount)) : '$' + fmtMoney(r.amount);
+        html += '<tr class="' + (isTransfer ? 'transfer-row' : '') + '">';
+        html += '<td style="color:#aaa;font-size:12px;">' + ds + '</td>';
+        html += '<td>' + (isTransfer ? '<span class="transfer-badge">Transfer</span>' : 'Invoice') + '</td>';
+        html += '<td style="font-size:12px;color:#444;">' + details + '</td>';
+        html += '<td class="amt-cell' + (isPending ? ' pending' : '') + '" style="text-align:right;">' + amtCell + '</td>';
+        html += '<td>' + (r.photo_url ? '<a href="' + r.photo_url + '" target="_blank" class="photo-link">view</a>' : '<span class="no-file">none</span>') + '</td>';
+        html += '<td><button class="edit-btn" onclick="triggerEdit(\'' + r.id + '\')">Edit</button><button class="del-btn" onclick="triggerDelete(\'' + r.id + '\')">Delete</button></td></tr>';
+      });
+      html += '</tbody></table></div>';
+    });
+    rEl.innerHTML = html;
+  } catch(e) { rEl.innerHTML = '<div class="empty-state" style="padding:16px;">Error loading results.</div>'; }
+}
+
+function toggleR(id, chId) { var el = document.getElementById(id); var ch = document.getElementById(chId); var open = el.style.display === 'table'; el.style.display = open ? 'none' : 'table'; ch.innerHTML = open ? '&#9654;' : '&#9660;'; }
+
+// ── Edit modal ──
+function triggerEdit(id) { requirePassword('Enter admin password to edit.', function() { openEdit(id); }); }
+function openEdit(id) {
+  var row = null;
+  for (var i = 0; i < currentSearchData.length; i++) { if (currentSearchData[i].id === id) { row = currentSearchData[i]; break; } }
+  if (!row) return;
+  var isTransfer = row.type === 'transfer';
+  document.getElementById('edit-id').value = id;
+  document.getElementById('edit-type').value = row.type;
+  document.getElementById('edit-modal-title').textContent = isTransfer ? 'Edit transfer -- add dollar value' : 'Edit purchase';
+  document.getElementById('edit-invoice-fields').style.display = isTransfer ? 'none' : 'block';
+  document.getElementById('edit-transfer-fields').style.display = isTransfer ? 'block' : 'none';
+  if (isTransfer) {
+    document.getElementById('edit-transfer-date').value = row.invoice_date;
+    document.getElementById('edit-transfer-amount').value = row.amount || '';
+    document.getElementById('edit-from-venue').value = row.venue || '';
+    document.getElementById('edit-to-venue').value = row.to_venue || '';
+  } else {
+    document.getElementById('edit-date').value = row.invoice_date;
+    document.getElementById('edit-amount').value = row.amount || '';
+    document.getElementById('edit-vendor').value = row.vendor || '';
+    document.getElementById('edit-venue').value = row.venue || '';
+  }
+  document.getElementById('edit-note').value = row.note || '';
+  editPhotoFile = null; editPhotoClear = false;
+  document.getElementById('edit-photo-file').value = '';
+  var lbl = document.getElementById('edit-photo-label');
+  var clr = document.getElementById('edit-photo-clear');
+  if (row.photo_url) { lbl.innerHTML = '<a href="' + row.photo_url + '" target="_blank">View current file</a>'; clr.style.display = 'inline-block'; }
+  else { lbl.textContent = 'No file'; clr.style.display = 'none'; }
+  document.getElementById('edit-error').style.display = 'none';
+  document.getElementById('edit-modal').classList.add('open');
+}
+function handleEditFile(input) { if (input.files && input.files[0]) { editPhotoFile = input.files[0]; document.getElementById('edit-photo-label').textContent = 'New: ' + editPhotoFile.name; editPhotoClear = false; } }
+function clearEditPhoto() { editPhotoClear = true; editPhotoFile = null; document.getElementById('edit-photo-label').textContent = 'Will be removed on save'; document.getElementById('edit-photo-clear').style.display = 'none'; }
+function closeEditModal() { document.getElementById('edit-modal').classList.remove('open'); }
+async function saveEdit() {
+  var id = document.getElementById('edit-id').value;
+  var type = document.getElementById('edit-type').value;
+  var note = document.getElementById('edit-note').value.trim();
+  var errEl = document.getElementById('edit-error');
+  errEl.style.display = 'none';
+  var original = null;
+  for (var i = 0; i < currentSearchData.length; i++) { if (currentSearchData[i].id === id) { original = currentSearchData[i]; break; } }
+  var photoUrl = original ? (original.photo_url || null) : null;
+  if (editPhotoClear) photoUrl = null;
+  if (editPhotoFile) photoUrl = await uploadPhoto(editPhotoFile, id + '.' + editPhotoFile.name.split('.').pop());
+  var payload = {note: note || null, photo_url: photoUrl};
+  if (type === 'transfer') {
+    var amount = parseFloat(document.getElementById('edit-transfer-amount').value) || null;
+    payload.invoice_date = document.getElementById('edit-transfer-date').value;
+    payload.venue = document.getElementById('edit-from-venue').value;
+    payload.to_venue = document.getElementById('edit-to-venue').value;
+    payload.amount = amount || null;
+    payload.transfer_valued = !!amount;
+  } else {
+    var edate = document.getElementById('edit-date').value;
+    var eamount = parseFloat(document.getElementById('edit-amount').value);
+    var evendor = document.getElementById('edit-vendor').value.trim();
+    var evenue = document.getElementById('edit-venue').value;
+    if (!edate || !evendor || !evenue || !eamount || isNaN(eamount)) { errEl.textContent = 'Please fill in all required fields.'; errEl.style.display = 'block'; return; }
+    payload.invoice_date = edate; payload.amount = eamount; payload.vendor = evendor; payload.venue = evenue;
+  }
+  try {
+    var res = await fetch(SUPA_URL + '/rest/v1/purchases?id=eq.' + id, {
+      method: 'PATCH', headers: {'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal'},
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error();
+    closeEditModal(); searchPurchases(); loadMonthlySummary();
+  } catch(e) { errEl.textContent = 'Save failed. Try again.'; errEl.style.display = 'block'; }
+}
+
+// ── Delete ──
+function triggerDelete(id) { requirePassword('Enter admin password to delete.', function() { confirmDelete(id); }); }
+async function confirmDelete(id) {
+  var row = null;
+  for (var i = 0; i < currentSearchData.length; i++) { if (currentSearchData[i].id === id) { row = currentSearchData[i]; break; } }
+  var label = row ? (row.type === 'transfer' ? 'Transfer ' + row.venue + ' to ' + row.to_venue : (row.vendor || '') + ' -- ' + (row.venue || '')) : '';
+  if (!confirm('Delete this entry?\n\n' + label + '\n\nThis cannot be undone.')) return;
+  try {
+    var res = await fetch(SUPA_URL + '/rest/v1/purchases?id=eq.' + id, { method: 'DELETE', headers: {'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Prefer': 'return=minimal'} });
+    if (!res.ok) throw new Error();
+    searchPurchases(); loadMonthlySummary();
+  } catch(e) { alert('Delete failed. Try again.'); }
+}
+
+// ── Export ──
+function exportCSV() {
+  if (!currentSearchData.length) return;
+  var h = ['Date','Type','Vendor/Description','From Venue','To Venue','Amount','Note','File','Submitted At'];
+  var rowsOut = currentSearchData.map(function(r) {
+    return [r.invoice_date, r.type, r.vendor || (r.note || '').split('\n')[0], r.venue, r.to_venue || '', r.amount || '', r.note || '', r.photo_url ? 'Yes' : 'No', r.submitted_at];
+  });
+  var csv = [h].concat(rowsOut).map(function(r) { return r.map(function(v) { return '"' + (v || '') + '"'; }).join(','); }).join('\n');
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], {type: 'text/csv'}));
+  a.download = 'purchases-' + new Date().toISOString().split('T')[0] + '.csv';
+  a.click();
+}
+
+loadMonthlySummary();
+</script>
+</body>
+</html>
