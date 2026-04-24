@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Popcorn Chez — Log Sales</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f0ec; min-height: 100vh; }
+
+header {
+  background: #fff; border-bottom: 1px solid #e8e8e4;
+  padding: 0 32px; display: flex; align-items: center;
+  justify-content: space-between; height: 64px;
+  position: sticky; top: 0; z-index: 100;
+}
+.header-left { display: flex; align-items: center; gap: 16px; }
+.back-link { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #999; text-decoration: none; display: flex; align-items: center; gap: 6px; transition: color 0.15s; }
+.back-link:hover { color: #1a1a1a; }
+.hdivider { width: 1px; height: 20px; background: #e8e8e4; }
+.header-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+.header-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: #1a1a1a; color: white; padding: 3px 8px; border-radius: 20px; }
+
+.page-body { padding: 20px 16px 60px; }
+.container { max-width: 560px; margin: 0 auto; }
+@media (min-width: 860px) {
+  .page-body { padding: 30px 32px 60px; }
+  .container { max-width: 1100px; display: grid; grid-template-columns: 440px 1fr; gap: 0 24px; align-items: start; }
+  .left-col { grid-column: 1; }
+  .right-col { grid-column: 2; }
+}
+.card { background: white; border-radius: 16px; padding: 20px; margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); }
+.card-title { font-size: 10px; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 16px; }
+.field { margin-bottom: 13px; }
+label { display: block; font-size: 13px; font-weight: 500; color: #555; margin-bottom: 4px; }
+select, input[type=text], input[type=number], input[type=date] { width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 10px; font-size: 15px; color: #1a1a1a; background: #fafafa; appearance: none; -webkit-appearance: none; font-family: inherit; transition: border-color 0.15s; }
+select:focus, input:focus { outline: none; border-color: #1a1a1a; background: white; }
+.field-note { font-size: 11px; color: #bbb; margin-top: 3px; }
+.field-note.green { color: #1D9E75; }
+.upload-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 13px; }
+.upload-box { border: 1.5px dashed #ddd; border-radius: 10px; padding: 14px 8px; text-align: center; cursor: pointer; background: #fafafa; transition: all 0.15s; }
+.upload-box:hover { border-color: #aaa; }
+.upload-box.has-file { border-color: #1D9E75; background: #f0faf5; }
+.upload-box p { font-size: 12px; color: #aaa; line-height: 1.4; }
+.upload-box.has-file p { color: #1D9E75; font-weight: 500; }
+.upload-box.has-error { border-color: #c0392b; background: #fdf0ee; }
+.upload-box.has-error p { color: #c0392b; font-weight: 500; }
+.upload-icon { font-size: 20px; margin-bottom: 4px; }
+.upload-note { font-size: 11px; color: #bbb; text-align: center; font-style: italic; margin-bottom: 13px; }
+.submit-btn { width: 100%; padding: 14px; background: #1a1a1a; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; }
+.submit-btn:disabled { background: #ccc; cursor: not-allowed; }
+.error-msg { color: #c0392b; font-size: 13px; margin-bottom: 10px; display: none; padding: 10px 12px; background: #fdf0ee; border-radius: 8px; }
+.success-card { background: #f0faf5; border: 1px solid #97C459; border-radius: 16px; padding: 24px; text-align: center; display: none; margin-bottom: 14px; }
+.success-card h2 { font-size: 20px; color: #27500A; margin-bottom: 6px; }
+.success-card p { font-size: 14px; color: #3B6D11; }
+.another-btn { display: inline-block; margin-top: 14px; padding: 10px 24px; background: #1a1a1a; color: white; border-radius: 10px; font-size: 14px; font-weight: 500; cursor: pointer; border: none; }
+.scoreboard-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px; }
+.scoreboard-label { font-size: 10px; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 0.08em; }
+.scoreboard-total { font-size: 26px; font-weight: 700; color: #1a1a1a; }
+.scoreboard-event { font-size: 12px; color: #999; margin-bottom: 14px; min-height: 18px; }
+.venue-row { padding: 10px 0; border-bottom: 1px solid #f2f2f2; cursor: pointer; }
+.venue-row:last-child { border-bottom: none; }
+.venue-top { display: flex; justify-content: space-between; align-items: center; }
+.venue-name { font-size: 14px; font-weight: 600; color: #1a1a1a; }
+.venue-meta { font-size: 11px; color: #bbb; margin-top: 2px; }
+.venue-amt { font-size: 16px; font-weight: 700; color: #1a1a1a; }
+.chevron { font-size: 10px; color: #ccc; margin-left: 6px; }
+.stand-list { display: none; background: #f8f8f8; border-radius: 10px; padding: 8px 12px; margin-top: 8px; }
+.stand-item { display: flex; justify-content: space-between; padding: 5px 0; font-size: 13px; color: #666; border-bottom: 1px solid #eee; }
+.stand-item:last-child { border-bottom: none; }
+.stand-amt { font-weight: 600; color: #1a1a1a; }
+.photo-pill { font-size: 10px; background: #EAF3DE; color: #27500A; padding: 1px 6px; border-radius: 6px; margin-left: 4px; font-weight: 600; }
+.empty-state { text-align: center; padding: 24px 0; font-size: 14px; color: #ccc; }
+.loading-state { text-align: center; padding: 16px; font-size: 13px; color: #ccc; }
+.no-event-warning { display: none; background: #FFFBEA; border: 1px solid #F5C400; border-radius: 10px; padding: 10px 13px; font-size: 12px; color: #7A5C00; margin-bottom: 13px; }
+
+@media (max-width: 600px) {
+  header { padding: 0 16px; height: auto; flex-wrap: wrap; padding: 12px 16px; gap: 10px; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <a href="/" class="back-link">&#8592; Toolkit</a>
+    <div class="hdivider"></div>
+    <span class="header-title">Log Sales</span>
+    <span class="header-badge">Nightly</span>
+  </div>
+</header>
+
+<div class="page-body">
+  <div class="container">
+    <div class="left-col">
+      <div class="card" id="form-card">
+        <div class="card-title">Log a sale</div>
+        <div class="field">
+          <label>Event date</label>
+          <input type="date" id="evt-date" onchange="handleDateChange()">
+        </div>
+        <div class="no-event-warning" id="no-event-warning">No event scheduled on this date -- double-check your date before submitting.</div>
+        <div class="field">
+          <label>Venue</label>
+          <select id="venue-sel" onchange="handleVenueChange()">
+            <option value="">Select date first...</option>
+          </select>
+          <div class="field-note" id="venue-note"></div>
+        </div>
+        <div class="field">
+          <label>Event name</label>
+          <input type="text" id="evt-name" readonly style="background:#f5f5f5;color:#888;" placeholder="Auto-filled when venue is selected">
+          <div class="field-note green" id="event-auto" style="display:none;"></div>
+        </div>
+        <div class="field">
+          <label>Stand</label>
+          <select id="stand-sel">
+            <option value="">Select venue first...</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Sales total ($)</label>
+          <input type="number" id="amount" placeholder="0.00" step="0.01" min="0">
+        </div>
+        <div class="field">
+          <label>Tips collected ($) <span style="font-weight:400;color:#bbb;">(optional)</span></label>
+          <input type="number" id="tip-amount" placeholder="0.00" step="0.01" min="0">
+          <div class="field-note" style="font-size:11px;color:#aaa;margin-top:4px;">Total tips for this stand tonight</div>
+        </div>
+        <div class="field">
+          <label>Staff working this stand <span style="font-weight:400;color:#bbb;">(optional)</span></label>
+          <input type="number" id="staff-count" placeholder="e.g. 3" min="0" step="1">
+          <div class="field-note" style="font-size:11px;color:#aaa;margin-top:4px;">Number of people staffed at this stand tonight</div>
+        </div>
+        <label style="margin-bottom:8px;display:block;">Photos</label>
+        <div class="upload-row">
+          <div class="upload-box" id="upload-register" onclick="document.getElementById('file-register').click()">
+            <div class="upload-icon">&#128196;</div>
+            <p id="register-text">Register total</p>
+          </div>
+          <div class="upload-box" id="upload-units" onclick="document.getElementById('file-units').click()">
+            <div class="upload-icon">&#128203;</div>
+            <p id="units-text">Units sold report</p>
+          </div>
+        </div>
+        <div class="upload-note">Attach register photo when possible -- units sold is a bonus</div>
+        <input type="file" id="file-register" accept="image/jpeg,image/png,image/webp,image/gif" onchange="handleFile(this,'register')" style="display:none;">
+        <input type="file" id="file-units" accept="image/jpeg,image/png,image/webp,image/gif" onchange="handleFile(this,'units')" style="display:none;">
+        <div class="error-msg" id="error-msg"></div>
+        <button class="submit-btn" id="submit-btn" onclick="submitSale()">Submit Sale</button>
+      </div>
+
+      <div class="success-card" id="success-card">
+        <h2>Sale logged!</h2>
+        <p id="success-detail"></p>
+        <button class="another-btn" onclick="resetForm()">Log another</button>
+      </div>
+    </div>
+
+    <div class="right-col">
+      <div class="card">
+        <div class="scoreboard-header">
+          <div class="scoreboard-label" id="scoreboard-label">Tonight's sales</div>
+          <div class="scoreboard-total" id="scoreboard-total">$0</div>
+        </div>
+        <div class="scoreboard-event" id="scoreboard-event"></div>
+        <div id="scoreboard-venues"><div class="loading-state">Loading...</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+var SUPA_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
+var SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvYXpsdHRkam93aGxmY2tzb3lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNzU4MjMsImV4cCI6MjA5MDg1MTgyM30.tagP_88g7R3d_p7a4Kp0NirnJgkAR5AQQImCt414SJg';
+
+var VENUE_LABELS = {
+  'Mann': 'Mann Music Center', 'FMP': 'FMP', 'ACCC': 'ACCC',
+  'BWH': 'Boardwalk Hall', 'Cure': 'Cure Insurance Arena',
+  'DE': 'DE Chase Field House', 'Subaru': 'Subaru Park',
+  'Villanova': 'Villanova', 'Montage': 'Montage',
+  'SATB': 'Sports at the Beach', 'Kirkwood': 'Kirkwood'
+};
+
+var STANDS = {
+  'Mann': ['Food Court Bar 2','Parkside Tent Bar','Parkside GA View Bar','Upper Concession','Upper Popcorn','Lower Popcorn','Upper Pizza','Lower Pizza','Farm & Fry Truck','Crescendo','Lawn Portable','Stage Left Bar','Upper Linear Bar','Hawking','Support Staff'],
+  'FMP': ['Stand 782','SC1','LM1','LM2','WWI','Ben Kettle','Walt Kettle','IC1','BWI','Ziggys','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4','Mobile Cart 5','Hawking','Support Staff'],
+  'ACCC': ['Stand 1','Stand 2','Hawking','Support Staff'],
+  'BWH': ['North Stand','South Stand','Hawking','Support Staff'],
+  'Cure': ['Popcorn','Candy','Cotton Candy','Hawking','Support Staff'],
+  'DE': ['VIP Bar','Cafe','Popcorn','Bar','Farm & Fry','Hawking','Support Staff'],
+  'Subaru': ['Popcorn','VIP','Hawking','Support Staff'],
+  'Villanova': ['Stand 1','Hawking','Support Staff'],
+  'Montage': ['BW Pizza','Midway Pizza','Midway Popcorn','Boardwalk Popcorn','Festival Foods','Potato Stand','Boardwalk New Food','Mobile Cart 1','Mobile Cart 2','Hawking','Support Staff'],
+  'SATB': ['Stand 1','Ice Cream 1','Stand 2','Stand 3','Catering','Hawking','Support Staff'],
+  'Kirkwood': ['Stand 1','Hawking','Support Staff']
+};
+
+var BLOCKED_EXTENSIONS = ['heic', 'heif'];
+var eventsOnDate = [];
+var uploadedRegister = null;
+var uploadedUnits = null;
+
+function todayLocal() {
+  var d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+function scoreboardDate() {
+  var now = new Date();
+  if (now.getHours() < 12) {
+    var y = new Date(now);
+    y.setDate(y.getDate()-1);
+    return { date: y.getFullYear() + '-' + String(y.getMonth()+1).padStart(2,'0') + '-' + String(y.getDate()).padStart(2,'0'), label: "Last night's sales" };
+  }
+  return { date: todayLocal(), label: "Tonight's sales" };
+}
+
+document.getElementById('evt-date').value = todayLocal();
+
+// ── Photo validation ──
+function isBlockedFile(file) {
+  var name = file.name.toLowerCase();
+  var ext = name.split('.').pop();
+  if (BLOCKED_EXTENSIONS.indexOf(ext) !== -1) return true;
+  // Also check MIME type for HEIC that might come through as image/heic or image/heif
+  var mime = (file.type || '').toLowerCase();
+  if (mime.indexOf('heic') !== -1 || mime.indexOf('heif') !== -1) return true;
+  return false;
+}
+
+function handleFile(input, type) {
+  if (input.files && input.files[0]) {
+    var file = input.files[0];
+
+    // Block HEIC/HEIF
+    if (isBlockedFile(file)) {
+      var boxId = type === 'register' ? 'upload-register' : 'upload-units';
+      var textId = type === 'register' ? 'register-text' : 'units-text';
+      document.getElementById(boxId).classList.remove('has-file');
+      document.getElementById(boxId).classList.add('has-error');
+      document.getElementById(textId).textContent = 'HEIC not supported -- use JPG or PNG';
+      input.value = '';
+      if (type === 'register') uploadedRegister = null;
+      else uploadedUnits = null;
+      // Clear the error after 4 seconds
+      setTimeout(function() {
+        document.getElementById(boxId).classList.remove('has-error');
+        document.getElementById(textId).textContent = type === 'register' ? 'Register total' : 'Units sold report';
+      }, 4000);
+      return;
+    }
+
+    if (type === 'register') {
+      uploadedRegister = file;
+      document.getElementById('upload-register').classList.remove('has-error');
+      document.getElementById('upload-register').classList.add('has-file');
+      document.getElementById('register-text').textContent = 'Register photo attached';
+    } else {
+      uploadedUnits = file;
+      document.getElementById('upload-units').classList.remove('has-error');
+      document.getElementById('upload-units').classList.add('has-file');
+      document.getElementById('units-text').textContent = 'Units photo attached';
+    }
+  }
+}
+
+// ── Date / Venue / Stand logic ──
+async function handleDateChange() {
+  var date = document.getElementById('evt-date').value;
+  var venueSel = document.getElementById('venue-sel');
+  var noteEl = document.getElementById('venue-note');
+  venueSel.innerHTML = '<option value="">Select venue...</option>';
+  document.getElementById('evt-name').value = '';
+  document.getElementById('event-auto').style.display = 'none';
+  document.getElementById('stand-sel').innerHTML = '<option value="">Select venue first...</option>';
+  eventsOnDate = [];
+  if (!date) {
+    document.getElementById('no-event-warning').style.display = 'none';
+    return;
+  }
+
+  noteEl.textContent = 'Loading events...';
+  noteEl.className = 'field-note';
+
+  try {
+    var res = await fetch(
+      SUPA_URL + '/rest/v1/events?event_date=eq.' + date + '&select=venue,event_name&order=venue.asc',
+      { headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY } }
+    );
+    var rows = await res.json();
+    if (Array.isArray(rows)) eventsOnDate = rows;
+  } catch(e) {
+    eventsOnDate = [];
+  }
+
+  var warningEl = document.getElementById('no-event-warning');
+  if (eventsOnDate.length) {
+    warningEl.style.display = 'none';
+    eventsOnDate.forEach(function(ev) {
+      var o = document.createElement('option');
+      o.value = ev.venue;
+      o.textContent = VENUE_LABELS[ev.venue] || ev.venue;
+      venueSel.appendChild(o);
+    });
+    noteEl.textContent = eventsOnDate.length + ' event' + (eventsOnDate.length > 1 ? 's' : '') + ' on this date';
+    noteEl.className = 'field-note green';
+    if (eventsOnDate.length === 1) {
+      venueSel.value = eventsOnDate[0].venue;
+      handleVenueChange();
+    }
+  } else {
+    warningEl.style.display = 'block';
+    Object.keys(STANDS).forEach(function(code) {
+      var o = document.createElement('option');
+      o.value = code;
+      o.textContent = VENUE_LABELS[code] || code;
+      venueSel.appendChild(o);
+    });
+    noteEl.textContent = '';
+    noteEl.className = 'field-note';
+  }
+}
+
+function handleVenueChange() {
+  var venueCode = document.getElementById('venue-sel').value;
+  var standSel = document.getElementById('stand-sel');
+  standSel.innerHTML = '<option value="">Select stand...</option>';
+
+  if (venueCode && STANDS[venueCode]) {
+    STANDS[venueCode].forEach(function(s) {
+      var o = document.createElement('option');
+      o.textContent = s;
+      standSel.appendChild(o);
+    });
+  }
+
+  var nameEl = document.getElementById('evt-name');
+  var autoEl = document.getElementById('event-auto');
+  nameEl.value = '';
+  autoEl.style.display = 'none';
+
+  if (venueCode && eventsOnDate.length) {
+    var match = null;
+    for (var i = 0; i < eventsOnDate.length; i++) {
+      if (eventsOnDate[i].venue === venueCode) { match = eventsOnDate[i]; break; }
+    }
+    if (match && match.event_name) {
+      nameEl.value = match.event_name;
+      autoEl.textContent = 'Auto-filled from event schedule';
+      autoEl.style.display = 'block';
+    }
+  }
+}
+
+// ── Photo upload ──
+async function uploadPhoto(file, path) {
+  var res = await fetch(SUPA_URL + '/storage/v1/object/sale-photos/' + path, {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': file.type },
+    body: file
+  });
+  if (!res.ok) return null;
+  return SUPA_URL + '/storage/v1/object/public/sale-photos/' + path;
+}
+
+// ── Submit ──
+async function submitSale() {
+  var date = document.getElementById('evt-date').value;
+  var evtName = document.getElementById('evt-name').value.trim();
+  var venue = document.getElementById('venue-sel').value;
+  var stand = document.getElementById('stand-sel').value;
+  var amount = parseFloat(document.getElementById('amount').value);
+  var errEl = document.getElementById('error-msg');
+  errEl.style.display = 'none';
+
+  if (!date || !venue || !stand || !amount || isNaN(amount)) {
+    errEl.textContent = 'Please fill in date, venue, stand, and amount.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  var staffCount = parseInt(document.getElementById('staff-count').value) || null;
+  var tipAmount = parseFloat(document.getElementById('tip-amount').value) || null;
+  var btn = document.getElementById('submit-btn');
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+
+  try {
+    var saleId = crypto.randomUUID();
+    var photoUrl = null;
+    var unitsUrl = null;
+    if (uploadedRegister) {
+      photoUrl = await uploadPhoto(uploadedRegister, saleId + '-register.' + uploadedRegister.name.split('.').pop());
+    }
+    if (uploadedUnits) {
+      unitsUrl = await uploadPhoto(uploadedUnits, saleId + '-units.' + uploadedUnits.name.split('.').pop());
+    }
+
+    var res = await fetch(SUPA_URL + '/rest/v1/sales', {
+      method: 'POST',
+      headers: {
+        'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY,
+        'Content-Type': 'application/json', 'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify({
+        id: saleId, event_date: date, event_name: evtName || null,
+        venue: venue, stand: stand, amount: amount, tip_amount: tipAmount,
+        staff_count: staffCount || null, photo_url: photoUrl, units_photo_url: unitsUrl
+      })
+    });
+    if (!res.ok) throw new Error(await res.text());
+
+    document.getElementById('form-card').style.display = 'none';
+    document.getElementById('success-card').style.display = 'block';
+    document.getElementById('success-detail').textContent = stand + ' at ' + (VENUE_LABELS[venue] || venue) + ' -- $' + amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    loadScoreboard();
+  } catch(e) {
+    errEl.textContent = 'Something went wrong -- check your connection and try again.';
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Submit Sale';
+  }
+}
+
+function resetForm() {
+  document.getElementById('form-card').style.display = 'block';
+  document.getElementById('success-card').style.display = 'none';
+  document.getElementById('evt-date').value = todayLocal();
+  document.getElementById('staff-count').value = '';
+  document.getElementById('tip-amount').value = '';
+  document.getElementById('evt-name').value = '';
+  document.getElementById('event-auto').style.display = 'none';
+  document.getElementById('amount').value = '';
+  document.getElementById('error-msg').style.display = 'none';
+  document.getElementById('submit-btn').disabled = false;
+  document.getElementById('submit-btn').textContent = 'Submit Sale';
+  document.getElementById('upload-register').classList.remove('has-file');
+  document.getElementById('upload-register').classList.remove('has-error');
+  document.getElementById('upload-units').classList.remove('has-file');
+  document.getElementById('upload-units').classList.remove('has-error');
+  document.getElementById('register-text').textContent = 'Register total';
+  document.getElementById('units-text').textContent = 'Units sold report';
+  document.getElementById('file-register').value = '';
+  document.getElementById('file-units').value = '';
+  uploadedRegister = null;
+  uploadedUnits = null;
+  handleDateChange();
+}
+
+// ── Scoreboard ──
+async function loadScoreboard() {
+  var sb = scoreboardDate();
+  document.getElementById('scoreboard-label').textContent = sb.label;
+  try {
+    var res = await fetch(
+      SUPA_URL + '/rest/v1/sales?event_date=eq.' + sb.date + '&select=venue,stand,amount,tip_amount,event_name,photo_url,units_photo_url',
+      { headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY } }
+    );
+    var rows = await res.json();
+    if (!Array.isArray(rows) || !rows.length) {
+      document.getElementById('scoreboard-venues').innerHTML = '<div class="empty-state">No sales logged yet.</div>';
+      document.getElementById('scoreboard-total').textContent = '$0';
+      document.getElementById('scoreboard-event').textContent = '';
+      return;
+    }
+    var grandTotal = rows.reduce(function(s,r) { return s + parseFloat(r.amount); }, 0);
+    var grandTips = rows.reduce(function(s,r) { return s + (parseFloat(r.tip_amount) || 0); }, 0);
+    document.getElementById('scoreboard-total').textContent = '$' + Math.round(grandTotal).toLocaleString();
+
+    var evtNamesSet = {};
+    rows.forEach(function(r) { if (r.event_name) evtNamesSet[r.event_name] = true; });
+    var evtText = Object.keys(evtNamesSet).join(' / ');
+    if (grandTips > 0) evtText += (evtText ? ' -- ' : '') + 'Tips: $' + Math.round(grandTips).toLocaleString();
+    document.getElementById('scoreboard-event').textContent = evtText;
+
+    var byVenue = {};
+    rows.forEach(function(r) {
+      if (!byVenue[r.venue]) byVenue[r.venue] = [];
+      byVenue[r.venue].push(r);
+    });
+    var venueEntries = Object.keys(byVenue).map(function(v) { return [v, byVenue[v]]; });
+    venueEntries.sort(function(a,b) {
+      var aTotal = a[1].reduce(function(s,r) { return s+parseFloat(r.amount); }, 0);
+      var bTotal = b[1].reduce(function(s,r) { return s+parseFloat(r.amount); }, 0);
+      return bTotal - aTotal;
+    });
+
+    var html = '';
+    venueEntries.forEach(function(entry, i) {
+      var venue = entry[0];
+      var stands = entry[1];
+      var total = stands.reduce(function(s,r) { return s+parseFloat(r.amount); }, 0);
+      var venueTips = stands.reduce(function(s,r) { return s+(parseFloat(r.tip_amount)||0); }, 0);
+      var id = 'sb' + i;
+      var label = VENUE_LABELS[venue] || venue;
+      html += '<div class="venue-row" onclick="toggleList(\'' + id + '\',\'ch' + id + '\')">';
+      html += '<div class="venue-top">';
+      var venueMeta = stands.length + ' stand' + (stands.length > 1 ? 's' : '');
+      if (venueTips > 0) venueMeta += ' -- Tips: $' + Math.round(venueTips).toLocaleString();
+      html += '<div><div class="venue-name">' + label + '</div><div class="venue-meta">' + venueMeta + '</div></div>';
+      html += '<div style="display:flex;align-items:center;"><div class="venue-amt">$' + Math.round(total).toLocaleString() + '</div><div class="chevron" id="ch' + id + '">&#9654;</div></div>';
+      html += '</div><div class="stand-list" id="' + id + '">';
+      stands.forEach(function(r) {
+        var tipInfo = (parseFloat(r.tip_amount) || 0) > 0 ? '<span class="photo-pill" style="background:#FFF3CD;color:#7A5C00;">tip $' + Math.round(parseFloat(r.tip_amount)).toLocaleString() + '</span>' : '';
+        html += '<div class="stand-item"><span>' + r.stand;
+        if (r.photo_url) html += '<span class="photo-pill">reg</span>';
+        if (r.units_photo_url) html += '<span class="photo-pill">units</span>';
+        html += tipInfo;
+        html += '</span><span class="stand-amt">$' + Math.round(parseFloat(r.amount)).toLocaleString() + '</span></div>';
+      });
+      html += '</div></div>';
+    });
+    document.getElementById('scoreboard-venues').innerHTML = html;
+  } catch(e) {
+    document.getElementById('scoreboard-venues').innerHTML = '<div class="empty-state">Could not load.</div>';
+  }
+}
+
+function toggleList(id, chId) {
+  var el = document.getElementById(id);
+  var ch = document.getElementById(chId);
+  var open = el.style.display === 'block';
+  el.style.display = open ? 'none' : 'block';
+  ch.innerHTML = open ? '&#9654;' : '&#9660;';
+}
+
+handleDateChange();
+loadScoreboard();
+setInterval(loadScoreboard, 60000);
+</script>
+</body>
+</html>
