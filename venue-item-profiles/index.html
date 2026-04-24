@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Popcorn Chez — Venue Item Profiles</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #f0f0ec; --card: #ffffff; --primary: #1a1a1a;
+  --green: #1D9E75; --green-light: #e8f7f2; --label: #999;
+  --border: #e8e8e4; --shadow: 0 2px 12px rgba(0,0,0,0.06);
+  --radius: 16px; --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+body { background: var(--bg); font-family: var(--font); color: var(--primary); min-height: 100vh; }
+
+header { background: var(--card); border-bottom: 1px solid var(--border); padding: 0 32px; display: flex; align-items: center; justify-content: space-between; height: 64px; position: sticky; top: 0; z-index: 100; }
+.header-left { display: flex; align-items: center; gap: 16px; }
+.back-link { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--label); text-decoration: none; display: flex; align-items: center; gap: 6px; transition: color 0.15s; }
+.back-link:hover { color: var(--primary); }
+.header-divider { width: 1px; height: 20px; background: var(--border); }
+.header-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+.header-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: var(--primary); color: white; padding: 3px 8px; border-radius: 20px; }
+
+.main-content { max-width: 900px; margin: 0 auto; padding: 32px 32px 80px; }
+
+.page-header { margin-bottom: 24px; }
+.page-header h2 { font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
+.page-header p { font-size: 13px; color: var(--label); margin-top: 4px; max-width: 580px; line-height: 1.5; }
+
+.controls { display: flex; gap: 12px; margin-bottom: 20px; align-items: center; flex-wrap: wrap; }
+.venue-select { padding: 10px 14px; border: 1.5px solid var(--border); border-radius: 10px; font-size: 14px; font-weight: 600; font-family: var(--font); background: var(--card); color: var(--primary); outline: none; cursor: pointer; min-width: 220px; -webkit-appearance: none; appearance: none; }
+.venue-select:focus { border-color: var(--primary); }
+.count-label { font-size: 13px; color: var(--label); font-weight: 600; }
+
+.stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px; }
+.stat-box { background: var(--card); border-radius: 12px; padding: 14px 16px; box-shadow: var(--shadow); }
+.stat-label { font-size: 11px; color: var(--label); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+.stat-val { font-size: 24px; font-weight: 700; color: var(--primary); }
+.stat-val.green { color: var(--green); }
+
+.cat-section { border: 1px solid #eee; border-radius: 14px; overflow: hidden; margin-bottom: 10px; background: var(--card); }
+.cat-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: #f8f8f6; cursor: pointer; }
+.cat-name { font-size: 13px; font-weight: 700; color: var(--primary); }
+.cat-count { font-size: 12px; color: var(--label); }
+.cat-chevron { font-size: 10px; color: #ccc; transition: transform 0.2s; }
+.cat-chevron.open { transform: rotate(90deg); }
+.cat-items { display: none; }
+.cat-items.open { display: block; }
+
+.item-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; border-top: 1px solid #f8f8f8; }
+.item-row:hover { background: #fafaf8; }
+.item-name { font-size: 13px; font-weight: 600; color: var(--primary); }
+.item-meta { font-size: 11px; color: #bbb; margin-top: 2px; }
+
+.toggle { position: relative; display: inline-block; width: 38px; height: 22px; flex-shrink: 0; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: #ddd; border-radius: 22px; transition: 0.2s; }
+.toggle-slider:before { content: ''; position: absolute; width: 16px; height: 16px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.2s; }
+.toggle input:checked + .toggle-slider { background: #27500A; }
+.toggle input:checked + .toggle-slider:before { transform: translateX(16px); }
+
+.loading { text-align: center; padding: 40px; font-size: 14px; color: #bbb; }
+.empty-state { text-align: center; padding: 40px; font-size: 14px; color: #ccc; }
+
+.toast { position: fixed; bottom: 28px; right: 28px; background: var(--primary); color: white; padding: 12px 20px; border-radius: 10px; font-size: 13px; font-weight: 600; box-shadow: 0 8px 24px rgba(0,0,0,0.2); z-index: 999; transform: translateY(80px); opacity: 0; transition: all 0.25s ease; }
+.toast.show { transform: translateY(0); opacity: 1; }
+.toast.green { background: var(--green); }
+.toast.red { background: #c0392b; }
+
+@media (max-width: 768px) {
+  header { padding: 12px 16px; height: auto; flex-wrap: wrap; gap: 10px; }
+  .main-content { padding: 20px 16px 80px; }
+  .stat-row { grid-template-columns: 1fr 1fr; }
+  .venue-select { min-width: 100%; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <a href="/" class="back-link">&#8592; Toolkit</a>
+    <div class="header-divider"></div>
+    <span class="header-title">Venue Item Profiles</span>
+    <span class="header-badge">Admin</span>
+  </div>
+</header>
+
+<div class="main-content">
+  <div class="page-header">
+    <h2>Venue Item Profiles</h2>
+    <p>Choose a venue and toggle which items appear on that venue's inventory count sheet. Changes save automatically.</p>
+  </div>
+
+  <div class="controls">
+    <select class="venue-select" id="venue-filter" onchange="renderProfiles()">
+      <option value="Mann">Mann Music Center</option>
+      <option value="FMP">Freedom Mortgage Pavilion</option>
+      <option value="Cure">Cure Insurance Arena</option>
+      <option value="ACCC">AC Convention Center</option>
+      <option value="BWH">Jim Whelan Boardwalk Hall</option>
+      <option value="DE">DE Chase Field House</option>
+      <option value="Subaru">Subaru Park</option>
+      <option value="Villanova">Villanova</option>
+      <option value="Montage">Montage Mountain</option>
+      <option value="SATB">Sports at the Beach</option>
+      <option value="Kirkwood">Kirkwood</option>
+    </select>
+    <span class="count-label" id="count-label"></span>
+  </div>
+
+  <div class="stat-row">
+    <div class="stat-box"><div class="stat-label">Profiled items</div><div class="stat-val green" id="stat-profiled">--</div></div>
+    <div class="stat-box"><div class="stat-label">Available items</div><div class="stat-val" id="stat-available">--</div></div>
+    <div class="stat-box"><div class="stat-label">Categories</div><div class="stat-val" id="stat-cats">--</div></div>
+  </div>
+
+  <div id="profiles-content"><div class="loading">Loading...</div></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var SB_URL='https://aoazlttdjowhlfcksoyl.supabase.co';
+var SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvYXpsdHRkam93aGxmY2tzb3lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNzU4MjMsImV4cCI6MjA5MDg1MTgyM30.tagP_88g7R3d_p7a4Kp0NirnJgkAR5AQQImCt414SJg';
+
+var pcCategories=[],pcItems=[],pcProfiles=[];
+
+function apiHeaders(){return{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'};}
+function fmt(n){return'$'+parseFloat(n||0).toFixed(2);}
+
+async function loadAll(){try{var r1=await fetch(SB_URL+'/rest/v1/cos_categories?select=*&order=sort_order.asc',{headers:apiHeaders()});pcCategories=await r1.json();var r2=await fetch(SB_URL+'/rest/v1/inventory_items?select=*&order=name.asc',{headers:apiHeaders()});pcItems=await r2.json();var r3=await fetch(SB_URL+'/rest/v1/inventory_venue_profiles?select=*',{headers:apiHeaders()});pcProfiles=await r3.json();renderProfiles();}catch(e){document.getElementById('profiles-content').innerHTML='<div class="loading">Error loading data. Please refresh.</div>';}}
+
+function renderProfiles(){var venue=document.getElementById('venue-filter').value;var profiled={};for(var i=0;i<pcProfiles.length;i++){if(pcProfiles[i].venue===venue)profiled[pcProfiles[i].item_id]=true;}var profiledCount=Object.keys(profiled).length;var activeItems=[];for(var i=0;i<pcItems.length;i++){if(pcItems[i].active&&pcItems[i].status!=='pending')activeItems.push(pcItems[i]);}document.getElementById('stat-profiled').textContent=profiledCount;document.getElementById('stat-available').textContent=activeItems.length;document.getElementById('stat-cats').textContent=pcCategories.length;document.getElementById('count-label').textContent=profiledCount+' of '+activeItems.length+' items profiled';
+var byCat={};for(var i=0;i<activeItems.length;i++){var catId=activeItems[i].cos_category_id||'none';if(!byCat[catId])byCat[catId]=[];byCat[catId].push(activeItems[i]);}var html='';for(var ci=0;ci<pcCategories.length;ci++){var cat=pcCategories[ci];var items=byCat[cat.id];if(!items||items.length===0)continue;var catProfiled=0;for(var ii=0;ii<items.length;ii++){if(profiled[items[ii].id])catProfiled++;}var sid='sec-'+cat.id.replace(/-/g,'');var cid='items-'+cat.id.replace(/-/g,'');html+='<div class="cat-section"><div class="cat-header" onclick="toggleSection(\''+sid+'\',\''+cid+'\')"><div><span class="cat-name">'+cat.name+'</span></div><div style="display:flex;align-items:center;gap:10px;"><span class="cat-count">'+catProfiled+' / '+items.length+' profiled</span><span class="cat-chevron open" id="'+sid+'">&#9654;</span></div></div><div class="cat-items open" id="'+cid+'">';for(var ii=0;ii<items.length;ii++){var it=items[ii];var checked=profiled[it.id]?true:false;html+='<div class="item-row"><div><div class="item-name">'+it.name+'</div><div class="item-meta">'+(it.vendor||'--')+' &middot; '+fmt(it.cost_per_unit)+' / '+(it.purchase_unit||it.unit_label||'each')+'</div></div><label class="toggle"><input type="checkbox" '+(checked?'checked':'')+' onchange="toggleProfile(this,\''+it.id+'\',\''+venue+'\')"><span class="toggle-slider"></span></label></div>';}html+='</div></div>';}if(!html)html='<div class="empty-state">No active items found.</div>';document.getElementById('profiles-content').innerHTML=html;}
+
+function toggleSection(sid,cid){var chevron=document.getElementById(sid);var items=document.getElementById(cid);if(!chevron||!items)return;var isOpen=items.classList.contains('open');items.classList.toggle('open',!isOpen);chevron.classList.toggle('open',!isOpen);}
+
+async function toggleProfile(cb,itemId,venue){if(cb.checked){try{await fetch(SB_URL+'/rest/v1/inventory_venue_profiles',{method:'POST',headers:Object.assign({},apiHeaders(),{'Prefer':'return=minimal'}),body:JSON.stringify({id:crypto.randomUUID(),venue:venue,item_id:itemId})});pcProfiles.push({venue:venue,item_id:itemId});updateCounts(venue);showToast('Added',true);}catch(e){cb.checked=false;showToast('Could not save. Try again.',false);}}else{try{await fetch(SB_URL+'/rest/v1/inventory_venue_profiles?item_id=eq.'+itemId+'&venue=eq.'+venue,{method:'DELETE',headers:apiHeaders()});var newP=[];for(var i=0;i<pcProfiles.length;i++){if(!(pcProfiles[i].item_id===itemId&&pcProfiles[i].venue===venue))newP.push(pcProfiles[i]);}pcProfiles=newP;updateCounts(venue);showToast('Removed',true);}catch(e){cb.checked=true;showToast('Could not save. Try again.',false);}}}
+
+function updateCounts(venue){var profiledCount=0;for(var i=0;i<pcProfiles.length;i++){if(pcProfiles[i].venue===venue)profiledCount++;}var activeCount=0;for(var i=0;i<pcItems.length;i++){if(pcItems[i].active&&pcItems[i].status!=='pending')activeCount++;}document.getElementById('stat-profiled').textContent=profiledCount;document.getElementById('count-label').textContent=profiledCount+' of '+activeCount+' items profiled';
+var cats=document.querySelectorAll('.cat-section');cats.forEach(function(section){var toggles=section.querySelectorAll('.toggle input[type=checkbox]');var checked=0;toggles.forEach(function(t){if(t.checked)checked++;});var countEl=section.querySelector('.cat-count');if(countEl)countEl.textContent=checked+' / '+toggles.length+' profiled';});}
+
+function showToast(msg,good){var t=document.getElementById('toast');t.textContent=msg;t.className='toast'+(good?' green':' red');t.classList.add('show');setTimeout(function(){t.classList.remove('show');},2000);}
+
+loadAll();
+</script>
+</body>
+</html>
