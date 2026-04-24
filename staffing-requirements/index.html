@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Popcorn Chez — Staffing Requirements</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #f0f0ec; --card: #ffffff; --primary: #1a1a1a;
+    --green: #1D9E75; --green-light: #e8f7f2; --label: #999;
+    --border: #e8e8e4; --shadow: 0 2px 12px rgba(0,0,0,0.06);
+    --radius: 16px; --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  body { background: var(--bg); font-family: var(--font); color: var(--primary); min-height: 100vh; }
+  header { background: var(--card); border-bottom: 1px solid var(--border); padding: 0 32px; display: flex; align-items: center; justify-content: space-between; height: 64px; position: sticky; top: 0; z-index: 50; }
+  .header-left { display: flex; align-items: center; gap: 16px; }
+  .back-link { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--label); text-decoration: none; display: flex; align-items: center; gap: 6px; transition: color 0.15s; }
+  .back-link:hover { color: var(--primary); }
+  .hdivider { width: 1px; height: 20px; background: var(--border); }
+  .header-title { font-size: 15px; font-weight: 700; }
+  .header-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: #607d8b; color: white; padding: 3px 8px; border-radius: 20px; }
+  .month-nav { display: flex; align-items: center; gap: 10px; }
+  .month-btn { background: var(--bg); border: none; border-radius: 8px; padding: 7px 13px; font-size: 15px; cursor: pointer; color: var(--primary); font-weight: 700; font-family: var(--font); }
+  .month-btn:hover { background: var(--border); }
+  .month-label { font-size: 15px; font-weight: 700; min-width: 140px; text-align: center; }
+  .main { max-width: 1280px; margin: 0 auto; padding: 28px 32px 80px; }
+  .legend { display: flex; align-items: center; gap: 20px; margin-bottom: 16px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #666; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+  .cal-card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+  .cal-dow-row { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); background: var(--bg); border-bottom: 1px solid var(--border); }
+  .cal-dow { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--label); text-align: center; padding: 10px 0; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+  .cal-day { min-height: 100px; min-width: 0; overflow: hidden; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 8px; background: var(--card); }
+  .cal-day:nth-child(7n) { border-right: none; }
+  .cal-day.other-month { background: #fafaf8; }
+  .cal-day.other-month .day-num { opacity: 0.25; }
+  .cal-day.is-today .day-num { background: var(--primary); color: white; border-radius: 4px; padding: 0 5px; font-weight: 800; }
+  .cal-day.all-submitted { background: #f5fdf9; }
+  .cal-day.has-pending { background: #fffdf4; }
+  .day-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 5px; }
+  .day-num { font-size: 13px; font-weight: 800; color: #1a1a1a; display: inline-block; flex-shrink: 0; }
+  .day-staff-total { font-size: 11px; font-weight: 800; border-radius: 5px; padding: 2px 6px; flex-shrink: 0; }
+  .dst-green { background: var(--green-light); color: var(--green); }
+  .dst-amber { background: #fff3cd; color: #856404; }
+  .dst-grey { background: var(--bg); color: var(--label); }
+  .event-pill { font-size: 10px; font-weight: 700; border-radius: 5px; padding: 3px 6px; margin-bottom: 3px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 4px; border: none; width: 100%; max-width: 100%; min-width: 0; overflow: hidden; text-align: left; font-family: var(--font); transition: opacity 0.1s; }
+  .event-pill:hover { opacity: 0.75; }
+  .pill-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+  .pill-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+  .pill-staffed { font-size: 8px; font-weight: 800; background: #1D9E75; color: #fff; border-radius: 3px; padding: 1px 3px; flex-shrink: 0; line-height: 1.4; }
+  .pill-count { font-size: 9px; font-weight: 800; background: rgba(0,0,0,0.09); border-radius: 3px; padding: 1px 4px; flex-shrink: 0; }
+  .pv-FMP{background:#fde8e6;color:#7a1a12;}.pv-Mann{background:#e8f5d8;color:#2d5a08;}.pv-Cure{background:#deeef9;color:#0e3f6a;}.pv-Subaru{background:#f0e8fa;color:#4a1a7a;}.pv-Villanova{background:#e8eaf6;color:#0d1257;}.pv-Montage{background:#eceff1;color:#2c3e47;}.pv-DE{background:#e0f2f0;color:#004d40;}.pv-BWH{background:#fdeede;color:#8a3e00;}.pv-ACCC{background:#fde4cc;color:#7a3200;}.pv-SATB{background:#f4f4f2;color:#444441;}.pv-Kirkwood{background:#fde8e8;color:#7a1212;}
+  .event-pill.adhoc-pill { border: 1.5px dashed currentColor; opacity: 0.85; }
+  .event-pill.adhoc-pill:hover { opacity: 0.7; }
+  .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 200; align-items: flex-start; justify-content: center; padding: 28px 20px; overflow-y: auto; }
+  .modal-backdrop.open { display: flex; }
+  .modal { background: var(--card); border-radius: var(--radius); width: 100%; max-width: 780px; margin: auto; box-shadow: 0 24px 64px rgba(0,0,0,0.22); animation: slideUp 0.2s ease; overflow: hidden; }
+  @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+  .modal-header { padding: 22px 28px 16px; }
+  .modal-header-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+  .modal-venue-label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.5); margin-bottom: 4px; }
+  .modal-event-name { font-size: 20px; font-weight: 800; color: #fff; letter-spacing: -0.02em; margin-bottom: 5px; }
+  .modal-meta { font-size: 12px; color: rgba(255,255,255,0.5); }
+  .modal-meta span { margin: 0 5px; opacity: 0.4; }
+  .modal-header-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; flex-shrink: 0; }
+  .modal-close { background: rgba(255,255,255,0.15); border: none; border-radius: 8px; width: 32px; height: 32px; color: #fff; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-family: var(--font); }
+  .modal-close:hover { background: rgba(255,255,255,0.28); }
+  .modal-total-badge { background: rgba(0,0,0,0.18); border-radius: 10px; padding: 10px 16px; text-align: right; }
+  .modal-total-label { font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.45); }
+  .modal-total-num { font-size: 28px; font-weight: 800; color: #fff; letter-spacing: -0.03em; line-height: 1; }
+  .modal-total-sub { font-size: 10px; color: rgba(255,255,255,0.35); }
+  .avail-bar-wrap { background: rgba(0,0,0,0.15); border-radius: 10px; padding: 11px 16px; display: flex; flex-direction: column; gap: 7px; min-width: 200px; }
+  .avail-bar-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .avail-bar-label { font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.45); }
+  .avail-bar-count { font-size: 16px; font-weight: 800; color: #fff; line-height: 1; }
+  .avail-bar-count span { font-size: 11px; font-weight: 400; color: rgba(255,255,255,0.5); }
+  .avail-track { height: 6px; background: rgba(255,255,255,0.2); border-radius: 3px; overflow: hidden; }
+  .avail-fill { height: 100%; border-radius: 3px; transition: width 0.3s ease; }
+  .avail-fill.green { background: #4ade80; }.avail-fill.amber { background: #fbbf24; }.avail-fill.red { background: #f87171; }
+  .avail-names-toggle { font-size: 11px; color: rgba(255,255,255,0.65); cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 4px; }
+  .avail-names-toggle:hover { color: rgba(255,255,255,0.9); }
+  .avail-names-arrow { font-size: 9px; transition: transform 0.2s; display: inline-block; }
+  .avail-names-arrow.expanded { transform: rotate(90deg); }
+  .avail-names-list { display: none; max-height: 160px; overflow-y: auto; margin-top: 6px; }
+  .avail-names-list.open { display: block; }
+  .avail-name-item { font-size: 12px; color: rgba(255,255,255,0.85); padding: 4px 8px; background: rgba(255,255,255,0.08); border-radius: 5px; margin-bottom: 3px; font-weight: 500; }
+  .avail-needed { font-size: 10px; font-weight: 700; color: rgba(255,255,255,0.65); }
+  .avail-needed.red { color: #f87171; }.avail-needed.green { color: #4ade80; }
+  .sub-bar { background: #f7f7f5; border-bottom: 1px solid var(--border); padding: 12px 28px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+  .sub-by { font-size: 13px; color: #666; }.sub-by strong { color: var(--primary); }
+  .sub-time { font-size: 11px; color: #bbb; margin-top: 2px; }
+  .submitted-chip { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; background: var(--green-light); color: var(--green); padding: 4px 12px; border-radius: 20px; }
+  .pending-chip { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; background: #fff3cd; color: #856404; padding: 4px 12px; border-radius: 20px; }
+  .stands-area { padding: 20px 28px 8px; }
+  .stands-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .stands-title { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--label); }
+  .ro-note { font-size: 11px; color: #bbb; font-style: italic; }
+  .par-notice-banner { background: #fff8e8; border: 1.5px solid #f5d9a0; border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; display: flex; align-items: flex-start; gap: 10px; }
+  .par-notice-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+  .par-notice-text { font-size: 12px; color: #7a5500; line-height: 1.6; }.par-notice-text strong { color: #5a3c00; }
+  .stand-card { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; overflow: hidden; }
+  .stand-card.support-stand { border-color: #c7d7f8; }.stand-card.support-stand .stand-card-header { background: #f0f4fe; }
+  .stand-card.hawking-stand { border-color: #f5d9a0; }.stand-card.hawking-stand .stand-card-header { background: #fdf6e8; }
+  .stand-card.client-stand { border-color: #dbb5f0; }.stand-card.client-stand .stand-card-header { background: #f8f6ff; }
+  .stand-card.nonevent-stand { border-color: #9FE1CB; }.stand-card.nonevent-stand .stand-card-header { background: #edf9f3; }
+  .stand-card.par-only { opacity: 0.85; }
+  .stand-card-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--bg); border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 8px; }
+  .stand-card-name { font-size: 14px; font-weight: 800; display: flex; align-items: center; gap: 8px; }
+  .stand-type-badge { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 5px; }
+  .stand-type-badge.support { background: #e8f0fe; color: #3b6dd4; }.stand-type-badge.hawking { background: #fff3e0; color: #d4720a; }.stand-type-badge.client { background: #f0e8fa; color: #7d3fbf; }.stand-type-badge.nonevent { background: #e8f7f2; color: #0F6E56; }
+  .par-badge { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 5px; background: #fff3cd; color: #856404; }
+  .stand-card-right { display: flex; align-items: center; gap: 10px; }
+  .stand-forecast { font-size: 11px; color: var(--label); }.stand-forecast strong { color: var(--primary); font-size: 13px; }
+  .stand-total-pill { border-radius: 7px; padding: 5px 12px; display: flex; align-items: baseline; gap: 4px; }
+  .stp-num { font-size: 16px; font-weight: 800; color: #fff; }.stp-lbl { font-size: 9px; font-weight: 700; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 0.06em; }
+  .roles-row { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 14px; }
+  .role-pill { display: inline-flex; align-items: center; gap: 6px; background: var(--bg); border-radius: 20px; padding: 5px 12px; }
+  .role-pill-name { font-size: 12px; color: #555; }.role-pill-num { font-size: 14px; font-weight: 800; color: var(--primary); }
+  .role-pill.par-pill { background: #fffbf0; border: 1px dashed #e8c96e; }.role-pill.par-pill .role-pill-num { color: #856404; }
+  .manager-request-box { margin: 0 14px 12px 14px; background: #fffdf5; border: 1.5px solid #f5d9a0; border-radius: 8px; padding: 10px 13px; }
+  .manager-request-label { font-size: 10px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #a07830; margin-bottom: 5px; }
+  .manager-request-text { font-size: 12px; color: #5a4010; line-height: 1.6; }
+  .closed-note { text-align: center; padding: 8px 0 4px; font-size: 11px; color: #bbb; font-style: italic; }
+  .modal-footer { padding: 14px 28px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+  .footer-stats { display: flex; gap: 24px; flex-wrap: wrap; }
+  .footer-stat { display: flex; flex-direction: column; gap: 2px; }
+  .footer-stat-label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--label); }
+  .footer-stat-value { font-size: 14px; font-weight: 800; color: var(--primary); }
+  .footer-stat-value.muted { color: var(--label); font-style: italic; font-weight: 400; font-size: 13px; }
+  .print-btn { background: var(--bg); border: none; border-radius: 8px; padding: 9px 18px; font-size: 12px; font-weight: 700; cursor: pointer; color: var(--primary); font-family: var(--font); }
+  .print-btn:hover { background: var(--border); }
+  .confirm-wrap { background: rgba(0,0,0,0.15); border-radius: 10px; padding: 11px 16px; min-width: 180px; display: flex; flex-direction: column; gap: 8px; }
+  .confirm-label { font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.45); }
+  .confirm-btn { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.12); border: 1.5px solid rgba(255,255,255,0.25); border-radius: 8px; padding: 8px 12px; cursor: pointer; font-family: var(--font); color: rgba(255,255,255,0.7); font-size: 13px; font-weight: 700; transition: all 0.15s; width: 100%; }
+  .confirm-btn:hover { background: rgba(255,255,255,0.2); color: #fff; }
+  .confirm-btn.confirmed { background: rgba(74,222,128,0.2); border-color: #4ade80; color: #4ade80; }
+  .confirm-check { width: 18px; height: 18px; border-radius: 4px; border: 2px solid currentColor; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 11px; }
+  .confirm-by { font-size: 10px; color: rgba(255,255,255,0.5); line-height: 1.4; }
+  .confirm-by.confirmed { color: rgba(74,222,128,0.7); }
+  .pw-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 400; align-items: center; justify-content: center; padding: 20px; }
+  .pw-backdrop.open { display: flex; }
+  .pw-box { background: var(--card); border-radius: var(--radius); padding: 28px; width: 100%; max-width: 360px; text-align: center; box-shadow: 0 24px 64px rgba(0,0,0,0.25); }
+  .pw-title { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+  .pw-desc { font-size: 13px; color: var(--label); margin-bottom: 16px; line-height: 1.5; }
+  .pw-input { width: 100%; padding: 11px 14px; border: 1.5px solid var(--border); border-radius: 10px; font-size: 15px; text-align: center; letter-spacing: 0.1em; font-family: var(--font); margin-bottom: 10px; outline: none; }
+  .pw-input:focus { border-color: var(--primary); }
+  .pw-submit { width: 100%; padding: 11px; background: var(--primary); color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; font-family: var(--font); margin-bottom: 8px; }
+  .pw-cancel { width: 100%; padding: 9px; background: none; color: var(--label); border: none; font-size: 13px; cursor: pointer; font-family: var(--font); }
+  .pw-error { color: #c0392b; font-size: 12px; margin-bottom: 10px; display: none; }
+  .pw-keith-msg { font-size: 12px; color: #c0392b; font-weight: 700; margin-bottom: 10px; display: none; line-height: 1.5; }
+  .name-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 400; align-items: center; justify-content: center; padding: 20px; }
+  .name-backdrop.open { display: flex; }
+  .name-box { background: var(--card); border-radius: var(--radius); padding: 28px; width: 100%; max-width: 360px; box-shadow: 0 24px 64px rgba(0,0,0,0.25); }
+  .name-box h3 { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+  .name-box p { font-size: 13px; color: var(--label); margin-bottom: 16px; line-height: 1.5; }
+  .name-input { width: 100%; padding: 11px 14px; border: 1.5px solid var(--border); border-radius: 10px; font-size: 15px; font-family: var(--font); margin-bottom: 10px; outline: none; }
+  .name-input:focus { border-color: var(--primary); }
+  .name-submit { width: 100%; padding: 11px; background: #1D9E75; color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; font-family: var(--font); margin-bottom: 8px; }
+  .name-cancel { width: 100%; padding: 9px; background: none; color: var(--label); border: none; font-size: 13px; cursor: pointer; font-family: var(--font); }
+  .name-error { color: #c0392b; font-size: 12px; margin-bottom: 8px; display: none; }
+  .toast { position: fixed; bottom: 28px; right: 28px; background: var(--primary); color: white; padding: 12px 20px; border-radius: 10px; font-size: 13px; font-weight: 600; z-index: 999; transform: translateY(80px); opacity: 0; transition: all 0.25s ease; }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  @media (max-width: 900px) {
+    header { padding: 12px 16px; flex-wrap: wrap; height: auto; gap: 10px; }
+    .main { padding: 16px 12px 60px; }
+    .cal-day { min-height: 76px; padding: 5px; }
+    .modal-backdrop { padding: 0; align-items: flex-end; }
+    .modal { border-radius: 16px 16px 0 0; max-height: 90vh; overflow-y: auto; }
+    .modal-header-top { flex-wrap: wrap; }
+  }
+  @media print {
+    header, .main { display: none; }
+    .modal-backdrop { position: static; background: none; padding: 0; display: block; }
+    .modal { box-shadow: none; max-width: 100%; }
+    .modal-close, .print-btn { display: none; }
+    .name-backdrop, .pw-backdrop { display: none !important; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="header-left">
+    <a href="/" class="back-link">&#8592; Toolkit</a>
+    <div class="hdivider"></div>
+    <span class="header-title">Staffing Requirements</span>
+    <span class="header-badge">Read Only</span>
+  </div>
+  <div class="month-nav">
+    <button class="month-btn" onclick="changeMonth(-1)">&#8249;</button>
+    <span class="month-label" id="month-label">--</span>
+    <button class="month-btn" onclick="changeMonth(1)">&#8250;</button>
+  </div>
+</header>
+<div class="main">
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:var(--green);"></div>All submitted</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#e8c94e;"></div>Pending submissions</div>
+    <div class="legend-item" style="color:#bbb;font-size:11px;">Dashed pill = not yet submitted -- ~ = par level estimate -- Green badge = staffing confirmed -- Click any event for full breakdown</div>
+  </div>
+  <div class="cal-card">
+    <div class="cal-dow-row"><div class="cal-dow">Sun</div><div class="cal-dow">Mon</div><div class="cal-dow">Tue</div><div class="cal-dow">Wed</div><div class="cal-dow">Thu</div><div class="cal-dow">Fri</div><div class="cal-dow">Sat</div></div>
+    <div class="cal-grid" id="cal-grid"></div>
+  </div>
+</div>
+<div class="modal-backdrop" id="modal-backdrop" onclick="handleBackdropClick(event)">
+  <div class="modal" id="modal" onclick="event.stopPropagation()">
+    <div class="modal-header" id="modal-header">
+      <div class="modal-header-top">
+        <div>
+          <div class="modal-venue-label" id="modal-venue-label">--</div>
+          <div class="modal-event-name" id="modal-event-name">--</div>
+          <div class="modal-meta" id="modal-meta">--</div>
+        </div>
+        <div class="modal-header-right">
+          <button class="modal-close" onclick="closeModal()">&#10005;</button>
+          <div style="display:flex;gap:8px;align-items:flex-start;">
+            <div class="modal-total-badge"><div class="modal-total-label">Total staff</div><div class="modal-total-num" id="modal-total-num">--</div><div class="modal-total-sub" id="modal-total-sub">--</div></div>
+            <div class="avail-bar-wrap" id="avail-bar-wrap"><div class="avail-bar-top"><span class="avail-bar-label">Availability</span><span class="avail-bar-count" id="avail-bar-count">-- <span>signed up</span></span></div><div class="avail-track"><div class="avail-fill" id="avail-fill" style="width:0%"></div></div><div class="avail-needed" id="avail-needed">Loading...</div><div class="avail-names-toggle" id="avail-names-toggle" onclick="toggleAvailNames()"><span class="avail-names-arrow" id="avail-names-arrow">&#9654;</span><span id="avail-names-toggle-text">Show names</span></div><div class="avail-names-list" id="avail-names-list"></div></div>
+            <div class="confirm-wrap"><div class="confirm-label">Staffing status</div><button class="confirm-btn" id="confirm-btn" onclick="handleConfirmClick()"><div class="confirm-check" id="confirm-check"></div><span id="confirm-btn-text">Mark as staffed</span></button><div class="confirm-by" id="confirm-by"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="sub-bar"><div><div class="sub-by" id="sub-by">--</div><div class="sub-time" id="sub-time">--</div></div><span id="sub-chip">--</span></div>
+    <div id="modal-body"></div>
+    <div class="modal-footer" id="modal-footer"><div class="footer-stats" id="footer-stats"></div><button class="print-btn" id="print-btn" onclick="window.print()">Print / Save PDF</button></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<div class="name-backdrop" id="name-backdrop">
+  <div class="name-box"><h3>Confirm staffing</h3><p>Enter your name to certify that this event is fully staffed and ready to go.</p><input type="text" class="name-input" id="name-input" placeholder="Your full name" /><div class="name-error" id="name-error">Please enter your name.</div><button class="name-submit" onclick="submitConfirmation()">Mark as staffed</button><button class="name-cancel" onclick="closeNameModal()">Cancel</button></div>
+</div>
+<div class="pw-backdrop" id="pw-backdrop">
+  <div class="pw-box"><div class="pw-title">Reverse staffing confirmation</div><div class="pw-keith-msg" id="pw-keith-msg">Please contact Keith to reverse this certification.</div><div class="pw-desc" id="pw-desc">This certification was already confirmed. Enter the admin password to reverse it.</div><input type="password" class="pw-input" id="pw-input" placeholder="password" onkeydown="if(event.key==='Enter')checkReversePassword()" /><div class="pw-error" id="pw-error">Incorrect password. Try again.</div><button class="pw-submit" onclick="checkReversePassword()">Continue</button><button class="pw-cancel" onclick="closePwModal()">Cancel</button></div>
+</div>
+<script>
+var SB_URL='https://aoazlttdjowhlfcksoyl.supabase.co';
+var SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvYXpsdHRkam93aGxmY2tzb3lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNzU4MjMsImV4cCI6MjA5MDg1MTgyM30.tagP_88g7R3d_p7a4Kp0NirnJgkAR5AQQImCt414SJg';
+var ADMIN_PW='popcorn2026';
+var VENUE_COLORS={FMP:'#c0392b',Mann:'#5a9e1a',Cure:'#2471a3',Subaru:'#7d3fbf',Villanova:'#1a237e',Montage:'#607d8b',DE:'#00796b',BWH:'#e67e22',ACCC:'#c0620a',SATB:'#888780',Kirkwood:'#b71c1c'};
+var VENUE_LABELS={FMP:'Freedom Mortgage Pavilion',Mann:'Mann Music Center',BWH:'Boardwalk Hall',ACCC:'AC Convention Center',Cure:'Cure Insurance Arena',Subaru:'Subaru Park',DE:'DE Chase Field House',Montage:'Montage Mountain',SATB:'Sports at the Beach',Villanova:'Villanova',Kirkwood:'Kirkwood'};
+var SUPPORT_STAND='Support Staff',HAWKING_STAND='Hawking',CLIENT_STAND='Client Staffing Needs',NONEVENT_STAND='Non-Event Labor';
+var VENUE_STANDS={Mann:[SUPPORT_STAND,HAWKING_STAND,'Upper Concession','Upper Popcorn','Lower Popcorn','Upper Pizza','Lower Pizza','Farm & Fry Truck','Crescendo','Lawn Portable','Stage Left Bar','Upper Linear Bar','Food Court Bar 2','Parkside Tent Bar','Parkside GA View Bar',CLIENT_STAND],FMP:[SUPPORT_STAND,HAWKING_STAND,'Stand 782','SC1','LM1','LM2','WWI','Ben Kettle','Walt Kettle','IC1','BWI','Ziggys','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4','Mobile Cart 5',CLIENT_STAND],Cure:[SUPPORT_STAND,HAWKING_STAND,'Popcorn','Candy','Cotton Candy',CLIENT_STAND],ACCC:[SUPPORT_STAND,HAWKING_STAND,'Stand 1','Stand 2',CLIENT_STAND],BWH:[SUPPORT_STAND,HAWKING_STAND,'North Stand','South Stand',CLIENT_STAND],DE:[SUPPORT_STAND,HAWKING_STAND,'VIP Bar','Cafe','Popcorn','Bar','Farm & Fry',CLIENT_STAND],Subaru:[SUPPORT_STAND,HAWKING_STAND,'Popcorn','VIP',CLIENT_STAND],Villanova:[SUPPORT_STAND,HAWKING_STAND,'Stand 1',CLIENT_STAND],Montage:[SUPPORT_STAND,HAWKING_STAND,'BW Pizza','Midway Pizza','Midway Popcorn','Boardwalk Popcorn','Festival Foods','Potato Stand','Boardwalk New Food','Mobile Cart 1','Mobile Cart 2',CLIENT_STAND],SATB:[SUPPORT_STAND,HAWKING_STAND,'Stand 1','Ice Cream 1','Stand 2','Stand 3','Catering',CLIENT_STAND],Kirkwood:[SUPPORT_STAND,HAWKING_STAND,'Stand 1',CLIENT_STAND]};
+var REVENUE_ROLES=['Bartender','Beer Tender','Concessions Cashier','Concessions Cook','Concessions Lead','Pizza Cashier','Pizza Maker','Pizza Lead','Prep Cook','Barback','Hawker'];
+var SUPPORT_ROLES=['Cleaning Crew','Warehouse/Runner','Supervisor','Venue Manager'];
+var HAWKING_ROLES=['Hawker','Supervisor','Barback'];
+var ALL_ROLES=['Bartender','Beer Tender','Concessions Cashier','Concessions Cook','Concessions Lead','Pizza Cashier','Pizza Maker','Pizza Lead','Prep Cook','Barback','Hawker','Cleaning Crew','Warehouse/Runner','Supervisor','Venue Manager'];
+var DEFAULT_EXCLUDED={'Cleaning Crew':true,'Warehouse/Runner':true,'Supervisor':true,'Venue Manager':true};
+function getRolesForStand(s){if(s===SUPPORT_STAND)return SUPPORT_ROLES;if(s===HAWKING_STAND)return HAWKING_ROLES;if(s===CLIENT_STAND||s===NONEVENT_STAND)return ALL_ROLES;return REVENUE_ROLES;}
+function isAdhocEvent(evt){return evt.event_type==='adhoc';}
+function getStandsForEvent(evt){if(isAdhocEvent(evt))return[NONEVENT_STAND];return VENUE_STANDS[evt.venue]||[];}
+var pcAllEvents=[],parLevels={},parExcludedFromTotal={},submissions={},availability={},staffingStatus={};
+var currentYear,currentMonth,activeEventId=null,activeVenue=null,availNamesExpanded=false;
+
+function sbFetch(path){return fetch(SB_URL+'/rest/v1/'+path,{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}}).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t);});return r.json();});}
+
+function init(){var n=new Date();currentYear=n.getFullYear();currentMonth=n.getMonth();Promise.all([sbFetch('events?order=event_date.asc'),sbFetch('par_levels?select=venue,stand,role,default_count,excluded_from_total,tier'),sbFetch('staffing_requests?select=id,event_id,venue,stand,role,headcount,manager_name,sales_forecast,staff_notes,submitted_at'),sbFetch('availability?select=id,staff_name,event_id,submitted_at'),sbFetch('event_staffing_status?select=event_id,venue,is_confirmed,confirmed_by,confirmed_at')]).then(function(res){pcAllEvents=res[0]||[];parLevels={};parExcludedFromTotal={};(res[1]||[]).forEach(function(r){var tier=r.tier||'full';var k=r.venue+'||'+r.stand+'||'+r.role+'||'+tier;parLevels[k]=r.default_count;parExcludedFromTotal[k]=r.excluded_from_total===true;});submissions={};(res[2]||[]).forEach(function(r){submissions[r.event_id+'||'+r.venue+'||'+r.stand+'||'+r.role]=r;if(!submissions['_evt_'+r.event_id])submissions['_evt_'+r.event_id]=[];submissions['_evt_'+r.event_id].push(r);});availability={};(res[3]||[]).forEach(function(r){if(!availability[r.event_id])availability[r.event_id]=[];availability[r.event_id].push(r);});staffingStatus={};(res[4]||[]).forEach(function(r){staffingStatus[r.event_id+'||'+r.venue]=r;});renderCalendar();}).catch(function(e){showToast('Error loading data.');console.error(e);});}
+
+function pc(v,s,r,tier){tier=tier||'full';return parLevels[v+'||'+s+'||'+r+'||'+tier]||0;}
+function isSub(id){var s=submissions['_evt_'+id];return s&&s.length>0;}
+function isConfirmed(evtId,venue){var s=staffingStatus[evtId+'||'+venue];return s?s.is_confirmed:false;}
+function shouldExclude(venue,stand,role,tier){if(stand===SUPPORT_STAND)return true;tier=tier||'full';var k=venue+'||'+stand+'||'+role+'||'+tier;if(k in parExcludedFromTotal)return parExcludedFromTotal[k];return DEFAULT_EXCLUDED[role]===true;}
+
+function evtTotal(evt){var rows=submissions['_evt_'+evt.id];var stands=getStandsForEvent(evt);var tier=evt.staffing_tier||'full';if(rows&&rows.length>0){return rows.reduce(function(s,r){if(shouldExclude(r.venue,r.stand,r.role,tier))return s;return s+(r.headcount||0);},0);}var t=0;stands.forEach(function(st){getRolesForStand(st).forEach(function(ro){if(!shouldExclude(evt.venue,st,ro,tier))t+=pc(evt.venue,st,ro,tier);});});return t;}
+function dayTotal(ds){return pcAllEvents.filter(function(e){return e.event_date===ds;}).reduce(function(s,e){return s+evtTotal(e);},0);}
+function changeMonth(d){currentMonth+=d;if(currentMonth>11){currentMonth=0;currentYear++;}if(currentMonth<0){currentMonth=11;currentYear--;}renderCalendar();}
+
+function renderCalendar(){var months=['January','February','March','April','May','June','July','August','September','October','November','December'];document.getElementById('month-label').textContent=months[currentMonth]+' '+currentYear;var grid=document.getElementById('cal-grid');grid.innerHTML='';var todayStr=tds(new Date());var firstDay=new Date(currentYear,currentMonth,1);var lastDay=new Date(currentYear,currentMonth+1,0);var startDow=firstDay.getDay();for(var i=0;i<startDow;i++)grid.appendChild(buildCell(new Date(currentYear,currentMonth,1-(startDow-i)),true,todayStr));for(var d=1;d<=lastDay.getDate();d++)grid.appendChild(buildCell(new Date(currentYear,currentMonth,d),false,todayStr));var total=grid.children.length;var rem=total%7===0?0:7-(total%7);for(var j=1;j<=rem;j++)grid.appendChild(buildCell(new Date(currentYear,currentMonth+1,j),true,todayStr));}
+
+function buildCell(date,other,todayStr){var ds=tds(date);var dayEvts=pcAllEvents.filter(function(e){return e.event_date===ds;});var dt=dayTotal(ds);var allS=dayEvts.length>0&&dayEvts.every(function(e){return isSub(e.id);});var hasPend=dayEvts.some(function(e){return!isSub(e.id);});var cell=document.createElement('div');cell.className='cal-day'+(other?' other-month':'')+(ds===todayStr?' is-today':'')+(allS&&dayEvts.length>0?' all-submitted':'')+(hasPend?' has-pending':'');var top=document.createElement('div');top.className='day-top';var numEl=document.createElement('div');numEl.className='day-num';numEl.textContent=date.getDate();top.appendChild(numEl);if(dayEvts.length>0&&!other){var tot=document.createElement('div');tot.className='day-staff-total '+(allS?'dst-green':dt>=40?'dst-amber':'dst-grey');tot.textContent=allS?dt:('~'+dt);top.appendChild(tot);}cell.appendChild(top);dayEvts.forEach(function(evt){var sub=isSub(evt.id);var confirmed=isConfirmed(evt.id,evt.venue);var adhoc=isAdhocEvent(evt);var pill=document.createElement('button');pill.className='event-pill pv-'+evt.venue+(sub?' submitted':'')+(adhoc?' adhoc-pill':'');if(!sub&&!adhoc)pill.style.border='1.5px dashed currentColor';pill.onclick=(function(id){return function(){openModal(id);};})(evt.id);var pillLabel=adhoc?(evt.venue+' - Non-Event'):evt.event_name;pill.innerHTML=(sub?'<span class="pill-dot"></span>':'')+'<span class="pill-name">'+pillLabel+'</span>'+(confirmed?'<span class="pill-staffed">&#10003;</span>':'')+'<span class="pill-count">'+(sub?'':'~')+evtTotal(evt)+'</span>';cell.appendChild(pill);});return cell;}
+
+function toggleAvailNames(){availNamesExpanded=!availNamesExpanded;document.getElementById('avail-names-list').className='avail-names-list'+(availNamesExpanded?' open':'');document.getElementById('avail-names-arrow').className='avail-names-arrow'+(availNamesExpanded?' expanded':'');document.getElementById('avail-names-toggle-text').textContent=availNamesExpanded?'Hide names':'Show names';}
+
+function openModal(evtId){var evt=null;for(var i=0;i<pcAllEvents.length;i++){if(pcAllEvents[i].id==evtId){evt=pcAllEvents[i];break;}}if(!evt)return;activeEventId=evtId;activeVenue=evt.venue;var adhoc=isAdhocEvent(evt);var color=adhoc?'#2d7a3d':(VENUE_COLORS[evt.venue]||'#1a1a1a');var sub=isSub(evtId);var sRows=submissions['_evt_'+evtId]||[];document.getElementById('modal-header').style.background=color;document.getElementById('modal').style.setProperty('--vc',color);document.getElementById('modal-venue-label').textContent=VENUE_LABELS[evt.venue]||evt.venue;document.getElementById('modal-event-name').textContent=adhoc?'Non-Event Day Labor':evt.event_name;var dateObj=new Date(evt.event_date+'T12:00:00');var days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];var mos=['January','February','March','April','May','June','July','August','September','October','November','December'];var metaHtml=days[dateObj.getDay()]+', '+mos[dateObj.getMonth()]+' '+dateObj.getDate()+' '+dateObj.getFullYear();if(adhoc){metaHtml+=' <span>|</span> Report: '+(evt.report_time?fmtTime(evt.report_time):'TBD')+' <span>|</span> End: '+(evt.end_time?fmtTime(evt.end_time):'TBD');}else{var gates=evt.gates_open?fmtTime(evt.gates_open):'Gates TBD';var att=evt.expected_attendance?'Exp. '+Number(evt.expected_attendance).toLocaleString()+' attendance':'';metaHtml+=' <span>|</span> '+gates+(att?' <span>|</span> '+att:'');}document.getElementById('modal-meta').innerHTML=metaHtml;var totalStaff=evtTotal(evt);var openCt=countOpen(evtId,evt.venue);document.getElementById('modal-total-num').textContent=sub?totalStaff:('~'+totalStaff);document.getElementById('modal-total-sub').textContent=sub?('across '+openCt+' stands'):'par level estimate';var availWrap=document.getElementById('avail-bar-wrap');if(adhoc){availWrap.style.display='none';}else{availWrap.style.display='';var avList=availability[evtId]||[];var avCount=avList.length;var needed=totalStaff>0?totalStaff:0;var pct=needed>0?Math.min(100,Math.round((avCount/needed)*100)):0;var fillEl=document.getElementById('avail-fill');fillEl.className='avail-fill '+(pct>=100?'green':pct>=60?'amber':'red');fillEl.style.width=pct+'%';document.getElementById('avail-bar-count').innerHTML=avCount+' <span>of '+needed+' signed up</span>';var neededEl=document.getElementById('avail-needed');var shortfall=needed-avCount;if(shortfall<=0){neededEl.textContent='Fully covered';neededEl.className='avail-needed green';}else{neededEl.textContent=shortfall+' still needed';neededEl.className='avail-needed'+(shortfall>5?' red':'');}availNamesExpanded=false;var namesList=document.getElementById('avail-names-list');namesList.className='avail-names-list';document.getElementById('avail-names-arrow').className='avail-names-arrow';if(avList.length>0){document.getElementById('avail-names-toggle-text').textContent='Show '+avList.length+' name'+(avList.length!==1?'s':'');var namesHtml='';for(var ni=0;ni<avList.length;ni++)namesHtml+='<div class="avail-name-item">'+escapeHtml(avList[ni].staff_name)+'</div>';namesList.innerHTML=namesHtml;}else{document.getElementById('avail-names-toggle-text').textContent='Nobody signed up yet';namesList.innerHTML='';}document.getElementById('avail-names-toggle').style.display='flex';}renderConfirmState(evtId,evt.venue);if(sub&&sRows.length>0){var mgr=sRows[0].manager_name||'Unknown';var ts=new Date(sRows[0].submitted_at);document.getElementById('sub-by').innerHTML='Submitted by <strong>'+mgr+'</strong>';document.getElementById('sub-time').textContent=ts.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})+' at '+ts.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});document.getElementById('sub-chip').className='submitted-chip';document.getElementById('sub-chip').textContent='Submitted';}else{document.getElementById('sub-by').innerHTML='<strong>Not yet submitted</strong>';document.getElementById('sub-time').textContent=adhoc?'Event created but no staffing request submitted':'Numbers shown are par level estimates only';document.getElementById('sub-chip').className='pending-chip';document.getElementById('sub-chip').textContent='Pending';}buildBody(evt,sub,sRows,color);buildFooter(evt,sub,sRows,totalStaff);document.getElementById('modal-backdrop').className='modal-backdrop open';}
+
+function renderConfirmState(evtId,venue){var status=staffingStatus[evtId+'||'+venue];var btn=document.getElementById('confirm-btn');var check=document.getElementById('confirm-check');var btnText=document.getElementById('confirm-btn-text');var byEl=document.getElementById('confirm-by');if(status&&status.is_confirmed){btn.className='confirm-btn confirmed';check.textContent='v';btnText.textContent='Staffed';var ts=new Date(status.confirmed_at);byEl.textContent='Confirmed by '+status.confirmed_by+' -- '+ts.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});byEl.className='confirm-by confirmed';}else{btn.className='confirm-btn';check.textContent='';btnText.textContent='Mark as staffed';byEl.textContent='Not yet confirmed';byEl.className='confirm-by';}}
+
+function handleConfirmClick(){var status=staffingStatus[activeEventId+'||'+activeVenue];if(status&&status.is_confirmed){document.getElementById('pw-input').value='';document.getElementById('pw-error').style.display='none';document.getElementById('pw-keith-msg').style.display='block';document.getElementById('pw-desc').style.display='block';document.getElementById('pw-backdrop').className='pw-backdrop open';setTimeout(function(){document.getElementById('pw-input').focus();},100);}else{document.getElementById('name-input').value='';document.getElementById('name-error').style.display='none';document.getElementById('name-backdrop').className='name-backdrop open';setTimeout(function(){document.getElementById('name-input').focus();},100);}}
+function closeNameModal(){document.getElementById('name-backdrop').className='name-backdrop';}
+function closePwModal(){document.getElementById('pw-backdrop').className='pw-backdrop';}
+
+function submitConfirmation(){var name=document.getElementById('name-input').value.trim();if(!name){document.getElementById('name-error').style.display='block';return;}document.getElementById('name-error').style.display='none';var nowStr=new Date().toISOString();fetch(SB_URL+'/rest/v1/event_staffing_status',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({event_id:activeEventId,venue:activeVenue,is_confirmed:true,confirmed_by:name,confirmed_at:nowStr})}).then(function(){staffingStatus[activeEventId+'||'+activeVenue]={event_id:activeEventId,venue:activeVenue,is_confirmed:true,confirmed_by:name,confirmed_at:nowStr};closeNameModal();renderConfirmState(activeEventId,activeVenue);showToast('Staffing confirmed by '+name);renderCalendar();}).catch(function(e){showToast('Error saving. Please try again.');console.error(e);});}
+
+function checkReversePassword(){var val=document.getElementById('pw-input').value;if(val===ADMIN_PW){doReverseConfirmation();}else{document.getElementById('pw-error').style.display='block';document.getElementById('pw-input').value='';document.getElementById('pw-input').focus();}}
+
+function doReverseConfirmation(){fetch(SB_URL+'/rest/v1/event_staffing_status?event_id=eq.'+activeEventId+'&venue=eq.'+encodeURIComponent(activeVenue),{method:'PATCH',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({is_confirmed:false,confirmed_by:null,confirmed_at:null})}).then(function(){staffingStatus[activeEventId+'||'+activeVenue].is_confirmed=false;staffingStatus[activeEventId+'||'+activeVenue].confirmed_by=null;staffingStatus[activeEventId+'||'+activeVenue].confirmed_at=null;closePwModal();renderConfirmState(activeEventId,activeVenue);showToast('Staffing confirmation reversed.');renderCalendar();}).catch(function(e){showToast('Error reversing. Please try again.');console.error(e);});}
+
+function countOpen(evtId,venue){var evt=null;for(var i=0;i<pcAllEvents.length;i++){if(pcAllEvents[i].id==evtId){evt=pcAllEvents[i];break;}}var stands=evt?getStandsForEvent(evt):(VENUE_STANDS[venue]||[]);return stands.filter(function(stand){return getRolesForStand(stand).some(function(role){var r=submissions[evtId+'||'+venue+'||'+stand+'||'+role];return r&&r.headcount>0;});}).length;}
+
+function getStandNote(evtId,venue,stand){var rows=submissions['_evt_'+evtId]||[];for(var i=0;i<rows.length;i++){if(rows[i].stand===stand&&rows[i].staff_notes)return rows[i].staff_notes;}return'';}
+function escapeHtml(str){return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+function buildBody(evt,sub,sRows,color){var venue=evt.venue;var stands=getStandsForEvent(evt);var body=document.getElementById('modal-body');var tier=evt.staffing_tier||'full';var adhoc=isAdhocEvent(evt);if(!sub){var parHtml='<div class="stands-area">';if(adhoc){parHtml+='<div class="par-notice-banner"><span class="par-notice-icon">&#9432;</span><div class="par-notice-text"><strong>No staffing request submitted yet.</strong> This non-event day labor request was created but no staff numbers have been submitted. The manager can submit staffing from the Event Planning page.</div></div><div class="stands-header"><span class="stands-title">Non-Event Labor -- '+(VENUE_LABELS[venue]||venue)+'</span><span class="ro-note">No submission yet</span></div>';}else{parHtml+='<div class="par-notice-banner"><span class="par-notice-icon">&#9432;</span><div class="par-notice-text"><strong>No staffing request submitted yet.</strong> The numbers below are par level estimates only -- these are the default headcounts used as a starting point for planning. Actual numbers will appear once the manager submits a request from the Event Planning page.</div></div><div class="stands-header"><span class="stands-title">Par Level Estimates -- '+(VENUE_LABELS[venue]||venue)+'</span><span class="ro-note">Default targets, not confirmed requests</span></div>';}var anyParData=false;stands.forEach(function(stand){var isSupport=stand===SUPPORT_STAND;var isHawking=stand===HAWKING_STAND;var isClient=stand===CLIENT_STAND;var isNonEvent=stand===NONEVENT_STAND;var roles=getRolesForStand(stand);var roleData=[];roles.forEach(function(role){roleData.push({role:role,count:parLevels[venue+'||'+stand+'||'+role+'||'+tier]||0});});var standTotal=roleData.reduce(function(s,r){return s+r.count;},0);if(standTotal===0)return;anyParData=true;var cardCls='stand-card par-only';if(isSupport)cardCls+=' support-stand';else if(isHawking)cardCls+=' hawking-stand';else if(isClient)cardCls+=' client-stand';else if(isNonEvent)cardCls+=' nonevent-stand';var badge='';if(isSupport)badge='<span class="stand-type-badge support">Support Staff</span>';else if(isHawking)badge='<span class="stand-type-badge hawking">Hawking</span>';else if(isClient)badge='<span class="stand-type-badge client">Client Contract</span>';else if(isNonEvent)badge='<span class="stand-type-badge nonevent">Non-Event</span>';var pillColor=isSupport?'#3b6dd4':isHawking?'#d4720a':isClient?'#7d3fbf':isNonEvent?'#2d7a3d':(VENUE_COLORS[venue]||'#888');var rolesHtml=roleData.map(function(r){return r.count===0?'':'<div class="role-pill par-pill"><span class="role-pill-name">'+r.role+'</span><span class="role-pill-num">'+r.count+'</span></div>';}).join('');parHtml+='<div class="'+cardCls+'"><div class="stand-card-header"><span class="stand-card-name">'+stand+(badge?' '+badge:'')+' <span class="par-badge">Par</span></span><div class="stand-card-right"><div class="stand-total-pill" style="background:'+pillColor+';opacity:0.75;"><span class="stp-num">~'+standTotal+'</span><span class="stp-lbl">par</span></div></div></div><div class="roles-row">'+rolesHtml+'</div></div>';});if(!anyParData){parHtml+=adhoc?'<div style="text-align:center;padding:32px 28px;font-size:13px;color:#bbb;">No staffing has been submitted for this non-event day. The manager can add staff from the Event Planning page.</div>':'<div style="text-align:center;padding:32px 28px;font-size:13px;color:#bbb;">No par level data found for this venue. Please set par levels in the Admin Panel.</div>';}parHtml+='</div>';body.innerHTML=parHtml;document.getElementById('print-btn').style.display='none';return;}document.getElementById('print-btn').style.display='';var open=[];var closedCt=0;stands.forEach(function(stand){var isSupport=stand===SUPPORT_STAND;var isHawking=stand===HAWKING_STAND;var isClient=stand===CLIENT_STAND;var isNonEvent=stand===NONEVENT_STAND;var roles=[];getRolesForStand(stand).forEach(function(role){var r=submissions[evt.id+'||'+venue+'||'+stand+'||'+role];if(r&&r.headcount>0)roles.push({role:role,count:r.headcount});});if(roles.length>0){var fr=null;for(var i=0;i<sRows.length;i++){if(sRows[i].stand===stand&&sRows[i].sales_forecast!=null){fr=sRows[i];break;}}open.push({stand:stand,roles:roles,isSupport:isSupport,isHawking:isHawking,isClient:isClient,isNonEvent:isNonEvent,forecast:fr?fr.sales_forecast:0,total:roles.reduce(function(s,r){return s+r.count;},0),note:getStandNote(evt.id,venue,stand)});}else{closedCt++;}});var standLabel=adhoc?'Non-Event Labor -- '+(VENUE_LABELS[venue]||venue):open.length+' stand'+(open.length!==1?'s':'')+' open for this event';var html='<div class="stands-area"><div class="stands-header"><span class="stands-title">'+standLabel+'</span><span class="ro-note">Read only -- no edits permitted</span></div>';open.forEach(function(s){var cardCls='stand-card';if(s.isSupport)cardCls+=' support-stand';else if(s.isHawking)cardCls+=' hawking-stand';else if(s.isClient)cardCls+=' client-stand';else if(s.isNonEvent)cardCls+=' nonevent-stand';var badge='';if(s.isSupport)badge='<span class="stand-type-badge support">Support Staff</span>';else if(s.isHawking)badge='<span class="stand-type-badge hawking">Hawking</span>';else if(s.isClient)badge='<span class="stand-type-badge client">Client Contract</span>';else if(s.isNonEvent)badge='<span class="stand-type-badge nonevent">Non-Event</span>';var pillColor=s.isSupport?'#3b6dd4':s.isHawking?'#d4720a':s.isClient?'#7d3fbf':s.isNonEvent?'#2d7a3d':color;var skipForecast=s.isSupport||s.isClient||s.isNonEvent;var forecastHtml=skipForecast?'':'<span class="stand-forecast">Forecasted sales <strong>$'+Number(s.forecast||0).toLocaleString()+'</strong></span>';var rolesHtml=s.roles.map(function(r){return'<div class="role-pill"><span class="role-pill-name">'+r.role+'</span><span class="role-pill-num">'+r.count+'</span></div>';}).join('');var noteHtml=s.note?'<div class="manager-request-box"><div class="manager-request-label">Manager request</div><div class="manager-request-text">'+escapeHtml(s.note)+'</div></div>':'';html+='<div class="'+cardCls+'"><div class="stand-card-header"><span class="stand-card-name">'+s.stand+(badge?' '+badge:'')+'</span><div class="stand-card-right">'+forecastHtml+'<div class="stand-total-pill" style="background:'+pillColor+';"><span class="stp-num">'+s.total+'</span><span class="stp-lbl">staff</span></div></div></div><div class="roles-row">'+rolesHtml+'</div>'+noteHtml+'</div>';});if(closedCt>0&&!adhoc)html+='<div class="closed-note">'+closedCt+' stand'+(closedCt!==1?'s':'')+' closed for this event</div>';html+='</div>';body.innerHTML=html;}
+
+function buildFooter(evt,sub,sRows,totalStaff){var el=document.getElementById('footer-stats');if(!sub){el.innerHTML='';return;}var adhoc=isAdhocEvent(evt);if(adhoc){el.innerHTML='<div class="footer-stat"><div class="footer-stat-label">Total staff</div><div class="footer-stat-value">'+totalStaff+'</div></div><div class="footer-stat"><div class="footer-stat-label">Type</div><div class="footer-stat-value">Non-Event Day Labor</div></div>';return;}var uStands=[];sRows.forEach(function(r){if(r.sales_forecast>0){var found=false;for(var i=0;i<uStands.length;i++){if(uStands[i]===r.stand){found=true;break;}}if(!found)uStands.push(r.stand);}});var fTotal=uStands.reduce(function(s,stand){var r=null;for(var i=0;i<sRows.length;i++){if(sRows[i].stand===stand&&sRows[i].sales_forecast>0){r=sRows[i];break;}}return s+(r?r.sales_forecast:0);},0);var pp=evt.expected_attendance&&fTotal>0?fTotal/evt.expected_attendance:null;el.innerHTML='<div class="footer-stat"><div class="footer-stat-label">Total staff</div><div class="footer-stat-value">'+totalStaff+'</div></div><div class="footer-stat"><div class="footer-stat-label">Total forecasted sales</div><div class="footer-stat-value">$'+Math.round(fTotal).toLocaleString()+'</div></div><div class="footer-stat"><div class="footer-stat-label">Forecasted $ per person</div><div class="footer-stat-value'+(pp?'':' muted')+'">'+(pp?'$'+pp.toFixed(2):'--')+'</div></div>';}
+
+function closeModal(){document.getElementById('modal-backdrop').className='modal-backdrop';}
+function handleBackdropClick(e){if(e.target===document.getElementById('modal-backdrop'))closeModal();}
+function tds(d){return d.toISOString().split('T')[0];}
+function fmtTime(t){if(!t)return'--';var parts=t.split(':');var hr=parseInt(parts[0]);return(hr%12||12)+':'+parts[1]+' '+(hr>=12?'PM':'AM');}
+function showToast(msg){var t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(function(){t.classList.remove('show');},3500);}
+
+init();
+</script>
+</body>
+</html>
