@@ -204,7 +204,16 @@ function renderRow(c) {
 }
 
 function render() {
-  document.getElementById('pcpeek-main').innerHTML = renderMain();
+  var main = document.getElementById('pcpeek-main');
+  if (pcLoading) { main.innerHTML = '<div class="spinner-wrap">Loading...</div>'; return; }
+  var searchEl = document.getElementById('pcpeek-search');
+  if (!searchEl) {
+    main.innerHTML = renderMain();
+  } else {
+    document.getElementById('pcpeek-list').innerHTML = renderCandidateList();
+    updatePeekStats();
+    updatePeekPills();
+  }
 }
 
 function renderMain() {
@@ -213,37 +222,55 @@ function renderMain() {
   }
 
   var visible = getVisibleCandidates();
-  var filtered = getFiltered(visible);
 
+  var html = '<p class="page-sub">Read only &middot; Newly active candidates shown for 14 days</p>';
+
+  html += '<div class="stat-row" id="pcpeek-stats"></div>';
+
+  html += '<input type="text" id="pcpeek-search" placeholder="Search by name..." value="' + pcSearch.replace(/"/g, '&quot;') + '" oninput="pcPeekSearch(this.value)" />';
+
+  html += '<div class="filter-pills" id="pcpeek-pills"></div>';
+
+  html += '<div id="pcpeek-list">' + renderCandidateList() + '</div>';
+
+  return html;
+}
+
+function updatePeekStats() {
+  var el = document.getElementById('pcpeek-stats');
+  if (!el) return;
+  var visible = getVisibleCandidates();
   var inProgress = countStage(visible, 'contacted') + countStage(visible, 'interview_scheduled');
   var onboarding = countStage(visible, 'onboarding');
   var active = countStage(visible, 'active');
   var applied = countStage(visible, 'applied');
-
-  var html = '<p class="page-sub">Read only &middot; Newly active candidates shown for 14 days</p>';
-
-  html += '<div class="stat-row">' +
+  el.innerHTML =
     '<div class="stat-box"><div class="stat-num">' + visible.length + '</div><div class="stat-lbl">In pipeline</div></div>' +
     '<div class="stat-box"><div class="stat-num" style="color:#1D9E75;">' + active + '</div><div class="stat-lbl">Ready</div></div>' +
     '<div class="stat-box"><div class="stat-num" style="color:#378ADD;">' + onboarding + '</div><div class="stat-lbl">Onboarding</div></div>' +
     '<div class="stat-box"><div class="stat-num" style="color:#d97706;">' + inProgress + '</div><div class="stat-lbl">In progress</div></div>' +
-    '<div class="stat-box"><div class="stat-num" style="color:#888;">' + applied + '</div><div class="stat-lbl">Applied</div></div>' +
-    '</div>';
+    '<div class="stat-box"><div class="stat-num" style="color:#888;">' + applied + '</div><div class="stat-lbl">Applied</div></div>';
+}
 
-  html += '<input type="text" placeholder="Search by name..." value="' + pcSearch + '" oninput="pcPeekSearch(this.value)" />';
-
-  html += '<div class="filter-pills">' +
+function updatePeekPills() {
+  var el = document.getElementById('pcpeek-pills');
+  if (!el) return;
+  el.innerHTML =
     '<span class="pill' + (pcFilter === 'all' ? ' active' : '') + '" onclick="pcPeekFilter(\'all\')">All</span>' +
     '<span class="pill' + (pcFilter === 'active' ? ' active' : '') + '" onclick="pcPeekFilter(\'active\')">Ready</span>' +
     '<span class="pill' + (pcFilter === 'onboarding' ? ' active' : '') + '" onclick="pcPeekFilter(\'onboarding\')">Onboarding</span>' +
     '<span class="pill' + (pcFilter === 'interview_scheduled' ? ' active' : '') + '" onclick="pcPeekFilter(\'interview_scheduled\')">Interview</span>' +
     '<span class="pill' + (pcFilter === 'contacted' ? ' active' : '') + '" onclick="pcPeekFilter(\'contacted\')">Contacted</span>' +
-    '<span class="pill' + (pcFilter === 'applied' ? ' active' : '') + '" onclick="pcPeekFilter(\'applied\')">Applied</span>' +
-    '</div>';
+    '<span class="pill' + (pcFilter === 'applied' ? ' active' : '') + '" onclick="pcPeekFilter(\'applied\')">Applied</span>';
+}
+
+function renderCandidateList() {
+  var visible = getVisibleCandidates();
+  var filtered = getFiltered(visible);
+  var html = '';
 
   if (filtered.length === 0) {
-    html += '<div class="empty-state">No candidates match this filter.</div>';
-    return html;
+    return '<div class="empty-state">No candidates match this filter.</div>';
   }
 
   var activeList = [];
@@ -299,7 +326,7 @@ function renderMain() {
 }
 
 function pcPeekFilter(f) { pcFilter = f; render(); }
-function pcPeekSearch(v) { pcSearch = v; render(); }
+function pcPeekSearch(v) { pcSearch = v; var el = document.getElementById('pcpeek-list'); if (el) el.innerHTML = renderCandidateList(); }
 
 loadAll();
 </script>
