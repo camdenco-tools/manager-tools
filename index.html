@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Popcorn Chez — Manager Toolkit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #F4F3EF;
+  --surface: #FFFFFF;
+  --text: #1a1a1a;
+  --muted: #888;
+  --light: #bbb;
+  --border: #E8E8E4;
+  --border-lt: #F0F0EC;
+
+  --green-50: #EAF3DE; --green-600: #3B6D11; --green-800: #27500A;
+  --teal-50: #E1F5EE; --teal-600: #0F6E56; --teal-800: #085041;
+  --blue-50: #E6F1FB; --blue-600: #185FA5; --blue-800: #0C447C;
+  --amber-50: #FAEEDA; --amber-400: #BA7517; --amber-600: #854F0B; --amber-800: #633806;
+  --gray-50: #F1EFE8; --gray-600: #5F5E5A; --gray-800: #444441;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+.top-bar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 24px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.brand-name { font-size: 15px; font-weight: 700; letter-spacing: -0.02em; }
+.brand-badge {
+  font-size: 9px; font-weight: 700; letter-spacing: 0.1em;
+  text-transform: uppercase; background: var(--text); color: white;
+  padding: 3px 8px; border-radius: 20px;
+}
+
+.canvas {
+  max-width: 1060px;
+  margin: 0 auto;
+  padding: 28px 20px 60px;
+}
+
+.sec-head {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 14px;
+}
+.sec-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.sec-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+.sec-line { flex: 1; height: 1px; background: var(--border); }
+
+.flow-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-bottom: 6px;
+}
+
+.tool-card {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 10px 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-decoration: none;
+  color: inherit;
+  min-width: 0;
+  flex: 1;
+}
+.tool-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.10);
+}
+.tool-icon {
+  width: 40px; height: 40px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; margin-bottom: 6px;
+}
+.tool-name { font-size: 11px; font-weight: 700; line-height: 1.3; }
+.tool-sub { font-size: 9px; color: var(--muted); margin-top: 2px; line-height: 1.3; }
+
+.card-green .tool-icon { background: var(--green-50); }
+.card-green:hover { border-color: var(--green-600); background: var(--green-50); }
+.card-teal .tool-icon { background: var(--teal-50); }
+.card-teal:hover { border-color: var(--teal-600); background: var(--teal-50); }
+.card-blue .tool-icon { background: var(--blue-50); }
+.card-blue:hover { border-color: var(--blue-600); background: var(--blue-50); }
+.card-amber .tool-icon { background: var(--amber-50); }
+.card-amber:hover { border-color: var(--amber-400); background: var(--amber-50); }
+.card-gray .tool-icon { background: var(--gray-50); }
+.card-gray:hover { border-color: var(--gray-600); background: var(--gray-50); }
+
+.arrow-h {
+  width: 24px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  position: relative;
+}
+.arrow-h::before {
+  content: ''; position: absolute;
+  top: 50%; left: 0; right: 6px;
+  height: 1px;
+}
+.arrow-h::after {
+  content: ''; position: absolute;
+  right: 2px; top: 50%;
+  width: 0; height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transform: translateY(-50%);
+}
+.arrow-green::before { background: var(--green-600); }
+.arrow-green::after { border-left: 6px solid var(--green-600); }
+.arrow-teal::before { background: var(--teal-600); }
+.arrow-teal::after { border-left: 6px solid var(--teal-600); }
+.arrow-blue::before { background: var(--blue-600); }
+.arrow-blue::after { border-left: 6px solid var(--blue-600); }
+.arrow-amber::before { background: var(--amber-400); }
+.arrow-amber::after { border-left: 6px solid var(--amber-400); }
+
+.starter-group {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  flex-shrink: 0;
+}
+.starter-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100px;
+}
+.starter-stack .tool-card { flex: none; }
+.merge-arrow {
+  width: 32px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.merge-arrow .merge-line {
+  position: absolute;
+  left: 0; top: 24px; bottom: 24px;
+  width: 1px;
+  background: var(--blue-600);
+}
+.merge-arrow .merge-h {
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0; height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 6px solid var(--blue-600);
+}
+.merge-arrow .merge-stem {
+  position: absolute;
+  left: 0; right: 6px;
+  top: 50%;
+  height: 1px;
+  background: var(--blue-600);
+}
+.merge-arrow .tick {
+  position: absolute;
+  left: -6px; width: 7px; height: 1px;
+  background: var(--blue-600);
+}
+.merge-arrow .tick-1 { top: 49px; }
+.merge-arrow .tick-2 { top: 50%; transform: translateY(-50%); }
+.merge-arrow .tick-3 { bottom: 49px; }
+
+.people-row2 { margin-left: 124px; }
+
+.ops-bend-and-row2 {
+  display: flex;
+  align-items: flex-start;
+  margin-top: 4px;
+}
+.ops-bend {
+  width: 182px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  padding-right: 0;
+  position: relative;
+}
+.ops-bend-line-v {
+  position: absolute;
+  right: 50px;
+  top: 0;
+  width: 1px;
+  height: 100%;
+  background: var(--blue-600);
+}
+.ops-bend-line-h {
+  position: absolute;
+  right: 0;
+  bottom: 50%;
+  width: 50px;
+  height: 1px;
+  background: var(--blue-600);
+}
+.ops-bend-head {
+  position: absolute;
+  right: -2px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0; height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 6px solid var(--blue-600);
+}
+
+.ops-row2 {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex: 1;
+}
+
+.section-gap { height: 24px; }
+
+.main-layout {
+  display: flex;
+  gap: 0;
+  align-items: flex-start;
+}
+.flow-area { flex: 1; min-width: 0; }
+.sidebar {
+  width: 150px;
+  flex-shrink: 0;
+  border-left: 1px dashed var(--border);
+  padding-left: 20px;
+  margin-left: 16px;
+}
+.sidebar-section { margin-bottom: 24px; }
+.sidebar-head {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--muted);
+  margin-bottom: 10px; padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.sidebar .tool-card {
+  margin-bottom: 8px;
+  padding: 12px 10px 10px;
+}
+.sidebar .tool-icon { width: 36px; height: 36px; font-size: 16px; }
+.sidebar .tool-name { font-size: 10px; }
+.sidebar .tool-sub { font-size: 8px; }
+
+.dash-card {
+  padding: 16px 10px 14px;
+  border-width: 1.5px;
+}
+.dash-card .tool-icon { width: 44px; height: 44px; font-size: 20px; }
+.dash-card .tool-name { font-size: 11px; }
+.dash-card .tool-sub { font-size: 9px; }
+
+.dash-arrows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  width: 100%;
+}
+.dash-arrow-tag {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 8px; font-weight: 600; color: var(--muted);
+  padding: 3px 6px;
+  background: var(--border-lt);
+  border-radius: 6px;
+}
+.dash-arrow-dot {
+  width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0;
+}
+
+.tool-card {
+  animation: fadeUp 0.35s ease-out both;
+}
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── MOBILE ─── */
+@media (max-width: 768px) {
+  .canvas { padding: 16px 12px 40px; }
+  .main-layout { flex-direction: column; }
+
+  .sidebar {
+    width: 100%;
+    border-left: none;
+    border-top: 1px dashed var(--border);
+    padding-left: 0;
+    padding-top: 20px;
+    margin-left: 0;
+    margin-top: 24px;
+  }
+  .sidebar-section {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .sidebar-head { grid-column: 1 / -1; }
+  .dash-card { grid-column: 1 / -1; }
+
+  .flow-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+  }
+  .flow-row .tool-card { flex: none; }
+
+  .arrow-h {
+    width: auto; height: 20px;
+  }
+  .arrow-h::before {
+    top: 0; bottom: 6px; left: 50%; right: auto;
+    width: 1px; height: auto;
+  }
+  .arrow-h::after {
+    right: auto; top: auto; bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-bottom: none;
+  }
+  .arrow-green::after { border-top: 6px solid var(--green-600); border-left-color: transparent; }
+  .arrow-teal::after { border-top: 6px solid var(--teal-600); border-left-color: transparent; }
+  .arrow-blue::after { border-top: 6px solid var(--blue-600); border-left-color: transparent; }
+  .arrow-amber::after { border-top: 6px solid var(--amber-400); border-left-color: transparent; }
+
+  .starter-group {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .starter-stack {
+    width: 100%;
+  }
+  .merge-arrow {
+    width: auto; height: 20px;
+    justify-content: center;
+  }
+  .merge-arrow .merge-line,
+  .merge-arrow .tick,
+  .merge-arrow .merge-stem { display: none; }
+  .merge-arrow .merge-h {
+    position: static;
+    transform: none;
+    border-top: 6px solid var(--blue-600);
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-bottom: none;
+  }
+
+  .people-row2 { margin-left: 0; }
+
+  .ops-bend-and-row2 {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .ops-bend {
+    width: auto;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .ops-bend-line-v,
+  .ops-bend-line-h { display: none; }
+  .ops-bend-head {
+    position: static;
+    transform: none;
+    border-top: 6px solid var(--blue-600);
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-bottom: none;
+  }
+  .ops-row2 {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .ops-row2 .arrow-h {
+    width: auto; height: 20px;
+  }
+}
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <span class="brand-name">Popcorn Chez</span>
+  <span class="brand-badge">Manager Toolkit</span>
+</div>
+
+<div class="canvas">
+  <div class="main-layout">
+    <div class="flow-area">
+
+      <!-- PEOPLE -->
+      <div class="sec-head">
+        <div class="sec-dot" style="background:var(--green-600);"></div>
+        <div class="sec-label" style="color:var(--green-800);">People</div>
+        <div class="sec-line"></div>
+      </div>
+
+      <div class="flow-row">
+        <a class="tool-card card-green" href="https://camdenco.com/candidate-pipeline/">
+          <div class="tool-icon">&#128101;</div>
+          <div class="tool-name">Pipeline</div>
+          <div class="tool-sub">Track candidates</div>
+        </a>
+        <div class="arrow-h arrow-green"></div>
+        <a class="tool-card card-green" href="https://camdenco.com/candidate-pipeline/">
+          <div class="tool-icon">&#128197;</div>
+          <div class="tool-name">Interviews</div>
+          <div class="tool-sub">Schedule slots</div>
+        </a>
+        <div class="arrow-h arrow-green"></div>
+        <a class="tool-card card-green" href="https://camdenco.com/w4-and-payroll/">
+          <div class="tool-icon">&#128203;</div>
+          <div class="tool-name">Onboarding</div>
+          <div class="tool-sub">W-4 + payroll</div>
+        </a>
+        <div class="arrow-h arrow-green"></div>
+        <a class="tool-card card-green" href="https://camdenco.com/identification-work-authorization/">
+          <div class="tool-icon">&#128196;</div>
+          <div class="tool-name">I-9 Verify</div>
+          <div class="tool-sub">Documents</div>
+        </a>
+      </div>
+
+      <div class="people-row2">
+        <div class="flow-row">
+          <a class="tool-card card-teal" href="https://camdenco.com/availability-responses/">
+            <div class="tool-icon">&#128197;</div>
+            <div class="tool-name">Availability</div>
+            <div class="tool-sub">Responses</div>
+          </a>
+          <div class="arrow-h arrow-teal"></div>
+          <a class="tool-card card-teal" href="https://camdenco.com/staffing-requirements/">
+            <div class="tool-icon">&#9989;</div>
+            <div class="tool-name">Staffing Req</div>
+            <div class="tool-sub">Fulfillment</div>
+          </a>
+          <div class="arrow-h arrow-amber"></div>
+          <div style="font-size:9px;color:var(--amber-400);font-weight:600;white-space:nowrap;padding:0 4px;">&#10132; Dashboard</div>
+        </div>
+      </div>
+
+      <div class="section-gap"></div>
+
+      <!-- OPERATIONS -->
+      <div class="sec-head">
+        <div class="sec-dot" style="background:var(--blue-600);"></div>
+        <div class="sec-label" style="color:var(--blue-800);">Operations</div>
+        <div class="sec-line"></div>
+      </div>
+
+      <div class="flow-row">
+        <div class="starter-group">
+          <div class="starter-stack">
+            <a class="tool-card card-blue" href="https://camdenco.com/hiring-snapshot/">
+              <div class="tool-icon">&#128064;</div>
+              <div class="tool-name">Hiring Snapshot</div>
+              <div class="tool-sub">Who's ready</div>
+            </a>
+            <a class="tool-card card-blue" href="https://camdenco.com/sales-history/">
+              <div class="tool-icon">&#128200;</div>
+              <div class="tool-name">Sales History</div>
+              <div class="tool-sub">Past data</div>
+            </a>
+            <a class="tool-card card-blue" href="/asset-tracker/">
+              <div class="tool-icon">&#128295;</div>
+              <div class="tool-name">Asset Tracker</div>
+              <div class="tool-sub">Equipment</div>
+            </a>
+          </div>
+          <div class="merge-arrow">
+            <div class="merge-line"></div>
+            <div class="tick tick-1"></div>
+            <div class="tick tick-2"></div>
+            <div class="tick tick-3"></div>
+            <div class="merge-stem"></div>
+            <div class="merge-h"></div>
+          </div>
+        </div>
+
+        <a class="tool-card card-blue" href="https://camdenco.com/receipt-upload/">
+          <div class="tool-icon">&#128722;</div>
+          <div class="tool-name">Purchases</div>
+          <div class="tool-sub">Invoices + transfers</div>
+        </a>
+        <div class="arrow-h arrow-blue"></div>
+        <a class="tool-card card-blue" href="https://camdenco.com/event-planning/">
+          <div class="tool-icon">&#128197;</div>
+          <div class="tool-name">Event Planning</div>
+          <div class="tool-sub">Staff + forecast</div>
+        </a>
+        <div class="arrow-h arrow-blue"></div>
+        <a class="tool-card card-blue" href="https://camdenco.com/sales-history/">
+          <div class="tool-icon">&#128176;</div>
+          <div class="tool-name">Log Sales</div>
+          <div class="tool-sub">Nightly entry</div>
+        </a>
+      </div>
+
+      <!-- L-bend from Purchases down to Inventory row -->
+      <div class="ops-bend-and-row2">
+        <div class="ops-bend" style="height:60px;">
+          <div class="ops-bend-line-v"></div>
+          <div class="ops-bend-line-h"></div>
+          <div class="ops-bend-head"></div>
+        </div>
+        <div class="ops-row2">
+          <a class="tool-card card-blue" href="https://camdenco.com/ending-inventory-reporting/">
+            <div class="tool-icon">&#128230;</div>
+            <div class="tool-name">Inventory</div>
+            <div class="tool-sub">End of month</div>
+          </a>
+          <div class="arrow-h arrow-blue"></div>
+          <a class="tool-card card-blue" href="https://camdenco.com/eom-cos-labor/">
+            <div class="tool-icon">&#128202;</div>
+            <div class="tool-name">COS + Labor</div>
+            <div class="tool-sub">Monthly report</div>
+          </a>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-head">Dashboards</div>
+        <a class="tool-card card-amber dash-card" href="https://camdenco.com/dashboard/">
+          <div class="tool-icon">&#128200;</div>
+          <div class="tool-name">Staffing Dashboard</div>
+          <div class="tool-sub">Coverage + accountability</div>
+          <div class="dash-arrows">
+            <div class="dash-arrow-tag">
+              <div class="dash-arrow-dot" style="background:var(--teal-600);"></div>
+              Staffing requests
+            </div>
+            <div class="dash-arrow-tag">
+              <div class="dash-arrow-dot" style="background:var(--blue-600);"></div>
+              Event planning
+            </div>
+          </div>
+        </a>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-head">Admin</div>
+        <a class="tool-card card-gray" href="https://camdenco.com/events-admin/">
+          <div class="tool-icon">&#9881;</div>
+          <div class="tool-name">Admin Panel</div>
+          <div class="tool-sub">Events, pars, deals</div>
+        </a>
+        <a class="tool-card card-gray" href="https://camdenco.com/master-inventory/">
+          <div class="tool-icon">&#128218;</div>
+          <div class="tool-name">Master Inventory</div>
+          <div class="tool-sub">Item catalog</div>
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
