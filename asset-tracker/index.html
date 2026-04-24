@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Popcorn Chez — Asset Tracker</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f0ec; min-height: 100vh; }
+
+/* CONSISTENT HEADER — matches all other pages */
+header {
+  background: #fff; border-bottom: 1px solid #e8e8e4;
+  padding: 0 32px; display: flex; align-items: center;
+  justify-content: space-between; height: 64px;
+  position: sticky; top: 0; z-index: 100;
+}
+.header-left { display: flex; align-items: center; gap: 16px; }
+.back-link { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #999; text-decoration: none; display: flex; align-items: center; gap: 6px; transition: color 0.15s; }
+.back-link:hover { color: #1a1a1a; }
+.hdivider { width: 1px; height: 20px; background: #e8e8e4; }
+.header-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+.header-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: #1a1a1a; color: white; padding: 3px 8px; border-radius: 20px; }
+
+.page-body { padding: 20px 16px 60px; }
+.container { max-width: 560px; margin: 0 auto; }
+@media (min-width: 860px) {
+  .page-body { padding: 30px 32px 60px; }
+  .container { max-width: 1200px; display: grid; grid-template-columns: 460px 1fr; gap: 0 24px; align-items: start; }
+  .left-col { grid-column: 1; }
+  .right-col { grid-column: 2; }
+}
+.card { background: white; border-radius: 16px; padding: 20px; margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); }
+.card-title { font-size: 10px; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 16px; }
+
+/* MODE TOGGLE */
+.mode-toggle { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 18px; background: #f0f0ec; border-radius: 12px; padding: 4px; }
+.mode-btn { padding: 9px 6px; border: none; border-radius: 9px; font-size: 12px; font-weight: 600; cursor: pointer; background: transparent; color: #888; transition: all 0.15s; }
+.mode-btn.active { background: white; color: #1a1a1a; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+
+.field { margin-bottom: 13px; }
+label { display: block; font-size: 13px; font-weight: 500; color: #555; margin-bottom: 4px; }
+select, input[type=text], input[type=number], input[type=password] { width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 10px; font-size: 15px; color: #1a1a1a; background: #fafafa; appearance: none; -webkit-appearance: none; font-family: inherit; }
+textarea { width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 10px; font-size: 14px; color: #1a1a1a; background: #fafafa; font-family: inherit; resize: vertical; min-height: 60px; }
+select:focus, input:focus, textarea:focus { outline: none; border-color: #1a1a1a; background: white; }
+.field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 13px; }
+.new-location-box { display: none; margin-top: 6px; }
+.new-location-box input { font-size: 14px; padding: 8px 12px; }
+.upload-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 6px; }
+.upload-box { border: 1.5px dashed #ddd; border-radius: 10px; padding: 14px 8px; text-align: center; cursor: pointer; background: #fafafa; }
+.upload-box.has-file { border-color: #1D9E75; background: #f0faf5; }
+.upload-box p { font-size: 12px; color: #aaa; line-height: 1.4; }
+.upload-box.has-file p { color: #1D9E75; font-weight: 500; }
+.upload-icon { font-size: 20px; margin-bottom: 4px; }
+.submit-btn { width: 100%; padding: 14px; background: #1a1a1a; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 4px; }
+.submit-btn:disabled { background: #ccc; cursor: not-allowed; }
+.error-msg { color: #c0392b; font-size: 13px; margin-bottom: 10px; display: none; padding: 10px 12px; background: #fdf0ee; border-radius: 8px; }
+.success-card { background: #f0faf5; border: 1px solid #97C459; border-radius: 16px; padding: 24px; text-align: center; display: none; margin-bottom: 14px; }
+.success-card h2 { font-size: 20px; color: #27500A; margin-bottom: 6px; }
+.success-card p { font-size: 14px; color: #3B6D11; line-height: 1.6; }
+.another-btn { display: inline-block; margin-top: 14px; padding: 10px 24px; background: #1a1a1a; color: white; border-radius: 10px; font-size: 14px; font-weight: 500; cursor: pointer; border: none; }
+
+/* SEARCH */
+.section-divider { text-align: center; margin: 20px 0 14px; }
+.section-divider span { font-size: 11px; font-weight: 700; color: #bbb; text-transform: uppercase; letter-spacing: 0.08em; background: #f0f0ec; padding: 0 12px; }
+.section-divider hr { border: none; border-top: 1px solid #e0e0e0; margin-top: -8px; }
+.search-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.search-btn { width: 100%; padding: 11px; background: #1a1a1a; color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.summary-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
+.summary-box { background: #f8f8f8; border-radius: 12px; padding: 12px; text-align: center; }
+.s-label { font-size: 10px; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+.s-val { font-size: 20px; font-weight: 700; color: #1a1a1a; }
+
+/* ASSET CARDS */
+.asset-card { border: 1px solid #eee; border-radius: 12px; overflow: hidden; margin-bottom: 10px; }
+.asset-header { display: flex; justify-content: space-between; align-items: flex-start; padding: 12px 14px; background: #fafafa; cursor: pointer; }
+.asset-tag { font-size: 11px; font-weight: 700; color: #999; margin-bottom: 2px; }
+.asset-name { font-size: 15px; font-weight: 600; color: #1a1a1a; }
+.asset-location { font-size: 12px; color: #888; margin-top: 2px; }
+.asset-right { text-align: right; flex-shrink: 0; margin-left: 12px; }
+.asset-value { font-size: 15px; font-weight: 700; color: #1a1a1a; }
+.asset-category { font-size: 10px; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px; }
+.asset-detail { display: none; padding: 14px; border-top: 1px solid #f0f0f0; }
+.detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+.detail-item { background: #f8f8f8; border-radius: 8px; padding: 8px 10px; }
+.detail-label { font-size: 10px; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 2px; }
+.detail-val { font-size: 13px; font-weight: 500; color: #1a1a1a; }
+.condition-good { color: #1D9E75; }
+.condition-fair { color: #BA7517; }
+.condition-repair { color: #c0392b; }
+.condition-out { color: #888; }
+.photo-row { display: flex; gap: 8px; margin-bottom: 12px; }
+.photo-thumb { flex: 1; }
+.photo-thumb a { display: block; background: #f0f0ec; border-radius: 8px; padding: 10px; text-align: center; font-size: 12px; color: #0C447C; text-decoration: none; font-weight: 600; }
+.photo-thumb .no-photo { display: block; background: #f8f8f8; border-radius: 8px; padding: 10px; text-align: center; font-size: 12px; color: #ccc; }
+.history-list { margin-bottom: 12px; }
+.history-item { display: flex; gap: 8px; padding: 6px 0; border-bottom: 1px solid #f5f5f5; font-size: 12px; color: #666; }
+.history-item:last-child { border-bottom: none; }
+.history-date { color: #aaa; flex-shrink: 0; }
+.asset-actions { display: flex; gap: 8px; }
+.action-btn { flex: 1; padding: 9px; border: 1px solid #e0e0e0; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; background: white; color: #1a1a1a; }
+.action-btn.primary { background: #1a1a1a; color: white; border-color: #1a1a1a; }
+.action-btn.danger { background: #FCEBEB; color: #A32D2D; border-color: #f0c0c0; }
+.action-btn.amber { background: #FAEEDA; color: #633806; border-color: #f0d0a0; }
+.empty-state { text-align: center; padding: 30px 0; font-size: 14px; color: #ccc; }
+.loading-state { text-align: center; padding: 20px; font-size: 13px; color: #ccc; }
+.export-btn { padding: 6px 12px; background: #f5f5f5; color: #555; border: 1px solid #ddd; border-radius: 8px; font-size: 12px; cursor: pointer; }
+
+/* BULK TRANSFER */
+.bulk-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: #f8f8f8; border-radius: 8px; margin-bottom: 6px; font-size: 13px; cursor: pointer; }
+.bulk-item input[type=checkbox] { width: 16px; height: 16px; flex-shrink: 0; }
+.bulk-item-name { font-weight: 600; color: #1a1a1a; flex: 1; }
+.bulk-item-tag { font-size: 11px; color: #aaa; }
+
+/* MODALS */
+.modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
+.modal-overlay.open { display: flex; }
+.modal { background: white; border-radius: 16px; padding: 24px; width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; }
+.modal h2 { font-size: 16px; font-weight: 700; margin-bottom: 16px; }
+.modal-field { margin-bottom: 12px; }
+.modal-field label { font-size: 12px; font-weight: 500; color: #666; margin-bottom: 4px; display: block; }
+.modal-field select, .modal-field input, .modal-field textarea { width: 100%; padding: 9px 11px; border: 1px solid #ddd; border-radius: 9px; font-size: 14px; color: #1a1a1a; background: #fafafa; appearance: none; -webkit-appearance: none; font-family: inherit; }
+.modal-field textarea { min-height: 60px; resize: vertical; }
+.modal-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.modal-actions { display: flex; gap: 10px; margin-top: 16px; }
+.modal-save { flex: 1; padding: 11px; background: #1a1a1a; color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.modal-cancel { padding: 11px 16px; background: #f5f5f5; color: #555; border: 1px solid #ddd; border-radius: 10px; font-size: 14px; cursor: pointer; }
+.modal-error { color: #c0392b; font-size: 12px; margin-top: 8px; display: none; }
+.photo-action { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: #f8f8f8; border-radius: 8px; }
+.photo-action span { font-size: 12px; color: #666; flex: 1; }
+.photo-clear-btn { font-size: 11px; background: #FCEBEB; color: #A32D2D; padding: 2px 8px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; }
+.photo-upload-btn { font-size: 11px; background: #E6F1FB; color: #0C447C; padding: 2px 8px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; }
+.pw-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2000; align-items: center; justify-content: center; padding: 20px; }
+.pw-overlay.open { display: flex; }
+.pw-box { background: white; border-radius: 16px; padding: 24px; width: 100%; max-width: 340px; text-align: center; }
+.pw-box h3 { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+.pw-box p { font-size: 13px; color: #888; margin-bottom: 16px; }
+.pw-box input { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 10px; font-size: 15px; margin-bottom: 10px; text-align: center; letter-spacing: 0.1em; }
+.pw-submit { width: 100%; padding: 11px; background: #1a1a1a; color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; margin-bottom: 8px; }
+.pw-cancel { width: 100%; padding: 9px; background: none; color: #888; border: none; font-size: 13px; cursor: pointer; }
+.pw-error { color: #c0392b; font-size: 12px; margin-bottom: 8px; display: none; }
+
+@media (max-width: 600px) {
+  header { padding: 0 16px; height: auto; flex-wrap: wrap; padding: 12px 16px; gap: 10px; }
+}
+</style>
+</head>
+<body>
+
+<!-- CONSISTENT HEADER — matches all other pages -->
+<header>
+  <div class="header-left">
+    <a href="https://camdenco.com/manager-resources/" class="back-link">&#8592; Manager Resources</a>
+    <div class="hdivider"></div>
+    <span class="header-title">Asset Tracker</span>
+    <span class="header-badge">Assets</span>
+  </div>
+</header>
+
+<!-- PASSWORD OVERLAY -->
+<div class="pw-overlay" id="pw-overlay">
+  <div class="pw-box">
+    <h3>Admin access required</h3>
+    <p id="pw-desc">Enter your admin password.</p>
+    <input type="password" id="pw-input" placeholder="password" onkeydown="if(event.key==='Enter')checkPw()">
+    <div class="pw-error" id="pw-error">Incorrect password.</div>
+    <button class="pw-submit" onclick="checkPw()">Continue</button>
+    <button class="pw-cancel" onclick="closePw()">Cancel</button>
+  </div>
+</div>
+
+<!-- EDIT MODAL -->
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal">
+    <h2>Edit asset</h2>
+    <input type="hidden" id="edit-id">
+    <div class="modal-row">
+      <div class="modal-field"><label>Tag number</label><input type="text" id="edit-tag" placeholder="0001"></div>
+      <div class="modal-field"><label>Category</label>
+        <select id="edit-category">
+          <option>Cooking Equipment</option><option>Carts &amp; Stands</option><option>Refrigeration</option>
+          <option>Point of Sale</option><option>Office</option><option>Transportation</option>
+          <option>Tents</option><option>Power</option><option>Health Department</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-field"><label>Equipment name</label><input type="text" id="edit-name"></div>
+    <div class="modal-row">
+      <div class="modal-field"><label>Currently housed at</label><select id="edit-location"></select></div>
+      <div class="modal-field"><label>Home venue</label><select id="edit-home"></select></div>
+    </div>
+    <div class="modal-row">
+      <div class="modal-field"><label>Condition</label>
+        <select id="edit-condition">
+          <option>Good</option><option>Fair</option><option>Needs Repair</option><option>Out of Service</option>
+        </select>
+      </div>
+      <div class="modal-field"><label>Estimated value ($)</label><input type="number" id="edit-value" step="0.01" min="0"></div>
+    </div>
+    <div class="modal-field"><label>Power requirements</label><input type="text" id="edit-power" placeholder="e.g. 20 amp standard, None..."></div>
+    <div class="modal-field"><label>Notes</label><textarea id="edit-notes"></textarea></div>
+    <div class="modal-field">
+      <label>Equipment photo</label>
+      <div class="photo-action">
+        <span id="edit-photo1-label">No photo</span>
+        <button class="photo-upload-btn" onclick="document.getElementById('edit-photo1-file').click()">Replace</button>
+        <button class="photo-clear-btn" id="edit-photo1-clear" onclick="clearEditPhoto(1)" style="display:none;">Clear</button>
+      </div>
+      <input type="file" id="edit-photo1-file" accept="image/*" style="display:none;" onchange="handleEditPhoto(this,1)">
+    </div>
+    <div class="modal-field">
+      <label>Plug / power photo</label>
+      <div class="photo-action">
+        <span id="edit-photo2-label">No photo</span>
+        <button class="photo-upload-btn" onclick="document.getElementById('edit-photo2-file').click()">Replace</button>
+        <button class="photo-clear-btn" id="edit-photo2-clear" onclick="clearEditPhoto(2)" style="display:none;">Clear</button>
+      </div>
+      <input type="file" id="edit-photo2-file" accept="image/*" style="display:none;" onchange="handleEditPhoto(this,2)">
+    </div>
+    <div class="modal-error" id="edit-error"></div>
+    <div class="modal-actions">
+      <button class="modal-cancel" onclick="closeEditModal()">Cancel</button>
+      <button class="modal-save" onclick="saveEdit()">Save changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- MOVE MODAL -->
+<div class="modal-overlay" id="move-modal">
+  <div class="modal">
+    <h2 id="move-title">Move asset</h2>
+    <input type="hidden" id="move-id">
+    <div class="modal-field">
+      <label>Move to location</label>
+      <select id="move-location"></select>
+    </div>
+    <div class="modal-field"><label>Moved by</label><input type="text" id="move-by" placeholder="Your name"></div>
+    <div class="modal-field"><label>Note <span style="font-weight:400;color:#bbb;">(optional)</span></label><textarea id="move-note" placeholder="Any details about this move..."></textarea></div>
+    <div class="modal-error" id="move-error"></div>
+    <div class="modal-actions">
+      <button class="modal-cancel" onclick="document.getElementById('move-modal').classList.remove('open')">Cancel</button>
+      <button class="modal-save" onclick="saveMove()">Confirm move</button>
+    </div>
+  </div>
+</div>
+
+<div class="page-body">
+  <div class="container">
+    <div class="left-col">
+      <div class="card" id="form-card">
+        <div class="mode-toggle">
+          <button class="mode-btn active" id="mode-add" onclick="setMode('add')">Add Asset</button>
+          <button class="mode-btn" id="mode-move" onclick="setMode('move-quick')">Move Asset</button>
+          <button class="mode-btn" id="mode-bulk" onclick="setMode('bulk')">Bulk Transfer</button>
+        </div>
+
+        <!-- ADD ASSET -->
+        <div id="add-fields">
+          <div class="field-grid">
+            <div class="field" style="margin-bottom:0;">
+              <label>Tag number <span style="color:#c0392b;">*</span></label>
+              <input type="text" id="tag" placeholder="Loading...">
+            </div>
+            <div class="field" style="margin-bottom:0;">
+              <label>Category <span style="color:#c0392b;">*</span></label>
+              <select id="category">
+                <option value="">Select...</option>
+                <option>Cooking Equipment</option><option>Carts &amp; Stands</option><option>Refrigeration</option>
+                <option>Point of Sale</option><option>Office</option><option>Transportation</option>
+                <option>Tents</option><option>Power</option><option>Health Department</option>
+              </select>
+            </div>
+          </div>
+          <div class="field"><label>Equipment name <span style="color:#c0392b;">*</span></label><input type="text" id="name" placeholder="e.g. Hot Dog Cart, Popcorn Machine, Fryer..."></div>
+          <div class="field-grid">
+            <div class="field" style="margin-bottom:0;">
+              <label>Currently housed at <span style="color:#c0392b;">*</span></label>
+              <select id="location" onchange="checkNewLocation('location','new-location')"></select>
+              <div class="new-location-box" id="new-location">
+                <input type="text" id="new-location-val" placeholder="Type new location name...">
+              </div>
+            </div>
+            <div class="field" style="margin-bottom:0;">
+              <label>Home venue</label>
+              <select id="home-venue" onchange="checkNewLocation('home-venue','new-home')"></select>
+              <div class="new-location-box" id="new-home">
+                <input type="text" id="new-home-val" placeholder="Type new location name...">
+              </div>
+            </div>
+          </div>
+          <div class="field-grid" style="margin-top:13px;">
+            <div class="field" style="margin-bottom:0;">
+              <label>Condition</label>
+              <select id="condition">
+                <option>Good</option><option>Fair</option><option>Needs Repair</option><option>Out of Service</option>
+              </select>
+            </div>
+            <div class="field" style="margin-bottom:0;">
+              <label>Estimated value ($)</label>
+              <input type="number" id="value" placeholder="0.00" step="0.01" min="0">
+            </div>
+          </div>
+          <div class="field" style="margin-top:13px;"><label>Power requirements <span style="font-weight:400;color:#bbb;">(optional)</span></label><input type="text" id="power" placeholder="e.g. 20 amp standard, 30 amp L6-30, None..."></div>
+          <div class="field"><label>Notes <span style="font-weight:400;color:#bbb;">(optional)</span></label><textarea id="notes" placeholder="Any additional details..."></textarea></div>
+          <label style="margin-bottom:8px;display:block;">Photos <span style="font-weight:400;color:#bbb;">(optional)</span></label>
+          <div class="upload-row">
+            <label class="upload-box" id="upload-equip" for="file-equip" style="cursor:pointer;">
+              <div class="upload-icon">&#128247;</div>
+              <p id="equip-text">Equipment photo</p>
+            </label>
+            <label class="upload-box" id="upload-plug" for="file-plug" style="cursor:pointer;">
+              <div class="upload-icon">&#128268;</div>
+              <p id="plug-text">Plug / power photo</p>
+            </label>
+          </div>
+          <input type="file" id="file-equip" accept="image/*" onchange="handlePhoto(this,'equip')" style="display:none;">
+          <input type="file" id="file-plug" accept="image/*" onchange="handlePhoto(this,'plug')" style="display:none;">
+          <div class="error-msg" id="error-msg"></div>
+          <button class="submit-btn" id="submit-btn" onclick="submitAsset()" style="margin-top:12px;">Add Asset</button>
+        </div>
+
+        <!-- QUICK MOVE -->
+        <div id="move-quick-fields" style="display:none;">
+          <div class="field"><label>Tag number</label><input type="text" id="move-tag" placeholder="0001" oninput="lookupTag()"></div>
+          <div id="move-tag-result" style="display:none;">
+            <div class="detail-item" style="margin-bottom:13px;">
+              <div class="detail-label">Asset found</div>
+              <div class="detail-val" id="move-tag-name">--</div>
+              <div style="font-size:11px;color:#aaa;margin-top:2px;" id="move-tag-location">--</div>
+            </div>
+            <div class="field"><label>Move to location</label><select id="quick-move-location" onchange="checkNewLocation('quick-move-location','new-quick-location')"></select>
+              <div class="new-location-box" id="new-quick-location"><input type="text" id="new-quick-location-val" placeholder="Type new location name..."></div>
+            </div>
+            <div class="field"><label>Moved by</label><input type="text" id="quick-move-by" placeholder="Your name"></div>
+            <div class="field"><label>Note <span style="font-weight:400;color:#bbb;">(optional)</span></label><textarea id="quick-move-note" placeholder="Any details..."></textarea></div>
+            <div class="error-msg" id="move-error-quick"></div>
+            <button class="submit-btn" onclick="submitQuickMove()">Confirm Move</button>
+          </div>
+          <div id="move-tag-notfound" style="display:none;font-size:13px;color:#c0392b;padding:10px 0;">Tag not found -- check the number and try again.</div>
+        </div>
+
+        <!-- BULK TRANSFER -->
+        <div id="bulk-fields" style="display:none;">
+          <div class="field"><label>Transfer FROM venue</label><select id="bulk-from" onchange="loadBulkAssets()"></select></div>
+          <div id="bulk-list"><div class="empty-state" style="padding:20px 0;">Select a venue above.</div></div>
+          <div id="bulk-bottom" style="display:none;">
+            <div class="field" style="margin-top:12px;"><label>Transfer TO venue</label><select id="bulk-to" onchange="checkNewLocation('bulk-to','new-bulk-location')"></select>
+              <div class="new-location-box" id="new-bulk-location"><input type="text" id="new-bulk-location-val" placeholder="Type new location name..."></div>
+            </div>
+            <div class="field"><label>Moved by</label><input type="text" id="bulk-by" placeholder="Your name"></div>
+            <div class="field"><label>Note <span style="font-weight:400;color:#bbb;">(optional)</span></label><textarea id="bulk-note" placeholder="e.g. End of season move..."></textarea></div>
+            <div class="error-msg" id="bulk-error"></div>
+            <button class="submit-btn" onclick="submitBulkTransfer()">Transfer Selected Assets</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="success-card" id="success-card">
+        <h2 id="success-title">Asset added!</h2>
+        <p id="success-detail"></p>
+        <button class="another-btn" onclick="resetForm()">Add another</button>
+      </div>
+
+      <!-- INSURANCE REPORT -->
+      <div class="card">
+        <div class="card-title">Insurance report -- value by location</div>
+        <div id="insurance-report"><div class="loading-state">Loading...</div></div>
+      </div>
+    </div>
+
+    <div class="right-col">
+      <div class="section-divider"><hr><span>Asset directory</span></div>
+      <div class="card">
+        <div class="card-title">Search assets</div>
+        <div class="field"><input type="text" id="s-name" placeholder="Search by name, tag number, or keyword..."></div>
+        <div class="search-grid">
+          <div class="field" style="margin-bottom:0;"><label>Location</label><select id="s-location"><option value="">All locations</option></select></div>
+          <div class="field" style="margin-bottom:0;"><label>Category</label>
+            <select id="s-category">
+              <option value="">All categories</option>
+              <option>Cooking Equipment</option><option>Carts &amp; Stands</option><option>Refrigeration</option>
+              <option>Point of Sale</option><option>Office</option><option>Transportation</option>
+              <option>Tents</option><option>Power</option><option>Health Department</option>
+            </select>
+          </div>
+        </div>
+        <div class="search-grid" style="margin-top:10px;">
+          <div class="field" style="margin-bottom:0;"><label>Condition</label>
+            <select id="s-condition">
+              <option value="">All conditions</option>
+              <option>Good</option><option>Fair</option><option>Needs Repair</option><option>Out of Service</option>
+            </select>
+          </div>
+          <div style="display:flex;align-items:flex-end;">
+            <button class="search-btn" onclick="searchAssets()">Search</button>
+          </div>
+        </div>
+        <div style="margin-top:14px;" id="search-results"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+var SUPA_URL='https://aoazlttdjowhlfcksoyl.supabase.co';
+var SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvYXpsdHRkam93aGxmY2tzb3lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNzU4MjMsImV4cCI6MjA5MDg1MTgyM30.tagP_88g7R3d_p7a4Kp0NirnJgkAR5AQQImCt414SJg';
+var ADMIN_PASSWORD='popcorn2026';
+
+var DEFAULT_LOCATIONS=[
+  'ACCC','Boardwalk Hall','Mann Music Center','FMP','Cure Insurance Arena',
+  'DE Chase Field House','Subaru Park','Villanova','Montage','Sports at the Beach',
+  'Kirkwood','Storage Unit','Disposed / Retired'
+];
+
+var locations=[].concat(DEFAULT_LOCATIONS);
+var uploadedEquip=null,uploadedPlug=null;
+var currentSearchData=[],bulkAssets=[];
+var adminUnlocked=false,pendingPwAction=null;
+var editPhoto1File=null,editPhoto2File=null,editPhoto1Clear=false,editPhoto2Clear=false;
+var foundAsset=null;
+
+// PASSWORD
+function requirePassword(desc,cb){if(adminUnlocked){cb();return;}pendingPwAction=cb;document.getElementById('pw-desc').textContent=desc;document.getElementById('pw-input').value='';document.getElementById('pw-error').style.display='none';document.getElementById('pw-overlay').classList.add('open');setTimeout(function(){document.getElementById('pw-input').focus();},100);}
+function checkPw(){if(document.getElementById('pw-input').value===ADMIN_PASSWORD){adminUnlocked=true;document.getElementById('pw-overlay').classList.remove('open');if(pendingPwAction){pendingPwAction();pendingPwAction=null;}}else{document.getElementById('pw-error').style.display='block';document.getElementById('pw-input').value='';document.getElementById('pw-input').focus();}}
+function closePw(){document.getElementById('pw-overlay').classList.remove('open');pendingPwAction=null;}
+
+// LOCATIONS
+async function loadLocations(){
+  try{
+    var res=await fetch(SUPA_URL+'/rest/v1/asset_locations?select=name&order=name.asc',{headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY}});
+    var rows=await res.json();
+    if(Array.isArray(rows) && rows.length){
+      var merged=[].concat(DEFAULT_LOCATIONS);
+      rows.forEach(function(r){if(merged.indexOf(r.name)===-1)merged.push(r.name);});
+      merged.sort();
+      locations=merged;
+    }
+  }catch(e){}
+  populateLocationDropdowns();
+}
+
+async function saveNewLocation(name){
+  try{await fetch(SUPA_URL+'/rest/v1/asset_locations',{method:'POST',headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({name})});}catch(e){}
+  if(locations.indexOf(name)===-1){locations.push(name);locations.sort();}
+  populateLocationDropdowns();
+}
+
+function populateLocationDropdowns(){
+  var ids=['location','home-venue','quick-move-location','bulk-from','bulk-to','s-location','edit-location','edit-home','move-location'];
+  ids.forEach(function(id){
+    var sel=document.getElementById(id);if(!sel)return;
+    var cur=sel.value;
+    var isSearch=id==='s-location';
+    var isBulkFrom=id==='bulk-from';
+    sel.innerHTML=isSearch?'<option value="">All locations</option>':isBulkFrom?'<option value="">Select venue...</option>':'<option value="">Select...</option>';
+    locations.forEach(function(l){var o=document.createElement('option');o.value=l;o.textContent=l;sel.appendChild(o);});
+    if(!isSearch && !isBulkFrom){var o=document.createElement('option');o.value='__new__';o.textContent='+ Add new location...';sel.appendChild(o);}
+    if(cur)sel.value=cur;
+  });
+}
+
+function checkNewLocation(selId,boxId){
+  var sel=document.getElementById(selId);var box=document.getElementById(boxId);
+  if(sel.value==='__new__'){box.style.display='block';var inp=box.querySelector('input');if(inp)inp.focus();}
+  else{box.style.display='none';}
+}
+
+async function resolveLocation(selId,inputId){
+  var sel=document.getElementById(selId);
+  if(sel.value==='__new__'){var inp=document.getElementById(inputId);var name=inp?inp.value.trim():'';if(!name)return null;await saveNewLocation(name);return name;}
+  return sel.value||null;
+}
+
+// Dynamic next tag number
+async function loadNextTag(){
+  try{
+    var res=await fetch(SUPA_URL+'/rest/v1/assets?select=tag_number&order=tag_number.desc&limit=1',{headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY}});
+    var rows=await res.json();
+    var next='0001';
+    if(Array.isArray(rows) && rows.length){
+      var last=parseInt(rows[0].tag_number,10);
+      if(!isNaN(last))next=String(last+1).padStart(4,'0');
+    }
+    var tagInput=document.getElementById('tag');
+    if(tagInput)tagInput.placeholder=next;
+  }catch(e){
+    var tagInput=document.getElementById('tag');
+    if(tagInput)tagInput.placeholder='0001';
+  }
+}
+
+// MODE TOGGLE
+function setMode(mode){
+  ['add-fields','move-quick-fields','bulk-fields'].forEach(function(id){document.getElementById(id).style.display='none';});
+  ['mode-add','mode-move','mode-bulk'].forEach(function(id){document.getElementById(id).classList.remove('active');});
+  document.getElementById(mode==='add'?'add-fields':mode==='move-quick'?'move-quick-fields':'bulk-fields').style.display='block';
+  document.getElementById(mode==='add'?'mode-add':mode==='move-quick'?'mode-move':'mode-bulk').classList.add('active');
+  document.getElementById('error-msg').style.display='none';
+}
+
+// PHOTOS
+function handlePhoto(input,type){
+  if(input.files && input.files[0]){var f=input.files[0];
+    if(type==='equip'){uploadedEquip=f;document.getElementById('upload-equip').classList.add('has-file');document.getElementById('equip-text').textContent=f.name;}
+    else{uploadedPlug=f;document.getElementById('upload-plug').classList.add('has-file');document.getElementById('plug-text').textContent=f.name;}
+  }
+}
+async function uploadPhoto(file,path){
+  try{
+    var r=await fetch(SUPA_URL+'/storage/v1/object/asset-photos/'+path,{method:'POST',headers:{'Authorization':'Bearer '+SUPA_KEY,'Content-Type':file.type},body:file});
+    return r.ok?SUPA_URL+'/storage/v1/object/public/asset-photos/'+path:null;
+  }catch(e){return null;}
+}
+
+// ADD ASSET
+async function submitAsset(){
+  var tagInput=document.getElementById('tag');
+  var rawTag=tagInput.value.trim();
+  if(!rawTag)rawTag=tagInput.placeholder;
+  var tag=rawTag.padStart(4,'0');
+  var category=document.getElementById('category').value;
+  var name=document.getElementById('name').value.trim();
+  var condition=document.getElementById('condition').value;
+  var value=parseFloat(document.getElementById('value').value)||0;
+  var power=document.getElementById('power').value.trim();
+  var notes=document.getElementById('notes').value.trim();
+  var errEl=document.getElementById('error-msg');errEl.style.display='none';
+  if(!rawTag || !category || !name){errEl.textContent='Please fill in tag number, category, and equipment name.';errEl.style.display='block';return;}
+  var location=await resolveLocation('location','new-location-val');
+  var homeVenue=await resolveLocation('home-venue','new-home-val');
+  if(!location){errEl.textContent='Please select or enter a current location.';errEl.style.display='block';return;}
+  var btn=document.getElementById('submit-btn');btn.disabled=true;btn.textContent='Saving...';
+  try{
+    var id=crypto.randomUUID();
+    var photoUrl=null,plugUrl=null;
+    if(uploadedEquip)photoUrl=await uploadPhoto(uploadedEquip,id+'-equip.'+uploadedEquip.name.split('.').pop());
+    if(uploadedPlug)plugUrl=await uploadPhoto(uploadedPlug,id+'-plug.'+uploadedPlug.name.split('.').pop());
+    var res=await fetch(SUPA_URL+'/rest/v1/assets',{method:'POST',headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body:JSON.stringify({id:id,tag_number:tag,category:category,name:name,current_location:location,home_venue:homeVenue||null,condition:condition,estimated_value:value||null,power_requirements:power||null,notes:notes||null,photo_url:photoUrl,plug_photo_url:plugUrl})});
+    if(!res.ok)throw new Error(await res.text());
+    await logMove(id,null,location,'Initial entry','System');
+    document.getElementById('form-card').style.display='none';
+    document.getElementById('success-card').style.display='block';
+    document.getElementById('success-title').textContent='Asset added!';
+    var photoNote=(uploadedEquip && !photoUrl)?'\nNote: equipment photo could not be uploaded.':'';
+    var plugNote=(uploadedPlug && !plugUrl)?'\nNote: plug photo could not be uploaded.':'';
+    document.getElementById('success-detail').textContent='Tag #'+tag+' -- '+name+'\nLocation: '+location+photoNote+plugNote;
+    loadInsuranceReport();
+  }catch(e){errEl.textContent='Something went wrong saving the asset -- try again. ('+e.message+')';errEl.style.display='block';btn.disabled=false;btn.textContent='Add Asset';}
+}
+
+async function logMove(assetId,fromLocation,toLocation,note,movedBy){
+  try{await fetch(SUPA_URL+'/rest/v1/asset_moves',{method:'POST',headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},
+    body:JSON.stringify({asset_id:assetId,from_location:fromLocation,to_location:toLocation,note:note||null,moved_by:movedBy||null,moved_at:new Date().toISOString()})});}catch(e){}
+}
+
+function resetForm(){
+  document.getElementById('form-card').style.display='block';document.getElementById('success-card').style.display='none';
+  document.getElementById('tag').value='';document.getElementById('category').value='';document.getElementById('name').value='';
+  document.getElementById('location').value='';document.getElementById('home-venue').value='';
+  document.getElementById('condition').value='Good';document.getElementById('value').value='';
+  document.getElementById('power').value='';document.getElementById('notes').value='';
+  ['upload-equip','upload-plug'].forEach(function(id){document.getElementById(id).classList.remove('has-file');});
+  document.getElementById('equip-text').textContent='Equipment photo';document.getElementById('plug-text').textContent='Plug / power photo';
+  document.getElementById('file-equip').value='';document.getElementById('file-plug').value='';
+  document.getElementById('error-msg').style.display='none';
+  document.getElementById('submit-btn').disabled=false;document.getElementById('submit-btn').textContent='Add Asset';
+  ['new-location','new-home'].forEach(function(id){document.getElementById(id).style.display='none';});
+  uploadedEquip=null;uploadedPlug=null;
+  loadNextTag();
+}
+
+// QUICK MOVE
+var lookupTimeout=null;
+function lookupTag(){
+  clearTimeout(lookupTimeout);var tag=document.getElementById('move-tag').value.trim();
+  document.getElementById('move-tag-result').style.display='none';document.getElementById('move-tag-notfound').style.display='none';
+  if(!tag)return;
+  lookupTimeout=setTimeout(async function(){
+    var padded=tag.padStart(4,'0');
+    try{
+      var res=await fetch(SUPA_URL+'/rest/v1/assets?tag_number=eq.'+padded+'&select=*',{headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY}});
+      var rows=await res.json();
+      if(rows.length){foundAsset=rows[0];document.getElementById('move-tag-name').textContent='#'+rows[0].tag_number+' -- '+rows[0].name;document.getElementById('move-tag-location').textContent='Currently at: '+rows[0].current_location;document.getElementById('move-tag-result').style.display='block';}
+      else{foundAsset=null;document.getElementById('move-tag-notfound').style.display='block';}
+    }catch(e){}
+  },600);
+}
+
+async function submitQuickMove(){
+  if(!foundAsset)return;
+  var newLoc=await resolveLocation('quick-move-location','new-quick-location-val');
+  var movedBy=document.getElementById('quick-move-by').value.trim();
+  var note=document.getElementById('quick-move-note').value.trim();
+  var errEl=document.getElementById('move-error-quick');errEl.style.display='none';
+  if(!newLoc){errEl.textContent='Please select a destination.';errEl.style.display='block';return;}
+  if(!movedBy){errEl.textContent='Please enter your name.';errEl.style.display='block';return;}
+  try{
+    await fetch(SUPA_URL+'/rest/v1/assets?id=eq.'+foundAsset.id,{method:'PATCH',headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({current_location:newLoc})});
+    await logMove(foundAsset.id,foundAsset.current_location,newLoc,note,movedBy);
+    document.getElementById('form-card').style.display='none';document.getElementById('success-card').style.display='block';
+    document.getElementById('success-title').textContent='Asset moved!';
+    document.getElementById('success-detail').textContent='#'+foundAsset.tag_number+' -- '+foundAsset.name+'\nMoved to: '+newLoc;
+    loadInsuranceReport();
+  }catch(e){errEl.textContent='Something went wrong.';errEl.style.display='block';}
+}
+
+// BULK TRANSFER
+async function loadBulkAssets(){
+  var from=document.getElementById('bulk-from').value;
+  var listEl=document.getElementById('bulk-list');var bottomEl=document.getElementById('bulk-bottom');
+  if(!from){listEl.innerHTML='<div class="empty-state" style="padding:20px 0;">Select a venue above.</div>';bottomEl.style.display='none';return;}
+  listEl.innerHTML='<div class="loading-state">Loading assets...</div>';
+  try{
+    var res=await fetch(SUPA_URL+'/rest/v1/assets?current_location=eq.'+encodeURIComponent(from)+'&select=id,tag_number,name,category&order=tag_number.asc',{headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY}});
+    bulkAssets=await res.json();
+    if(!bulkAssets.length){listEl.innerHTML='<div class="empty-state" style="padding:20px 0;">No assets at this location.</div>';bottomEl.style.display='none';return;}
+    var html='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><div style="font-size:12px;font-weight:600;color:#555;">'+bulkAssets.length+' assets at this location</div><div style="display:flex;gap:8px;"><button onclick="selectAllBulk(true)" style="font-size:11px;color:#0C447C;background:none;border:none;cursor:pointer;font-weight:600;">Select all</button><button onclick="selectAllBulk(false)" style="font-size:11px;color:#888;background:none;border:none;cursor:pointer;">Deselect all</button></div></div>';
+    bulkAssets.forEach(function(a){html+='<div class="bulk-item" onclick="toggleBulkItem(\'bulk-'+a.id+'\')"><input type="checkbox" id="bulk-'+a.id+'" checked onclick="event.stopPropagation()"><div class="bulk-item-name">'+a.name+'</div><div class="bulk-item-tag">#'+a.tag_number+' &middot; '+a.category+'</div></div>';});
+    listEl.innerHTML=html;bottomEl.style.display='block';
+  }catch(e){listEl.innerHTML='<div class="empty-state" style="padding:20px 0;">Could not load.</div>';}
+}
+
+function selectAllBulk(val){bulkAssets.forEach(function(a){var cb=document.getElementById('bulk-'+a.id);if(cb)cb.checked=val;});}
+function toggleBulkItem(id){var cb=document.getElementById(id);if(cb)cb.checked=!cb.checked;}
+
+async function submitBulkTransfer(){
+  var from=document.getElementById('bulk-from').value;
+  var to=await resolveLocation('bulk-to','new-bulk-location-val');
+  var movedBy=document.getElementById('bulk-by').value.trim();
+  var note=document.getElementById('bulk-note').value.trim();
+  var errEl=document.getElementById('bulk-error');errEl.style.display='none';
+  if(!to){errEl.textContent='Please select a destination.';errEl.style.display='block';return;}
+  if(!movedBy){errEl.textContent='Please enter your name.';errEl.style.display='block';return;}
+  var selected=bulkAssets.filter(function(a){var cb=document.getElementById('bulk-'+a.id);return cb?cb.checked:false;});
+  if(!selected.length){errEl.textContent='Please select at least one asset to transfer.';errEl.style.display='block';return;}
+  var btn=document.querySelector('#bulk-fields .submit-btn');btn.disabled=true;btn.textContent='Moving '+selected.length+' assets...';
+  try{
+    for(var i=0;i<selected.length;i++){
+      var a=selected[i];
+      await fetch(SUPA_URL+'/rest/v1/assets?id=eq.'+a.id,{method:'PATCH',headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({current_location:to})});
+      await logMove(a.id,from,to,note?note:'Bulk transfer: '+selected.length+' items',movedBy);
+    }
+    document.getElementById('form-card').style.display='none';document.getElementById('success-card').style.display='block';
+    document.getElementById('success-title').textContent='Bulk transfer complete!';
+    document.getElementById('success-detail').textContent=selected.length+' asset'+(selected.length!==1?'s':'')+' moved\nFrom: '+from+'\nTo: '+to+'\nBy: '+movedBy;
+    loadInsuranceReport();
+  }catch(e){errEl.textContent='Something went wrong.';errEl.style.display='block';btn.disabled=false;btn.textContent='Transfer Selected Assets';}
+}
+
+// INSURANCE REPORT
+async function loadInsuranceReport(){
+  var el=document.getElementById('insurance-report');
+  try{
+    var res=await fetch(SUPA_URL+'/rest/v1/assets?select=current_location,estimated_value&order=current_location.asc',{headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY}});
+    var rows=await res.json();
+    if(!Array.isArray(rows) || !rows.length){el.innerHTML='<div class="empty-state">No assets logged yet.</div>';return;}
+    var byLoc={};
+    rows.forEach(function(r){
+      if(!byLoc[r.current_location])byLoc[r.current_location]={count:0,value:0};
+      byLoc[r.current_location].count++;
+      byLoc[r.current_location].value+=parseFloat(r.estimated_value||0);
+    });
+    var disposed=byLoc['Disposed / Retired']||{count:0,value:0};
+    var grand=0;
+    Object.keys(byLoc).forEach(function(loc){if(loc!=='Disposed / Retired')grand+=byLoc[loc].value;});
+    var html='<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid #f0f0f0;"><div style="font-size:13px;font-weight:600;color:#555;">Total active value</div><div style="font-size:20px;font-weight:700;color:#1a1a1a;">$'+grand.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0})+'</div></div>';
+    var entries=Object.keys(byLoc).filter(function(loc){return loc!=='Disposed / Retired';}).sort(function(a,b){return byLoc[b].value-byLoc[a].value;});
+    entries.forEach(function(loc){
+      var data=byLoc[loc];
+      html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #f8f8f8;font-size:13px;"><div><div style="font-weight:600;color:#1a1a1a;">'+loc+'</div><div style="font-size:11px;color:#aaa;">'+data.count+' asset'+(data.count!==1?'s':'')+'</div></div><div style="font-weight:700;color:#1a1a1a;">$'+data.value.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0})+'</div></div>';
+    });
+    if(disposed.count){html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-top:1px dashed #ddd;margin-top:4px;font-size:13px;"><div><div style="font-weight:600;color:#aaa;">Disposed / Retired</div><div style="font-size:11px;color:#ccc;">'+disposed.count+' asset'+(disposed.count!==1?'s':'')+': not included in total</div></div><div style="font-weight:700;color:#aaa;">$'+disposed.value.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0})+'</div></div>';}
+    el.innerHTML=html;
+  }catch(e){el.innerHTML='<div class="empty-state">Could not load.</div>';}
+}
+
+// SEARCH
+async function searchAssets(){
+  var name=document.getElementById('s-name').value.trim();
+  var location=document.getElementById('s-location').value;
+  var category=document.getElementById('s-category').value;
+  var condition=document.getElementById('s-condition').value;
+  var rEl=document.getElementById('search-results');rEl.innerHTML='<div class="loading-state">Searching...</div>';
+  var url=SUPA_URL+'/rest/v1/assets?select=*&order=tag_number.asc';
+  if(location)url+='&current_location=eq.'+encodeURIComponent(location);
+  if(category)url+='&category=eq.'+encodeURIComponent(category);
+  if(condition)url+='&condition=eq.'+encodeURIComponent(condition);
+  try{
+    var res=await fetch(url,{headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY}});
+    var rows=await res.json();
+    if(name){var q=name.toLowerCase();rows=rows.filter(function(r){return r.name.toLowerCase().indexOf(q)!==-1||r.tag_number.indexOf(name.replace(/^0+/,''))!==-1||r.tag_number.indexOf(name)!==-1||(r.notes||'').toLowerCase().indexOf(q)!==-1||(r.power_requirements||'').toLowerCase().indexOf(q)!==-1;});}
+    currentSearchData=rows;
+    if(!rows.length){rEl.innerHTML='<div class="empty-state" style="padding:20px 0;">No assets found.</div>';return;}
+    var totalValue=rows.reduce(function(s,r){return s+parseFloat(r.estimated_value||0);},0);
+    var uniqueLocs=[];
+    rows.forEach(function(r){if(uniqueLocs.indexOf(r.current_location)===-1)uniqueLocs.push(r.current_location);});
+    var html='<div class="summary-row"><div class="summary-box"><div class="s-label">Assets found</div><div class="s-val">'+rows.length+'</div></div><div class="summary-box"><div class="s-label">Total value</div><div class="s-val">$'+Math.round(totalValue).toLocaleString()+'</div></div><div class="summary-box"><div class="s-label">Locations</div><div class="s-val">'+uniqueLocs.length+'</div></div></div><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><div style="font-size:11px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:0.06em;">'+rows.length+' result'+(rows.length!==1?'s':'')+'</div><button class="export-btn" onclick="exportCSV()">Export CSV</button></div>';
+    rows.forEach(function(r){
+      var condClass={'Good':'condition-good','Fair':'condition-fair','Needs Repair':'condition-repair','Out of Service':'condition-out'}[r.condition]||'';
+      var id='a'+r.id.replace(/-/g,'').slice(0,8);
+      var locExtra=(r.home_venue && r.home_venue!==r.current_location)?' &middot; Home: '+r.home_venue:'';
+      var valStr=r.estimated_value?'$'+parseFloat(r.estimated_value).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}):'';
+      var photo1=r.photo_url?'<a href="'+r.photo_url+'" target="_blank">View photo</a>':'<span class="no-photo">No photo</span>';
+      var photo2=r.plug_photo_url?'<a href="'+r.plug_photo_url+'" target="_blank">View photo</a>':'<span class="no-photo">No photo</span>';
+      var powerHtml=r.power_requirements?'<div class="detail-item"><div class="detail-label">Power</div><div class="detail-val">'+r.power_requirements+'</div></div>':'';
+      var notesHtml=r.notes?'<div class="detail-item" style="grid-column:1/-1;"><div class="detail-label">Notes</div><div class="detail-val">'+r.notes+'</div></div>':'';
+      var safeName=r.name.replace(/'/g,"\\'");
+      var safeLoc=r.current_location.replace(/'/g,"\\'");
+      html+='<div class="asset-card"><div class="asset-header" onclick="toggleAsset(\''+id+'\',\''+r.id+'\')"><div><div class="asset-tag">Tag #'+r.tag_number+'</div><div class="asset-name">'+r.name+'</div><div class="asset-location">'+r.current_location+locExtra+'</div></div><div class="asset-right"><div class="asset-value">'+valStr+'</div><div class="asset-category">'+r.category+'</div><div class="'+condClass+'" style="font-size:11px;font-weight:600;margin-top:4px;">'+r.condition+'</div></div></div><div class="asset-detail" id="'+id+'"><div class="detail-grid">'+powerHtml+notesHtml+'</div><div class="photo-row"><div class="photo-thumb"><div class="detail-label" style="margin-bottom:4px;">Equipment photo</div>'+photo1+'</div><div class="photo-thumb"><div class="detail-label" style="margin-bottom:4px;">Plug photo</div>'+photo2+'</div></div><div class="history-list" id="hist-'+id+'"><div style="font-size:12px;color:#aaa;">Loading history...</div></div><div class="asset-actions"><button class="action-btn amber" onclick="openMoveModal(\''+r.id+'\',\''+safeName+'\',\''+safeLoc+'\')">Move</button><button class="action-btn primary" onclick="requirePassword(\'Enter admin password to edit.\',function(){openEditModal(\''+r.id+'\');})">Edit</button><button class="action-btn danger" onclick="requirePassword(\'Enter admin password to delete.\',function(){deleteAsset(\''+r.id+'\',\''+safeName+'\');})">Delete</button></div></div></div>';
+    });
+    rEl.innerHTML=html;
+  }catch(e){rEl.innerHTML='<div class="empty-state" style="padding:20px 0;">Error loading results.</div>';}
+}
+
+async function toggleAsset(domId,assetId){
+  var el=document.getElementById(domId);var open=el.style.display==='block';
+  el.style.display=open?'none':'block';if(!open)await loadHistory(domId,assetId);
+}
+
+async function loadHistory(domId,assetId){
+  var el=document.getElementById('hist-'+domId);
+  try{
+    var res=await fetch(SUPA_URL+'/rest/v1/asset_moves?asset_id=eq.'+assetId+'&select=*&order=moved_at.desc&limit=10',{headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY}});
+    var rows=await res.json();
+    if(!rows.length){el.innerHTML='<div style="font-size:12px;color:#aaa;margin-bottom:12px;">No move history.</div>';return;}
+    var html='<div class="detail-label" style="margin-bottom:6px;">Location history</div>';
+    rows.forEach(function(r){
+      var d=new Date(r.moved_at);
+      var ds=(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear();
+      var from=r.from_location?r.from_location+' &rarr; ':'';
+      html+='<div class="history-item"><div class="history-date">'+ds+'</div><div>'+from+r.to_location+(r.moved_by?' &middot; '+r.moved_by:'')+(r.note?' &middot; '+r.note:'')+'</div></div>';
+    });
+    el.innerHTML=html;
+  }catch(e){el.innerHTML='';}
+}
+
+// MOVE MODAL
+function openMoveModal(id,name,currentLoc){
+  document.getElementById('move-id').value=id;document.getElementById('move-title').textContent='Move: '+name;
+  document.getElementById('move-location').value='';document.getElementById('move-by').value='';
+  document.getElementById('move-note').value='';document.getElementById('move-error').style.display='none';
+  document.getElementById('move-modal').classList.add('open');
+}
+async function saveMove(){
+  var id=document.getElementById('move-id').value;var newLoc=document.getElementById('move-location').value;
+  var movedBy=document.getElementById('move-by').value.trim();var note=document.getElementById('move-note').value.trim();
+  var errEl=document.getElementById('move-error');errEl.style.display='none';
+  if(!newLoc || !movedBy){errEl.textContent='Please select a destination and enter your name.';errEl.style.display='block';return;}
+  var asset=null;
+  for(var i=0;i<currentSearchData.length;i++){if(currentSearchData[i].id===id){asset=currentSearchData[i];break;}}
+  try{
+    await fetch(SUPA_URL+'/rest/v1/assets?id=eq.'+id,{method:'PATCH',headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({current_location:newLoc})});
+    await logMove(id,asset?asset.current_location:null,newLoc,note,movedBy);
+    document.getElementById('move-modal').classList.remove('open');searchAssets();loadInsuranceReport();
+  }catch(e){errEl.textContent='Save failed.';errEl.style.display='block';}
+}
+
+// EDIT
+function openEditModal(id){
+  var row=null;
+  for(var i=0;i<currentSearchData.length;i++){if(currentSearchData[i].id===id){row=currentSearchData[i];break;}}
+  if(!row)return;
+  document.getElementById('edit-id').value=id;document.getElementById('edit-tag').value=row.tag_number;
+  document.getElementById('edit-category').value=row.category;document.getElementById('edit-name').value=row.name;
+  document.getElementById('edit-location').value=row.current_location;document.getElementById('edit-home').value=row.home_venue||'';
+  document.getElementById('edit-condition').value=row.condition;document.getElementById('edit-value').value=row.estimated_value||'';
+  document.getElementById('edit-power').value=row.power_requirements||'';document.getElementById('edit-notes').value=row.notes||'';
+  editPhoto1File=null;editPhoto2File=null;editPhoto1Clear=false;editPhoto2Clear=false;
+  document.getElementById('edit-photo1-file').value='';document.getElementById('edit-photo2-file').value='';
+  var l1=document.getElementById('edit-photo1-label'),c1=document.getElementById('edit-photo1-clear');
+  if(row.photo_url){l1.innerHTML='<a href="'+row.photo_url+'" target="_blank">View current</a>';c1.style.display='inline-block';}else{l1.textContent='No photo';c1.style.display='none';}
+  var l2=document.getElementById('edit-photo2-label'),c2=document.getElementById('edit-photo2-clear');
+  if(row.plug_photo_url){l2.innerHTML='<a href="'+row.plug_photo_url+'" target="_blank">View current</a>';c2.style.display='inline-block';}else{l2.textContent='No photo';c2.style.display='none';}
+  document.getElementById('edit-error').style.display='none';document.getElementById('edit-modal').classList.add('open');
+}
+function handleEditPhoto(input,num){if(input.files && input.files[0]){if(num===1){editPhoto1File=input.files[0];document.getElementById('edit-photo1-label').textContent='New: '+editPhoto1File.name;editPhoto1Clear=false;}else{editPhoto2File=input.files[0];document.getElementById('edit-photo2-label').textContent='New: '+editPhoto2File.name;editPhoto2Clear=false;}}}
+function clearEditPhoto(num){if(num===1){editPhoto1Clear=true;editPhoto1File=null;document.getElementById('edit-photo1-label').textContent='Will be removed';document.getElementById('edit-photo1-clear').style.display='none';}else{editPhoto2Clear=true;editPhoto2File=null;document.getElementById('edit-photo2-label').textContent='Will be removed';document.getElementById('edit-photo2-clear').style.display='none';}}
+function closeEditModal(){document.getElementById('edit-modal').classList.remove('open');}
+async function saveEdit(){
+  var id=document.getElementById('edit-id').value;var tag=document.getElementById('edit-tag').value.trim().padStart(4,'0');
+  var category=document.getElementById('edit-category').value;var name=document.getElementById('edit-name').value.trim();
+  var location=document.getElementById('edit-location').value;var home=document.getElementById('edit-home').value;
+  var condition=document.getElementById('edit-condition').value;var value=parseFloat(document.getElementById('edit-value').value)||null;
+  var power=document.getElementById('edit-power').value.trim();var notes=document.getElementById('edit-notes').value.trim();
+  var errEl=document.getElementById('edit-error');errEl.style.display='none';
+  if(!tag || !category || !name || !location){errEl.textContent='Please fill in required fields.';errEl.style.display='block';return;}
+  var original=null;
+  for(var i=0;i<currentSearchData.length;i++){if(currentSearchData[i].id===id){original=currentSearchData[i];break;}}
+  var photoUrl=original?original.photo_url||null:null;
+  var plugUrl=original?original.plug_photo_url||null:null;
+  if(editPhoto1Clear)photoUrl=null;if(editPhoto2Clear)plugUrl=null;
+  if(editPhoto1File)photoUrl=await uploadPhoto(editPhoto1File,id+'-equip.'+editPhoto1File.name.split('.').pop());
+  if(editPhoto2File)plugUrl=await uploadPhoto(editPhoto2File,id+'-plug.'+editPhoto2File.name.split('.').pop());
+  try{
+    await fetch(SUPA_URL+'/rest/v1/assets?id=eq.'+id,{method:'PATCH',headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body:JSON.stringify({tag_number:tag,category:category,name:name,current_location:location,home_venue:home||null,condition:condition,estimated_value:value,power_requirements:power||null,notes:notes||null,photo_url:photoUrl,plug_photo_url:plugUrl})});
+    closeEditModal();searchAssets();loadInsuranceReport();
+  }catch(e){errEl.textContent='Save failed.';errEl.style.display='block';}
+}
+
+// DELETE
+async function deleteAsset(id,name){
+  if(!confirm('Delete asset: '+name+'?\n\nThis cannot be undone.'))return;
+  try{
+    await fetch(SUPA_URL+'/rest/v1/assets?id=eq.'+id,{method:'DELETE',headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Prefer':'return=minimal'}});
+    await fetch(SUPA_URL+'/rest/v1/asset_moves?asset_id=eq.'+id,{method:'DELETE',headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Prefer':'return=minimal'}});
+    searchAssets();loadInsuranceReport();
+  }catch(e){alert('Delete failed.');}
+}
+
+// EXPORT
+function exportCSV(){
+  if(!currentSearchData.length)return;
+  var h=['Tag','Name','Category','Current Location','Home Venue','Condition','Value','Power','Notes'];
+  var r=currentSearchData.map(function(r){return[r.tag_number,r.name,r.category,r.current_location,r.home_venue||'',r.condition,r.estimated_value||'',r.power_requirements||'',r.notes||''];});
+  var csv=[h].concat(r).map(function(r){return r.map(function(v){return '"'+(v||'')+'"';}).join(',');}).join('\n');
+  var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='assets-'+new Date().toISOString().split('T')[0]+'.csv';a.click();
+}
+
+loadLocations();
+loadInsuranceReport();
+loadNextTag();
+setMode('add');
+</script>
+</body>
+</html>
