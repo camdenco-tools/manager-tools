@@ -34,6 +34,8 @@ var pcAuth = (function() {
   var accessToken = null;
   var currentUser = null;
   var config = null;
+  var authUserId = null;
+  var authUserEmail = null;
 
   function authHeaders() {
     var h = {
@@ -148,10 +150,27 @@ var pcAuth = (function() {
   }
 
   function fetchUserRole() {
-    fetch(SUPABASE_URL + '/rest/v1/user_roles?select=*', {
-      headers: authHeaders()
+    // First get the authenticated user's ID and email
+    fetch(SUPABASE_URL + '/auth/v1/user', {
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + accessToken }
     })
     .then(function(r) { return r.json(); })
+    .then(function(authUser) {
+      if (!authUser || !authUser.id) {
+        showError('Authentication error. Please sign in again.');
+        accessToken = null;
+        try { localStorage.removeItem('sb_access_token'); localStorage.removeItem('sb_refresh_token'); } catch(e) {}
+        injectLoginOverlay();
+        return;
+      }
+      authUserId = authUser.id;
+      authUserEmail = authUser.email;
+      // Now fetch the matching user_roles record by auth_id or email
+      return fetch(SUPABASE_URL + '/rest/v1/user_roles?select=*&or=(auth_id.eq.' + authUser.id + ',email.eq.' + encodeURIComponent(authUser.email) + ')', {
+        headers: authHeaders()
+      });
+    })
+    .then(function(r) { if (r) return r.json(); return null; })
     .then(function(rows) {
       if (!rows || rows.length === 0) {
         showError('No access configured for this account. Contact your admin.');
@@ -161,6 +180,16 @@ var pcAuth = (function() {
       }
 
       var user = rows[0];
+
+      // Auto-link auth_id if matched by email but auth_id was null
+      if (!user.auth_id && authUserId) {
+        fetch(SUPABASE_URL + '/rest/v1/user_roles?id=eq.' + user.id, {
+          method: 'PATCH',
+          headers: authHeaders(),
+          body: JSON.stringify({ auth_id: authUserId })
+        }).catch(function() {});
+        user.auth_id = authUserId;
+      }
 
       if (!user.is_active) {
         showError('Your account has been deactivated. Contact your admin.');
