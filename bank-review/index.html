@@ -1,0 +1,1192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Popcorn Chez — Bank Charge Review</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f0ec; min-height: 100vh; }
+
+header {
+  background: #fff; border-bottom: 1px solid #e8e8e4;
+  padding: 0 32px; display: flex; align-items: center;
+  justify-content: space-between; height: 64px;
+  position: sticky; top: 0; z-index: 100;
+}
+.header-left { display: flex; align-items: center; gap: 16px; }
+.header-right { display: flex; align-items: center; gap: 12px; }
+.header-user { font-size: 12px; color: #999; font-weight: 500; }
+.sign-out-btn { font-size: 11px; color: #c0392b; background: none; border: 1px solid #f0c0c0; padding: 4px 10px; border-radius: 6px; cursor: pointer; font-weight: 600; }
+.sign-out-btn:hover { background: #fdf0ee; }
+.back-link { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #999; text-decoration: none; display: flex; align-items: center; gap: 6px; transition: color 0.15s; }
+.back-link:hover { color: #1a1a1a; }
+.hdivider { width: 1px; height: 20px; background: #e8e8e4; }
+.header-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+.header-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: #534AB7; color: white; padding: 3px 8px; border-radius: 20px; }
+
+.page-body { padding: 20px 16px 60px; max-width: 900px; margin: 0 auto; }
+@media (min-width: 860px) { .page-body { padding: 30px 32px 60px; } }
+
+.card { background: white; border-radius: 16px; padding: 20px; margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); }
+.card-title { font-size: 10px; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 14px; }
+
+/* Upload area */
+.upload-zone { border: 2px dashed #ddd; border-radius: 14px; padding: 32px; text-align: center; cursor: pointer; transition: all 0.2s; }
+.upload-zone:hover, .upload-zone.dragover { border-color: #999; background: #fafafa; }
+.upload-zone p { font-size: 14px; color: #888; margin-bottom: 4px; }
+.upload-zone .sub { font-size: 12px; color: #bbb; }
+.upload-formats { display: flex; gap: 6px; margin-top: 10px; justify-content: center; }
+.upload-formats span { font-size: 11px; color: #bbb; background: #f5f5f5; padding: 3px 8px; border-radius: 6px; }
+.upload-file-input { display: none; }
+
+/* Month selector */
+.month-row { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; }
+.month-row label { font-size: 13px; font-weight: 500; color: #555; white-space: nowrap; }
+.month-row input[type=month] { flex: 1; padding: 9px 12px; border: 1px solid #e0e0e0; border-radius: 10px; font-size: 14px; color: #1a1a1a; background: #fafafa; font-family: inherit; }
+
+/* Processing state */
+.processing-card { background: white; border-radius: 16px; padding: 32px; text-align: center; display: none; margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); }
+.processing-card .spinner { width: 32px; height: 32px; border: 3px solid #eee; border-top-color: #534AB7; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 14px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.processing-card p { font-size: 14px; color: #888; }
+.processing-card .step { font-size: 12px; color: #bbb; margin-top: 6px; }
+
+/* Stats strip */
+.stats-strip { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 16px; }
+.stat-box { background: white; border-radius: 12px; padding: 10px; text-align: center; border: 1px solid #eee; }
+.stat-box.green { border-color: #97C459; }
+.stat-box.purple { border-color: #CECBF6; }
+.stat-box.amber { border-color: #EF9F27; }
+.stat-box.lavender { border-color: #AFA9EC; }
+.stat-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 3px; }
+.stat-label.green { color: #3B6D11; }
+.stat-label.purple { color: #534AB7; }
+.stat-label.amber { color: #854F0B; }
+.stat-label.lavender { color: #3C3489; }
+.stat-label.gray { color: #999; }
+.stat-val { font-size: 18px; font-weight: 700; color: #1a1a1a; }
+.stat-sub { font-size: 11px; color: #bbb; margin-top: 1px; }
+
+/* Section cards */
+.section-card { background: white; border-radius: 16px; padding: 16px 20px; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); overflow: hidden; }
+.section-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; }
+.section-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.section-title-area { display: flex; align-items: center; gap: 8px; }
+.section-title { font-size: 13px; font-weight: 600; }
+.section-meta { font-size: 11px; opacity: 0.7; }
+.section-action { font-size: 11px; font-weight: 600; }
+.section-body { margin-top: 12px; display: none; }
+.section-body.open { display: block; }
+
+/* Matched section */
+.matched-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 12px; border-bottom: 1px solid rgba(0,0,0,0.04); }
+.matched-row:last-child { border-bottom: none; }
+.matched-left { color: #3B6D11; }
+.matched-right { display: flex; gap: 12px; color: #3B6D11; }
+.matched-right .match-detail { opacity: 0.6; }
+.matched-more { font-size: 11px; color: #3B6D11; opacity: 0.5; font-style: italic; padding: 4px 0; }
+
+/* Expense section */
+.expense-list { background: #f8f8f8; border-radius: 10px; overflow: hidden; }
+.expense-row { display: flex; align-items: center; padding: 9px 12px; gap: 8px; border-bottom: 1px solid #eee; }
+.expense-row:last-child { border-bottom: none; }
+.expense-check { width: 16px; height: 16px; accent-color: #534AB7; flex-shrink: 0; cursor: pointer; }
+.expense-date { font-size: 12px; color: #999; min-width: 42px; flex-shrink: 0; }
+.expense-vendor { font-size: 13px; font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.expense-amount { font-size: 13px; font-weight: 700; min-width: 60px; text-align: right; flex-shrink: 0; }
+.expense-amount.credit { color: #27500A; }
+.expense-cat-sel { padding: 4px 8px; border: 1px solid #CECBF6; border-radius: 6px; font-size: 12px; color: #3C3489; background: #EEEDFE; font-weight: 500; font-family: inherit; min-width: 130px; cursor: pointer; appearance: none; -webkit-appearance: none; }
+.expense-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
+.expense-hint { font-size: 11px; color: #534AB7; opacity: 0.6; }
+.section-btn { padding: 8px 20px; color: white; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.section-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.section-btn.purple { background: #534AB7; }
+.section-btn.amber { background: #BA7517; }
+
+/* Food section */
+.food-list { background: #FAEEDA; border-radius: 10px; overflow: hidden; }
+.food-row { display: flex; align-items: center; padding: 9px 12px; gap: 8px; border-bottom: 1px solid rgba(0,0,0,0.06); }
+.food-row:last-child { border-bottom: none; }
+.food-date { font-size: 12px; color: #854F0B; min-width: 42px; flex-shrink: 0; }
+.food-vendor { font-size: 13px; font-weight: 600; color: #633806; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.food-amount { font-size: 13px; font-weight: 700; color: #633806; min-width: 60px; text-align: right; flex-shrink: 0; }
+.food-amount.credit { color: #27500A; }
+.food-cat { font-size: 11px; color: #854F0B; min-width: 100px; text-align: right; opacity: 0.6; }
+.food-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
+.food-hint { font-size: 11px; color: #854F0B; opacity: 0.6; }
+
+/* Returned section */
+.returned-list { background: #EEEDFE; border-radius: 10px; overflow: hidden; }
+.returned-row { display: flex; align-items: center; padding: 9px 12px; gap: 8px; border-bottom: 1px solid rgba(0,0,0,0.06); }
+.returned-row:last-child { border-bottom: none; }
+.returned-date { font-size: 12px; color: #534AB7; min-width: 42px; flex-shrink: 0; }
+.returned-vendor { font-size: 13px; font-weight: 600; color: #3C3489; flex: 1; }
+.returned-amount { font-size: 13px; font-weight: 700; color: #3C3489; min-width: 60px; text-align: right; flex-shrink: 0; }
+.returned-by { font-size: 11px; color: #534AB7; opacity: 0.6; flex-shrink: 0; }
+.returned-cat-sel { padding: 4px 8px; border: 1px solid #CECBF6; border-radius: 6px; font-size: 12px; color: #3C3489; background: white; font-weight: 500; font-family: inherit; min-width: 130px; cursor: pointer; appearance: none; -webkit-appearance: none; }
+
+/* History */
+.history-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f2f2f2; }
+.history-item:last-child { border-bottom: none; }
+.history-name { font-size: 13px; font-weight: 600; color: #1a1a1a; }
+.history-meta { font-size: 11px; color: #bbb; margin-top: 2px; }
+.history-status { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 6px; }
+.history-status.complete { background: #EAF3DE; color: #27500A; }
+.history-status.active { background: #FAEEDA; color: #633806; }
+
+.empty-state { text-align: center; padding: 20px; font-size: 13px; color: #ccc; }
+
+/* Move charge between sections */
+.move-btn { font-size: 11px; background: #f5f5f5; color: #888; padding: 3px 8px; border-radius: 6px; border: 1px solid #e0e0e0; cursor: pointer; font-weight: 500; flex-shrink: 0; white-space: nowrap; }
+.move-btn:hover { background: #eee; color: #555; }
+
+@media (max-width: 600px) {
+  header { padding: 0 16px; height: auto; flex-wrap: wrap; padding: 12px 16px; gap: 10px; }
+  .stats-strip { grid-template-columns: repeat(3, 1fr); }
+  .expense-row, .food-row, .returned-row { flex-wrap: wrap; gap: 4px; }
+  .expense-cat-sel, .returned-cat-sel { min-width: 100%; margin-top: 4px; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <a href="/" class="back-link">&#8592; Toolkit</a>
+    <div class="hdivider"></div>
+    <span class="header-title">Bank charge review</span>
+    <span class="header-badge">Admin</span>
+  </div>
+  <div class="header-right" id="header-right"></div>
+</header>
+
+<div class="page-body" id="app" style="display:none;">
+
+  <!-- Upload card -->
+  <div class="card" id="upload-card">
+    <div class="card-title">Upload bank statement</div>
+    <div class="month-row">
+      <label>Statement month</label>
+      <input type="month" id="batch-month">
+    </div>
+    <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()">
+      <p>Drop a CSV, Excel, or screenshot here</p>
+      <p class="sub">or click to browse</p>
+      <div class="upload-formats">
+        <span>.csv</span>
+        <span>.xlsx</span>
+        <span>.png / .jpg</span>
+      </div>
+    </div>
+    <input type="file" id="file-input" class="upload-file-input" accept=".csv,.xlsx,.xls,image/png,image/jpeg,image/webp" onchange="handleFileUpload(this)">
+  </div>
+
+  <!-- Processing card -->
+  <div class="processing-card" id="processing-card">
+    <div class="spinner"></div>
+    <p>Processing bank statement...</p>
+    <div class="step" id="processing-step">Reading file</div>
+  </div>
+
+  <!-- Review section (hidden until processing complete) -->
+  <div id="review-section" style="display:none;">
+
+    <!-- Stats strip -->
+    <div class="stats-strip" id="stats-strip"></div>
+
+    <!-- Matched section -->
+    <div class="section-card" id="matched-section" style="display:none;">
+      <div class="section-header" onclick="toggleSection('matched')">
+        <div class="section-title-area">
+          <span class="section-dot" style="background:#3B6D11;"></span>
+          <span class="section-title" style="color:#3B6D11;">Matched to existing purchases</span>
+          <span class="section-meta" style="color:#3B6D11;" id="matched-meta"></span>
+        </div>
+        <span class="section-action" style="color:#3B6D11;">No action needed &#9660;</span>
+      </div>
+      <div class="section-body" id="matched-body"></div>
+    </div>
+
+    <!-- Expense section -->
+    <div class="section-card" id="expense-section" style="display:none;">
+      <div class="section-header" onclick="toggleSection('expense')">
+        <div class="section-title-area">
+          <span class="section-dot" style="background:#534AB7;"></span>
+          <span class="section-title" style="color:#3C3489;">Non-food expenses</span>
+          <span class="section-meta" style="color:#534AB7;" id="expense-meta"></span>
+        </div>
+        <span class="section-action" style="color:#534AB7;">&#9660;</span>
+      </div>
+      <div class="section-body" id="expense-body"></div>
+    </div>
+
+    <!-- Food section -->
+    <div class="section-card" id="food-section" style="display:none;">
+      <div class="section-header" onclick="toggleSection('food')">
+        <div class="section-title-area">
+          <span class="section-dot" style="background:#EF9F27;"></span>
+          <span class="section-title" style="color:#633806;">Unmatched food purchases -- need venue assignment</span>
+          <span class="section-meta" style="color:#854F0B;" id="food-meta"></span>
+        </div>
+        <span class="section-action" style="color:#BA7517;">&#9660;</span>
+      </div>
+      <div class="section-body" id="food-body"></div>
+    </div>
+
+    <!-- Returned section -->
+    <div class="section-card" id="returned-section" style="display:none;">
+      <div class="section-header" onclick="toggleSection('returned')">
+        <div class="section-title-area">
+          <span class="section-dot" style="background:#AFA9EC;"></span>
+          <span class="section-title" style="color:#3C3489;">Returned by managers</span>
+          <span class="section-meta" style="color:#534AB7;" id="returned-meta"></span>
+        </div>
+        <span class="section-action" style="color:#534AB7;">&#9660;</span>
+      </div>
+      <div class="section-body" id="returned-body"></div>
+    </div>
+  </div>
+
+  <!-- Upload history -->
+  <div class="card" id="history-card">
+    <div class="card-title">Upload history</div>
+    <div id="history-list"><div class="empty-state">No uploads yet.</div></div>
+  </div>
+
+</div>
+
+<script src="/pc-auth.js"></script>
+<script>
+var SUPA_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
+var VENUE_OPTIONS = ['ACCC','Boardwalk Hall','Mann Music Center','FMP','Cure Insurance Arena','DE Chase Field House','Subaru Park','Villanova','Montage','Sports at the Beach'];
+
+// Known vendor patterns for AI-assisted matching
+var KNOWN_VENDORS = [];
+var EXPENSE_CATEGORIES = [];
+var COGS_CATEGORIES = [];
+var ALL_CATEGORIES = [];
+
+// State
+var currentCharges = [];  // all charges from current batch
+var expenseChecked = {};  // id -> boolean
+var currentBatchId = null;
+var currentUser = null;
+
+// ── Helpers ──
+function fmtMoney(n) { return Math.abs(parseFloat(n)).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}); }
+function fmtMoneyRound(n) { return Math.round(Math.abs(n)).toLocaleString(); }
+function thisMonth() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); }
+
+function hdrs() { return pcAuth.headers(); }
+
+// ── Load reference data ──
+async function loadReferenceData() {
+  // Load known vendors from purchases table
+  try {
+    var res = await fetch(SUPA_URL + '/rest/v1/purchases?select=vendor&type=eq.invoice&vendor=not.is.null&order=vendor.asc', { headers: hdrs() });
+    var rows = await res.json();
+    var seen = {};
+    KNOWN_VENDORS = [];
+    if (Array.isArray(rows)) {
+      rows.forEach(function(r) {
+        var v = (r.vendor || '').trim();
+        var vl = v.toLowerCase();
+        if (v && !seen[vl]) { seen[vl] = true; KNOWN_VENDORS.push(v); }
+      });
+    }
+  } catch(e) {}
+
+  // Load expense categories
+  try {
+    var res2 = await fetch(SUPA_URL + '/rest/v1/expense_categories?is_active=eq.true&order=sort_order.asc', { headers: hdrs() });
+    ALL_CATEGORIES = await res2.json();
+    if (Array.isArray(ALL_CATEGORIES)) {
+      EXPENSE_CATEGORIES = ALL_CATEGORIES.filter(function(c) { return c.gl_group === 'expense'; });
+      COGS_CATEGORIES = ALL_CATEGORIES.filter(function(c) { return c.gl_group === 'cogs'; });
+    }
+  } catch(e) {}
+}
+
+// ── File handling ──
+var uploadZone = null;
+function setupDragDrop() {
+  uploadZone = document.getElementById('upload-zone');
+  uploadZone.addEventListener('dragover', function(e) { e.preventDefault(); uploadZone.classList.add('dragover'); });
+  uploadZone.addEventListener('dragleave', function() { uploadZone.classList.remove('dragover'); });
+  uploadZone.addEventListener('drop', function(e) {
+    e.preventDefault(); uploadZone.classList.remove('dragover');
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]);
+  });
+}
+
+function handleFileUpload(input) {
+  if (input.files && input.files[0]) processFile(input.files[0]);
+  input.value = '';
+}
+
+async function processFile(file) {
+  var batchMonth = document.getElementById('batch-month').value;
+  if (!batchMonth) { alert('Please select a statement month first.'); return; }
+
+  document.getElementById('upload-card').style.display = 'none';
+  document.getElementById('processing-card').style.display = 'block';
+  document.getElementById('processing-step').textContent = 'Reading file...';
+
+  var ext = file.name.toLowerCase().split('.').pop();
+  var isImage = ['png','jpg','jpeg','webp'].indexOf(ext) !== -1;
+  var isCSV = ext === 'csv';
+
+  try {
+    var lines = [];
+
+    if (isImage) {
+      document.getElementById('processing-step').textContent = 'AI is reading the image...';
+      lines = await parseWithAI(file, 'image');
+    } else if (isCSV) {
+      document.getElementById('processing-step').textContent = 'Parsing CSV...';
+      lines = await parseCSV(file);
+      if (!lines.length) {
+        // Client-side parsing failed -- send CSV text to edge function
+        document.getElementById('processing-step').textContent = 'AI is reading the CSV...';
+        lines = await parseCSVviaEdge(file);
+      }
+    } else {
+      // xlsx
+      document.getElementById('processing-step').textContent = 'Reading spreadsheet...';
+      lines = await parseWithAI(file, 'spreadsheet');
+    }
+
+    if (!lines.length) {
+      alert('No transactions found in this file. Please check the format and try again.');
+      document.getElementById('upload-card').style.display = 'block';
+      document.getElementById('processing-card').style.display = 'none';
+      return;
+    }
+
+    document.getElementById('processing-step').textContent = 'Matching against existing purchases (' + lines.length + ' charges)...';
+
+    // Match against existing purchases
+    await matchCharges(lines, batchMonth, file.name, isImage ? 'image' : (isCSV ? 'csv' : 'xlsx'));
+
+  } catch(e) {
+    console.error(e);
+    alert('Error processing file: ' + (e.message || 'Unknown error'));
+    document.getElementById('upload-card').style.display = 'block';
+    document.getElementById('processing-card').style.display = 'none';
+  }
+}
+
+// ── CSV parsing ──
+function parseCSV(file) {
+  return new Promise(function(resolve, reject) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      var text = e.target.result;
+      var rows = text.split('\n').map(function(r) { return r.trim(); }).filter(function(r) { return r; });
+      if (rows.length < 2) { resolve([]); return; }
+
+      // Try to detect columns: look for date, description, amount patterns
+      var header = rows[0].toLowerCase();
+      var lines = [];
+
+      for (var i = 1; i < rows.length; i++) {
+        var cols = parseCSVRow(rows[i]);
+        if (cols.length < 3) continue;
+
+        var dateVal = null, descVal = null, amountVal = null;
+
+        // Try each column to find date, description, amount
+        for (var c = 0; c < cols.length; c++) {
+          var val = cols[c].trim().replace(/^"|"$/g, '');
+          if (!dateVal && /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(val)) {
+            dateVal = normalizeDate(val);
+          } else if (!amountVal && /^-?\$?[\d,]+\.?\d*$/.test(val.replace(/[()]/g, ''))) {
+            var numStr = val.replace(/[$,()]/g, '').trim();
+            if (numStr && !isNaN(parseFloat(numStr))) {
+              amountVal = parseFloat(numStr);
+              if (val.indexOf('(') !== -1) amountVal = -amountVal;
+            }
+          } else if (!descVal && val.length > 5 && !/^\d+$/.test(val)) {
+            descVal = val;
+          }
+        }
+
+        if (dateVal && descVal && amountVal !== null) {
+          lines.push({ date: dateVal, description: descVal, amount: amountVal });
+        }
+      }
+      resolve(lines);
+    };
+    reader.onerror = reject;
+    reader.readAsText(file);
+  });
+}
+
+function parseCSVRow(row) {
+  var cols = [];
+  var current = '';
+  var inQuotes = false;
+  for (var i = 0; i < row.length; i++) {
+    var ch = row[i];
+    if (ch === '"') { inQuotes = !inQuotes; }
+    else if (ch === ',' && !inQuotes) { cols.push(current); current = ''; }
+    else { current += ch; }
+  }
+  cols.push(current);
+  return cols;
+}
+
+function normalizeDate(dateStr) {
+  var parts = dateStr.split('/');
+  if (parts.length !== 3) return null;
+  var m = parseInt(parts[0]);
+  var d = parseInt(parts[1]);
+  var y = parseInt(parts[2]);
+  if (y < 100) y += 2000;
+  return y + '-' + String(m).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+}
+
+// ── CSV fallback via edge function ──
+async function parseCSVviaEdge(file) {
+  return new Promise(function(resolve) {
+    var reader = new FileReader();
+    reader.onload = async function(e) {
+      var csvText = e.target.result;
+      var authHeaders = hdrs();
+      try {
+        var response = await fetch(SUPA_URL + '/functions/v1/parse-bank-statement', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': authHeaders['Authorization']
+          },
+          body: JSON.stringify({ file_type: 'csv', csv_text: csvText })
+        });
+        if (!response.ok) { resolve([]); return; }
+        var data = await response.json();
+        if (!data.transactions || !Array.isArray(data.transactions)) { resolve([]); return; }
+        resolve(data.transactions.map(function(item) {
+          return {
+            date: normalizeDate(item.date),
+            description: item.description || '',
+            amount: parseFloat(item.amount) || 0
+          };
+        }).filter(function(item) { return item.date && item.amount !== 0; }));
+      } catch(err) { resolve([]); }
+    };
+    reader.onerror = function() { resolve([]); };
+    reader.readAsText(file);
+  });
+}
+
+// ── AI parsing via edge function (for images and xlsx) ──
+async function parseWithAI(file, fileType) {
+  var base64 = await fileToBase64(file);
+  var authHeaders = hdrs();
+
+  var payload = { file_type: fileType };
+  if (fileType === 'image' || fileType === 'spreadsheet') {
+    payload.file_data = base64;
+  }
+
+  try {
+    var response = await fetch(SUPA_URL + '/functions/v1/parse-bank-statement', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': authHeaders['Authorization']
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      var errText = await response.text();
+      console.error('Edge function error:', response.status, errText);
+      return [];
+    }
+
+    var data = await response.json();
+
+    if (!data.transactions || !Array.isArray(data.transactions)) return [];
+
+    return data.transactions.map(function(item) {
+      return {
+        date: normalizeDate(item.date),
+        description: item.description || '',
+        amount: parseFloat(item.amount) || 0
+      };
+    }).filter(function(item) { return item.date && item.amount !== 0; });
+
+  } catch(e) {
+    console.error('AI parsing error:', e);
+    return [];
+  }
+}
+
+function fileToBase64(file) {
+  return new Promise(function(resolve, reject) {
+    var reader = new FileReader();
+    reader.onload = function() { resolve(reader.result.split(',')[1]); };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// ── Vendor matching ──
+function guessVendor(rawDesc) {
+  var desc = rawDesc.toUpperCase();
+  // Strip common bank prefixes
+  desc = desc.replace(/^PURCHASE AUTHORIZED ON \d{2}\/\d{2}\s*/i, '');
+  desc = desc.replace(/^(IN\s+\*?)/i, '');
+  // Strip trailing card number, authorization codes
+  desc = desc.replace(/\s+(CARD|S\d{10,}|P\d{10,}).*$/i, '');
+  desc = desc.replace(/\s+\d{2,}\s+(NJ|PA|DE|NY|MD|VA)\s*$/i, '');
+
+  // Try to match against known vendors
+  var descLower = desc.toLowerCase();
+  var bestMatch = null;
+  var bestScore = 0;
+
+  for (var i = 0; i < KNOWN_VENDORS.length; i++) {
+    var vendor = KNOWN_VENDORS[i];
+    var vendorLower = vendor.toLowerCase();
+    // Check if vendor name appears in description
+    if (descLower.indexOf(vendorLower) !== -1) {
+      if (vendor.length > bestScore) { bestMatch = vendor; bestScore = vendor.length; }
+    }
+    // Check first word match
+    var vendorFirst = vendorLower.split(/\s+/)[0];
+    if (vendorFirst.length > 3 && descLower.indexOf(vendorFirst) !== -1) {
+      if (!bestMatch || vendor.length > bestScore) { bestMatch = vendor; bestScore = vendor.length; }
+    }
+  }
+
+  if (bestMatch) return bestMatch;
+
+  // Extract a clean name from the garbled description
+  var cleaned = desc.replace(/[#\d]{4,}/g, '').replace(/\s{2,}/g, ' ').trim();
+  var words = cleaned.split(/\s+/);
+  // Take first 2-3 meaningful words
+  var name = words.slice(0, Math.min(3, words.length)).join(' ');
+  // Title case
+  name = name.toLowerCase().replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+  return name || 'Unknown';
+}
+
+function guessCategory(vendorName, rawDesc) {
+  var combined = (vendorName + ' ' + rawDesc).toLowerCase();
+
+  // Gas stations
+  if (/conoco|shell|sunoco|wawa|exxon|mobil|bp\s|gulf oil|keen gas|speedway|gas\b|fuel|citgo/i.test(combined)) {
+    return findCategoryByName('Travel & Tolls');
+  }
+  // Hardware/repair
+  if (/home depot|lowes|lowe'?s|ace hardware|autozone|advance auto|napa|pep boys|repair/i.test(combined)) {
+    return findCategoryByName('Repairs & Maintenance');
+  }
+  // Office
+  if (/staples|office depot|officemax/i.test(combined)) {
+    return findCategoryByName('Office Supplies');
+  }
+  // Uniforms
+  if (/uniform|embroid/i.test(combined)) {
+    return findCategoryByName('Uniforms');
+  }
+  // Phone/internet
+  if (/verizon|t-mobile|at.t|comcast|xfinity/i.test(combined)) {
+    return findCategoryByName('Telephone Expense');
+  }
+  // Tolls/travel
+  if (/toll|ez.?pass|parking|uber|lyft|hotel|airbnb/i.test(combined)) {
+    return findCategoryByName('Travel & Tolls');
+  }
+  // Wine/liquor (could be restaurant supplies depending on context)
+  if (/total wine|wine|liquor|spirits/i.test(combined)) {
+    return findCategoryByName('Restaurant Supplies');
+  }
+  // Restaurant supply stores = food purchases
+  if (/restaurant depot|sysco|us foods|gordon food|gfs|pepsi|coca.cola|hershey|frito|utz|herr|royal farms|wal.?mart|costco|sam'?s club|bj'?s/i.test(combined)) {
+    return findCategoryByName('Food Purchases');
+  }
+  // Bank fees
+  if (/bank fee|service charge|monthly fee|overdraft/i.test(combined)) {
+    return findCategoryByName('Bank Service Charges');
+  }
+  // Insurance
+  if (/insurance|geico|progressive|state farm/i.test(combined)) {
+    return findCategoryByName('Insurance Expense');
+  }
+
+  return null; // Unknown -- will be categorized as food by default
+}
+
+function findCategoryByName(name) {
+  for (var i = 0; i < ALL_CATEGORIES.length; i++) {
+    if (ALL_CATEGORIES[i].name === name) return ALL_CATEGORIES[i];
+  }
+  return null;
+}
+
+function isFoodCategory(cat) {
+  return cat && cat.gl_group === 'cogs';
+}
+
+// ── Match against existing purchases ──
+async function matchCharges(lines, batchMonth, fileName, fileType) {
+  // Load existing purchases for the month range (+/- 7 days from any charge date)
+  var dates = lines.map(function(l) { return l.date; }).filter(Boolean).sort();
+  var minDate = dates[0];
+  var maxDate = dates[dates.length - 1];
+
+  // Expand range by 7 days
+  var min = new Date(minDate);
+  min.setDate(min.getDate() - 7);
+  var max = new Date(maxDate);
+  max.setDate(max.getDate() + 7);
+  var fromStr = min.toISOString().slice(0, 10);
+  var toStr = max.toISOString().slice(0, 10);
+
+  var existingPurchases = [];
+  try {
+    var res = await fetch(SUPA_URL + '/rest/v1/purchases?type=eq.invoice&invoice_date=gte.' + fromStr + '&invoice_date=lte.' + toStr + '&select=id,invoice_date,vendor,venue,amount,note', { headers: hdrs() });
+    existingPurchases = await res.json();
+    if (!Array.isArray(existingPurchases)) existingPurchases = [];
+  } catch(e) {}
+
+  // Create batch
+  currentBatchId = crypto.randomUUID();
+  var totalAmount = lines.reduce(function(s, l) { return s + l.amount; }, 0);
+
+  // Process each line
+  var charges = [];
+  var matchedPurchaseIds = {};
+
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i];
+    var vendorName = guessVendor(line.description);
+    var category = guessCategory(vendorName, line.description);
+    var isFood = !category || isFoodCategory(category);
+
+    // Try to match against existing purchases
+    var matchedPurchase = null;
+    var absAmount = Math.abs(line.amount);
+
+    for (var p = 0; p < existingPurchases.length; p++) {
+      var purch = existingPurchases[p];
+      if (matchedPurchaseIds[purch.id]) continue; // already matched
+
+      var purchAmount = Math.abs(parseFloat(purch.amount));
+      var amountDiff = Math.abs(absAmount - purchAmount);
+      var amountTolerance = Math.max(absAmount * 0.03, 2); // 3% or $2, whichever is larger
+
+      if (amountDiff > amountTolerance) continue;
+
+      // Check date proximity (within 5 days)
+      var chargeDate = new Date(line.date);
+      var purchDate = new Date(purch.invoice_date);
+      var dayDiff = Math.abs((chargeDate - purchDate) / 86400000);
+      if (dayDiff > 5) continue;
+
+      // Check vendor similarity
+      var purchVendor = (purch.vendor || '').toLowerCase();
+      var guessedLower = vendorName.toLowerCase();
+      var vendorMatch = purchVendor.indexOf(guessedLower) !== -1 ||
+                        guessedLower.indexOf(purchVendor) !== -1 ||
+                        purchVendor.split(/\s+/)[0] === guessedLower.split(/\s+/)[0];
+
+      if (vendorMatch || amountDiff < 1) {
+        matchedPurchase = purch;
+        matchedPurchaseIds[purch.id] = true;
+        break;
+      }
+    }
+
+    var status = 'unprocessed';
+    if (matchedPurchase) {
+      status = 'matched';
+    } else if (!isFood) {
+      status = 'expense_pending'; // local status for UI
+    } else {
+      status = 'food_pending'; // local status for UI
+    }
+
+    charges.push({
+      id: crypto.randomUUID(),
+      batch_id: currentBatchId,
+      charge_date: line.date,
+      raw_description: line.description,
+      amount: line.amount,
+      vendor_name: vendorName,
+      category_id: category ? category.id : (findCategoryByName('Food Purchases') || {}).id,
+      category_name: category ? category.name : 'Food Purchases',
+      category_gl: category ? category.gl_group : 'cogs',
+      status: status,
+      matched_purchase: matchedPurchase,
+      matched_purchase_id: matchedPurchase ? matchedPurchase.id : null,
+      batch_month: batchMonth,
+      uploaded_by: currentUser ? currentUser.display_name : 'admin'
+    });
+  }
+
+  currentCharges = charges;
+
+  // Initialize expense checkboxes (all checked by default)
+  expenseChecked = {};
+  charges.forEach(function(c) {
+    if (c.status === 'expense_pending') expenseChecked[c.id] = true;
+  });
+
+  document.getElementById('processing-card').style.display = 'none';
+  document.getElementById('review-section').style.display = 'block';
+
+  renderReview();
+}
+
+// ── Render review sections ──
+function renderReview() {
+  var matched = currentCharges.filter(function(c) { return c.status === 'matched'; });
+  var expenses = currentCharges.filter(function(c) { return c.status === 'expense_pending'; });
+  var food = currentCharges.filter(function(c) { return c.status === 'food_pending'; });
+
+  var matchedTotal = matched.reduce(function(s, c) { return s + Math.abs(c.amount); }, 0);
+  var expenseTotal = expenses.reduce(function(s, c) { return s + Math.abs(c.amount); }, 0);
+  var foodTotal = food.reduce(function(s, c) { return s + Math.abs(c.amount); }, 0);
+  var grandTotal = currentCharges.reduce(function(s, c) { return s + Math.abs(c.amount); }, 0);
+
+  // Stats strip
+  document.getElementById('stats-strip').innerHTML =
+    '<div class="stat-box"><div class="stat-label gray">Total</div><div class="stat-val">$' + fmtMoneyRound(grandTotal) + '</div><div class="stat-sub">' + currentCharges.length + ' charges</div></div>' +
+    '<div class="stat-box green"><div class="stat-label green">Matched</div><div class="stat-val" style="color:#3B6D11;">$' + fmtMoneyRound(matchedTotal) + '</div><div class="stat-sub">' + matched.length + ' charges</div></div>' +
+    '<div class="stat-box purple"><div class="stat-label purple">Expenses</div><div class="stat-val" style="color:#534AB7;">$' + fmtMoneyRound(expenseTotal) + '</div><div class="stat-sub">' + expenses.length + ' charges</div></div>' +
+    '<div class="stat-box amber"><div class="stat-label amber">To managers</div><div class="stat-val" style="color:#BA7517;">$' + fmtMoneyRound(foodTotal) + '</div><div class="stat-sub">' + food.length + ' charges</div></div>' +
+    '<div class="stat-box lavender"><div class="stat-label lavender">Returned</div><div class="stat-val" style="color:#3C3489;">$0</div><div class="stat-sub">0 charges</div></div>';
+
+  // Matched section
+  renderMatched(matched);
+  renderExpenses(expenses);
+  renderFood(food);
+  loadReturned();
+}
+
+function renderMatched(items) {
+  var sec = document.getElementById('matched-section');
+  if (!items.length) { sec.style.display = 'none'; return; }
+  sec.style.display = 'block';
+  document.getElementById('matched-meta').textContent = items.length + ' charges -- $' + fmtMoneyRound(items.reduce(function(s,c) { return s + Math.abs(c.amount); }, 0));
+
+  var html = '';
+  var showCount = Math.min(items.length, 5);
+  for (var i = 0; i < showCount; i++) {
+    var c = items[i];
+    var ds = c.charge_date.slice(5,7) + '/' + c.charge_date.slice(8,10);
+    var mp = c.matched_purchase;
+    var matchDetail = mp ? 'matched $' + fmtMoney(mp.amount) + ' on ' + mp.invoice_date.slice(5,7) + '/' + mp.invoice_date.slice(8,10) : '';
+    html += '<div class="matched-row"><span class="matched-left">' + ds + ' -- ' + c.vendor_name + ' -- $' + fmtMoney(c.amount) + '</span><span class="matched-right"><span class="match-detail">' + matchDetail + '</span></span></div>';
+  }
+  if (items.length > 5) {
+    html += '<div class="matched-more">+ ' + (items.length - 5) + ' more matches</div>';
+  }
+  document.getElementById('matched-body').innerHTML = html;
+}
+
+function renderExpenses(items) {
+  var sec = document.getElementById('expense-section');
+  if (!items.length) { sec.style.display = 'none'; return; }
+  sec.style.display = 'block';
+  document.getElementById('expense-meta').textContent = items.length + ' charges -- $' + fmtMoneyRound(items.reduce(function(s,c) { return s + Math.abs(c.amount); }, 0));
+
+  var html = '<div class="expense-list">';
+  for (var i = 0; i < items.length; i++) {
+    var c = items[i];
+    var ds = c.charge_date.slice(5,7) + '/' + c.charge_date.slice(8,10);
+    var isCredit = c.amount < 0;
+    var displayAmt = (isCredit ? '-' : '') + '$' + fmtMoney(c.amount);
+
+    html += '<div class="expense-row">';
+    html += '<input type="checkbox" class="expense-check" ' + (expenseChecked[c.id] ? 'checked' : '') + ' onchange="toggleExpenseCheck(\'' + c.id + '\', this.checked)">';
+    html += '<span class="expense-date">' + ds + '</span>';
+    html += '<span class="expense-vendor">' + c.vendor_name + '</span>';
+    html += '<span class="expense-amount' + (isCredit ? ' credit' : '') + '">' + displayAmt + '</span>';
+    html += '<select class="expense-cat-sel" onchange="changeCategory(\'' + c.id + '\', this.value)">';
+    for (var e = 0; e < EXPENSE_CATEGORIES.length; e++) {
+      html += '<option value="' + EXPENSE_CATEGORIES[e].id + '"' + (c.category_id === EXPENSE_CATEGORIES[e].id ? ' selected' : '') + '>' + EXPENSE_CATEGORIES[e].name + '</option>';
+    }
+    html += '</select>';
+    html += '<button class="move-btn" onclick="moveToFood(\'' + c.id + '\')" title="Move to food purchases">&#8594; Food</button>';
+    html += '</div>';
+  }
+  html += '</div>';
+
+  var checkedCount = items.filter(function(c) { return expenseChecked[c.id]; }).length;
+  html += '<div class="expense-footer">';
+  html += '<span class="expense-hint">Uncheck any that should go to managers instead</span>';
+  html += '<button class="section-btn purple" onclick="saveExpenses()"' + (checkedCount === 0 ? ' disabled' : '') + '>Save ' + checkedCount + ' expense' + (checkedCount !== 1 ? 's' : '') + '</button>';
+  html += '</div>';
+
+  document.getElementById('expense-body').innerHTML = html;
+  document.getElementById('expense-body').classList.add('open');
+}
+
+function renderFood(items) {
+  var sec = document.getElementById('food-section');
+  if (!items.length) { sec.style.display = 'none'; return; }
+  sec.style.display = 'block';
+  document.getElementById('food-meta').textContent = items.length + ' charges -- $' + fmtMoneyRound(items.reduce(function(s,c) { return s + Math.abs(c.amount); }, 0));
+
+  var html = '<div class="food-list">';
+  for (var i = 0; i < items.length; i++) {
+    var c = items[i];
+    var ds = c.charge_date.slice(5,7) + '/' + c.charge_date.slice(8,10);
+    var isCredit = c.amount < 0;
+    var displayAmt = (isCredit ? '-' : '') + '$' + fmtMoney(c.amount);
+
+    html += '<div class="food-row">';
+    html += '<span class="food-date">' + ds + '</span>';
+    html += '<span class="food-vendor">' + c.vendor_name + '</span>';
+    html += '<span class="food-amount' + (isCredit ? ' credit' : '') + '">' + displayAmt + '</span>';
+    html += '<span class="food-cat">' + (c.category_name || 'Food Purchases') + '</span>';
+    html += '<button class="move-btn" onclick="moveToExpense(\'' + c.id + '\')" title="Move to expenses">&#8594; Expense</button>';
+    html += '</div>';
+  }
+  html += '</div>';
+
+  html += '<div class="food-footer">';
+  html += '<span class="food-hint">These will appear on the Purchases page for venue assignment</span>';
+  html += '<button class="section-btn amber" onclick="sendToManagers()">Send ' + items.length + ' to managers</button>';
+  html += '</div>';
+
+  document.getElementById('food-body').innerHTML = html;
+  document.getElementById('food-body').classList.add('open');
+}
+
+// ── Returned charges (from database) ──
+async function loadReturned() {
+  try {
+    var res = await fetch(SUPA_URL + '/rest/v1/bank_charges?status=eq.returned&select=id,charge_date,vendor_name,amount,returned_by,category_id&order=charge_date.asc', { headers: hdrs() });
+    var rows = await res.json();
+    if (!Array.isArray(rows) || !rows.length) {
+      document.getElementById('returned-section').style.display = 'none';
+      return;
+    }
+    document.getElementById('returned-section').style.display = 'block';
+    document.getElementById('returned-meta').textContent = rows.length + ' charges';
+
+    var html = '<div class="returned-list">';
+    for (var i = 0; i < rows.length; i++) {
+      var c = rows[i];
+      var ds = c.charge_date.slice(5,7) + '/' + c.charge_date.slice(8,10);
+      var isCredit = parseFloat(c.amount) < 0;
+      var displayAmt = (isCredit ? '-' : '') + '$' + fmtMoney(c.amount);
+
+      html += '<div class="returned-row">';
+      html += '<span class="returned-date">' + ds + '</span>';
+      html += '<span class="returned-vendor">' + (c.vendor_name || 'Unknown') + '</span>';
+      html += '<span class="returned-amount">' + displayAmt + '</span>';
+      html += '<span class="returned-by">Returned by ' + (c.returned_by || '?') + '</span>';
+      html += '<select class="returned-cat-sel" id="ret-cat-' + c.id + '">';
+      for (var e = 0; e < ALL_CATEGORIES.length; e++) {
+        html += '<option value="' + ALL_CATEGORIES[e].id + '"' + (c.category_id === ALL_CATEGORIES[e].id ? ' selected' : '') + '>' + ALL_CATEGORIES[e].name + '</option>';
+      }
+      html += '</select>';
+      html += '</div>';
+    }
+    html += '</div>';
+
+    html += '<div class="expense-footer" style="margin-top:10px;">';
+    html += '<span class="expense-hint" style="color:#534AB7;">Categorize and save returned charges</span>';
+    html += '<button class="section-btn purple" onclick="saveReturned()">Save ' + rows.length + ' returned</button>';
+    html += '</div>';
+
+    document.getElementById('returned-body').innerHTML = html;
+    document.getElementById('returned-body').classList.add('open');
+  } catch(e) {}
+}
+
+// ── Actions ──
+function toggleSection(name) {
+  var body = document.getElementById(name + '-body');
+  body.classList.toggle('open');
+}
+
+function toggleExpenseCheck(id, checked) {
+  expenseChecked[id] = checked;
+  var expenses = currentCharges.filter(function(c) { return c.status === 'expense_pending'; });
+  renderExpenses(expenses);
+}
+
+function changeCategory(id, catId) {
+  for (var i = 0; i < currentCharges.length; i++) {
+    if (currentCharges[i].id === id) {
+      currentCharges[i].category_id = catId;
+      for (var c = 0; c < ALL_CATEGORIES.length; c++) {
+        if (ALL_CATEGORIES[c].id === catId) {
+          currentCharges[i].category_name = ALL_CATEGORIES[c].name;
+          currentCharges[i].category_gl = ALL_CATEGORIES[c].gl_group;
+          break;
+        }
+      }
+      break;
+    }
+  }
+}
+
+function moveToFood(id) {
+  for (var i = 0; i < currentCharges.length; i++) {
+    if (currentCharges[i].id === id) {
+      currentCharges[i].status = 'food_pending';
+      var foodCat = findCategoryByName('Food Purchases');
+      if (foodCat) {
+        currentCharges[i].category_id = foodCat.id;
+        currentCharges[i].category_name = foodCat.name;
+        currentCharges[i].category_gl = foodCat.gl_group;
+      }
+      delete expenseChecked[id];
+      break;
+    }
+  }
+  renderReview();
+}
+
+function moveToExpense(id) {
+  for (var i = 0; i < currentCharges.length; i++) {
+    if (currentCharges[i].id === id) {
+      currentCharges[i].status = 'expense_pending';
+      expenseChecked[id] = true;
+      break;
+    }
+  }
+  renderReview();
+}
+
+// ── Save expenses ──
+async function saveExpenses() {
+  var toSave = currentCharges.filter(function(c) {
+    return c.status === 'expense_pending' && expenseChecked[c.id];
+  });
+  if (!toSave.length) return;
+
+  var btn = document.querySelector('#expense-section .section-btn');
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+
+  var errors = 0;
+  for (var i = 0; i < toSave.length; i++) {
+    var c = toSave[i];
+    try {
+      // Write to bank_charges table
+      await fetch(SUPA_URL + '/rest/v1/bank_charges', {
+        method: 'POST',
+        headers: Object.assign({}, hdrs(), {'Content-Type': 'application/json', 'Prefer': 'return=minimal'}),
+        body: JSON.stringify({
+          id: c.id, batch_id: c.batch_id, charge_date: c.charge_date,
+          raw_description: c.raw_description, amount: c.amount,
+          vendor_name: c.vendor_name, category_id: c.category_id,
+          status: 'expense', batch_month: c.batch_month,
+          uploaded_by: c.uploaded_by, uploaded_at: new Date().toISOString()
+        })
+      });
+
+      // Write to expenses table
+      await fetch(SUPA_URL + '/rest/v1/expenses', {
+        method: 'POST',
+        headers: Object.assign({}, hdrs(), {'Content-Type': 'application/json', 'Prefer': 'return=minimal'}),
+        body: JSON.stringify({
+          charge_date: c.charge_date, vendor_name: c.vendor_name,
+          amount: c.amount, category_id: c.category_id,
+          bank_charge_id: c.id,
+          created_by: currentUser ? currentUser.display_name : 'admin'
+        })
+      });
+
+      // Update local state
+      c.status = 'saved_expense';
+    } catch(e) { errors++; }
+  }
+
+  if (errors) alert(errors + ' expense(s) failed to save.');
+
+  // Remove saved items and re-render
+  currentCharges = currentCharges.filter(function(c) { return c.status !== 'saved_expense'; });
+  renderReview();
+}
+
+// ── Send food charges to managers ──
+async function sendToManagers() {
+  var toSend = currentCharges.filter(function(c) { return c.status === 'food_pending'; });
+  if (!toSend.length) return;
+
+  // Also send unchecked expenses to managers
+  var uncheckedExpenses = currentCharges.filter(function(c) {
+    return c.status === 'expense_pending' && !expenseChecked[c.id];
+  });
+  toSend = toSend.concat(uncheckedExpenses);
+
+  var btn = document.querySelector('#food-section .section-btn');
+  btn.disabled = true;
+  btn.textContent = 'Sending...';
+
+  var errors = 0;
+  for (var i = 0; i < toSend.length; i++) {
+    var c = toSend[i];
+    try {
+      await fetch(SUPA_URL + '/rest/v1/bank_charges', {
+        method: 'POST',
+        headers: Object.assign({}, hdrs(), {'Content-Type': 'application/json', 'Prefer': 'return=minimal'}),
+        body: JSON.stringify({
+          id: c.id, batch_id: c.batch_id, charge_date: c.charge_date,
+          raw_description: c.raw_description, amount: c.amount,
+          vendor_name: c.vendor_name, category_id: c.category_id,
+          status: 'pending_venue', batch_month: c.batch_month,
+          uploaded_by: c.uploaded_by, uploaded_at: new Date().toISOString()
+        })
+      });
+      c.status = 'sent_to_managers';
+    } catch(e) { errors++; }
+  }
+
+  // Save matched charges too (for audit trail)
+  var matched = currentCharges.filter(function(c) { return c.status === 'matched'; });
+  for (var m = 0; m < matched.length; m++) {
+    var mc = matched[m];
+    try {
+      await fetch(SUPA_URL + '/rest/v1/bank_charges', {
+        method: 'POST',
+        headers: Object.assign({}, hdrs(), {'Content-Type': 'application/json', 'Prefer': 'return=minimal'}),
+        body: JSON.stringify({
+          id: mc.id, batch_id: mc.batch_id, charge_date: mc.charge_date,
+          raw_description: mc.raw_description, amount: mc.amount,
+          vendor_name: mc.vendor_name, category_id: mc.category_id,
+          status: 'matched', matched_purchase_id: mc.matched_purchase_id,
+          batch_month: mc.batch_month,
+          uploaded_by: mc.uploaded_by, uploaded_at: new Date().toISOString()
+        })
+      });
+    } catch(e) {}
+  }
+
+  // Save batch record
+  var batchMonth = document.getElementById('batch-month').value;
+  try {
+    await fetch(SUPA_URL + '/rest/v1/bank_upload_batches', {
+      method: 'POST',
+      headers: Object.assign({}, hdrs(), {'Content-Type': 'application/json', 'Prefer': 'return=minimal'}),
+      body: JSON.stringify({
+        id: currentBatchId,
+        batch_month: batchMonth,
+        total_charges: currentCharges.length,
+        total_amount: currentCharges.reduce(function(s,c) { return s + c.amount; }, 0),
+        matched_count: matched.length,
+        expense_count: currentCharges.filter(function(c) { return c.status === 'saved_expense'; }).length,
+        pending_count: toSend.length,
+        uploaded_by: currentUser ? currentUser.display_name : 'admin',
+        status: 'reviewed'
+      })
+    });
+  } catch(e) {}
+
+  if (errors) alert(errors + ' charge(s) failed to send.');
+
+  // Show success and reset
+  currentCharges = [];
+  document.getElementById('review-section').style.display = 'none';
+  document.getElementById('upload-card').style.display = 'block';
+
+  alert('Done! ' + toSend.length + ' charge(s) sent to the Purchases page for venue assignment.');
+  loadHistory();
+}
+
+// ── Save returned charges ──
+async function saveReturned() {
+  try {
+    var res = await fetch(SUPA_URL + '/rest/v1/bank_charges?status=eq.returned&select=id', { headers: hdrs() });
+    var rows = await res.json();
+    if (!Array.isArray(rows)) return;
+
+    var errors = 0;
+    for (var i = 0; i < rows.length; i++) {
+      var catSel = document.getElementById('ret-cat-' + rows[i].id);
+      if (!catSel) continue;
+      var catId = catSel.value;
+
+      try {
+        // Update bank charge
+        await fetch(SUPA_URL + '/rest/v1/bank_charges?id=eq.' + rows[i].id, {
+          method: 'PATCH',
+          headers: Object.assign({}, hdrs(), {'Content-Type': 'application/json', 'Prefer': 'return=minimal'}),
+          body: JSON.stringify({ status: 'expense', category_id: catId })
+        });
+
+        // Get full charge data for expense record
+        var chargeRes = await fetch(SUPA_URL + '/rest/v1/bank_charges?id=eq.' + rows[i].id + '&select=charge_date,vendor_name,amount', { headers: hdrs() });
+        var chargeData = await chargeRes.json();
+        if (Array.isArray(chargeData) && chargeData[0]) {
+          var cd = chargeData[0];
+          await fetch(SUPA_URL + '/rest/v1/expenses', {
+            method: 'POST',
+            headers: Object.assign({}, hdrs(), {'Content-Type': 'application/json', 'Prefer': 'return=minimal'}),
+            body: JSON.stringify({
+              charge_date: cd.charge_date, vendor_name: cd.vendor_name,
+              amount: cd.amount, category_id: catId,
+              bank_charge_id: rows[i].id,
+              created_by: currentUser ? currentUser.display_name : 'admin'
+            })
+          });
+        }
+      } catch(e) { errors++; }
+    }
+
+    if (errors) alert(errors + ' returned charge(s) failed to save.');
+    loadReturned();
+  } catch(e) {}
+}
+
+// ── Upload history ──
+async function loadHistory() {
+  try {
+    var res = await fetch(SUPA_URL + '/rest/v1/bank_upload_batches?select=*&order=uploaded_at.desc&limit=10', { headers: hdrs() });
+    var rows = await res.json();
+    if (!Array.isArray(rows) || !rows.length) {
+      document.getElementById('history-list').innerHTML = '<div class="empty-state">No uploads yet.</div>';
+      return;
+    }
+
+    var html = '';
+    rows.forEach(function(b) {
+      var mp = b.batch_month.split('-');
+      var monthLabel = new Date(parseInt(mp[0]), parseInt(mp[1])-1, 1).toLocaleString('en-US', {month:'long', year:'numeric'});
+      var dateStr = new Date(b.uploaded_at).toLocaleDateString('en-US');
+      var statusClass = b.pending_count > 0 ? 'active' : 'complete';
+      var statusLabel = b.pending_count > 0 ? b.pending_count + ' pending' : 'Complete';
+
+      html += '<div class="history-item">';
+      html += '<div><div class="history-name">' + monthLabel + '</div>';
+      html += '<div class="history-meta">Uploaded ' + dateStr + ' by ' + b.uploaded_by + ' -- ' + b.total_charges + ' charges, $' + fmtMoneyRound(Math.abs(b.total_amount)) + '</div></div>';
+      html += '<span class="history-status ' + statusClass + '">' + statusLabel + '</span>';
+      html += '</div>';
+    });
+    document.getElementById('history-list').innerHTML = html;
+  } catch(e) {}
+}
+
+// ── Init ──
+function init(user) {
+  currentUser = user;
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('header-right').innerHTML =
+    '<span class="header-user">' + user.display_name + '</span>' +
+    '<button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
+  document.getElementById('batch-month').value = thisMonth();
+  setupDragDrop();
+  loadReferenceData();
+  loadReturned();
+  loadHistory();
+}
+
+pcAuth.require({
+  pageSlug: 'bank-review',
+  onReady: function(user) { init(user); }
+});
+</script>
+</body>
+</html>
