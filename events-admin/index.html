@@ -16,14 +16,6 @@
 }
 body { background: var(--bg); font-family: var(--font); color: var(--primary); min-height: 100vh; }
 
-#login-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; }
-.login-card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 48px 40px; width: 100%; max-width: 380px; text-align: center; }
-.login-logo { font-size: 28px; font-weight: 800; letter-spacing: -0.03em; margin-bottom: 4px; }
-.login-sub { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--label); margin-bottom: 36px; }
-.login-card input[type="password"] { width: 100%; padding: 14px 16px; border: 1.5px solid var(--border); border-radius: 10px; font-size: 15px; font-family: var(--font); outline: none; transition: border-color 0.15s; margin-bottom: 12px; background: var(--bg); }
-.login-card input[type="password"]:focus { border-color: var(--primary); }
-.login-error { font-size: 12px; color: #e05c5c; margin-bottom: 12px; min-height: 16px; }
-
 #app { display: none; }
 
 header { background: var(--card); border-bottom: 1px solid var(--border); padding: 0 32px; display: flex; align-items: center; justify-content: space-between; height: 64px; position: sticky; top: 0; z-index: 100; }
@@ -33,6 +25,10 @@ header { background: var(--card); border-bottom: 1px solid var(--border); paddin
 .header-divider { width: 1px; height: 20px; background: var(--border); }
 .header-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
 .header-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: var(--primary); color: white; padding: 3px 8px; border-radius: 20px; }
+.header-right { display: flex; align-items: center; gap: 14px; }
+.header-user { font-size: 12px; color: var(--label); font-weight: 600; }
+.sign-out-btn { font-size: 11px; font-weight: 700; color: var(--label); background: none; border: 1px solid var(--border); padding: 5px 12px; border-radius: 8px; cursor: pointer; font-family: var(--font); transition: all 0.15s; }
+.sign-out-btn:hover { color: var(--primary); border-color: var(--primary); }
 
 .main-content { max-width: 1200px; margin: 0 auto; padding: 32px 32px 80px; }
 
@@ -142,16 +138,6 @@ header { background: var(--card); border-bottom: 1px solid var(--border); paddin
 </head>
 <body>
 
-<div id="login-screen">
-  <div class="login-card">
-    <div class="login-logo">Popcorn Chez</div>
-    <div class="login-sub">Event Master List</div>
-    <input type="password" id="pw-input" placeholder="Password" autocomplete="current-password">
-    <div class="login-error" id="login-error"></div>
-    <button class="btn-primary" style="width:100%;justify-content:center;" onclick="checkLogin()">Enter</button>
-  </div>
-</div>
-
 <div id="app">
   <header>
     <div class="header-left">
@@ -160,7 +146,11 @@ header { background: var(--card); border-bottom: 1px solid var(--border); paddin
       <span class="header-title">Event Master List</span>
       <span class="header-badge">Admin</span>
     </div>
-    <button class="btn-primary" onclick="openAddModal()"><span>+</span> Add Event</button>
+    <div class="header-right">
+      <span class="header-user" id="header-user"></span>
+      <button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>
+      <button class="btn-primary" onclick="openAddModal()"><span>+</span> Add Event</button>
+    </div>
   </header>
 
   <div class="main-content">
@@ -285,10 +275,9 @@ header { background: var(--card); border-bottom: 1px solid var(--border); paddin
 
 <div class="toast" id="toast"></div>
 
+<script src="/pc-auth.js"></script>
 <script>
 var SB_URL='https://aoazlttdjowhlfcksoyl.supabase.co';
-var SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvYXpsdHRkam93aGxmY2tzb3lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNzU4MjMsImV4cCI6MjA5MDg1MTgyM30.tagP_88g7R3d_p7a4Kp0NirnJgkAR5AQQImCt414SJg';
-var ADMIN_PW='popcorn2026';
 var TIERED_VENUES={'Mann':true,'FMP':true};
 var VENUE_LABELS={FMP:'Freedom Mortgage Pavilion',Mann:'Mann Music Center',BWH:'Boardwalk Hall',ACCC:'AC Convention Center',Cure:'Cure Insurance Arena',Subaru:'Subaru Park',DE:'DE Chase Field House',Montage:'Montage Mountain',SATB:'Sports at the Beach',Villanova:'Villanova',Kirkwood:'Kirkwood'};
 var VENUE_CLASS={FMP:'fmp',Mann:'mann',BWH:'bwh',ACCC:'accc',Cure:'cure',Subaru:'subaru',DE:'de',Montage:'montage',SATB:'satb',Villanova:'villanova',Kirkwood:'kirkwood'};
@@ -298,11 +287,8 @@ var currentFilter='upcoming';
 var editingId=null;
 var drillState={outstanding:false,unconfirmed:false};
 
-function checkLogin(){var pw=document.getElementById('pw-input').value;if(pw===ADMIN_PW){document.getElementById('login-screen').style.display='none';document.getElementById('app').style.display='block';init();}else{document.getElementById('login-error').textContent='Incorrect password.';document.getElementById('pw-input').value='';}}
-document.getElementById('pw-input').addEventListener('keydown',function(e){if(e.key==='Enter')checkLogin();});
-
-function sbFetch(method,path,body){return fetch(SB_URL+'/rest/v1/'+path,{method:method,headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:body?JSON.stringify(body):undefined}).then(function(res){if(!res.ok)return res.text().then(function(t){throw new Error(t);});return res.status===204?null:res.json();});}
-function sbGet(path){return fetch(SB_URL+'/rest/v1/'+path,{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}}).then(function(res){if(!res.ok)return res.text().then(function(t){throw new Error(t);});return res.json();});}
+function sbFetch(method,path,body){return fetch(SB_URL+'/rest/v1/'+path,{method:method,headers:Object.assign(pcAuth.headers(),{'Content-Type':'application/json','Prefer':'return=representation'}),body:body?JSON.stringify(body):undefined}).then(function(res){if(!res.ok)return res.text().then(function(t){throw new Error(t);});return res.status===204?null:res.json();});}
+function sbGet(path){return fetch(SB_URL+'/rest/v1/'+path,{headers:pcAuth.headers()}).then(function(res){if(!res.ok)return res.text().then(function(t){throw new Error(t);});return res.json();});}
 
 function pad(n){return n<=9?'0'+n:''+n;}
 function addDays(dateStr,n){var d=new Date(dateStr+'T12:00:00');d.setDate(d.getDate()+n);return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
@@ -339,6 +325,15 @@ function exportCSV(){var headers=['Date','Day','Venue','Event Name','Gates Open'
 function onVenueChange(venue){var tr=document.getElementById('f-tier-row');if(tr)tr.style.display=TIERED_VENUES[venue]?'block':'none';}
 
 function showToast(msg,good){var t=document.getElementById('toast');t.textContent=msg;t.className='toast'+(good?' green':'');t.classList.add('show');setTimeout(function(){t.classList.remove('show');},3000);}
+
+pcAuth.require({
+  pageSlug: 'events-admin',
+  onReady: function(user) {
+    document.getElementById('header-user').textContent = user.display_name;
+    document.getElementById('app').style.display = 'block';
+    init();
+  }
+});
 </script>
 </body>
 </html>
