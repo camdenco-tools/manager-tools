@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>User Access — Popcorn Chez</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #1a1a1a; }
+
+/* ── Sticky Header ── */
+.page-header {
+  position: sticky; top: 0; z-index: 100;
+  background: #1a1a1a; color: #fff;
+  padding: 12px 20px; display: flex; align-items: center; gap: 12px;
+}
+.page-header a { color: #ccc; text-decoration: none; font-size: 14px; }
+.page-header a:hover { color: #fff; }
+.page-header h1 { font-size: 16px; font-weight: 600; }
+.page-header .badge { background: #dc2626; color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+
+/* ── Auth Gate ── */
+.auth-gate {
+  max-width: 400px; margin: 120px auto; padding: 40px;
+  background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  text-align: center;
+}
+.auth-gate h2 { margin-bottom: 8px; font-size: 20px; }
+.auth-gate p { color: #666; margin-bottom: 24px; font-size: 14px; }
+.auth-gate input {
+  width: 100%; padding: 10px 14px; margin-bottom: 12px;
+  border: 1px solid #ddd; border-radius: 8px; font-size: 14px;
+}
+.auth-gate input:focus { outline: none; border-color: #2563eb; }
+.auth-gate button {
+  width: 100%; padding: 10px; background: #1a1a1a; color: #fff;
+  border: none; border-radius: 8px; font-size: 14px; font-weight: 600;
+  cursor: pointer;
+}
+.auth-gate button:hover { background: #333; }
+.auth-gate .error { color: #dc2626; font-size: 13px; margin-top: 8px; display: none; }
+.auth-gate .forgot { color: #2563eb; font-size: 13px; margin-top: 12px; cursor: pointer; display: inline-block; }
+.auth-gate .forgot:hover { text-decoration: underline; }
+.auth-gate .reset-sent { color: #16a34a; font-size: 13px; margin-top: 8px; display: none; }
+
+/* ── Main Content ── */
+.content { display: none; padding: 20px; max-width: 1400px; margin: 0 auto; }
+.content.visible { display: block; }
+
+/* ── Stats Row ── */
+.stats-row {
+  display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;
+}
+.stat-card {
+  background: #fff; border-radius: 10px; padding: 16px 20px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06); flex: 1; min-width: 140px;
+}
+.stat-card .label { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+.stat-card .value { font-size: 28px; font-weight: 700; margin-top: 4px; }
+.stat-card .value.green { color: #16a34a; }
+.stat-card .value.amber { color: #d97706; }
+.stat-card .value.red { color: #dc2626; }
+
+/* ── Toolbar ── */
+.toolbar {
+  display: flex; gap: 12px; margin-bottom: 16px; align-items: center; flex-wrap: wrap;
+}
+.toolbar input {
+  padding: 8px 14px; border: 1px solid #ddd; border-radius: 8px;
+  font-size: 14px; flex: 1; min-width: 200px;
+}
+.toolbar input:focus { outline: none; border-color: #2563eb; }
+.btn {
+  padding: 8px 16px; border: none; border-radius: 8px; font-size: 13px;
+  font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.btn-primary { background: #1a1a1a; color: #fff; }
+.btn-primary:hover { background: #333; }
+.btn-success { background: #16a34a; color: #fff; }
+.btn-success:hover { background: #15803d; }
+.btn-danger { background: #dc2626; color: #fff; }
+.btn-danger:hover { background: #b91c1c; }
+.btn-outline { background: #fff; color: #1a1a1a; border: 1px solid #ddd; }
+.btn-outline:hover { background: #f5f5f5; }
+
+/* ── User Grid ── */
+.user-table-wrap {
+  background: #fff; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  overflow-x: auto;
+}
+.user-table {
+  width: 100%; border-collapse: collapse; font-size: 13px;
+}
+.user-table th {
+  background: #f8f8f8; padding: 10px 8px; text-align: center;
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.3px; color: #666; border-bottom: 2px solid #eee;
+  position: sticky; top: 0; z-index: 5;
+}
+.user-table th:first-child,
+.user-table th:nth-child(2),
+.user-table th:nth-child(3) { text-align: left; }
+.user-table th.page-col {
+  writing-mode: vertical-rl; text-orientation: mixed;
+  transform: rotate(180deg); min-width: 36px; padding: 8px 4px;
+  max-width: 36px; white-space: nowrap;
+}
+.user-table td {
+  padding: 8px; border-bottom: 1px solid #f0f0f0; text-align: center;
+  vertical-align: middle;
+}
+.user-table td:first-child,
+.user-table td:nth-child(2),
+.user-table td:nth-child(3) { text-align: left; }
+.user-table tr:hover td { background: #fafafa; }
+.user-table tr.inactive td { opacity: 0.4; }
+
+.user-name { font-weight: 600; font-size: 14px; }
+.user-email { color: #888; font-size: 12px; }
+.role-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 10px;
+  font-size: 11px; font-weight: 600;
+}
+.role-badge.admin { background: #fef2f2; color: #dc2626; }
+.role-badge.manager { background: #eff6ff; color: #2563eb; }
+
+.access-cb {
+  width: 18px; height: 18px; cursor: pointer; accent-color: #1a1a1a;
+}
+.status-toggle {
+  width: 40px; height: 22px; border-radius: 11px; border: none;
+  cursor: pointer; position: relative; transition: background 0.2s;
+}
+.status-toggle.active { background: #16a34a; }
+.status-toggle.inactive { background: #ccc; }
+.status-toggle::after {
+  content: ''; position: absolute; top: 3px; width: 16px; height: 16px;
+  border-radius: 50%; background: #fff; transition: left 0.2s;
+}
+.status-toggle.active::after { left: 21px; }
+.status-toggle.inactive::after { left: 3px; }
+
+/* ── Action Buttons ── */
+.row-actions { display: flex; gap: 4px; justify-content: center; }
+.row-actions button {
+  padding: 4px 8px; border: none; border-radius: 4px;
+  font-size: 11px; cursor: pointer; font-weight: 600;
+}
+.btn-edit { background: #eff6ff; color: #2563eb; }
+.btn-edit:hover { background: #dbeafe; }
+.btn-deactivate { background: #fef2f2; color: #dc2626; }
+.btn-deactivate:hover { background: #fee2e2; }
+
+/* ── Add User Modal ── */
+.modal-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+  z-index: 200; justify-content: center; align-items: center;
+}
+.modal-overlay.visible { display: flex; }
+.modal {
+  background: #fff; border-radius: 12px; padding: 32px;
+  max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto;
+}
+.modal h2 { font-size: 18px; margin-bottom: 20px; }
+.modal label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: #444; }
+.modal input, .modal select {
+  width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 8px;
+  font-size: 14px; margin-bottom: 16px;
+}
+.modal input:focus, .modal select:focus { outline: none; border-color: #2563eb; }
+.modal .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+.modal .error-msg { color: #dc2626; font-size: 13px; margin-bottom: 12px; display: none; }
+
+/* ── Page Access Section in Modal ── */
+.page-access-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+  margin-bottom: 16px; max-height: 300px; overflow-y: auto;
+  border: 1px solid #eee; border-radius: 8px; padding: 12px;
+}
+.page-access-item {
+  display: flex; align-items: center; gap: 6px; font-size: 13px;
+  padding: 4px 8px; border-radius: 4px;
+}
+.page-access-item:hover { background: #f5f5f5; }
+.page-access-item input { width: 16px; height: 16px; margin: 0; }
+.page-access-item.section-header {
+  grid-column: 1 / -1; font-weight: 700; font-size: 12px; color: #888;
+  text-transform: uppercase; letter-spacing: 0.5px; margin-top: 8px;
+  padding-bottom: 2px; border-bottom: 1px solid #eee;
+}
+.page-access-item.section-header:first-child { margin-top: 0; }
+
+/* ── Toast ── */
+.toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: #1a1a1a; color: #fff; padding: 12px 24px; border-radius: 8px;
+  font-size: 14px; font-weight: 500; z-index: 300;
+  opacity: 0; transition: opacity 0.3s; pointer-events: none;
+}
+.toast.visible { opacity: 1; }
+
+/* ── Save Bar ── */
+.save-bar {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: #1a1a1a; color: #fff; padding: 12px 20px;
+  display: none; align-items: center; justify-content: center; gap: 12px;
+  z-index: 150; font-size: 14px;
+}
+.save-bar.visible { display: flex; }
+.save-bar .btn { padding: 8px 24px; }
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .stats-row { flex-direction: column; }
+  .toolbar { flex-direction: column; }
+  .toolbar input { min-width: unset; width: 100%; }
+  .page-access-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="page-header">
+  <a href="/">&larr; Toolkit</a>
+  <h1>User Access</h1>
+  <span class="badge">ADMIN</span>
+</div>
+
+<!-- Login Gate -->
+<div class="auth-gate" id="authGate">
+  <h2>Sign In</h2>
+  <p>Admin access required</p>
+  <input type="email" id="loginEmail" placeholder="Email address" autocomplete="email">
+  <input type="password" id="loginPassword" placeholder="Password" autocomplete="current-password">
+  <button onclick="doLogin()">Sign In</button>
+  <div class="error" id="loginError"></div>
+  <span class="forgot" onclick="doForgotPassword()">Forgot password?</span>
+  <div class="reset-sent" id="resetSent">Password reset email sent. Check your inbox.</div>
+</div>
+
+<!-- Main Content -->
+<div class="content" id="mainContent">
+
+  <!-- Stats -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="label">Total Users</div>
+      <div class="value" id="statTotal">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Active</div>
+      <div class="value green" id="statActive">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Admins</div>
+      <div class="value amber" id="statAdmins">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Inactive</div>
+      <div class="value red" id="statInactive">0</div>
+    </div>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <input type="text" id="searchInput" placeholder="Search by name or email..." oninput="renderTable()">
+    <button class="btn btn-primary" onclick="openAddModal()">+ Add User</button>
+  </div>
+
+  <!-- User Grid -->
+  <div class="user-table-wrap">
+    <table class="user-table" id="userTable">
+      <thead id="tableHead"></thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Save Bar -->
+<div class="save-bar" id="saveBar">
+  <span id="saveCount">0 changes</span>
+  <button class="btn btn-success" onclick="saveChanges()">Save Changes</button>
+  <button class="btn btn-outline" style="color:#fff;border-color:#555;" onclick="discardChanges()">Discard</button>
+</div>
+
+<!-- Add User Modal -->
+<div class="modal-overlay" id="addModal">
+  <div class="modal">
+    <h2 id="modalTitle">Add New User</h2>
+    <div class="error-msg" id="modalError"></div>
+    <label>Display Name</label>
+    <input type="text" id="modalName" placeholder="e.g. John Smith">
+    <label>Email Address</label>
+    <input type="email" id="modalEmail" placeholder="e.g. john@camdenco.com">
+    <label>Role</label>
+    <select id="modalRole">
+      <option value="manager">Manager</option>
+      <option value="admin">Admin</option>
+    </select>
+    <label>Page Access</label>
+    <div class="page-access-grid" id="modalPageGrid"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeAddModal()">Cancel</button>
+      <button class="btn btn-primary" id="modalSaveBtn" onclick="saveNewUser()">Create Account</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+var SUPABASE_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
+var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvYXpsdHRkam93aGxmY2tzb3lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNzU4MjMsImV4cCI6MjA5MDg1MTgyM30.tagP_88g7R3d_p7a4Kp0NirnJgkAR5AQQImCt414SJg';
+
+// All page slugs grouped for the access grid
+var PAGE_GROUPS = [
+  { label: 'People', pages: [
+    { slug: 'pipeline', name: 'Pipeline' },
+    { slug: 'interviews', name: 'Interviews' },
+    { slug: 'i9-verification', name: 'I-9 Verification' },
+    { slug: 'availability-responses', name: 'Availability Responses' },
+    { slug: 'staffing-requirements', name: 'Staffing Requirements' }
+  ]},
+  { label: 'Operations', pages: [
+    { slug: 'hiring-snapshot', name: 'Hiring Snapshot' },
+    { slug: 'sales-history', name: 'Sales History' },
+    { slug: 'asset-tracker', name: 'Asset Tracker' },
+    { slug: 'purchases', name: 'Purchases' },
+    { slug: 'event-planning', name: 'Event Planning' },
+    { slug: 'log-sales', name: 'Log Sales' },
+    { slug: 'ending-inventory-reporting', name: 'Ending Inventory' },
+    { slug: 'eom-cos-labor', name: 'COS & Labor' }
+  ]},
+  { label: 'Shared', pages: [
+    { slug: 'dashboard', name: 'Dashboard' },
+    { slug: 'availability', name: 'Availability' }
+  ]},
+  { label: 'Admin', pages: [
+    { slug: 'events-admin', name: 'Event Master List' },
+    { slug: 'par-levels', name: 'Par Levels' },
+    { slug: 'deal-structure', name: 'Deal Structure' },
+    { slug: 'item-catalog', name: 'Item Catalog' },
+    { slug: 'venue-item-profiles', name: 'Venue Item Profiles' },
+    { slug: 'user-access', name: 'User Access' }
+  ]}
+];
+
+// Flat list of all pages for table columns
+var ALL_PAGES = [];
+PAGE_GROUPS.forEach(function(g) {
+  g.pages.forEach(function(p) { ALL_PAGES.push(p); });
+});
+
+var currentUser = null;
+var accessToken = null;
+var allUsers = [];
+var pendingChanges = {};
+
+// ── Auth helpers ──
+
+function authHeaders() {
+  var h = {
+    'apikey': SUPABASE_KEY,
+    'Content-Type': 'application/json'
+  };
+  if (accessToken) h['Authorization'] = 'Bearer ' + accessToken;
+  return h;
+}
+
+function doLogin() {
+  var email = document.getElementById('loginEmail').value.trim();
+  var pw = document.getElementById('loginPassword').value;
+  var errEl = document.getElementById('loginError');
+  errEl.style.display = 'none';
+
+  if (!email || !pw) {
+    errEl.textContent = 'Please enter email and password.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  fetch(SUPABASE_URL + '/auth/v1/token?grant_type=password', {
+    method: 'POST',
+    headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email, password: pw })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data.error) {
+      errEl.textContent = data.error_description || data.error.message || 'Login failed.';
+      errEl.style.display = 'block';
+      return;
+    }
+    accessToken = data.access_token;
+    // Store session
+    try { localStorage.setItem('sb_access_token', data.access_token); localStorage.setItem('sb_refresh_token', data.refresh_token); } catch(e) {}
+    checkUserRole();
+  })
+  .catch(function(err) {
+    errEl.textContent = 'Connection error. Please try again.';
+    errEl.style.display = 'block';
+  });
+}
+
+function doForgotPassword() {
+  var email = document.getElementById('loginEmail').value.trim();
+  var errEl = document.getElementById('loginError');
+  var sentEl = document.getElementById('resetSent');
+  errEl.style.display = 'none';
+  sentEl.style.display = 'none';
+
+  if (!email) {
+    errEl.textContent = 'Enter your email address first.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  fetch(SUPABASE_URL + '/auth/v1/recover', {
+    method: 'POST',
+    headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email })
+  })
+  .then(function() {
+    sentEl.style.display = 'block';
+  });
+}
+
+function checkUserRole() {
+  fetch(SUPABASE_URL + '/rest/v1/user_roles?select=*', {
+    headers: authHeaders()
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(rows) {
+    if (!rows || rows.length === 0 || rows[0].role !== 'admin') {
+      document.getElementById('loginError').textContent = 'Admin access required.';
+      document.getElementById('loginError').style.display = 'block';
+      accessToken = null;
+      try { localStorage.removeItem('sb_access_token'); localStorage.removeItem('sb_refresh_token'); } catch(e) {}
+      return;
+    }
+    currentUser = rows[0];
+    document.getElementById('authGate').style.display = 'none';
+    document.getElementById('mainContent').classList.add('visible');
+    loadAllUsers();
+  });
+}
+
+function tryAutoLogin() {
+  try {
+    var token = localStorage.getItem('sb_access_token');
+    if (token) {
+      accessToken = token;
+      // Verify token is still valid
+      fetch(SUPABASE_URL + '/auth/v1/user', {
+        headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token }
+      })
+      .then(function(r) {
+        if (r.ok) return checkUserRole();
+        // Token expired, try refresh
+        var refresh = localStorage.getItem('sb_refresh_token');
+        if (refresh) {
+          return fetch(SUPABASE_URL + '/auth/v1/token?grant_type=refresh_token', {
+            method: 'POST',
+            headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refresh_token: refresh })
+          })
+          .then(function(r2) { return r2.json(); })
+          .then(function(data) {
+            if (data.access_token) {
+              accessToken = data.access_token;
+              try { localStorage.setItem('sb_access_token', data.access_token); localStorage.setItem('sb_refresh_token', data.refresh_token); } catch(e) {}
+              checkUserRole();
+            }
+          });
+        }
+      })
+      .catch(function() {});
+    }
+  } catch(e) {}
+}
+
+// ── Data loading ──
+
+function loadAllUsers() {
+  fetch(SUPABASE_URL + '/rest/v1/user_roles?select=*&order=display_name.asc', {
+    headers: authHeaders()
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(rows) {
+    allUsers = rows || [];
+    pendingChanges = {};
+    updateStats();
+    renderTable();
+  });
+}
+
+function updateStats() {
+  var total = allUsers.length;
+  var active = allUsers.filter(function(u) { return u.is_active; }).length;
+  var admins = allUsers.filter(function(u) { return u.role === 'admin'; }).length;
+  var inactive = total - active;
+  document.getElementById('statTotal').textContent = total;
+  document.getElementById('statActive').textContent = active;
+  document.getElementById('statAdmins').textContent = admins;
+  document.getElementById('statInactive').textContent = inactive;
+}
+
+// ── Table rendering ──
+
+function renderTable() {
+  var search = document.getElementById('searchInput').value.toLowerCase();
+  var thead = document.getElementById('tableHead');
+  var tbody = document.getElementById('tableBody');
+
+  // Build header
+  var hrow = '<tr><th>Name</th><th>Email</th><th>Role</th>';
+  ALL_PAGES.forEach(function(p) {
+    hrow += '<th class="page-col">' + p.name + '</th>';
+  });
+  hrow += '<th>Active</th></tr>';
+  thead.innerHTML = hrow;
+
+  // Filter users
+  var filtered = allUsers.filter(function(u) {
+    if (!search) return true;
+    return u.display_name.toLowerCase().indexOf(search) !== -1 ||
+           u.email.toLowerCase().indexOf(search) !== -1;
+  });
+
+  var html = '';
+  filtered.forEach(function(user) {
+    var changes = pendingChanges[user.id] || {};
+    var pageAccess = changes.page_access || user.page_access || [];
+    var isActive = changes.hasOwnProperty('is_active') ? changes.is_active : user.is_active;
+    var role = changes.role || user.role;
+
+    html += '<tr class="' + (isActive ? '' : 'inactive') + '">';
+    html += '<td><div class="user-name">' + escHtml(user.display_name) + '</div></td>';
+    html += '<td><span class="user-email">' + escHtml(user.email) + '</span></td>';
+    html += '<td><span class="role-badge ' + role + '">' + role + '</span></td>';
+
+    ALL_PAGES.forEach(function(p) {
+      var checked = pageAccess.indexOf(p.slug) !== -1;
+      html += '<td><input type="checkbox" class="access-cb" ' +
+        (checked ? 'checked' : '') +
+        ' onchange="toggleAccess(\'' + user.id + '\',\'' + p.slug + '\',this.checked)"' +
+        (role === 'admin' ? ' disabled title="Admins have full access"' : '') +
+        '></td>';
+    });
+
+    html += '<td><button class="status-toggle ' + (isActive ? 'active' : 'inactive') + '"' +
+      ' onclick="toggleActive(\'' + user.id + '\')" title="' + (isActive ? 'Active' : 'Inactive') + '"></button></td>';
+    html += '</tr>';
+  });
+
+  tbody.innerHTML = html;
+}
+
+function escHtml(s) {
+  var d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// ── Access toggling ──
+
+function toggleAccess(userId, slug, checked) {
+  var user = allUsers.find(function(u) { return u.id === userId; });
+  if (!user) return;
+
+  if (!pendingChanges[userId]) {
+    pendingChanges[userId] = { page_access: (user.page_access || []).slice() };
+  }
+  var pa = pendingChanges[userId].page_access;
+
+  if (checked && pa.indexOf(slug) === -1) {
+    pa.push(slug);
+  } else if (!checked) {
+    var idx = pa.indexOf(slug);
+    if (idx !== -1) pa.splice(idx, 1);
+  }
+
+  updateSaveBar();
+}
+
+function toggleActive(userId) {
+  var user = allUsers.find(function(u) { return u.id === userId; });
+  if (!user) return;
+
+  if (!pendingChanges[userId]) pendingChanges[userId] = {};
+  var currentVal = pendingChanges[userId].hasOwnProperty('is_active') ? pendingChanges[userId].is_active : user.is_active;
+  pendingChanges[userId].is_active = !currentVal;
+
+  updateSaveBar();
+  renderTable();
+}
+
+function updateSaveBar() {
+  var count = Object.keys(pendingChanges).length;
+  var bar = document.getElementById('saveBar');
+  if (count > 0) {
+    document.getElementById('saveCount').textContent = count + (count === 1 ? ' user changed' : ' users changed');
+    bar.classList.add('visible');
+  } else {
+    bar.classList.remove('visible');
+  }
+}
+
+// ── Save changes ──
+
+function saveChanges() {
+  var userIds = Object.keys(pendingChanges);
+  if (userIds.length === 0) return;
+
+  var promises = userIds.map(function(userId) {
+    var changes = pendingChanges[userId];
+    var body = { updated_at: new Date().toISOString() };
+    if (changes.page_access) body.page_access = changes.page_access;
+    if (changes.hasOwnProperty('is_active')) body.is_active = changes.is_active;
+    if (changes.role) body.role = changes.role;
+
+    return fetch(SUPABASE_URL + '/rest/v1/user_roles?id=eq.' + userId, {
+      method: 'PATCH',
+      headers: authHeaders(),
+      body: JSON.stringify(body)
+    });
+  });
+
+  Promise.all(promises).then(function() {
+    showToast('Changes saved');
+    loadAllUsers();
+  });
+}
+
+function discardChanges() {
+  pendingChanges = {};
+  document.getElementById('saveBar').classList.remove('visible');
+  renderTable();
+}
+
+// ── Add User Modal ──
+
+function openAddModal() {
+  document.getElementById('modalTitle').textContent = 'Add New User';
+  document.getElementById('modalName').value = '';
+  document.getElementById('modalEmail').value = '';
+  document.getElementById('modalRole').value = 'manager';
+  document.getElementById('modalError').style.display = 'none';
+  document.getElementById('modalSaveBtn').textContent = 'Create Account';
+  document.getElementById('modalSaveBtn').onclick = saveNewUser;
+  buildPageAccessGrid([]);
+  document.getElementById('addModal').classList.add('visible');
+}
+
+function closeAddModal() {
+  document.getElementById('addModal').classList.remove('visible');
+}
+
+function buildPageAccessGrid(selectedSlugs) {
+  var grid = document.getElementById('modalPageGrid');
+  var html = '';
+  PAGE_GROUPS.forEach(function(g) {
+    html += '<div class="page-access-item section-header">' + g.label + '</div>';
+    g.pages.forEach(function(p) {
+      var checked = selectedSlugs.indexOf(p.slug) !== -1;
+      html += '<div class="page-access-item">' +
+        '<input type="checkbox" id="modal_' + p.slug + '" value="' + p.slug + '"' +
+        (checked ? ' checked' : '') + '>' +
+        '<label for="modal_' + p.slug + '">' + p.name + '</label></div>';
+    });
+  });
+  grid.innerHTML = html;
+}
+
+function getModalPageAccess() {
+  var grid = document.getElementById('modalPageGrid');
+  var checks = grid.querySelectorAll('input[type="checkbox"]');
+  var slugs = [];
+  for (var i = 0; i < checks.length; i++) {
+    if (checks[i].checked) slugs.push(checks[i].value);
+  }
+  return slugs;
+}
+
+function saveNewUser() {
+  var name = document.getElementById('modalName').value.trim();
+  var email = document.getElementById('modalEmail').value.trim().toLowerCase();
+  var role = document.getElementById('modalRole').value;
+  var pageAccess = getModalPageAccess();
+  var errEl = document.getElementById('modalError');
+  errEl.style.display = 'none';
+
+  if (!name || !email) {
+    errEl.textContent = 'Name and email are required.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  // Check for duplicate email
+  var dup = allUsers.find(function(u) { return u.email.toLowerCase() === email; });
+  if (dup) {
+    errEl.textContent = 'A user with this email already exists.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  if (role === 'admin') {
+    pageAccess = ALL_PAGES.map(function(p) { return p.slug; });
+  }
+
+  // Step 1: Create Supabase Auth account (invite)
+  // We use the admin invite endpoint through our edge function or direct signup
+  // For now, insert into user_roles first, then create auth account
+  fetch(SUPABASE_URL + '/rest/v1/user_roles', {
+    method: 'POST',
+    headers: Object.assign({}, authHeaders(), { 'Prefer': 'return=representation' }),
+    body: JSON.stringify({
+      email: email,
+      display_name: name,
+      role: role,
+      page_access: pageAccess,
+      is_active: true
+    })
+  })
+  .then(function(r) {
+    if (!r.ok) throw new Error('Failed to create user record');
+    return r.json();
+  })
+  .then(function() {
+    showToast(name + ' added. Send them a signup link to set their password.');
+    closeAddModal();
+    loadAllUsers();
+  })
+  .catch(function(err) {
+    errEl.textContent = err.message || 'Failed to create user.';
+    errEl.style.display = 'block';
+  });
+}
+
+// ── Toast ──
+
+function showToast(msg) {
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('visible');
+  setTimeout(function() { t.classList.remove('visible'); }, 3000);
+}
+
+// ── Enter key on login ──
+document.getElementById('loginPassword').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') doLogin();
+});
+document.getElementById('loginEmail').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') document.getElementById('loginPassword').focus();
+});
+
+// ── Init ──
+tryAutoLogin();
+</script>
+</body>
+</html>
