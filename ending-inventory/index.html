@@ -1,0 +1,1085 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Popcorn Chez — Inventory Counts</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f0ec; min-height: 100vh; }
+
+header {
+  background: #fff; border-bottom: 1px solid #e8e8e4;
+  padding: 0 32px; display: flex; align-items: center;
+  justify-content: space-between; height: 64px;
+  position: sticky; top: 0; z-index: 100;
+}
+.header-left { display: flex; align-items: center; gap: 16px; }
+.back-link { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #999; text-decoration: none; display: flex; align-items: center; gap: 6px; transition: color 0.15s; }
+.back-link:hover { color: #1a1a1a; }
+.hdivider { width: 1px; height: 20px; background: #e8e8e4; }
+.header-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+.header-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: #1a1a1a; color: white; padding: 3px 8px; border-radius: 20px; }
+
+.container { max-width: 860px; margin: 0 auto; padding: 20px 16px 60px; }
+
+/* VENUE PICKER */
+.venue-picker { background: white; border-radius: 16px; padding: 20px; margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.venue-picker-title { font-size: 13px; font-weight: 700; color: #1a1a1a; margin-bottom: 14px; }
+.venue-tiles { display: flex; flex-wrap: wrap; gap: 8px; }
+.venue-tile { padding: 9px 16px; border: 1.5px solid #e0e0e0; border-radius: 30px; font-size: 13px; font-weight: 600; color: #888; background: white; cursor: pointer; transition: all 0.15s; font-family: inherit; }
+.venue-tile:hover { border-color: #bbb; color: #555; }
+.venue-tile.selected { background: #1a1a1a; color: white; border-color: #1a1a1a; }
+
+.month-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.month-row label { font-size: 12px; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap; }
+
+.prior-banner { background: #f8f8f6; border: 1px solid #eee; border-radius: 12px; padding: 12px 16px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; }
+.prior-label { font-size: 12px; color: #999; }
+.prior-sub { font-size: 11px; color: #bbb; margin-top: 2px; }
+.prior-val { font-size: 18px; font-weight: 700; color: #1a1a1a; }
+
+.stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
+.stat-box { background: white; border-radius: 12px; padding: 12px 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.stat-label { font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+.stat-val { font-size: 20px; font-weight: 700; color: #1a1a1a; }
+.stat-sub { font-size: 11px; color: #bbb; margin-top: 2px; }
+
+.progress-wrap { margin-bottom: 14px; display: flex; align-items: center; gap: 10px; }
+.progress-bar { flex: 1; height: 5px; background: #eee; border-radius: 3px; overflow: hidden; }
+.progress-fill { height: 100%; background: #3B6D11; border-radius: 3px; transition: width 0.3s; }
+.progress-label { font-size: 12px; color: #999; white-space: nowrap; min-width: 120px; text-align: right; }
+
+.already-submitted-banner { background: #EAF3DE; border: 1px solid #97C459; border-radius: 12px; padding: 12px 16px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; }
+.submitted-text { font-size: 13px; color: #27500A; font-weight: 600; }
+.submitted-sub { font-size: 11px; color: #3B6D11; margin-top: 2px; }
+.resubmit-btn { padding: 7px 14px; background: white; border: 1px solid #97C459; border-radius: 9px; font-size: 12px; color: #27500A; cursor: pointer; font-family: inherit; font-weight: 600; white-space: nowrap; }
+
+.print-btn { padding: 8px 16px; border: 1px solid #ddd; border-radius: 10px; font-size: 13px; color: #555; background: white; cursor: pointer; font-family: inherit; }
+.print-panel { background: white; border-radius: 14px; padding: 16px 18px; margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); display: none; }
+.print-panel-title { font-size: 11px; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px; }
+.print-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.print-opt { padding: 7px 14px; border: 1px solid #ddd; border-radius: 9px; font-size: 13px; color: #1a1a1a; background: none; cursor: pointer; font-family: inherit; }
+.print-opt.all-opt { background: #1a1a1a; color: white; border-color: #1a1a1a; }
+
+/* COUNT TABLE */
+.cat-section { border: 1px solid #eee; border-radius: 14px; overflow: visible; margin-bottom: 10px; position: relative; }
+.cat-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; background: #f8f8f6; cursor: pointer; border-radius: 14px 14px 0 0; }
+.cat-name { font-size: 13px; font-weight: 700; color: #1a1a1a; }
+.cat-subtotal { font-size: 13px; font-weight: 700; color: #1a1a1a; }
+.cat-right { display: flex; align-items: center; gap: 10px; }
+.cat-print-btn { font-size: 11px; padding: 3px 10px; border: 1px solid #ddd; border-radius: 7px; background: white; color: #666; cursor: pointer; font-family: inherit; }
+.cat-chevron { font-size: 10px; color: #ccc; transition: transform 0.2s; }
+.cat-chevron.open { transform: rotate(90deg); }
+
+.count-table { width: 100%; border-collapse: collapse; table-layout: fixed; display: none; }
+.count-table.open { display: table; }
+.count-table th { font-size: 10px; font-weight: 700; color: #bbb; text-transform: uppercase; letter-spacing: 0.06em; padding: 7px 14px; text-align: left; background: white; border-top: 1px solid #f5f5f5; }
+.count-table th.r { text-align: right; }
+.count-table td { padding: 7px 14px; border-top: 1px solid #f8f8f8; vertical-align: middle; }
+.count-table tr:hover td { background: #fafaf8; }
+.item-name-td { font-size: 13px; font-weight: 600; color: #1a1a1a; }
+.item-meta-td { font-size: 11px; color: #bbb; margin-top: 1px; }
+.prior-td { text-align: right; font-size: 12px; color: #999; }
+.prior-td.flag { color: #854F0B; font-weight: 700; }
+.count-unit-label { font-size: 11px; font-weight: 700; color: #888; text-align: center; background: #f8f8f6; border-radius: 6px; padding: 3px 7px; white-space: nowrap; }
+.count-input { width: 100%; padding: 7px 10px; border: 1px solid #e0e0e0; border-radius: 8px; font-size: 14px; font-weight: 600; background: white; color: #1a1a1a; text-align: right; font-family: inherit; transition: border-color 0.15s; }
+.count-input:focus { outline: none; border-color: #1a1a1a; background: white; box-shadow: 0 0 0 3px rgba(26,26,26,0.06); }
+.count-input.has-val { border-color: #97C459; background: #EAF3DE; }
+.count-input.flagged { border-color: #EF9F27; background: #FAEEDA; }
+.count-input:disabled { background: #f8f8f8; color: #bbb; }
+.val-td { text-align: right; font-size: 13px; font-weight: 600; color: #1a1a1a; }
+.val-td.empty { color: #ddd; font-weight: 400; }
+.diff-badge { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 20px; margin-left: 5px; vertical-align: middle; }
+.diff-low { background: #FAEEDA; color: #633806; }
+
+.add-row { padding: 10px 14px; border-top: 1px solid #f5f5f5; position: relative; z-index: 9998; }
+.add-input { width: 100%; padding: 7px 10px; border: 1px dashed #ddd; border-radius: 9px; font-size: 13px; background: white; color: #1a1a1a; font-family: inherit; }
+.add-input:focus { outline: none; border-color: #1a1a1a; border-style: solid; }
+.search-dropdown { position: absolute; left: 14px; right: 14px; background: white; border: 1px solid #e0e0e0; border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.15); z-index: 9999; display: none; max-height: 220px; overflow-y: auto; }
+.search-dropdown.open { display: block; }
+.sd-item { padding: 9px 14px; cursor: pointer; border-bottom: 1px solid #f5f5f5; }
+.sd-item:last-child { border-bottom: none; }
+.sd-item:hover { background: #f8f8f8; }
+.sd-name { font-size: 13px; font-weight: 600; color: #1a1a1a; }
+.sd-meta { font-size: 11px; color: #999; margin-top: 1px; }
+.sd-new { background: #EAF3DE; }
+.sd-new .sd-name { color: #27500A; }
+.sd-new .sd-meta { color: #3B6D11; }
+.sd-pending { background: #FAEEDA; }
+.sd-pending .sd-name { color: #633806; }
+
+/* NEW ITEM MODAL */
+.modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
+.modal-overlay.open { display: flex; }
+.modal { background: white; border-radius: 16px; padding: 24px; width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto; }
+.modal-title { font-size: 16px; font-weight: 700; color: #1a1a1a; margin-bottom: 4px; }
+.modal-sub { font-size: 13px; color: #888; margin-bottom: 18px; line-height: 1.5; }
+.modal-field { margin-bottom: 12px; }
+.modal-field label { display: block; font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+.modal-field input, .modal-field select { width: 100%; padding: 9px 11px; border: 1px solid #e0e0e0; border-radius: 10px; font-size: 14px; color: #1a1a1a; background: #fafafa; font-family: inherit; -webkit-appearance: none; appearance: none; }
+.modal-field input:focus, .modal-field select:focus { outline: none; border-color: #1a1a1a; background: white; }
+.modal-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.modal-cost-display { background: #f8f8f6; border-radius: 10px; padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.modal-cost-label { font-size: 12px; color: #999; }
+.modal-cost-val { font-size: 18px; font-weight: 700; color: #1a1a1a; }
+.modal-unit-helper { font-size: 11px; color: #888; background: #f8f8f6; border-radius: 8px; padding: 8px 10px; margin-bottom: 14px; line-height: 1.5; }
+.modal-pending-notice { background: #FAEEDA; border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; font-size: 12px; color: #633806; line-height: 1.5; }
+.modal-actions { display: flex; gap: 8px; margin-top: 4px; }
+.modal-save { flex: 1; padding: 11px; background: #1a1a1a; color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.modal-cancel { padding: 11px 16px; background: none; border: 1px solid #ddd; border-radius: 10px; font-size: 14px; color: #888; cursor: pointer; font-family: inherit; }
+.modal-error { color: #c0392b; font-size: 12px; margin-top: 8px; display: none; }
+
+.actions-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+.submit-card { background: white; border-radius: 16px; padding: 18px 20px; margin-top: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.submit-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+.submit-label { font-size: 13px; color: #999; }
+.submit-venue { font-size: 11px; color: #bbb; margin-top: 2px; }
+.total-val { font-size: 32px; font-weight: 700; color: #1a1a1a; }
+.submit-row { display: flex; gap: 10px; align-items: center; }
+.name-input { flex: 1; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 10px; font-size: 14px; background: #fafafa; color: #1a1a1a; font-family: inherit; }
+.name-input:focus { outline: none; border-color: #1a1a1a; background: white; }
+.submit-btn { padding: 11px 28px; background: #1a1a1a; color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit; white-space: nowrap; }
+.submit-btn:disabled { background: #ccc; cursor: not-allowed; }
+.error-msg { color: #c0392b; font-size: 13px; margin-top: 10px; display: none; background: #fdf0ee; border-radius: 8px; padding: 10px 12px; }
+.success-card { background: #EAF3DE; border: 1px solid #97C459; border-radius: 16px; padding: 28px 24px; text-align: center; display: none; margin-bottom: 14px; }
+.success-card h2 { font-size: 22px; font-weight: 700; color: #27500A; margin-bottom: 8px; }
+.success-card p { font-size: 14px; color: #3B6D11; line-height: 1.7; }
+.another-btn { display: inline-block; margin-top: 16px; padding: 10px 24px; background: #1a1a1a; color: white; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; }
+.loading { text-align: center; padding: 30px; font-size: 14px; color: #bbb; }
+.empty-state { text-align: center; padding: 30px; font-size: 14px; color: #ccc; }
+.no-venue-selected { text-align: center; padding: 40px 20px; font-size: 15px; color: #bbb; }
+.no-venue-selected span { font-size: 32px; display: block; margin-bottom: 10px; }
+
+@media print {
+  header { display: none !important; }
+  body { background: white; }
+  .container { padding: 0; }
+  .venue-picker, .month-row, .stat-row, .progress-wrap, .prior-banner, .submit-card, .already-submitted-banner, .actions-row, .print-panel, .add-row, .cat-print-btn { display: none !important; }
+  .count-table { display: table !important; }
+  .count-input { border: 1px solid #999; background: white; }
+  .print-header { display: block !important; }
+}
+.print-header { display: none; }
+
+@media (max-width: 600px) {
+  header { padding: 0 16px; height: auto; flex-wrap: wrap; padding: 12px 16px; gap: 10px; }
+  .container { padding: 16px 12px 60px; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <a href="/" class="back-link">&#8592; Toolkit</a>
+    <div class="hdivider"></div>
+    <span class="header-title">Inventory Counts</span>
+    <span class="header-badge">Manager</span>
+  </div>
+</header>
+
+<div class="modal-overlay" id="new-item-modal">
+  <div class="modal">
+    <div class="modal-title">Add new item</div>
+    <div class="modal-sub" id="new-item-modal-sub">This item will be added to the master list as pending. It will count toward your inventory total right away and will be reviewed by the office.</div>
+    <div class="modal-field">
+      <label>Item name</label>
+      <input type="text" id="ni-name" placeholder="What is this item called?">
+    </div>
+    <div class="modal-field">
+      <label>Category (your best guess)</label>
+      <select id="ni-category"></select>
+    </div>
+    <div class="modal-field">
+      <label>Vendor</label>
+      <input type="text" id="ni-vendor" placeholder="e.g. Gold Medal, Restaurant Depot...">
+    </div>
+    <div class="modal-two-col">
+      <div class="modal-field">
+        <label>Case cost ($)</label>
+        <input type="number" id="ni-case-cost" step="0.01" min="0" placeholder="0.00" oninput="calcNewItemCost()">
+      </div>
+      <div class="modal-field">
+        <label>Units per case</label>
+        <input type="number" id="ni-units" step="0.5" min="0.5" value="1" oninput="calcNewItemCost()">
+      </div>
+    </div>
+    <div class="modal-field">
+      <label>Purchase unit <span style="font-weight:400;color:#bbb;text-transform:none;font-size:10px;">what one unit is (jug, bag, lb...)</span></label>
+      <input type="text" id="ni-purchase-unit" placeholder="each, jug, bag, lb..." value="each" oninput="calcNewItemCost()">
+    </div>
+    <div class="modal-field">
+      <label>Count unit <span style="font-weight:400;color:#bbb;text-transform:none;font-size:10px;">how will you count this?</span></label>
+      <select id="ni-count-unit" onchange="calcNewItemCost()">
+        <option value="each">each (individual unit)</option>
+        <option value="case">case</option>
+        <option value="lb">lb</option>
+      </select>
+    </div>
+    <div class="modal-cost-display">
+      <div>
+        <div class="modal-cost-label">Cost per count unit</div>
+        <div style="font-size:11px;color:#bbb;" id="ni-cost-sub">--</div>
+      </div>
+      <span class="modal-cost-val" id="ni-cost-display">--</span>
+    </div>
+    <div class="modal-unit-helper" id="ni-unit-helper">Fill in details above.</div>
+    <div class="modal-field">
+      <label>Your count for this item</label>
+      <input type="number" id="ni-count-val" step="0.01" min="0" placeholder="0">
+    </div>
+    <div class="modal-pending-notice">This item will be flagged as pending on the master inventory list. The office will review and approve it.</div>
+    <div class="modal-error" id="ni-error"></div>
+    <div class="modal-actions">
+      <button class="modal-cancel" onclick="closeNewItemModal()">Cancel</button>
+      <button class="modal-save" onclick="saveNewItem()">Add item and count</button>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+  <div class="print-header" id="print-header">
+    <div style="font-size:16px;font-weight:700;margin-bottom:4px;" id="print-title-text">Inventory Count Sheet</div>
+    <div style="font-size:12px;color:#666;margin-bottom:16px;" id="print-sub-text"></div>
+  </div>
+
+  <div class="venue-picker">
+    <div class="venue-picker-title">Step 1 -- Select venue</div>
+    <div class="venue-tiles" id="venue-tiles"></div>
+  </div>
+
+  <div id="month-picker-wrap" style="display:none;">
+    <div class="venue-picker" style="padding-bottom:14px;">
+      <div class="venue-picker-title">Step 2 -- Select count month</div>
+      <div id="month-tiles"></div>
+      <div style="font-size:11px;color:#bbb;margin-top:8px;">Only current and prior months shown. Counts lock 18 days after month end.</div>
+    </div>
+  </div>
+
+  <div id="count-area">
+    <div class="no-venue-selected"><span>&#9776;</span>Select a venue above to begin</div>
+  </div>
+
+  <div id="month-sel-anchor"></div>
+
+  <div id="submit-wrap"></div>
+  <div id="success-wrap"></div>
+</div>
+
+<script>
+var SUPA_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
+var SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvYXpsdHRkam93aGxmY2tzb3lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNzU4MjMsImV4cCI6MjA5MDg1MTgyM30.tagP_88g7R3d_p7a4Kp0NirnJgkAR5AQQImCt414SJg';
+var SENTINEL_ID = 'e2bf5cd1-5f50-4b11-b4b3-30c06907bffc';
+var VENUES = [
+  {code:'Mann',label:'Mann Music Center'},{code:'FMP',label:'Freedom Mortgage Pavilion'},
+  {code:'Cure',label:'Cure Insurance Arena'},{code:'ACCC',label:'AC Convention Center'},
+  {code:'BWH',label:'Jim Whelan BWH'},{code:'DE',label:'DE Chase Field House'},
+  {code:'Subaru',label:'Subaru Park'},{code:'Villanova',label:'Villanova'},
+  {code:'Montage',label:'Montage Mountain'},{code:'SATB',label:'Sports at the Beach'},
+  {code:'Kirkwood',label:'Kirkwood'}
+];
+
+var pcCategories = [];
+var pcAllItems = [];
+var pcProfiles = [];
+var pcPriorCounts = [];
+var pcCurrentCounts = [];
+var currentVenue = '';
+var currentMonth = '';
+var isResubmit = false;
+var newItemTargetCatId = '';
+var priorRolloverMonth = '';
+
+function apiHeaders() {
+  return {'apikey':SUPA_KEY,'Authorization':'Bearer ' + SUPA_KEY,'Content-Type':'application/json'};
+}
+
+function fmt(n) { return '$' + parseFloat(n || 0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}); }
+
+function isMonthLocked(monthVal) {
+  if (!monthVal) return false;
+  var parts = monthVal.split('-');
+  var y = parseInt(parts[0]);
+  var m = parseInt(parts[1]) - 1;
+  var lastDay = new Date(y, m + 1, 0);
+  var lockDate = new Date(lastDay.getTime() + 18 * 24 * 60 * 60 * 1000);
+  return new Date() > lockDate;
+}
+
+function getMonthLabel(monthVal) {
+  if (!monthVal) return '';
+  var parts = monthVal.split('-');
+  return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, 1).toLocaleString('en-US', {month: 'long', year: 'numeric'});
+}
+
+function renderVenueTiles() {
+  var html = '';
+  for (var i = 0; i < VENUES.length; i++) {
+    var v = VENUES[i];
+    var sel = v.code === currentVenue ? ' selected' : '';
+    html += '<button class="venue-tile' + sel + '" data-vcode="' + v.code + '">' + v.label + '</button>';
+  }
+  var el = document.getElementById('venue-tiles');
+  el.innerHTML = html;
+  var btns = el.querySelectorAll('button');
+  for (var i = 0; i < btns.length; i++) {
+    btns[i].addEventListener('click', function() { selectVenue(this.getAttribute('data-vcode')); });
+  }
+}
+
+function selectVenue(code) {
+  currentVenue = code;
+  currentMonth = '';
+  isResubmit = false;
+  renderVenueTiles();
+  renderMonthTiles();
+  document.getElementById('month-picker-wrap').style.display = 'block';
+  document.getElementById('count-area').innerHTML = '<div class="no-venue-selected"><span>&#128197;</span>Now select the month you are counting above</div>';
+  document.getElementById('submit-wrap').innerHTML = '';
+  document.getElementById('success-wrap').innerHTML = '';
+}
+
+function renderMonthTiles() {
+  var now = new Date();
+  var thisYear = now.getFullYear();
+  var thisMonth = now.getMonth();
+  var html = '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">';
+  for (var i = 0; i < 12; i++) {
+    var y = thisYear;
+    var m = thisMonth - i;
+    while (m < 0) { m += 12; y -= 1; }
+    var val = y + '-' + String(m + 1).padStart(2, '0');
+    var label = new Date(y, m, 1).toLocaleString('en-US', {month: 'long', year: 'numeric'});
+    var locked = isMonthLocked(val);
+    var sel = val === currentMonth ? ' selected' : '';
+    var lockedStyle = locked ? ' style="opacity:0.5;"' : '';
+    var lockedBadge = locked ? ' <span style="font-size:10px;color:#bbb;">(locked)</span>' : '';
+    html += '<button class="venue-tile' + sel + '" data-mval="' + val + '"' + lockedStyle + '>' + label + lockedBadge + '</button>';
+  }
+  html += '</div>';
+  var el = document.getElementById('month-tiles');
+  el.innerHTML = html;
+  var btns = el.querySelectorAll('button');
+  for (var i = 0; i < btns.length; i++) {
+    btns[i].addEventListener('click', function() { selectMonth(this.getAttribute('data-mval')); });
+  }
+}
+
+function selectMonth(val) {
+  currentMonth = val;
+  renderMonthTiles();
+  loadCount();
+}
+
+async function loadAll() {
+  try {
+    var r1 = await fetch(SUPA_URL + '/rest/v1/cos_categories?select=*&order=sort_order.asc', {headers:apiHeaders()});
+    pcCategories = await r1.json();
+    var r2 = await fetch(SUPA_URL + '/rest/v1/inventory_items?select=*&active=eq.true&order=name.asc', {headers:apiHeaders()});
+    pcAllItems = await r2.json();
+    var r3 = await fetch(SUPA_URL + '/rest/v1/inventory_venue_profiles?select=*', {headers:apiHeaders()});
+    pcProfiles = await r3.json();
+    populateCatSelectModal();
+    renderVenueTiles();
+  } catch(e) {
+    document.getElementById('count-area').innerHTML = '<div class="loading">Error loading data. Please refresh.</div>';
+  }
+}
+
+function populateCatSelectModal() {
+  var sel = document.getElementById('ni-category');
+  sel.innerHTML = '<option value="">Select category...</option>';
+  for (var i = 0; i < pcCategories.length; i++) {
+    var opt = document.createElement('option');
+    opt.value = pcCategories[i].id;
+    opt.textContent = pcCategories[i].name + ' -- ' + pcCategories[i].gl_code;
+    sel.appendChild(opt);
+  }
+}
+
+async function loadCount() {
+  if (!currentVenue) return;
+  var monthDate = currentMonth + '-01';
+  var prevDate = getPrevMonthDate(currentMonth);
+  try {
+    var r2 = await fetch(SUPA_URL + '/rest/v1/inventory_counts?venue=eq.' + currentVenue + '&count_month=eq.' + monthDate + '&select=*', {headers:apiHeaders()});
+    pcCurrentCounts = await r2.json();
+    var r1 = await fetch(SUPA_URL + '/rest/v1/inventory_counts?venue=eq.' + currentVenue + '&count_month=eq.' + prevDate + '&select=*', {headers:apiHeaders()});
+    var directPrior = await r1.json();
+    priorRolloverMonth = '';
+    if (directPrior.length > 0) {
+      pcPriorCounts = directPrior;
+    } else {
+      var rolled = await findMostRecentCount(currentVenue, currentMonth);
+      pcPriorCounts = rolled.counts;
+      priorRolloverMonth = rolled.month;
+    }
+    isResubmit = false;
+    renderAll();
+  } catch(e) {
+    document.getElementById('count-area').innerHTML = '<div class="loading">Error loading counts: ' + (e ? e.message : 'unknown') + ' -- Please refresh.</div>';
+  }
+}
+
+async function findMostRecentCount(venue, beforeMonth) {
+  var parts = beforeMonth.split('-');
+  var y = parseInt(parts[0]);
+  var m = parseInt(parts[1]) - 1;
+  for (var i = 0; i < 12; i++) {
+    m = m - 1;
+    if (m < 0) { m = 11; y -= 1; }
+    var checkDate = y + '-' + String(m + 1).padStart(2, '0') + '-01';
+    try {
+      var r = await fetch(SUPA_URL + '/rest/v1/inventory_counts?venue=eq.' + venue + '&count_month=eq.' + checkDate + '&select=*', {headers:apiHeaders()});
+      var rows = await r.json();
+      if (rows.length > 0) {
+        var monthLabel = new Date(y, m, 1).toLocaleString('en-US', {month:'long', year:'numeric'});
+        return {counts: rows, month: monthLabel};
+      }
+    } catch(e) { break; }
+  }
+  return {counts: [], month: ''};
+}
+
+function getPrevMonthDate(monthVal) {
+  var parts = monthVal.split('-');
+  var y = parseInt(parts[0]);
+  var m = parseInt(parts[1]) - 1;
+  if (m === 0) { m = 12; y = y - 1; }
+  return y + '-' + String(m).padStart(2, '0') + '-01';
+}
+
+function renderAll() {
+  renderPriorBanner();
+  renderAlreadySubmitted();
+  renderStats();
+  renderProgress();
+  renderSections();
+  renderSubmit();
+}
+
+function getPriorTotal() {
+  var sentinel = null;
+  for (var i = 0; i < pcPriorCounts.length; i++) {
+    if (pcPriorCounts[i].item_id === SENTINEL_ID) { sentinel = pcPriorCounts[i]; break; }
+  }
+  if (sentinel) return {total: parseFloat(sentinel.value_on_hand) || 0, by: sentinel.submitted_by, at: sentinel.submitted_at};
+  var total = 0;
+  var by = '';
+  var at = '';
+  for (var i = 0; i < pcPriorCounts.length; i++) {
+    var c = pcPriorCounts[i];
+    if (c.item_id === SENTINEL_ID) continue;
+    total += parseFloat(c.value_on_hand) || 0;
+    if (!by && c.submitted_by) { by = c.submitted_by; at = c.submitted_at; }
+  }
+  return {total: total, by: by, at: at};
+}
+
+function renderPriorBanner() {
+  var prior = getPriorTotal();
+  var prevDate = getPrevMonthDate(currentMonth);
+  var parts = prevDate.split('-');
+  var prevLabel = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, 1).toLocaleString('en-US', {month: 'long', year: 'numeric'});
+  var sub = '';
+  if (priorRolloverMonth) { sub = 'No count for ' + prevLabel + ' - rolling forward from ' + priorRolloverMonth; }
+  else if (prior.by) { sub = 'Submitted by ' + prior.by + (prior.at ? ' ' + new Date(prior.at).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) : ''); }
+  else { sub = 'No prior count on record'; }
+  var bannerBg = priorRolloverMonth ? 'background:#E6F1FB;border:1px solid #B5D4F4;' : '';
+  var priorLabelDisplay = priorRolloverMonth ? priorRolloverMonth + ' (rolled forward)' : prevLabel;
+  var html = '<div class="prior-banner" style="' + bannerBg + '"><div><div class="prior-label">Prior month ending inventory (' + priorLabelDisplay + ')</div><div class="prior-sub">' + sub + '</div></div><div class="prior-val">' + fmt(prior.total) + '</div></div>';
+  var el = document.getElementById('prior-banner-el');
+  if (el) el.outerHTML = html;
+}
+
+function isAlreadySubmitted() {
+  for (var i = 0; i < pcCurrentCounts.length; i++) {
+    if (pcCurrentCounts[i].item_id !== SENTINEL_ID) return true;
+  }
+  return false;
+}
+
+function renderAlreadySubmitted() {
+  var el = document.getElementById('submitted-banner-el');
+  if (!el) return;
+  if (!isAlreadySubmitted() || isResubmit) { el.style.display = 'none'; return; }
+  var first = null;
+  for (var i = 0; i < pcCurrentCounts.length; i++) {
+    if (pcCurrentCounts[i].item_id !== SENTINEL_ID) { first = pcCurrentCounts[i]; break; }
+  }
+  var by = first ? (first.submitted_by || '') : '';
+  var at = first ? (first.submitted_at ? new Date(first.submitted_at).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) : '') : '';
+  el.innerHTML = '<div class="already-submitted-banner"><div><div class="submitted-text">Count already submitted for this period</div><div class="submitted-sub">Submitted' + (by ? ' by ' + by : '') + (at ? ' on ' + at : '') + '</div></div><button class="resubmit-btn" onclick="enableResubmit()">Edit and resubmit</button></div>';
+  el.style.display = 'block';
+}
+
+function enableResubmit() {
+  isResubmit = true;
+  renderAll();
+}
+
+function getVenueItems() {
+  var ids = {};
+  for (var i = 0; i < pcProfiles.length; i++) {
+    if (pcProfiles[i].venue === currentVenue) ids[pcProfiles[i].item_id] = true;
+  }
+  var result = [];
+  for (var i = 0; i < pcAllItems.length; i++) {
+    if (ids[pcAllItems[i].id]) result.push(pcAllItems[i]);
+  }
+  return result;
+}
+
+function getCurrentCount(itemId) {
+  for (var i = 0; i < pcCurrentCounts.length; i++) {
+    if (pcCurrentCounts[i].item_id === itemId) return pcCurrentCounts[i];
+  }
+  return null;
+}
+
+function getPriorCount(itemId) {
+  for (var i = 0; i < pcPriorCounts.length; i++) {
+    if (pcPriorCounts[i].item_id === itemId) return pcPriorCounts[i];
+  }
+  return null;
+}
+
+function getItemById(id) {
+  for (var i = 0; i < pcAllItems.length; i++) {
+    if (pcAllItems[i].id === id) return pcAllItems[i];
+  }
+  return null;
+}
+
+function getCatById(id) {
+  for (var i = 0; i < pcCategories.length; i++) {
+    if (pcCategories[i].id === id) return pcCategories[i];
+  }
+  return null;
+}
+
+function getCountCost(item) {
+  var countUnit = item.count_unit || 'each';
+  if (countUnit === 'case') return parseFloat(item.case_cost) || 0;
+  return parseFloat(item.cost_per_unit) || 0;
+}
+
+function getCountUnit(item) {
+  return item.count_unit || 'each';
+}
+
+function renderStats() {
+  var items = getVenueItems();
+  var counted = 0;
+  var runningTotal = 0;
+  for (var i = 0; i < pcCurrentCounts.length; i++) {
+    var c = pcCurrentCounts[i];
+    if (c.item_id === SENTINEL_ID) continue;
+    if (parseFloat(c.case_count) > 0) counted++;
+    runningTotal += parseFloat(c.value_on_hand) || 0;
+  }
+  var prior = getPriorTotal();
+  var statsHtml = '<div class="stat-row">';
+  statsHtml += '<div class="stat-box"><div class="stat-label">Items to count</div><div class="stat-val">' + items.length + '</div><div class="stat-sub">profiled for this venue</div></div>';
+  statsHtml += '<div class="stat-box"><div class="stat-label">Running total</div><div class="stat-val">' + fmt(runningTotal) + '</div><div class="stat-sub">value on hand so far</div></div>';
+  statsHtml += '<div class="stat-box"><div class="stat-label">Prior month</div><div class="stat-val">' + fmt(prior.total) + '</div><div class="stat-sub">ending inventory</div></div>';
+  statsHtml += '</div>';
+  var el = document.getElementById('stats-el');
+  if (el) el.innerHTML = statsHtml;
+}
+
+function renderProgress() {
+  var items = getVenueItems();
+  var counted = 0;
+  for (var i = 0; i < pcCurrentCounts.length; i++) {
+    var c = pcCurrentCounts[i];
+    if (c.item_id === SENTINEL_ID) continue;
+    if (parseFloat(c.case_count) > 0) counted++;
+  }
+  var pct = items.length > 0 ? Math.round((counted / items.length) * 100) : 0;
+  var el = document.getElementById('progress-el');
+  if (el) {
+    el.innerHTML = '<div class="progress-wrap"><div class="progress-bar"><div class="progress-fill" style="width:' + pct + '%;"></div></div><div class="progress-label">' + counted + ' of ' + items.length + ' items counted</div></div>';
+  }
+}
+
+function renderSections() {
+  var items = getVenueItems();
+  var submitted = isAlreadySubmitted();
+  var monthLocked = isMonthLocked(currentMonth);
+  var locked = monthLocked || (submitted && !isResubmit);
+  var venueLabel = '';
+  for (var i = 0; i < VENUES.length; i++) { if (VENUES[i].code === currentVenue) { venueLabel = VENUES[i].label; break; } }
+  var monthLabel = getMonthLabel(currentMonth);
+
+  var byCat = {};
+  for (var i = 0; i < items.length; i++) {
+    var catId = items[i].cos_category_id || 'none';
+    if (!byCat[catId]) byCat[catId] = [];
+    byCat[catId].push(items[i]);
+  }
+
+  var printOpts = '<button class="print-opt all-opt" onclick="doPrint(null)">Full venue (all categories)</button>';
+  var sectionsHtml = '';
+
+  for (var ci = 0; ci < pcCategories.length; ci++) {
+    var cat = pcCategories[ci];
+    var catItems = byCat[cat.id];
+    if (!catItems || catItems.length === 0) continue;
+    printOpts += '<button class="print-opt" onclick="doPrint(\'' + cat.id + '\')">' + cat.name + '</button>';
+
+    var catTotal = 0;
+    for (var ii = 0; ii < catItems.length; ii++) {
+      var curr = getCurrentCount(catItems[ii].id);
+      if (curr) catTotal += parseFloat(curr.value_on_hand) || 0;
+    }
+
+    var sid = 'cs-' + cat.id.replace(/-/g, '');
+    var tid = 'ct-' + cat.id.replace(/-/g, '');
+
+    sectionsHtml += '<div class="cat-section" id="catsec-' + cat.id.replace(/-/g, '') + '">';
+    sectionsHtml += '<div class="cat-header" onclick="toggleCat(\'' + sid + '\',\'' + tid + '\')">';
+    sectionsHtml += '<span class="cat-name">' + cat.name + '</span>';
+    sectionsHtml += '<div class="cat-right">';
+    sectionsHtml += '<span class="cat-subtotal" id="catsubtotal-' + cat.id.replace(/-/g, '') + '">' + fmt(catTotal) + '</span>';
+    sectionsHtml += '<button class="cat-print-btn" onclick="event.stopPropagation();doPrint(\'' + cat.id + '\')">Print</button>';
+    sectionsHtml += '<span class="cat-chevron open" id="' + sid + '">&#9654;</span>';
+    sectionsHtml += '</div></div>';
+
+    sectionsHtml += '<table class="count-table open" id="' + tid + '">';
+    sectionsHtml += '<thead><tr>';
+    sectionsHtml += '<th style="width:36%;">Item</th>';
+    sectionsHtml += '<th class="r" style="width:14%;">Last month</th>';
+    sectionsHtml += '<th style="width:10%;">Unit</th>';
+    sectionsHtml += '<th class="r" style="width:18%;">Count</th>';
+    sectionsHtml += '<th class="r" style="width:11%;">Cost/unit</th>';
+    sectionsHtml += '<th class="r" style="width:11%;">Value</th>';
+    sectionsHtml += '</tr></thead><tbody>';
+
+    for (var ii = 0; ii < catItems.length; ii++) {
+      var it = catItems[ii];
+      var curr = getCurrentCount(it.id);
+      var prior = getPriorCount(it.id);
+      var currCount = curr ? parseFloat(curr.case_count) : 0;
+      var currVal = curr ? parseFloat(curr.value_on_hand) : 0;
+      var priorCount = prior ? parseFloat(prior.case_count) : null;
+      var countUnit = getCountUnit(it);
+      var countCost = getCountCost(it);
+      var hasVal = currCount > 0;
+      var isFlagged = priorCount !== null && priorCount > 0 && (currCount / priorCount) < 0.3;
+      var priorDisplay = priorCount !== null ? (priorCount > 0 ? priorCount + ' ' + countUnit : '0') : '--';
+
+      sectionsHtml += '<tr>';
+      sectionsHtml += '<td><div class="item-name-td">' + it.name;
+      if (it.status === 'pending') sectionsHtml += ' <span style="font-size:10px;background:#FAEEDA;color:#633806;padding:1px 6px;border-radius:5px;border:1px solid #EF9F27;">pending</span>';
+      if (isFlagged) sectionsHtml += '<span class="diff-badge diff-low">low vs last month</span>';
+      sectionsHtml += '</div>';
+      if (it.purchase_unit && it.purchase_unit !== countUnit) {
+        sectionsHtml += '<div class="item-meta-td">' + it.units_per_case + ' ' + (it.purchase_unit || 'each') + '/case</div>';
+      }
+      sectionsHtml += '</td>';
+      sectionsHtml += '<td class="prior-td' + (isFlagged ? ' flag' : '') + '">' + priorDisplay + '</td>';
+      sectionsHtml += '<td style="text-align:center;"><span class="count-unit-label">' + countUnit + '</span></td>';
+      sectionsHtml += '<td><input class="count-input' + (hasVal ? ' has-val' : '') + (isFlagged ? ' flagged' : '') + '" type="number" min="0" step="0.01" value="' + (hasVal ? currCount : '') + '" placeholder="0" ' + (locked ? 'disabled' : '') + ' data-item="' + it.id + '" oninput="onCountInput(this)"></td>';
+      sectionsHtml += '<td style="text-align:right;font-size:12px;color:#bbb;">' + fmt(countCost) + '</td>';
+      sectionsHtml += '<td class="val-td' + (hasVal ? '' : ' empty') + '" id="val-' + it.id.replace(/-/g, '') + '">' + (hasVal ? fmt(currVal) : '--') + '</td>';
+      sectionsHtml += '</tr>';
+    }
+
+    sectionsHtml += '</tbody></table>';
+
+    if (!locked) {
+      var drid = 'dr-' + cat.id.replace(/-/g, '');
+      sectionsHtml += '<div class="add-row">';
+      sectionsHtml += '<input class="add-input" placeholder="+ Add item not on this list..." oninput="onAddSearch(this,\'' + cat.id + '\')" onfocus="onAddFocus(this,\'' + cat.id + '\')" onblur="onAddBlur(\'' + drid + '\')">';
+      sectionsHtml += '<div class="search-dropdown" id="' + drid + '"></div>';
+      sectionsHtml += '</div>';
+    }
+
+    sectionsHtml += '</div>';
+  }
+
+  if (sectionsHtml === '') {
+    sectionsHtml = '<div class="empty-state">No items profiled for this venue yet.<br>Use the search box below a category or visit the Item Catalog to add items.</div>';
+  }
+
+  var prior = getPriorTotal();
+  var priorParts = getPrevMonthDate(currentMonth).split('-');
+  var priorLabel = new Date(parseInt(priorParts[0]), parseInt(priorParts[1]) - 1, 1).toLocaleString('en-US', {month:'long', year:'numeric'});
+  var priorSub = prior.by ? 'Submitted by ' + prior.by : 'No prior count on record';
+
+  var html = '';
+  html += '<div id="prior-banner-el"><div class="prior-banner"><div><div class="prior-label">Prior month ending inventory (' + priorLabel + ')</div><div class="prior-sub">' + priorSub + '</div></div><div class="prior-val">' + fmt(prior.total) + '</div></div></div>';
+  html += '<div id="submitted-banner-el" style="display:none;"></div>';
+  if (monthLocked) {
+    html += '<div style="background:#f8f8f6;border:1px solid #ddd;border-radius:12px;padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:10px;"><div style="font-size:18px;">&#128274;</div><div><div style="font-size:13px;font-weight:700;color:#555;">This period is locked</div><div style="font-size:11px;color:#999;margin-top:2px;">Count month ended more than 18 days ago. Showing as read-only history.</div></div></div>';
+  }
+  html += '<div id="stats-el"></div>';
+  html += '<div id="progress-el"></div>';
+  html += '<div class="actions-row"><button class="print-btn" onclick="togglePrintPanel()">Print count sheets</button></div>';
+  html += '<div class="print-panel" id="print-panel"><div class="print-panel-title">Choose what to print -- ' + venueLabel + '</div><div class="print-options">' + printOpts + '</div></div>';
+  html += sectionsHtml;
+
+  document.getElementById('count-area').innerHTML = html;
+
+  renderAlreadySubmitted();
+  renderStats();
+  renderProgress();
+}
+
+function toggleCat(sid, tid) {
+  var chevron = document.getElementById(sid);
+  var table = document.getElementById(tid);
+  if (!chevron || !table) return;
+  var isOpen = table.classList.contains('open');
+  if (isOpen) { table.classList.remove('open'); chevron.classList.remove('open'); }
+  else { table.classList.add('open'); chevron.classList.add('open'); }
+}
+
+function onCountInput(input) {
+  var itemId = input.getAttribute('data-item');
+  var val = parseFloat(input.value) || 0;
+  input.classList.toggle('has-val', val > 0);
+  var item = getItemById(itemId);
+  if (!item) return;
+  var countCost = getCountCost(item);
+  var value = val * countCost;
+  var valCell = document.getElementById('val-' + itemId.replace(/-/g, ''));
+  if (valCell) {
+    if (val > 0) { valCell.textContent = fmt(value); valCell.classList.remove('empty'); }
+    else { valCell.textContent = '--'; valCell.classList.add('empty'); }
+  }
+  updateCurrentCount(itemId, val, value);
+  recalcCatSubtotals();
+  recalcGrandTotal();
+  recalcProgress();
+}
+
+function updateCurrentCount(itemId, countVal, value) {
+  var found = false;
+  for (var i = 0; i < pcCurrentCounts.length; i++) {
+    if (pcCurrentCounts[i].item_id === itemId) {
+      pcCurrentCounts[i].case_count = countVal;
+      pcCurrentCounts[i].value_on_hand = value;
+      found = true; break;
+    }
+  }
+  if (!found) pcCurrentCounts.push({item_id:itemId, case_count:countVal, loose_count:0, value_on_hand:value});
+}
+
+function recalcCatSubtotals() {
+  for (var ci = 0; ci < pcCategories.length; ci++) {
+    var cat = pcCategories[ci];
+    var el = document.getElementById('catsubtotal-' + cat.id.replace(/-/g, ''));
+    if (!el) continue;
+    var total = 0;
+    for (var i = 0; i < pcAllItems.length; i++) {
+      if (pcAllItems[i].cos_category_id !== cat.id) continue;
+      var curr = getCurrentCount(pcAllItems[i].id);
+      if (curr) total += parseFloat(curr.value_on_hand) || 0;
+    }
+    el.textContent = fmt(total);
+  }
+}
+
+function recalcGrandTotal() {
+  var total = 0;
+  for (var i = 0; i < pcCurrentCounts.length; i++) {
+    if (pcCurrentCounts[i].item_id === SENTINEL_ID) continue;
+    total += parseFloat(pcCurrentCounts[i].value_on_hand) || 0;
+  }
+  var el = document.getElementById('grand-total-val');
+  if (el) el.textContent = fmt(total);
+}
+
+function recalcProgress() {
+  var items = getVenueItems();
+  var counted = 0;
+  for (var i = 0; i < pcCurrentCounts.length; i++) {
+    if (pcCurrentCounts[i].item_id === SENTINEL_ID) continue;
+    if (parseFloat(pcCurrentCounts[i].case_count) > 0) counted++;
+  }
+  var pct = items.length > 0 ? Math.round((counted / items.length) * 100) : 0;
+  var progEl = document.getElementById('progress-el');
+  if (progEl) {
+    progEl.innerHTML = '<div class="progress-wrap"><div class="progress-bar"><div class="progress-fill" style="width:' + pct + '%;"></div></div><div class="progress-label">' + counted + ' of ' + items.length + ' items counted</div></div>';
+  }
+}
+
+function renderSubmit() {
+  var submitted = isAlreadySubmitted();
+  var monthLocked = isMonthLocked(currentMonth);
+  var locked = monthLocked || (submitted && !isResubmit);
+  if (locked || !currentVenue) { document.getElementById('submit-wrap').innerHTML = ''; return; }
+  var venueLabel = '';
+  for (var i = 0; i < VENUES.length; i++) { if (VENUES[i].code === currentVenue) { venueLabel = VENUES[i].label; break; } }
+  var monthLabel = getMonthLabel(currentMonth);
+  var total = 0;
+  for (var i = 0; i < pcCurrentCounts.length; i++) {
+    if (pcCurrentCounts[i].item_id === SENTINEL_ID) continue;
+    total += parseFloat(pcCurrentCounts[i].value_on_hand) || 0;
+  }
+  var html = '<div class="submit-card"><div class="submit-top"><div><div class="submit-label">Total ending inventory value</div><div class="submit-venue">' + venueLabel + ' -- ' + monthLabel + '</div></div><div class="total-val" id="grand-total-val">' + fmt(total) + '</div></div>';
+  html += '<div class="submit-row"><input class="name-input" id="submitter-name" placeholder="Your name" type="text"><button class="submit-btn" id="submit-count-btn" onclick="submitCount()">' + (isResubmit ? 'Resubmit count' : 'Submit count') + '</button></div>';
+  html += '<div style="margin-top:10px;text-align:right;"><button onclick="clearAllCounts()" style="font-size:12px;color:#A32D2D;background:none;border:none;cursor:pointer;font-family:inherit;padding:4px 0;">Clear all entries</button></div>';
+  html += '<div class="error-msg" id="submit-error"></div></div>';
+  document.getElementById('submit-wrap').innerHTML = html;
+}
+
+async function submitCount() {
+  var nameEl = document.getElementById('submitter-name');
+  var name = nameEl ? nameEl.value.trim() : '';
+  var errEl = document.getElementById('submit-error');
+  if (errEl) errEl.style.display = 'none';
+  if (!name) {
+    if (errEl) { errEl.textContent = 'Please enter your name before submitting.'; errEl.style.display = 'block'; }
+    return;
+  }
+  var monthDate = currentMonth + '-01';
+  var btn = document.getElementById('submit-count-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+  try {
+    if (isResubmit) {
+      await fetch(SUPA_URL + '/rest/v1/inventory_counts?venue=eq.' + currentVenue + '&count_month=eq.' + monthDate + '&item_id=neq.' + SENTINEL_ID, {method:'DELETE', headers:apiHeaders()});
+    }
+    var rows = [];
+    for (var i = 0; i < pcCurrentCounts.length; i++) {
+      var c = pcCurrentCounts[i];
+      if (c.item_id === SENTINEL_ID) continue;
+      var item = getItemById(c.item_id);
+      if (!item) continue;
+      var countVal = parseFloat(c.case_count) || 0;
+      if (countVal === 0) continue;
+      var countCost = getCountCost(item);
+      var value = countVal * countCost;
+      rows.push({id:crypto.randomUUID(), venue:currentVenue, item_id:c.item_id, count_month:monthDate, case_count:countVal, loose_count:0, total_units:countVal, value_on_hand:Math.round(value * 10000) / 10000, submitted_by:name, submitted_at:new Date().toISOString()});
+    }
+    if (rows.length === 0) {
+      if (errEl) { errEl.textContent = 'No counts entered. Please fill in at least one item.'; errEl.style.display = 'block'; }
+      if (btn) { btn.disabled = false; btn.textContent = isResubmit ? 'Resubmit count' : 'Submit count'; }
+      return;
+    }
+    var CHUNK = 50;
+    for (var start = 0; start < rows.length; start += CHUNK) {
+      var chunk = rows.slice(start, start + CHUNK);
+      var res = await fetch(SUPA_URL + '/rest/v1/inventory_counts', {method:'POST', headers:Object.assign({}, apiHeaders(), {'Prefer':'return=minimal'}), body:JSON.stringify(chunk)});
+      if (!res.ok) throw new Error(await res.text());
+    }
+    var venueLabel = '';
+    for (var i = 0; i < VENUES.length; i++) { if (VENUES[i].code === currentVenue) { venueLabel = VENUES[i].label; break; } }
+    var monthLabel = getMonthLabel(currentMonth);
+    var total = 0;
+    for (var i = 0; i < rows.length; i++) total += rows[i].value_on_hand;
+    document.getElementById('submit-wrap').innerHTML = '';
+    document.getElementById('count-area').style.display = 'none';
+    document.getElementById('success-wrap').innerHTML = '<div class="success-card" style="display:block;"><h2>Count submitted!</h2><p>' + venueLabel + '<br>' + monthLabel + '<br><br>Total ending inventory: <strong>' + fmt(total) + '</strong><br>' + rows.length + ' items recorded<br><br>Submitted by ' + name + '</p><button class="another-btn" onclick="resetPage()">Count another venue</button></div>';
+  } catch(e) {
+    if (errEl) { errEl.textContent = 'Submit failed. Please try again.'; errEl.style.display = 'block'; }
+    if (btn) { btn.disabled = false; btn.textContent = isResubmit ? 'Resubmit count' : 'Submit count'; }
+  }
+}
+
+function resetPage() {
+  isResubmit = false;
+  currentVenue = '';
+  currentMonth = '';
+  document.getElementById('success-wrap').innerHTML = '';
+  document.getElementById('count-area').style.display = 'block';
+  document.getElementById('count-area').innerHTML = '<div class="no-venue-selected"><span>&#9776;</span>Select a venue above to begin</div>';
+  document.getElementById('month-picker-wrap').style.display = 'none';
+  renderVenueTiles();
+  document.getElementById('submit-wrap').innerHTML = '';
+}
+
+function onAddSearch(input, catId) {
+  var q = input.value.trim().toLowerCase();
+  var drid = 'dr-' + catId.replace(/-/g, '');
+  var dd = document.getElementById(drid);
+  if (!dd) return;
+  if (!q) { dd.classList.remove('open'); return; }
+  var profiled = {};
+  for (var i = 0; i < pcProfiles.length; i++) {
+    if (pcProfiles[i].venue === currentVenue) profiled[pcProfiles[i].item_id] = true;
+  }
+  var matches = [];
+  for (var i = 0; i < pcAllItems.length; i++) {
+    var it = pcAllItems[i];
+    if (profiled[it.id]) continue;
+    if (it.name.toLowerCase().indexOf(q) !== -1) matches.push(it);
+    if (matches.length >= 8) break;
+  }
+  var html = '';
+  for (var i = 0; i < matches.length; i++) {
+    var it = matches[i];
+    var cat = getCatById(it.cos_category_id);
+    var isPending = it.status === 'pending';
+    html += '<div class="sd-item' + (isPending ? ' sd-pending' : '') + '" onmousedown="addItemFromSearch(\'' + it.id + '\')">';
+    html += '<div class="sd-name">' + it.name + (isPending ? ' (pending approval)' : '') + '</div>';
+    html += '<div class="sd-meta">' + (cat ? cat.name : '') + ' -- ' + (it.vendor || '') + ' -- ' + fmt(getCountCost(it)) + '/' + getCountUnit(it) + '</div>';
+    html += '</div>';
+  }
+  html += '<div class="sd-item sd-new" onmousedown="openNewItemModal(\'' + catId + '\',\'' + input.value.trim() + '\')">';
+  html += '<div class="sd-name">+ Add "' + input.value.trim() + '" as new item</div>';
+  html += '<div class="sd-meta">Will be added as pending for office review</div>';
+  html += '</div>';
+  dd.innerHTML = html;
+  dd.classList.add('open');
+}
+
+function onAddFocus(input, catId) {
+  if (input.value.trim()) onAddSearch(input, catId);
+}
+
+function onAddBlur(drid) {
+  setTimeout(function() {
+    var dd = document.getElementById(drid);
+    if (dd) dd.classList.remove('open');
+  }, 250);
+}
+
+async function addItemFromSearch(itemId) {
+  try {
+    await fetch(SUPA_URL + '/rest/v1/inventory_venue_profiles', {method:'POST', headers:Object.assign({}, apiHeaders(), {'Prefer':'return=minimal'}), body:JSON.stringify({id:crypto.randomUUID(), venue:currentVenue, item_id:itemId})});
+    pcProfiles.push({venue:currentVenue, item_id:itemId});
+    await loadCount();
+  } catch(e) { alert('Could not add item. Try again.'); }
+}
+
+function openNewItemModal(catId, prefillName) {
+  newItemTargetCatId = catId;
+  document.getElementById('ni-name').value = prefillName || '';
+  document.getElementById('ni-vendor').value = '';
+  document.getElementById('ni-case-cost').value = '';
+  document.getElementById('ni-units').value = '1';
+  document.getElementById('ni-purchase-unit').value = 'each';
+  document.getElementById('ni-count-unit').value = 'each';
+  document.getElementById('ni-count-val').value = '';
+  document.getElementById('ni-cost-display').textContent = '--';
+  document.getElementById('ni-cost-sub').textContent = '--';
+  document.getElementById('ni-unit-helper').textContent = 'Fill in details above.';
+  document.getElementById('ni-error').style.display = 'none';
+  var cat = getCatById(catId);
+  document.getElementById('ni-category').value = catId ? catId : '';
+  document.getElementById('new-item-modal-sub').textContent = 'Adding to ' + (cat ? cat.name : 'inventory') + '. This item will be flagged as pending on the master list and reviewed by the office. Your count will be included immediately.';
+  document.getElementById('new-item-modal').classList.add('open');
+  setTimeout(function() { if (!prefillName) { document.getElementById('ni-name').focus(); } else { document.getElementById('ni-case-cost').focus(); } }, 100);
+}
+
+function closeNewItemModal() {
+  document.getElementById('new-item-modal').classList.remove('open');
+}
+
+function calcNewItemCost() {
+  var cost = parseFloat(document.getElementById('ni-case-cost').value) || 0;
+  var units = parseFloat(document.getElementById('ni-units').value) || 1;
+  var purchaseUnit = document.getElementById('ni-purchase-unit').value.trim() || 'each';
+  var countUnit = document.getElementById('ni-count-unit').value;
+  var dispEl = document.getElementById('ni-cost-display');
+  var subEl = document.getElementById('ni-cost-sub');
+  var helperEl = document.getElementById('ni-unit-helper');
+  if (cost > 0) {
+    var cpu = cost / units;
+    var displayCost = countUnit === 'case' ? cost : cpu;
+    var displayLabel = countUnit === 'case' ? 'case' : (countUnit === 'lb' ? 'lb' : purchaseUnit);
+    dispEl.textContent = '$' + displayCost.toFixed(2);
+    subEl.textContent = 'per ' + displayLabel;
+    helperEl.textContent = 'Enter count in ' + displayLabel + 's. Cost per ' + displayLabel + ' = $' + displayCost.toFixed(2) + '.';
+  } else {
+    dispEl.textContent = '--';
+    subEl.textContent = '--';
+    helperEl.textContent = 'Fill in purchase details above.';
+  }
+}
+
+async function saveNewItem() {
+  var errEl = document.getElementById('ni-error');
+  errEl.style.display = 'none';
+  var name = document.getElementById('ni-name').value.trim();
+  var catId = document.getElementById('ni-category').value;
+  var vendor = document.getElementById('ni-vendor').value.trim();
+  var caseCost = parseFloat(document.getElementById('ni-case-cost').value) || 0;
+  var units = parseFloat(document.getElementById('ni-units').value) || 1;
+  var purchaseUnit = document.getElementById('ni-purchase-unit').value.trim() || 'each';
+  var countUnit = document.getElementById('ni-count-unit').value;
+  var countVal = parseFloat(document.getElementById('ni-count-val').value) || 0;
+  if (!name) { errEl.textContent = 'Item name is required.'; errEl.style.display = 'block'; return; }
+  if (!catId) { errEl.textContent = 'Please select a category.'; errEl.style.display = 'block'; return; }
+  if (caseCost === 0) { errEl.textContent = 'Please enter the case cost.'; errEl.style.display = 'block'; return; }
+  var cpu = units > 0 ? caseCost / units : 0;
+  var itemId = crypto.randomUUID();
+  var itemPayload = {id:itemId, name:name, cos_category_id:catId, vendor:vendor||null, case_cost:caseCost, units_per_case:units, unit_label:purchaseUnit, purchase_unit:purchaseUnit, count_unit:countUnit, cost_per_unit:cpu, active:true, status:'pending', added_by_venue:currentVenue, added_by_name:'field'};
+  var btn = document.querySelector('#new-item-modal .modal-save');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+  try {
+    var r = await fetch(SUPA_URL + '/rest/v1/inventory_items', {method:'POST', headers:Object.assign({}, apiHeaders(), {'Prefer':'return=minimal'}), body:JSON.stringify(itemPayload)});
+    if (!r.ok) throw new Error(await r.text());
+    await fetch(SUPA_URL + '/rest/v1/inventory_venue_profiles', {method:'POST', headers:Object.assign({}, apiHeaders(), {'Prefer':'return=minimal'}), body:JSON.stringify({id:crypto.randomUUID(), venue:currentVenue, item_id:itemId})});
+    pcAllItems.push(itemPayload);
+    pcProfiles.push({venue:currentVenue, item_id:itemId});
+    if (countVal > 0) {
+      var countCost = countUnit === 'case' ? caseCost : cpu;
+      updateCurrentCount(itemId, countVal, countVal * countCost);
+    }
+    closeNewItemModal();
+    await loadAll();
+    await loadCount();
+  } catch(e) {
+    errEl.textContent = 'Save failed. Please try again.';
+    errEl.style.display = 'block';
+    if (btn) { btn.disabled = false; btn.textContent = 'Add item and count'; }
+  }
+}
+
+function togglePrintPanel() {
+  var p = document.getElementById('print-panel');
+  if (p) p.style.display = p.style.display === 'none' ? 'block' : 'none';
+}
+
+function doPrint(catId) {
+  var venueLabel = '';
+  for (var i = 0; i < VENUES.length; i++) { if (VENUES[i].code === currentVenue) { venueLabel = VENUES[i].label; break; } }
+  var monthLabel = getMonthLabel(currentMonth);
+  var catName = '';
+  if (catId) { var cat = getCatById(catId); catName = cat ? ' - ' + cat.name : ''; }
+  document.getElementById('print-title-text').textContent = venueLabel + ' - ' + monthLabel + catName;
+  document.getElementById('print-sub-text').textContent = 'Printed: ' + new Date().toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'});
+  if (catId) {
+    document.querySelectorAll('.cat-section').forEach(function(sec) {
+      sec.style.display = sec.id === 'catsec-' + catId.replace(/-/g, '') ? 'block' : 'none';
+    });
+  }
+  window.print();
+  if (catId) {
+    document.querySelectorAll('.cat-section').forEach(function(sec) { sec.style.display = 'block'; });
+  }
+}
+
+function clearAllCounts() {
+  if (!confirm('Clear all entered counts for this venue and month? This only clears your current entries and does not affect any submitted data.')) return;
+  var newCounts = [];
+  for (var i = 0; i < pcCurrentCounts.length; i++) {
+    if (pcCurrentCounts[i].item_id === SENTINEL_ID) newCounts.push(pcCurrentCounts[i]);
+  }
+  pcCurrentCounts = newCounts;
+  var inputs = document.querySelectorAll('.count-input');
+  for (var i = 0; i < inputs.length; i++) {
+    inputs[i].value = '';
+    inputs[i].classList.remove('has-val');
+    inputs[i].classList.remove('flagged');
+  }
+  var valCells = document.querySelectorAll('.val-td');
+  for (var i = 0; i < valCells.length; i++) {
+    valCells[i].textContent = '--';
+    valCells[i].classList.add('empty');
+  }
+  recalcCatSubtotals();
+  recalcGrandTotal();
+  recalcProgress();
+}
+
+renderVenueTiles();
+loadAll();
+</script>
+</body>
+</html>
