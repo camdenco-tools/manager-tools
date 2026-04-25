@@ -21,6 +21,10 @@ header { background: var(--card); border-bottom: 1px solid var(--border); paddin
 .header-divider { width: 1px; height: 20px; background: var(--border); }
 .header-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
 .header-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: var(--primary); color: white; padding: 3px 8px; border-radius: 20px; }
+.header-right { display: flex; align-items: center; gap: 12px; }
+.header-user { font-size: 12px; color: var(--label); font-weight: 600; }
+.sign-out-btn { font-size: 11px; font-weight: 700; color: var(--label); background: none; border: 1px solid var(--border); padding: 5px 12px; border-radius: 8px; cursor: pointer; font-family: var(--font); transition: all 0.15s; }
+.sign-out-btn:hover { color: var(--primary); border-color: var(--primary); }
 
 .main-content { max-width: 900px; margin: 0 auto; padding: 32px 32px 80px; }
 
@@ -85,6 +89,7 @@ header { background: var(--card); border-bottom: 1px solid var(--border); paddin
     <span class="header-title">Venue Item Profiles</span>
     <span class="header-badge">Admin</span>
   </div>
+  <div class="header-right" id="header-right"></div>
 </header>
 
 <div class="main-content">
@@ -121,29 +126,44 @@ header { background: var(--card); border-bottom: 1px solid var(--border); paddin
 
 <div class="toast" id="toast"></div>
 
+<script src="/pc-auth.js"></script>
 <script>
 var SB_URL='https://aoazlttdjowhlfcksoyl.supabase.co';
 var SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvYXpsdHRkam93aGxmY2tzb3lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNzU4MjMsImV4cCI6MjA5MDg1MTgyM30.tagP_88g7R3d_p7a4Kp0NirnJgkAR5AQQImCt414SJg';
 
 var pcCategories=[],pcItems=[],pcProfiles=[];
 
-function apiHeaders(){return{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'};}
+function apiHeaders(){
+  try { var h = pcAuth.headers(); if (h) return Object.assign(h, {'Content-Type':'application/json'}); } catch(e) {}
+  return {'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'};
+}
 function fmt(n){return'$'+parseFloat(n||0).toFixed(2);}
 
-async function loadAll(){try{var r1=await fetch(SB_URL+'/rest/v1/cos_categories?select=*&order=sort_order.asc',{headers:apiHeaders()});pcCategories=await r1.json();var r2=await fetch(SB_URL+'/rest/v1/inventory_items?select=*&order=name.asc',{headers:apiHeaders()});pcItems=await r2.json();var r3=await fetch(SB_URL+'/rest/v1/inventory_venue_profiles?select=*',{headers:apiHeaders()});pcProfiles=await r3.json();renderProfiles();}catch(e){document.getElementById('profiles-content').innerHTML='<div class="loading">Error loading data. Please refresh.</div>';}}
+function setupHeader(){
+  var el = document.getElementById('header-right');
+  try {
+    var user = pcAuth.getUser();
+    if (user) {
+      el.innerHTML = '<span class="header-user">' + user.display_name + '</span><button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
+    }
+  } catch(e) {}
+}
+
+async function loadAll(){try{var hdrs=apiHeaders();var r1=await fetch(SB_URL+'/rest/v1/cos_categories?select=*&order=sort_order.asc',{headers:hdrs});pcCategories=await r1.json();var r2=await fetch(SB_URL+'/rest/v1/inventory_items?select=*&order=name.asc',{headers:hdrs});pcItems=await r2.json();var r3=await fetch(SB_URL+'/rest/v1/inventory_venue_profiles?select=*',{headers:hdrs});pcProfiles=await r3.json();renderProfiles();}catch(e){document.getElementById('profiles-content').innerHTML='<div class="loading">Error loading data. Please refresh.</div>';}}
 
 function renderProfiles(){var venue=document.getElementById('venue-filter').value;var profiled={};for(var i=0;i<pcProfiles.length;i++){if(pcProfiles[i].venue===venue)profiled[pcProfiles[i].item_id]=true;}var profiledCount=Object.keys(profiled).length;var activeItems=[];for(var i=0;i<pcItems.length;i++){if(pcItems[i].active&&pcItems[i].status!=='pending')activeItems.push(pcItems[i]);}document.getElementById('stat-profiled').textContent=profiledCount;document.getElementById('stat-available').textContent=activeItems.length;document.getElementById('stat-cats').textContent=pcCategories.length;document.getElementById('count-label').textContent=profiledCount+' of '+activeItems.length+' items profiled';
 var byCat={};for(var i=0;i<activeItems.length;i++){var catId=activeItems[i].cos_category_id||'none';if(!byCat[catId])byCat[catId]=[];byCat[catId].push(activeItems[i]);}var html='';for(var ci=0;ci<pcCategories.length;ci++){var cat=pcCategories[ci];var items=byCat[cat.id];if(!items||items.length===0)continue;var catProfiled=0;for(var ii=0;ii<items.length;ii++){if(profiled[items[ii].id])catProfiled++;}var sid='sec-'+cat.id.replace(/-/g,'');var cid='items-'+cat.id.replace(/-/g,'');html+='<div class="cat-section"><div class="cat-header" onclick="toggleSection(\''+sid+'\',\''+cid+'\')"><div><span class="cat-name">'+cat.name+'</span></div><div style="display:flex;align-items:center;gap:10px;"><span class="cat-count">'+catProfiled+' / '+items.length+' profiled</span><span class="cat-chevron open" id="'+sid+'">&#9654;</span></div></div><div class="cat-items open" id="'+cid+'">';for(var ii=0;ii<items.length;ii++){var it=items[ii];var checked=profiled[it.id]?true:false;html+='<div class="item-row"><div><div class="item-name">'+it.name+'</div><div class="item-meta">'+(it.vendor||'--')+' &middot; '+fmt(it.cost_per_unit)+' / '+(it.purchase_unit||it.unit_label||'each')+'</div></div><label class="toggle"><input type="checkbox" '+(checked?'checked':'')+' onchange="toggleProfile(this,\''+it.id+'\',\''+venue+'\')"><span class="toggle-slider"></span></label></div>';}html+='</div></div>';}if(!html)html='<div class="empty-state">No active items found.</div>';document.getElementById('profiles-content').innerHTML=html;}
 
 function toggleSection(sid,cid){var chevron=document.getElementById(sid);var items=document.getElementById(cid);if(!chevron||!items)return;var isOpen=items.classList.contains('open');items.classList.toggle('open',!isOpen);chevron.classList.toggle('open',!isOpen);}
 
-async function toggleProfile(cb,itemId,venue){if(cb.checked){try{await fetch(SB_URL+'/rest/v1/inventory_venue_profiles',{method:'POST',headers:Object.assign({},apiHeaders(),{'Prefer':'return=minimal'}),body:JSON.stringify({id:crypto.randomUUID(),venue:venue,item_id:itemId})});pcProfiles.push({venue:venue,item_id:itemId});updateCounts(venue);showToast('Added',true);}catch(e){cb.checked=false;showToast('Could not save. Try again.',false);}}else{try{await fetch(SB_URL+'/rest/v1/inventory_venue_profiles?item_id=eq.'+itemId+'&venue=eq.'+venue,{method:'DELETE',headers:apiHeaders()});var newP=[];for(var i=0;i<pcProfiles.length;i++){if(!(pcProfiles[i].item_id===itemId&&pcProfiles[i].venue===venue))newP.push(pcProfiles[i]);}pcProfiles=newP;updateCounts(venue);showToast('Removed',true);}catch(e){cb.checked=true;showToast('Could not save. Try again.',false);}}}
+async function toggleProfile(cb,itemId,venue){var hdrs=apiHeaders();if(cb.checked){try{var insHdrs=Object.assign({},hdrs);insHdrs['Prefer']='return=minimal';await fetch(SB_URL+'/rest/v1/inventory_venue_profiles',{method:'POST',headers:insHdrs,body:JSON.stringify({id:crypto.randomUUID(),venue:venue,item_id:itemId})});pcProfiles.push({venue:venue,item_id:itemId});updateCounts(venue);showToast('Added',true);}catch(e){cb.checked=false;showToast('Could not save. Try again.',false);}}else{try{await fetch(SB_URL+'/rest/v1/inventory_venue_profiles?item_id=eq.'+itemId+'&venue=eq.'+venue,{method:'DELETE',headers:hdrs});var newP=[];for(var i=0;i<pcProfiles.length;i++){if(!(pcProfiles[i].item_id===itemId&&pcProfiles[i].venue===venue))newP.push(pcProfiles[i]);}pcProfiles=newP;updateCounts(venue);showToast('Removed',true);}catch(e){cb.checked=true;showToast('Could not save. Try again.',false);}}}
 
 function updateCounts(venue){var profiledCount=0;for(var i=0;i<pcProfiles.length;i++){if(pcProfiles[i].venue===venue)profiledCount++;}var activeCount=0;for(var i=0;i<pcItems.length;i++){if(pcItems[i].active&&pcItems[i].status!=='pending')activeCount++;}document.getElementById('stat-profiled').textContent=profiledCount;document.getElementById('count-label').textContent=profiledCount+' of '+activeCount+' items profiled';
 var cats=document.querySelectorAll('.cat-section');cats.forEach(function(section){var toggles=section.querySelectorAll('.toggle input[type=checkbox]');var checked=0;toggles.forEach(function(t){if(t.checked)checked++;});var countEl=section.querySelector('.cat-count');if(countEl)countEl.textContent=checked+' / '+toggles.length+' profiled';});}
 
 function showToast(msg,good){var t=document.getElementById('toast');t.textContent=msg;t.className='toast'+(good?' green':' red');t.classList.add('show');setTimeout(function(){t.classList.remove('show');},2000);}
 
+setupHeader();
 loadAll();
 </script>
 </body>
