@@ -35,6 +35,10 @@
   .print-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
   .page-desc { font-size: 13px; color: var(--label); line-height: 1.6; }
   .event-card { background: var(--card); border-radius: 12px; border: 1px solid var(--border); margin-bottom: 10px; overflow: hidden; box-shadow: var(--shadow); }
+  .event-card.is-staffed { opacity: 0.55; }
+  .event-card.is-staffed .event-card-header { background: #f6fdf9; }
+  .event-card.is-staffed .evt-name { text-decoration: line-through; text-decoration-color: var(--green); }
+  .event-card.is-staffed:hover { opacity: 0.8; }
   .event-card-header { padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; border-bottom: 1px solid transparent; transition: background 0.12s; flex-wrap: wrap; }
   .event-card-header:hover { background: #fafaf8; }
   .event-card-header.open { border-bottom-color: var(--border); }
@@ -42,7 +46,8 @@
   .evt-date { font-size: 11px; font-weight: 700; color: var(--label); white-space: nowrap; min-width: 60px; }
   .vbadge { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 11px; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
   .evt-name { font-size: 14px; font-weight: 700; color: var(--primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .evt-time { font-size: 12px; color: var(--label); flex-shrink: 0; }
+  .evt-time { font-size: 12px; color: var(--label); flex-shrink: 0; white-space: nowrap; }
+  .staffed-badge { font-size: 9px; font-weight: 800; background: var(--green); color: #fff; border-radius: 4px; padding: 2px 6px; flex-shrink: 0; letter-spacing: 0.04em; text-transform: uppercase; }
   .evt-right { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
   .coverage-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
   .coverage-counts { font-size: 13px; font-weight: 800; white-space: nowrap; }
@@ -152,7 +157,7 @@
     </div>
   </div>
   <div class="print-bar">
-    <p class="page-desc">Click an event to see who signed up. Expand the not signed up section to see who else may be available to call.</p>
+    <p class="page-desc">Click an event to see who signed up. Expand the not signed up section to see who else may be available to call. Events with a green strikethrough are already fully staffed.</p>
   </div>
   <div id="events-container"><div class="loading">Loading...</div></div>
 </div>
@@ -196,31 +201,47 @@ var DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var SUPPORT_STAND='Support Staff';
 var NOT_SHOW_INITIAL=4;
 
-var pcEvents=[],pcEmployees=[],pcAvailability={},pcStaffingRequests={},pcParLevels={},pcHistoryCounts={};
+var pcEvents=[],pcEmployees=[],pcAvailability={},pcStaffingRequests={},pcParLevels={},pcHistoryCounts={},pcStaffingStatus={};
 var selectedVenues={},pendingDeleteId=null,pendingDeleteName=null;
 
 function sbFetch(path){return fetch(SB_URL+'/rest/v1/'+path,{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}}).then(function(r){if(!r.ok)throw new Error(r.status);return r.json();});}
 
 function init(){
 var today=new Date();var ds=today.getFullYear()+'-'+pad(today.getMonth()+1)+'-'+pad(today.getDate());
-var p1=sbFetch('events?event_date=gte.'+ds+'&order=event_date.asc').catch(function(){return[];});
+var p1=sbFetch('events?event_date=gte.'+ds+'&order=event_date.asc&select=id,venue,event_name,event_date,event_type,gates_open,show_time,report_time,end_time,expected_attendance,staffing_tier').catch(function(){return[];});
 var p2=sbFetch('availability?select=id,staff_name,event_id,submitted_at,note&order=submitted_at.asc').catch(function(){return[];});
 var p3=sbFetch('employees?is_active=eq.true&order=last_name.asc').catch(function(){return[];});
 var p4=sbFetch('staffing_requests?select=event_id,venue,stand,role,headcount').catch(function(){return[];});
 var p5=sbFetch('par_levels?select=venue,stand,role,default_count,excluded_from_total,tier').catch(function(){return[];});
 var p6=sbFetch('availability?select=staff_name').catch(function(){return[];});
-Promise.all([p1,p2,p3,p4,p5,p6]).then(function(res){
-pcEvents=res[0]||[];var avail=res[1]||[];pcEmployees=res[2]||[];var subs=res[3]||[];var pars=res[4]||[];var allAvail=res[5]||[];
+var p7=sbFetch('event_staffing_status?select=event_id,venue,is_confirmed,confirmed_by,confirmed_at').catch(function(){return[];});
+Promise.all([p1,p2,p3,p4,p5,p6,p7]).then(function(res){
+pcEvents=res[0]||[];var avail=res[1]||[];pcEmployees=res[2]||[];var subs=res[3]||[];var pars=res[4]||[];var allAvail=res[5]||[];var statuses=res[6]||[];
 pcAvailability={};avail.forEach(function(r){if(!pcAvailability[r.event_id])pcAvailability[r.event_id]=[];pcAvailability[r.event_id].push(r);});
 pcStaffingRequests={};subs.forEach(function(r){var key=r.event_id+'||'+r.venue;if(!pcStaffingRequests[key])pcStaffingRequests[key]=[];pcStaffingRequests[key].push(r);});
 pcParLevels={};pars.forEach(function(r){var tier=r.tier||'full';pcParLevels[r.venue+'||'+r.stand+'||'+r.role+'||'+tier]=r;});
 pcHistoryCounts={};allAvail.forEach(function(r){pcHistoryCounts[r.staff_name]=(pcHistoryCounts[r.staff_name]||0)+1;});
+pcStaffingStatus={};statuses.forEach(function(r){pcStaffingStatus[r.event_id+'||'+r.venue]=r;});
 var venuesInEvents=[];pcEvents.forEach(function(e){if(venuesInEvents.indexOf(e.venue)===-1)venuesInEvents.push(e.venue);});
 venuesInEvents.forEach(function(v){selectedVenues[v]=true;});
 buildVenuePills(venuesInEvents);render();
 }).catch(function(e){console.error(e);document.getElementById('events-container').innerHTML='<div class="loading">Error loading data.</div>';});}
 
 function buildVenuePills(venues){var container=document.getElementById('venue-pills');container.innerHTML='';venues.forEach(function(v){var btn=document.createElement('button');btn.className='venue-pill';btn.id='pill-'+v;btn.textContent=VENUE_LABELS[v]||v;btn.setAttribute('data-venue',v);container.appendChild(btn);});if(venues.length===0)document.getElementById('filter-section').style.display='none';}
+
+function isConfirmed(evt){var s=pcStaffingStatus[evt.id+'||'+evt.venue];return s&&s.is_confirmed;}
+
+function getCallTime(evt){
+  // Call time = report_time if set, otherwise gates_open minus 1 hour
+  if(evt.report_time) return evt.report_time;
+  if(evt.gates_open){
+    var parts=evt.gates_open.split(':');
+    var h=parseInt(parts[0])-1;
+    if(h<0)h=0;
+    return pad(h)+':'+parts[1]+':'+(parts[2]||'00');
+  }
+  return null;
+}
 
 function getRequestedCount(evt){var key=evt.id+'||'+evt.venue;var rows=pcStaffingRequests[key];if(rows&&rows.length>=1){var total=0;rows.forEach(function(r){if(r.stand!==SUPPORT_STAND)total+=(r.headcount||0);});return total;}var tier=evt.staffing_tier||'full';var total=0;Object.keys(pcParLevels).forEach(function(k){var parts=k.split('||');if(parts[0]===evt.venue&&parts[3]===tier&&parts[1]!==SUPPORT_STAND){var row=pcParLevels[k];if(!row.excluded_from_total)total+=(row.default_count||0);}});return total;}
 
@@ -230,10 +251,33 @@ function getNotSignedUp(dateStr){var signedOnDate=getSignedUpOnDate(dateStr);var
 
 function render(){var container=document.getElementById('events-container');var filtered=pcEvents.filter(function(e){return selectedVenues[e.venue];});if(filtered.length===0){container.innerHTML='<div class="loading">No events match your venue selection.</div>';return;}container.innerHTML='';filtered.forEach(function(evt){container.appendChild(buildCard(evt));});}
 
-function buildCard(evt){var avList=pcAvailability[evt.id]||[];var cnt=avList.length;var requested=getRequestedCount(evt);var dateObj=new Date(evt.event_date+'T12:00:00');var dateStr=DAYS[dateObj.getDay()]+' '+(dateObj.getMonth()+1)+'/'+dateObj.getDate();var timeStr=evt.gates_open?fmtTime(evt.gates_open):(evt.show_time?fmtTime(evt.show_time):'--');var badgeStyle=VENUE_BADGE_STYLES[evt.venue]||'';var pct=requested>=1?Math.round((cnt/requested)*100):(cnt>=1?100:0);var barPct=pct>=100?100:pct;var covClass,barClass;if(cnt>=requested&&requested>=1){covClass='cov-green';barClass='bar-green';}else if(pct>=30){covClass='cov-amber';barClass='bar-amber';}else{covClass='cov-red';barClass='bar-red';}if(requested===0){covClass='';barClass='bar-green';barPct=0;}var countLabel=cnt+' signed up';if(requested>=1)countLabel+=' / '+requested+' needed';
-var card=document.createElement('div');card.className='event-card';card.id='card-'+evt.id;
+function buildCard(evt){var avList=pcAvailability[evt.id]||[];var cnt=avList.length;var requested=getRequestedCount(evt);var dateObj=new Date(evt.event_date+'T12:00:00');var dateStr=DAYS[dateObj.getDay()]+' '+(dateObj.getMonth()+1)+'/'+dateObj.getDate();
+
+// Build shift time string
+var callTime=getCallTime(evt);
+var endTime=evt.end_time||null;
+var timeStr='';
+if(callTime){
+  timeStr=fmtTime(callTime);
+  if(endTime) timeStr+=' - '+fmtTime(endTime);
+} else if(evt.gates_open){
+  timeStr='Gates '+fmtTime(evt.gates_open);
+  if(endTime) timeStr+=' - '+fmtTime(endTime);
+} else if(evt.show_time){
+  timeStr='Show '+fmtTime(evt.show_time);
+} else {
+  timeStr='--';
+}
+
+var badgeStyle=VENUE_BADGE_STYLES[evt.venue]||'';var pct=requested>=1?Math.round((cnt/requested)*100):(cnt>=1?100:0);var barPct=pct>=100?100:pct;var covClass,barClass;if(cnt>=requested&&requested>=1){covClass='cov-green';barClass='bar-green';}else if(pct>=30){covClass='cov-amber';barClass='bar-amber';}else{covClass='cov-red';barClass='bar-red';}if(requested===0){covClass='';barClass='bar-green';barPct=0;}var countLabel=cnt+' signed up';if(requested>=1)countLabel+=' / '+requested+' needed';
+
+var confirmed=isConfirmed(evt);
+
+var card=document.createElement('div');card.className='event-card'+(confirmed?' is-staffed':'');card.id='card-'+evt.id;
+
 var hdr=document.createElement('div');hdr.className='event-card-header';hdr.setAttribute('data-evtid',evt.id);
-hdr.innerHTML='<div class="evt-left"><span class="evt-date">'+dateStr+'</span><span class="vbadge" style="'+badgeStyle+'">'+evt.venue+'</span><span class="evt-name">'+evt.event_name+'</span></div><div class="evt-right"><span class="evt-time">'+timeStr+'</span><div class="coverage-wrap"><span class="coverage-counts '+covClass+'">'+countLabel+'</span>'+(requested>=1?'<div class="coverage-bar-wrap"><div class="coverage-bar '+barClass+'" style="width:'+barPct+'%;"></div></div>':'')+'</div><span class="chevron" id="chev-'+evt.id+'">v</span></div>';
+
+hdr.innerHTML='<div class="evt-left"><span class="evt-date">'+dateStr+'</span><span class="vbadge" style="'+badgeStyle+'">'+evt.venue+'</span><span class="evt-name">'+evt.event_name+'</span>'+(confirmed?'<span class="staffed-badge">Staffed</span>':'')+'</div><div class="evt-right"><span class="evt-time">'+timeStr+'</span><div class="coverage-wrap"><span class="coverage-counts '+covClass+'">'+countLabel+'</span>'+(requested>=1?'<div class="coverage-bar-wrap"><div class="coverage-bar '+barClass+'" style="width:'+barPct+'%;"></div></div>':'')+'</div><span class="chevron" id="chev-'+evt.id+'">v</span></div>';
 
 var body=document.createElement('div');body.className='event-card-body';body.id='body-'+evt.id;
 var signedSection=document.createElement('div');signedSection.className='panel-section';
@@ -273,7 +317,13 @@ function toggleCard(evtId){var body=document.getElementById('body-'+evtId);var c
 function toggleNotPanel(evtId){var body=document.getElementById('notbody-'+evtId);var chev=document.getElementById('notchev-'+evtId);var isOpen=body.classList.contains('open');body.classList.toggle('open',!isOpen);chev.textContent=isOpen?'v':'^';}
 function getEmployeePhone(name){for(var i=0;i<pcEmployees.length;i++){if((pcEmployees[i].first_name+' '+pcEmployees[i].last_name)===name)return pcEmployees[i].phone||'';}return'';}
 
-function openPrintPanel(evtId,type){var evt=null;for(var i=0;i<pcEvents.length;i++){if(pcEvents[i].id===evtId){evt=pcEvents[i];break;}}if(!evt)return;var dateObj=new Date(evt.event_date+'T12:00:00');var dateStr=DAYS[dateObj.getDay()]+', '+['January','February','March','April','May','June','July','August','September','October','November','December'][dateObj.getMonth()]+' '+dateObj.getDate()+', '+dateObj.getFullYear();var metaStr=(VENUE_LABELS[evt.venue]||evt.venue)+' -- '+(evt.show_time?'Show '+fmtTime(evt.show_time):'');var now=new Date();var stamp='Printed '+now.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})+' at '+now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});document.getElementById('print-evt-name').textContent=evt.event_name;document.getElementById('print-evt-meta').textContent=metaStr;document.getElementById('print-stamp').textContent=stamp;var typeEl=document.getElementById('print-type');var listEl=document.getElementById('print-list');listEl.innerHTML='';
+function openPrintPanel(evtId,type){var evt=null;for(var i=0;i<pcEvents.length;i++){if(pcEvents[i].id===evtId){evt=pcEvents[i];break;}}if(!evt)return;var dateObj=new Date(evt.event_date+'T12:00:00');var dateStr=DAYS[dateObj.getDay()]+', '+['January','February','March','April','May','June','July','August','September','October','November','December'][dateObj.getMonth()]+' '+dateObj.getDate()+', '+dateObj.getFullYear();
+var callTime=getCallTime(evt);
+var shiftStr='';
+if(callTime){shiftStr='Call: '+fmtTime(callTime);if(evt.end_time)shiftStr+=' - End: '+fmtTime(evt.end_time);}
+else if(evt.gates_open){shiftStr='Gates: '+fmtTime(evt.gates_open);}
+var metaStr=(VENUE_LABELS[evt.venue]||evt.venue)+(shiftStr?' -- '+shiftStr:'');
+var now=new Date();var stamp='Printed '+now.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})+' at '+now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});document.getElementById('print-evt-name').textContent=evt.event_name;document.getElementById('print-evt-meta').textContent=metaStr;document.getElementById('print-stamp').textContent=stamp;var typeEl=document.getElementById('print-type');var listEl=document.getElementById('print-list');listEl.innerHTML='';
 if(type==='signed'){typeEl.className='print-panel-type signed';typeEl.textContent='Signed Up';var avList=pcAvailability[evtId]||[];if(avList.length===0){listEl.innerHTML='<div class="empty-print">Nobody signed up yet.</div>';}else{avList.forEach(function(r,i){var phone=getEmployeePhone(r.staff_name);listEl.innerHTML+='<div class="print-name-row"><div class="print-name-left"><span class="print-num">'+(i+1)+'</span><span class="print-name">'+r.staff_name+'</span>'+(r.note?'<span class="print-note">'+r.note+'</span>':'')+'</div><span class="print-phone">'+phone+'</span></div>';});}}
 else{typeEl.className='print-panel-type not-signed';typeEl.textContent='Not Signed Up -- Available to Call';var notList=getNotSignedUp(evt.event_date);if(notList.length===0){listEl.innerHTML='<div class="empty-print">Everyone has signed up!</div>';}else{notList.forEach(function(emp,i){var fullName=emp.first_name+' '+emp.last_name;var histCount=pcHistoryCounts[fullName]||0;listEl.innerHTML+='<div class="print-name-row"><div class="print-name-left"><span class="print-num">'+(i+1)+'</span><span class="print-name">'+fullName+'</span>'+(histCount>=1?'<span class="not-count-badge" style="margin-left:6px;">'+histCount+' past</span>':'')+'</div><span class="print-phone">'+(emp.phone||'')+'</span></div>';});}}
 document.getElementById('print-overlay').classList.add('open');}
