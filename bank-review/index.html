@@ -272,6 +272,7 @@ var currentCharges = [];  // all charges from current batch
 var expenseChecked = {};  // id -> boolean
 var currentBatchId = null;
 var currentUser = null;
+var foodChecked = {};  // id -> boolean for food section checkboxes
 
 // ── Helpers ──
 function fmtMoney(n) { return Math.abs(parseFloat(n)).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}); }
@@ -634,6 +635,43 @@ function isFoodCategory(cat) {
 
 // ── Match against existing purchases ──
 async function matchCharges(lines, batchMonth, fileName, fileType) {
+  // ── STEP 0: Filter and normalize ──
+  // Filter out incoming deposits (positive = money IN = revenue, not an expense)
+  // Filter out internal transfers
+  var TRANSFER_PATTERNS = /online transfer|transfer to|transfer from|xfer to|xfer from|wire transfer/i;
+  var DEPOSIT_PATTERNS = /ach paymen|ach credit|ach deposit|direct dep|payroll dep/i;
+
+  var filteredCount = 0;
+  var filtered = [];
+  for (var f = 0; f < lines.length; f++) {
+    var ln = lines[f];
+    // Skip incoming deposits (positive amounts = money received)
+    if (ln.amount > 0) { filteredCount++; continue; }
+    // Skip internal transfers
+    if (TRANSFER_PATTERNS.test(ln.description)) { filteredCount++; continue; }
+    // Skip deposit patterns even if somehow negative
+    if (DEPOSIT_PATTERNS.test(ln.description)) { filteredCount++; continue; }
+
+    // Flip the sign: bank shows -608 (money out), we store as 608 (expense amount)
+    filtered.push({
+      date: ln.date,
+      description: ln.description,
+      amount: Math.abs(ln.amount)
+    });
+  }
+  lines = filtered;
+
+  if (filteredCount > 0) {
+    console.log('Filtered out ' + filteredCount + ' deposits/transfers');
+  }
+
+  if (!lines.length) {
+    alert('All transactions were deposits or transfers -- nothing to reconcile.');
+    document.getElementById('upload-card').style.display = 'block';
+    document.getElementById('review-section').style.display = 'none';
+    return;
+  }
+
   // Load existing purchases for the month range (+/- 7 days from any charge date)
   var dates = lines.map(function(l) { return l.date; }).filter(Boolean).sort();
   var minDate = dates[0];
@@ -735,6 +773,12 @@ async function matchCharges(lines, batchMonth, fileName, fileType) {
   expenseChecked = {};
   charges.forEach(function(c) {
     if (c.status === 'expense_pending') expenseChecked[c.id] = true;
+  });
+
+  // Initialize food checkboxes (all checked by default)
+  foodChecked = {};
+  charges.forEach(function(c) {
+    if (c.status === 'food_pending') foodChecked[c.id] = true;
   });
 
   document.getElementById('processing-card').style.display = 'none';
@@ -842,6 +886,7 @@ function renderFood(items) {
     var displayAmt = (isCredit ? '-' : '') + '$' + fmtMoney(c.amount);
 
     html += '<div class="food-row">';
+    html += '<input type="checkbox" class="expense-check" ' + (foodChecked[c.id] ? 'checked' : '') + ' onchange="toggleFoodCheck(\'' + c.id + '\', this.checked)" style="accent-color:#BA7517;">';
     html += '<span class="food-date">' + ds + '</span>';
     html += '<span class="food-vendor">' + c.vendor_name + '</span>';
     html += '<span class="food-amount' + (isCredit ? ' credit' : '') + '">' + displayAmt + '</span>';
@@ -851,13 +896,20 @@ function renderFood(items) {
   }
   html += '</div>';
 
+  var checkedCount = items.filter(function(c) { return foodChecked[c.id]; }).length;
   html += '<div class="food-footer">';
-  html += '<span class="food-hint">These will appear on the Purchases page for venue assignment</span>';
-  html += '<button class="section-btn amber" onclick="sendToManagers()">Send ' + items.length + ' to managers</button>';
+  html += '<span class="food-hint">Uncheck any you don\'t want to send</span>';
+  html += '<button class="section-btn amber" onclick="sendToManagers()"' + (checkedCount === 0 ? ' disabled' : '') + '>Send ' + checkedCount + ' to managers</button>';
   html += '</div>';
 
   document.getElementById('food-body').innerHTML = html;
   document.getElementById('food-body').classList.add('open');
+}
+
+function toggleFoodCheck(id, checked) {
+  foodChecked[id] = checked;
+  var food = currentCharges.filter(function(c) { return c.status === 'food_pending'; });
+  renderFood(food);
 }
 
 // ── Returned charges (from database) ──
@@ -1013,14 +1065,16 @@ async function saveExpenses() {
 
 // ── Send food charges to managers ──
 async function sendToManagers() {
-  var toSend = currentCharges.filter(function(c) { return c.status === 'food_pending'; });
-  if (!toSend.length) return;
+  // Only send checked food items
+  var toSend = currentCharges.filter(function(c) { return c.status === 'food_pending' && foodChecked[c.id]; });
 
   // Also send unchecked expenses to managers
   var uncheckedExpenses = currentCharges.filter(function(c) {
     return c.status === 'expense_pending' && !expenseChecked[c.id];
   });
   toSend = toSend.concat(uncheckedExpenses);
+
+  if (!toSend.length) return;
 
   var btn = document.querySelector('#food-section .section-btn');
   btn.disabled = true;
