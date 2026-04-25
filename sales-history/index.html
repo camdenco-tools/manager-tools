@@ -20,6 +20,10 @@ header {
 .hdivider { width: 1px; height: 20px; background: #e8e8e4; }
 .header-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
 .header-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: #1a1a1a; color: white; padding: 3px 8px; border-radius: 20px; }
+.header-right { display: flex; align-items: center; gap: 12px; }
+.header-user { font-size: 12px; color: #999; font-weight: 600; }
+.sign-out-btn { font-size: 11px; font-weight: 700; color: #999; background: none; border: 1px solid #e8e8e4; padding: 5px 12px; border-radius: 8px; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+.sign-out-btn:hover { color: #1a1a1a; border-color: #1a1a1a; }
 
 .page-body { padding: 20px 16px 60px; }
 .container { max-width: 800px; margin: 0 auto; }
@@ -71,16 +75,6 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
 .modal-cancel { padding: 11px 16px; background: #f5f5f5; color: #555; border: 1px solid #ddd; border-radius: 10px; font-size: 14px; cursor: pointer; }
 .modal-error { color: #c0392b; font-size: 12px; margin-top: 8px; display: none; }
 
-.pw-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2000; align-items: center; justify-content: center; padding: 20px; }
-.pw-overlay.open { display: flex; }
-.pw-box { background: white; border-radius: 16px; padding: 24px; width: 100%; max-width: 340px; text-align: center; }
-.pw-box h3 { font-size: 15px; font-weight: 700; color: #1a1a1a; margin-bottom: 6px; }
-.pw-box p { font-size: 13px; color: #888; margin-bottom: 16px; }
-.pw-box input { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 10px; font-size: 15px; margin-bottom: 10px; text-align: center; letter-spacing: 0.1em; }
-.pw-submit { width: 100%; padding: 11px; background: #1a1a1a; color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; margin-bottom: 8px; }
-.pw-cancel { width: 100%; padding: 9px; background: none; color: #888; border: none; font-size: 13px; cursor: pointer; }
-.pw-error { color: #c0392b; font-size: 12px; margin-bottom: 8px; display: none; }
-
 @media (max-width: 600px) {
   header { padding: 0 16px; height: auto; flex-wrap: wrap; padding: 12px 16px; gap: 10px; }
   .search-grid { grid-template-columns: 1fr; }
@@ -90,17 +84,6 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
 </style>
 </head>
 <body>
-
-<div class="pw-overlay" id="pw-overlay">
-  <div class="pw-box">
-    <h3>Admin access required</h3>
-    <p id="pw-action-desc">Enter your admin password to continue.</p>
-    <input type="password" id="pw-input" placeholder="password" onkeydown="if(event.key==='Enter')checkPassword()">
-    <div class="pw-error" id="pw-error">Incorrect password. Try again.</div>
-    <button class="pw-submit" onclick="checkPassword()">Continue</button>
-    <button class="pw-cancel" onclick="closePwOverlay()">Cancel</button>
-  </div>
-</div>
 
 <div class="modal-overlay" id="edit-modal">
   <div class="modal">
@@ -160,6 +143,7 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
     <span class="header-title">Sales History</span>
     <span class="header-badge">Search</span>
   </div>
+  <div class="header-right" id="header-right"></div>
 </header>
 
 <div class="page-body">
@@ -202,40 +186,56 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
   </div>
 </div>
 
+<script src="/pc-auth.js"></script>
 <script>
 var SUPA_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
 var SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvYXpsdHRkam93aGxmY2tzb3lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNzU4MjMsImV4cCI6MjA5MDg1MTgyM30.tagP_88g7R3d_p7a4Kp0NirnJgkAR5AQQImCt414SJg';
-var ADMIN_PASSWORD = 'popcorn2026';
 
 var VENUE_LABELS = {
-  'Mann': 'Mann Music Center', 'FMP': 'FMP', 'ACCC': 'ACCC',
-  'BWH': 'Boardwalk Hall', 'Cure': 'Cure Insurance Arena',
-  'DE': 'DE Chase Field House', 'Subaru': 'Subaru Park',
-  'Villanova': 'Villanova', 'Montage': 'Montage',
-  'SATB': 'Sports at the Beach', 'Kirkwood': 'Kirkwood'
+  'Mann':'Mann Music Center','FMP':'FMP','ACCC':'ACCC','BWH':'Boardwalk Hall',
+  'Cure':'Cure Insurance Arena','DE':'DE Chase Field House','Subaru':'Subaru Park',
+  'Villanova':'Villanova','Montage':'Montage','SATB':'Sports at the Beach','Kirkwood':'Kirkwood'
 };
 
 var STANDS = {
-  'Mann': ['Upper Concession','Upper Popcorn','Lower Popcorn','Skyline Popcorn','Upper Pizza','Lower Pizza','Skyline Pizza','Farm & Fry Truck','Crescendo','Lawn Portable','Stage Left Bar','Upper Linear Bar','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4','Mobile Cart 5','Mobile Cart 6','Mobile Cart 7','Mobile Cart 8','Mobile Cart 9','Mobile Cart 10','Hawking','Support Staff'],
-  'FMP': ['Stand 782','783','SC1','LM1','LM2','WWI','Ben Kettle','Walt Kettle','IC1','BWI','UD1','Ziggys Walt','Ziggys Ben','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4','Mobile Cart 5','Hawking','Support Staff'],
-  'ACCC': ['Stand 1','Stand 2','Hawking','Support Staff'],
-  'BWH': ['Popcorn 1','Popcorn 2','North Stand','South Stand','Hawking','Support Staff'],
-  'Cure': ['Popcorn','Candy','Cotton Candy','Hawking','Support Staff'],
-  'DE': ['VIP Bar','Cafe','Popcorn','Bar','Farm & Fry','Hawking','Support Staff'],
-  'Subaru': ['Popcorn','VIP','Hawking','Support Staff'],
-  'Villanova': ['Stand 1','Hawking','Support Staff'],
-  'Montage': ['BW Pizza','Midway Pizza','Midway Popcorn','Boardwalk Popcorn','Festival Foods','Potato Stand','Boardwalk New Food','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4','Hawking','Support Staff'],
-  'SATB': ['Stand 1','Ice Cream 1','Stand 2','Stand 3','Catering','Hawking','Support Staff'],
-  'Kirkwood': ['Stand 1','Hawking','Support Staff']
+  'Mann':['Upper Concession','Upper Popcorn','Lower Popcorn','Skyline Popcorn','Upper Pizza','Lower Pizza','Skyline Pizza','Farm & Fry Truck','Crescendo','Lawn Portable','Stage Left Bar','Upper Linear Bar','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4','Mobile Cart 5','Mobile Cart 6','Mobile Cart 7','Mobile Cart 8','Mobile Cart 9','Mobile Cart 10','Hawking','Support Staff'],
+  'FMP':['Stand 782','783','SC1','LM1','LM2','WWI','Ben Kettle','Walt Kettle','IC1','BWI','UD1','Ziggys Walt','Ziggys Ben','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4','Mobile Cart 5','Hawking','Support Staff'],
+  'ACCC':['Stand 1','Stand 2','Hawking','Support Staff'],
+  'BWH':['Popcorn 1','Popcorn 2','North Stand','South Stand','Hawking','Support Staff'],
+  'Cure':['Popcorn','Candy','Cotton Candy','Hawking','Support Staff'],
+  'DE':['VIP Bar','Cafe','Popcorn','Bar','Farm & Fry','Hawking','Support Staff'],
+  'Subaru':['Popcorn','VIP','Hawking','Support Staff'],
+  'Villanova':['Stand 1','Hawking','Support Staff'],
+  'Montage':['BW Pizza','Midway Pizza','Midway Popcorn','Boardwalk Popcorn','Festival Foods','Potato Stand','Boardwalk New Food','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4','Hawking','Support Staff'],
+  'SATB':['Stand 1','Ice Cream 1','Stand 2','Stand 3','Catering','Hawking','Support Staff'],
+  'Kirkwood':['Stand 1','Hawking','Support Staff']
 };
 
 var currentSearchData = [];
-var pendingPwAction = null;
-var adminUnlocked = false;
 var editRegisterFile = null;
 var editUnitsFile = null;
 var editRegClear = false;
 var editUnitsClear = false;
+
+function apiHeaders() {
+  try { var h = pcAuth.headers(); if (h) return h; } catch(e) {}
+  return {'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY};
+}
+
+function setupHeader() {
+  var el = document.getElementById('header-right');
+  try {
+    var user = pcAuth.getUser();
+    if (user) {
+      el.innerHTML = '<span class="header-user">' + user.display_name + '</span><button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
+    }
+  } catch(e) {}
+}
+
+function requireAdmin(desc, cb) {
+  try { if (pcAuth.isAdmin()) { cb(); return; } } catch(e) {}
+  alert('Admin login required. Please sign in from the Toolkit page.');
+}
 
 function todayLocal() {
   var d = new Date();
@@ -244,33 +244,6 @@ function todayLocal() {
 
 document.getElementById('s-from').value = '2023-01-01';
 document.getElementById('s-to').value = todayLocal();
-
-function requirePassword(actionDesc, callback) {
-  if (adminUnlocked) { callback(); return; }
-  pendingPwAction = callback;
-  document.getElementById('pw-action-desc').textContent = actionDesc;
-  document.getElementById('pw-input').value = '';
-  document.getElementById('pw-error').style.display = 'none';
-  document.getElementById('pw-overlay').classList.add('open');
-  setTimeout(function() { document.getElementById('pw-input').focus(); }, 100);
-}
-
-function checkPassword() {
-  if (document.getElementById('pw-input').value === ADMIN_PASSWORD) {
-    adminUnlocked = true;
-    document.getElementById('pw-overlay').classList.remove('open');
-    if (pendingPwAction) { pendingPwAction(); pendingPwAction = null; }
-  } else {
-    document.getElementById('pw-error').style.display = 'block';
-    document.getElementById('pw-input').value = '';
-    document.getElementById('pw-input').focus();
-  }
-}
-
-function closePwOverlay() {
-  document.getElementById('pw-overlay').classList.remove('open');
-  pendingPwAction = null;
-}
 
 async function searchHistory() {
   var from = document.getElementById('s-from').value;
@@ -287,7 +260,7 @@ async function searchHistory() {
   if (event) url += '&event_name=ilike.' + encodeURIComponent('%' + event + '%');
 
   try {
-    var res = await fetch(url, { headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY } });
+    var res = await fetch(url, {headers: apiHeaders()});
     var rows = await res.json();
     currentSearchData = rows;
 
@@ -383,7 +356,7 @@ function toggleResult(id, chId) {
 }
 
 function triggerEdit(id) {
-  requirePassword('Enter your admin password to edit this submission.', function() { openEditModal(id); });
+  requireAdmin('Admin access required to edit.', function() { openEditModal(id); });
 }
 
 function openEditModal(id) {
@@ -466,9 +439,11 @@ function clearPhoto(type) {
 function closeEditModal() { document.getElementById('edit-modal').classList.remove('open'); }
 
 async function uploadPhoto(file, path) {
+  var hdrs = apiHeaders();
+  hdrs['Content-Type'] = file.type;
   var res = await fetch(SUPA_URL + '/storage/v1/object/sale-photos/' + path, {
     method: 'POST',
-    headers: { 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': file.type },
+    headers: hdrs,
     body: file
   });
   if (!res.ok) return null;
@@ -506,12 +481,12 @@ async function saveEdit() {
   if (editUnitsFile) unitsUrl = await uploadPhoto(editUnitsFile, id + '-units.' + editUnitsFile.name.split('.').pop());
 
   try {
+    var hdrs = apiHeaders();
+    hdrs['Content-Type'] = 'application/json';
+    hdrs['Prefer'] = 'return=minimal';
     var res = await fetch(SUPA_URL + '/rest/v1/sales?id=eq.' + id, {
       method: 'PATCH',
-      headers: {
-        'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY,
-        'Content-Type': 'application/json', 'Prefer': 'return=minimal'
-      },
+      headers: hdrs,
       body: JSON.stringify({
         event_date: date, amount: amount, event_name: evtName || null,
         venue: venue, stand: stand, staff_count: staffVal,
@@ -528,15 +503,17 @@ async function saveEdit() {
 }
 
 function triggerDelete(id, label) {
-  requirePassword('Enter your admin password to delete "' + label + '".', function() { confirmDelete(id, label); });
+  requireAdmin('Admin access required to delete "' + label + '".', function() { confirmDelete(id, label); });
 }
 
 async function confirmDelete(id, label) {
   if (!confirm('Delete this entry?\n\n' + label + '\n\nThis cannot be undone.')) return;
   try {
+    var hdrs = apiHeaders();
+    hdrs['Prefer'] = 'return=minimal';
     var res = await fetch(SUPA_URL + '/rest/v1/sales?id=eq.' + id, {
       method: 'DELETE',
-      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Prefer': 'return=minimal' }
+      headers: hdrs
     });
     if (!res.ok) throw new Error();
     searchHistory();
@@ -564,6 +541,8 @@ function exportCSV() {
   a.download = 'sales-history-' + new Date().toISOString().split('T')[0] + '.csv';
   a.click();
 }
+
+setupHeader();
 </script>
 </body>
 </html>
