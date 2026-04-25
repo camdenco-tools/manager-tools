@@ -183,15 +183,15 @@ var VENUE_LABELS = {
 };
 
 var STANDS = {
-  'Mann': ['Food Court Bar 2','Parkside Tent Bar','Parkside GA View Bar','Upper Concession','Upper Popcorn','Lower Popcorn','Upper Pizza','Lower Pizza','Farm & Fry Truck','Crescendo','Lawn Portable','Stage Left Bar','Upper Linear Bar','Hawking','Support Staff'],
-  'FMP': ['Stand 782','SC1','LM1','LM2','WWI','Ben Kettle','Walt Kettle','IC1','BWI','Ziggys','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4','Mobile Cart 5','Hawking','Support Staff'],
+  'Mann': ['Upper Concession','Upper Popcorn','Lower Popcorn','Skyline Popcorn','Upper Pizza','Lower Pizza','Skyline Pizza','Farm & Fry Truck','Crescendo','Lawn Portable','Stage Left Bar','Upper Linear Bar','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4','Mobile Cart 5','Mobile Cart 6','Mobile Cart 7','Mobile Cart 8','Mobile Cart 9','Mobile Cart 10','Hawking','Support Staff'],
+  'FMP': ['Stand 782','783','SC1','LM1','LM2','WWI','Ben Kettle','Walt Kettle','IC1','BWI','UD1','Ziggys Walt','Ziggys Ben','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4','Mobile Cart 5','Hawking','Support Staff'],
   'ACCC': ['Stand 1','Stand 2','Hawking','Support Staff'],
-  'BWH': ['North Stand','South Stand','Hawking','Support Staff'],
+  'BWH': ['Popcorn 1','Popcorn 2','North Stand','South Stand','Hawking','Support Staff'],
   'Cure': ['Popcorn','Candy','Cotton Candy','Hawking','Support Staff'],
   'DE': ['VIP Bar','Cafe','Popcorn','Bar','Farm & Fry','Hawking','Support Staff'],
   'Subaru': ['Popcorn','VIP','Hawking','Support Staff'],
   'Villanova': ['Stand 1','Hawking','Support Staff'],
-  'Montage': ['BW Pizza','Midway Pizza','Midway Popcorn','Boardwalk Popcorn','Festival Foods','Potato Stand','Boardwalk New Food','Mobile Cart 1','Mobile Cart 2','Hawking','Support Staff'],
+  'Montage': ['BW Pizza','Midway Pizza','Midway Popcorn','Boardwalk Popcorn','Festival Foods','Potato Stand','Boardwalk New Food','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4','Hawking','Support Staff'],
   'SATB': ['Stand 1','Ice Cream 1','Stand 2','Stand 3','Catering','Hawking','Support Staff'],
   'Kirkwood': ['Stand 1','Hawking','Support Staff']
 };
@@ -218,12 +218,10 @@ function scoreboardDate() {
 
 document.getElementById('evt-date').value = todayLocal();
 
-// ── Photo validation ──
 function isBlockedFile(file) {
   var name = file.name.toLowerCase();
   var ext = name.split('.').pop();
   if (BLOCKED_EXTENSIONS.indexOf(ext) !== -1) return true;
-  // Also check MIME type for HEIC that might come through as image/heic or image/heif
   var mime = (file.type || '').toLowerCase();
   if (mime.indexOf('heic') !== -1 || mime.indexOf('heif') !== -1) return true;
   return false;
@@ -232,8 +230,6 @@ function isBlockedFile(file) {
 function handleFile(input, type) {
   if (input.files && input.files[0]) {
     var file = input.files[0];
-
-    // Block HEIC/HEIF
     if (isBlockedFile(file)) {
       var boxId = type === 'register' ? 'upload-register' : 'upload-units';
       var textId = type === 'register' ? 'register-text' : 'units-text';
@@ -243,14 +239,12 @@ function handleFile(input, type) {
       input.value = '';
       if (type === 'register') uploadedRegister = null;
       else uploadedUnits = null;
-      // Clear the error after 4 seconds
       setTimeout(function() {
         document.getElementById(boxId).classList.remove('has-error');
         document.getElementById(textId).textContent = type === 'register' ? 'Register total' : 'Units sold report';
       }, 4000);
       return;
     }
-
     if (type === 'register') {
       uploadedRegister = file;
       document.getElementById('upload-register').classList.remove('has-error');
@@ -265,7 +259,6 @@ function handleFile(input, type) {
   }
 }
 
-// ── Date / Venue / Stand logic ──
 async function handleDateChange() {
   var date = document.getElementById('evt-date').value;
   var venueSel = document.getElementById('venue-sel');
@@ -279,10 +272,8 @@ async function handleDateChange() {
     document.getElementById('no-event-warning').style.display = 'none';
     return;
   }
-
   noteEl.textContent = 'Loading events...';
   noteEl.className = 'field-note';
-
   try {
     var res = await fetch(
       SUPA_URL + '/rest/v1/events?event_date=eq.' + date + '&select=venue,event_name&order=venue.asc',
@@ -293,7 +284,6 @@ async function handleDateChange() {
   } catch(e) {
     eventsOnDate = [];
   }
-
   var warningEl = document.getElementById('no-event-warning');
   if (eventsOnDate.length) {
     warningEl.style.display = 'none';
@@ -326,7 +316,6 @@ function handleVenueChange() {
   var venueCode = document.getElementById('venue-sel').value;
   var standSel = document.getElementById('stand-sel');
   standSel.innerHTML = '<option value="">Select stand...</option>';
-
   if (venueCode && STANDS[venueCode]) {
     STANDS[venueCode].forEach(function(s) {
       var o = document.createElement('option');
@@ -334,12 +323,10 @@ function handleVenueChange() {
       standSel.appendChild(o);
     });
   }
-
   var nameEl = document.getElementById('evt-name');
   var autoEl = document.getElementById('event-auto');
   nameEl.value = '';
   autoEl.style.display = 'none';
-
   if (venueCode && eventsOnDate.length) {
     var match = null;
     for (var i = 0; i < eventsOnDate.length; i++) {
@@ -353,7 +340,6 @@ function handleVenueChange() {
   }
 }
 
-// ── Photo upload ──
 async function uploadPhoto(file, path) {
   var res = await fetch(SUPA_URL + '/storage/v1/object/sale-photos/' + path, {
     method: 'POST',
@@ -364,7 +350,6 @@ async function uploadPhoto(file, path) {
   return SUPA_URL + '/storage/v1/object/public/sale-photos/' + path;
 }
 
-// ── Submit ──
 async function submitSale() {
   var date = document.getElementById('evt-date').value;
   var evtName = document.getElementById('evt-name').value.trim();
@@ -373,19 +358,16 @@ async function submitSale() {
   var amount = parseFloat(document.getElementById('amount').value);
   var errEl = document.getElementById('error-msg');
   errEl.style.display = 'none';
-
   if (!date || !venue || !stand || !amount || isNaN(amount)) {
     errEl.textContent = 'Please fill in date, venue, stand, and amount.';
     errEl.style.display = 'block';
     return;
   }
-
   var staffCount = parseInt(document.getElementById('staff-count').value) || null;
   var tipAmount = parseFloat(document.getElementById('tip-amount').value) || null;
   var btn = document.getElementById('submit-btn');
   btn.disabled = true;
   btn.textContent = 'Saving...';
-
   try {
     var saleId = crypto.randomUUID();
     var photoUrl = null;
@@ -396,7 +378,6 @@ async function submitSale() {
     if (uploadedUnits) {
       unitsUrl = await uploadPhoto(uploadedUnits, saleId + '-units.' + uploadedUnits.name.split('.').pop());
     }
-
     var res = await fetch(SUPA_URL + '/rest/v1/sales', {
       method: 'POST',
       headers: {
@@ -410,7 +391,6 @@ async function submitSale() {
       })
     });
     if (!res.ok) throw new Error(await res.text());
-
     document.getElementById('form-card').style.display = 'none';
     document.getElementById('success-card').style.display = 'block';
     document.getElementById('success-detail').textContent = stand + ' at ' + (VENUE_LABELS[venue] || venue) + ' -- $' + amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -448,7 +428,6 @@ function resetForm() {
   handleDateChange();
 }
 
-// ── Scoreboard ──
 async function loadScoreboard() {
   var sb = scoreboardDate();
   document.getElementById('scoreboard-label').textContent = sb.label;
@@ -467,13 +446,11 @@ async function loadScoreboard() {
     var grandTotal = rows.reduce(function(s,r) { return s + parseFloat(r.amount); }, 0);
     var grandTips = rows.reduce(function(s,r) { return s + (parseFloat(r.tip_amount) || 0); }, 0);
     document.getElementById('scoreboard-total').textContent = '$' + Math.round(grandTotal).toLocaleString();
-
     var evtNamesSet = {};
     rows.forEach(function(r) { if (r.event_name) evtNamesSet[r.event_name] = true; });
     var evtText = Object.keys(evtNamesSet).join(' / ');
     if (grandTips > 0) evtText += (evtText ? ' -- ' : '') + 'Tips: $' + Math.round(grandTips).toLocaleString();
     document.getElementById('scoreboard-event').textContent = evtText;
-
     var byVenue = {};
     rows.forEach(function(r) {
       if (!byVenue[r.venue]) byVenue[r.venue] = [];
@@ -485,7 +462,6 @@ async function loadScoreboard() {
       var bTotal = b[1].reduce(function(s,r) { return s+parseFloat(r.amount); }, 0);
       return bTotal - aTotal;
     });
-
     var html = '';
     venueEntries.forEach(function(entry, i) {
       var venue = entry[0];
