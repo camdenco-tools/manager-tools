@@ -14,14 +14,6 @@
 }
 body { background: var(--bg); font-family: var(--font); color: var(--primary); min-height: 100vh; }
 
-#login-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; }
-.login-card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 48px 40px; width: 100%; max-width: 380px; text-align: center; }
-.login-logo { font-size: 28px; font-weight: 800; letter-spacing: -0.03em; margin-bottom: 4px; }
-.login-sub { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--label); margin-bottom: 36px; }
-.login-card input[type="password"] { width: 100%; padding: 14px 16px; border: 1.5px solid var(--border); border-radius: 10px; font-size: 15px; font-family: var(--font); outline: none; transition: border-color 0.15s; margin-bottom: 12px; background: var(--bg); }
-.login-card input[type="password"]:focus { border-color: var(--primary); }
-.login-error { font-size: 12px; color: #e05c5c; margin-bottom: 12px; min-height: 16px; }
-
 #app { display: none; }
 
 header { background: var(--card); border-bottom: 1px solid var(--border); padding: 0 32px; display: flex; align-items: center; justify-content: space-between; height: 64px; position: sticky; top: 0; z-index: 100; }
@@ -32,6 +24,9 @@ header { background: var(--card); border-bottom: 1px solid var(--border); paddin
 .header-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
 .header-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: var(--primary); color: white; padding: 3px 8px; border-radius: 20px; }
 .header-right { display: flex; align-items: center; gap: 12px; }
+.header-user { font-size: 12px; color: var(--label); font-weight: 600; }
+.sign-out-btn { font-size: 11px; font-weight: 700; color: var(--label); background: none; border: 1px solid var(--border); padding: 5px 12px; border-radius: 8px; cursor: pointer; font-family: var(--font); transition: all 0.15s; }
+.sign-out-btn:hover { color: var(--primary); border-color: var(--primary); }
 
 .btn-primary { background: var(--primary); color: white; border: none; padding: 10px 20px; border-radius: 10px; font-size: 13px; font-weight: 700; font-family: var(--font); cursor: pointer; display: flex; align-items: center; gap: 8px; transition: opacity 0.15s; }
 .btn-primary:hover { opacity: 0.85; }
@@ -105,16 +100,6 @@ header { background: var(--card); border-bottom: 1px solid var(--border); paddin
 </head>
 <body>
 
-<div id="login-screen">
-  <div class="login-card">
-    <div class="login-logo">Popcorn Chez</div>
-    <div class="login-sub">Par Levels</div>
-    <input type="password" id="pw-input" placeholder="Password" autocomplete="current-password">
-    <div class="login-error" id="login-error"></div>
-    <button class="btn-primary" style="width:100%;justify-content:center;" onclick="checkLogin()">Enter</button>
-  </div>
-</div>
-
 <div id="app">
   <header>
     <div class="header-left">
@@ -124,6 +109,8 @@ header { background: var(--card); border-bottom: 1px solid var(--border); paddin
       <span class="header-badge">Admin</span>
     </div>
     <div class="header-right">
+      <span class="header-user" id="header-user"></span>
+      <button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>
       <span class="par-saved-indicator" id="par-saved-indicator">&#10003; Saved</span>
       <button class="btn-primary" id="par-save-btn" onclick="saveParLevels()" style="display:none;">Save Changes</button>
     </div>
@@ -149,10 +136,9 @@ header { background: var(--card); border-bottom: 1px solid var(--border); paddin
 
 <div class="toast" id="toast"></div>
 
+<script src="/pc-auth.js"></script>
 <script>
 var SB_URL='https://aoazlttdjowhlfcksoyl.supabase.co';
-var SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvYXpsdHRkam93aGxmY2tzb3lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNzU4MjMsImV4cCI6MjA5MDg1MTgyM30.tagP_88g7R3d_p7a4Kp0NirnJgkAR5AQQImCt414SJg';
-var ADMIN_PW='popcorn2026';
 var PAR_TABLE='par_levels';
 var TIERED_VENUES={'Mann':true,'FMP':true};
 var SUPPORT_STAND='Support Staff',HAWKING_STAND='Hawking',CLIENT_STAND='Client Staffing Needs',NONEVENT_STAND='Non-Event Labor';
@@ -182,9 +168,6 @@ function getRolesForStand(stand){if(stand===SUPPORT_STAND)return SUPPORT_ROLES;i
 
 var parData={},parShow={},parExclude={},parDirty=false;
 
-function checkLogin(){var pw=document.getElementById('pw-input').value;if(pw===ADMIN_PW){document.getElementById('login-screen').style.display='none';document.getElementById('app').style.display='block';buildUI();loadParLevels();}else{document.getElementById('login-error').textContent='Incorrect password.';document.getElementById('pw-input').value='';}}
-document.getElementById('pw-input').addEventListener('keydown',function(e){if(e.key==='Enter')checkLogin();});
-
 function parKey(venue,stand,role,tier){return venue+'||'+stand+'||'+role+'||'+(tier||'full');}
 
 function buildUI(){var tabsEl=document.getElementById('venue-tabs');var blocksEl=document.getElementById('venue-blocks');var venues=Object.keys(VENUE_STANDS);tabsEl.innerHTML=venues.map(function(v,i){return'<button class="venue-btn'+(i===0?' active':'')+'" onclick="switchVenue(\''+v+'\',this)">'+(VENUE_LABELS[v]||v)+'</button>';}).join('');
@@ -194,7 +177,7 @@ var rolesHtml=roles.map(function(role){var isDefExcl=isDefExclStand||DEFAULT_EXC
 return'<div class="'+cardCls+'"><div class="par-stand-header" onclick="toggleStand(this)" id="stand-header-'+venue+'-'+si+'"><span class="par-stand-name">'+stand+' '+badge+'</span><span class="par-stand-total">Total <span class="total-num" id="stand-total-'+venue+'-'+si+'">0</span></span><span class="par-stand-chevron">&#9660;</span></div><div class="par-roles-grid" id="stand-roles-'+venue+'-'+si+'">'+rolesHtml+'</div></div>';}).join('');
 return'<div class="venue-block'+(vi===0?' active':'')+'" id="par-block-'+venue+'">'+tierToggle+standsHtml+'</div>';}).join('');}
 
-function loadParLevels(){showToast('Loading par levels...');var venues=Object.keys(VENUE_STANDS);var fetches=venues.map(function(v){return fetch(SB_URL+'/rest/v1/'+PAR_TABLE+'?venue=eq.'+encodeURIComponent(v),{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}}).then(function(r){return r.json();});});Promise.all(fetches).then(function(results){parData={};parShow={};parExclude={};results.forEach(function(data){(data||[]).forEach(function(row){var tier=row.tier||'full';var k=parKey(row.venue,row.stand,row.role,tier);parData[k]=row.default_count;parShow[k]=row.show_in_planning!==false;parExclude[k]=row.excluded_from_total===true;});});refreshParInputs();showToast('Par levels loaded',true);}).catch(function(e){showToast('Error loading par levels.');console.error(e);});}
+function loadParLevels(){showToast('Loading par levels...');var venues=Object.keys(VENUE_STANDS);var hdrs=pcAuth.headers();var fetches=venues.map(function(v){return fetch(SB_URL+'/rest/v1/'+PAR_TABLE+'?venue=eq.'+encodeURIComponent(v),{headers:hdrs}).then(function(r){return r.json();});});Promise.all(fetches).then(function(results){parData={};parShow={};parExclude={};results.forEach(function(data){(data||[]).forEach(function(row){var tier=row.tier||'full';var k=parKey(row.venue,row.stand,row.role,tier);parData[k]=row.default_count;parShow[k]=row.show_in_planning!==false;parExclude[k]=row.excluded_from_total===true;});});refreshParInputs();showToast('Par levels loaded',true);}).catch(function(e){showToast('Error loading par levels.');console.error(e);});}
 
 function getTierForEl(el){if(!TIERED_VENUES[el.dataset.venue])return'full';var block=el.closest('.venue-block');var activeBtn=block?block.querySelector('.tier-btn.active'):null;return activeBtn?(activeBtn.textContent.indexOf('Reduced')!==-1?'reduced':'full'):'full';}
 
@@ -216,11 +199,21 @@ function switchVenue(venue,btn){document.querySelectorAll('.venue-btn:not(.tier-
 
 function switchTier(tier,btn){var venueBlock=btn.closest('.venue-block');if(venueBlock)venueBlock.querySelectorAll('.tier-btn').forEach(function(b){b.classList.remove('active');});btn.classList.add('active');if(venueBlock){venueBlock.querySelectorAll('.par-role-input').forEach(function(input){var t=TIERED_VENUES[input.dataset.venue]?tier:'full';var key=parKey(input.dataset.venue,input.dataset.stand,input.dataset.role,t);var val=parData[key]||0;input.value=val;styleParInput(input,val);});venueBlock.querySelectorAll('[id^="stand-total-"]').forEach(function(el){el.textContent='0';el.className='total-num';});var seen={};venueBlock.querySelectorAll('.par-role-input').forEach(function(input){var k=input.dataset.venue+'|'+input.dataset.standIdx;if(!seen[k]){seen[k]=true;updateStandTotal(input.dataset.venue,input.dataset.standIdx);}});venueBlock.querySelectorAll('input[data-type="show"]').forEach(function(cb){var t=TIERED_VENUES[cb.dataset.venue]?tier:'full';var key=parKey(cb.dataset.venue,cb.dataset.stand,cb.dataset.role,t);cb.checked=parShow[key]!==false;});venueBlock.querySelectorAll('input[data-type="excl"]').forEach(function(cb){var t=TIERED_VENUES[cb.dataset.venue]?tier:'full';var key=parKey(cb.dataset.venue,cb.dataset.stand,cb.dataset.role,t);if(key in parExclude)cb.checked=parExclude[key];});}}
 
-function saveParLevels(){var btn=document.getElementById('par-save-btn');btn.textContent='Saving...';btn.disabled=true;var allRows=[];Object.keys(VENUE_STANDS).forEach(function(venue){VENUE_STANDS[venue].forEach(function(stand){getRolesForStand(stand).forEach(function(role){var tiers=TIERED_VENUES[venue]?['full','reduced']:['full'];tiers.forEach(function(tier){var k=parKey(venue,stand,role,tier);allRows.push({venue:venue,stand:stand,role:role,tier:tier,default_count:parData[k]||0,show_in_planning:parShow[k]!==false,excluded_from_total:parExclude[k]===true});});});});});var venuesToSave=[];var vSeen={};allRows.forEach(function(r){if(!vSeen[r.venue]){vSeen[r.venue]=true;venuesToSave.push(r.venue);}});var delPromises=venuesToSave.map(function(venue){return fetch(SB_URL+'/rest/v1/'+PAR_TABLE+'?venue=eq.'+encodeURIComponent(venue),{method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});});Promise.all(delPromises).then(function(){var chunks=[];for(var i=0;i<allRows.length;i+=100)chunks.push(allRows.slice(i,i+100));return chunks.reduce(function(p,chunk){return p.then(function(){return fetch(SB_URL+'/rest/v1/'+PAR_TABLE,{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify(chunk)}).then(function(res){if(!res.ok)return res.text().then(function(t){throw new Error(t);});});});},Promise.resolve());}).then(function(){parDirty=false;btn.style.display='none';btn.textContent='Save Changes';btn.disabled=false;var ind=document.getElementById('par-saved-indicator');ind.classList.add('show');setTimeout(function(){ind.classList.remove('show');},3000);showToast('Par levels saved',true);}).catch(function(e){showToast('Error saving par levels.');btn.textContent='Save Changes';btn.disabled=false;console.error(e);});}
+function saveParLevels(){var btn=document.getElementById('par-save-btn');btn.textContent='Saving...';btn.disabled=true;var allRows=[];Object.keys(VENUE_STANDS).forEach(function(venue){VENUE_STANDS[venue].forEach(function(stand){getRolesForStand(stand).forEach(function(role){var tiers=TIERED_VENUES[venue]?['full','reduced']:['full'];tiers.forEach(function(tier){var k=parKey(venue,stand,role,tier);allRows.push({venue:venue,stand:stand,role:role,tier:tier,default_count:parData[k]||0,show_in_planning:parShow[k]!==false,excluded_from_total:parExclude[k]===true});});});});});var venuesToSave=[];var vSeen={};allRows.forEach(function(r){if(!vSeen[r.venue]){vSeen[r.venue]=true;venuesToSave.push(r.venue);}});var hdrs=pcAuth.headers();var delPromises=venuesToSave.map(function(venue){return fetch(SB_URL+'/rest/v1/'+PAR_TABLE+'?venue=eq.'+encodeURIComponent(venue),{method:'DELETE',headers:hdrs});});Promise.all(delPromises).then(function(){var writeHdrs=Object.assign(hdrs,{'Content-Type':'application/json','Prefer':'return=minimal'});var chunks=[];for(var i=0;i<allRows.length;i+=100)chunks.push(allRows.slice(i,i+100));return chunks.reduce(function(p,chunk){return p.then(function(){return fetch(SB_URL+'/rest/v1/'+PAR_TABLE,{method:'POST',headers:writeHdrs,body:JSON.stringify(chunk)}).then(function(res){if(!res.ok)return res.text().then(function(t){throw new Error(t);});});});},Promise.resolve());}).then(function(){parDirty=false;btn.style.display='none';btn.textContent='Save Changes';btn.disabled=false;var ind=document.getElementById('par-saved-indicator');ind.classList.add('show');setTimeout(function(){ind.classList.remove('show');},3000);showToast('Par levels saved',true);}).catch(function(e){showToast('Error saving par levels.');btn.textContent='Save Changes';btn.disabled=false;console.error(e);});}
 
 window.addEventListener('beforeunload',function(e){if(parDirty){e.preventDefault();e.returnValue='';}});
 
 function showToast(msg,good){var t=document.getElementById('toast');t.textContent=msg;t.className='toast'+(good?' green':'');t.classList.add('show');setTimeout(function(){t.classList.remove('show');},3000);}
+
+pcAuth.require({
+  pageSlug: 'par-levels',
+  onReady: function(user) {
+    document.getElementById('header-user').textContent = user.display_name;
+    document.getElementById('app').style.display = 'block';
+    buildUI();
+    loadParLevels();
+  }
+});
 </script>
 </body>
 </html>
