@@ -22,6 +22,10 @@ header { background: var(--card); border-bottom: 1px solid var(--border); paddin
 .header-divider { width: 1px; height: 20px; background: var(--border); }
 .header-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
 .header-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: var(--primary); color: white; padding: 3px 8px; border-radius: 20px; }
+.header-right { display: flex; align-items: center; gap: 12px; }
+.header-user { font-size: 12px; color: var(--label); font-weight: 600; }
+.sign-out-btn { font-size: 11px; font-weight: 700; color: var(--label); background: none; border: 1px solid var(--border); padding: 5px 12px; border-radius: 8px; cursor: pointer; font-family: var(--font); transition: all 0.15s; }
+.sign-out-btn:hover { color: var(--primary); border-color: var(--primary); }
 
 .main-content { max-width: 1100px; margin: 0 auto; padding: 32px 32px 80px; }
 
@@ -117,16 +121,6 @@ header { background: var(--card); border-bottom: 1px solid var(--border); paddin
 .cancel-btn { padding: 11px 16px; background: none; border: 1px solid #ddd; border-radius: 10px; font-size: 14px; color: #888; cursor: pointer; font-family: var(--font); }
 .panel-error { color: var(--red); font-size: 12px; margin-top: 8px; display: none; }
 
-.pw-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
-.pw-overlay.open { display: flex; }
-.pw-box { background: white; border-radius: var(--radius); padding: 24px; width: 100%; max-width: 320px; text-align: center; }
-.pw-box h3 { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
-.pw-box p { font-size: 13px; color: #888; margin-bottom: 16px; }
-.pw-input { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 10px; font-size: 15px; margin-bottom: 10px; text-align: center; letter-spacing: 0.1em; font-family: var(--font); }
-.pw-submit { width: 100%; padding: 11px; background: var(--primary); color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; margin-bottom: 8px; font-family: var(--font); }
-.pw-cancel { width: 100%; padding: 9px; background: none; color: #888; border: none; font-size: 13px; cursor: pointer; font-family: var(--font); }
-.pw-error { color: var(--red); font-size: 12px; margin-bottom: 8px; display: none; }
-
 .merge-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
 .merge-overlay.open { display: flex; }
 .merge-box { background: white; border-radius: var(--radius); padding: 24px; width: 100%; max-width: 460px; }
@@ -163,17 +157,6 @@ header { background: var(--card); border-bottom: 1px solid var(--border); paddin
 </head>
 <body>
 
-<div class="pw-overlay" id="pw-overlay">
-  <div class="pw-box">
-    <h3>Admin access required</h3>
-    <p id="pw-desc">Enter the admin password to continue.</p>
-    <input type="password" class="pw-input" id="pw-input" placeholder="password">
-    <div class="pw-error" id="pw-error">Incorrect password.</div>
-    <button class="pw-submit" onclick="checkPw()">Continue</button>
-    <button class="pw-cancel" onclick="closePw()">Cancel</button>
-  </div>
-</div>
-
 <div class="merge-overlay" id="merge-overlay">
   <div class="merge-box">
     <h3>Merge into existing item</h3>
@@ -198,6 +181,7 @@ header { background: var(--card); border-bottom: 1px solid var(--border); paddin
     <span class="header-title">Item Catalog</span>
     <span class="header-badge">Admin</span>
   </div>
+  <div class="header-right" id="header-right"></div>
 </header>
 
 <div class="main-content">
@@ -291,31 +275,40 @@ header { background: var(--card); border-bottom: 1px solid var(--border); paddin
   </div>
 </div>
 
+<script src="/pc-auth.js"></script>
 <script>
 var SB_URL='https://aoazlttdjowhlfcksoyl.supabase.co';
 var SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvYXpsdHRkam93aGxmY2tzb3lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNzU4MjMsImV4cCI6MjA5MDg1MTgyM30.tagP_88g7R3d_p7a4Kp0NirnJgkAR5AQQImCt414SJg';
-var ADMIN_PW='popcorn2026';
 var VENUES=[{code:'Mann',label:'Mann Music Center'},{code:'FMP',label:'FMP'},{code:'Cure',label:'Cure Arena'},{code:'ACCC',label:'ACCC'},{code:'BWH',label:'Jim Whelan BWH'},{code:'DE',label:'DE Chase'},{code:'Subaru',label:'Subaru Park'},{code:'Villanova',label:'Villanova'},{code:'Montage',label:'Montage'},{code:'SATB',label:'SATB'},{code:'Kirkwood',label:'Kirkwood'}];
 
 var pcCategories=[],pcItems=[],pcProfiles=[];
-var adminUnlocked=false,pendingPwAction=null,selectedItemId=null,isNewItem=false;
+var selectedItemId=null,isNewItem=false;
 var mergePendingId=null,mergeTargetId=null;
 
-function apiHeaders(){return{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'};}
+function apiHeaders(){
+  try { var h = pcAuth.headers(); if (h) return Object.assign(h, {'Content-Type':'application/json'}); } catch(e) {}
+  return {'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'};
+}
 function fmt(n){return'$'+parseFloat(n||0).toFixed(2);}
 
-function requirePassword(desc,cb){if(adminUnlocked){cb();return;}pendingPwAction=cb;document.getElementById('pw-desc').textContent=desc;document.getElementById('pw-input').value='';document.getElementById('pw-error').style.display='none';document.getElementById('pw-overlay').classList.add('open');setTimeout(function(){document.getElementById('pw-input').focus();},100);}
-function checkPw(){if(document.getElementById('pw-input').value===ADMIN_PW){adminUnlocked=true;document.getElementById('pw-overlay').classList.remove('open');if(pendingPwAction){pendingPwAction();pendingPwAction=null;}}else{document.getElementById('pw-error').style.display='block';document.getElementById('pw-input').value='';document.getElementById('pw-input').focus();}}
-function closePw(){document.getElementById('pw-overlay').classList.remove('open');pendingPwAction=null;}
-document.getElementById('pw-input').addEventListener('keydown',function(e){if(e.key==='Enter')checkPw();});
+// Show user info in header if logged in
+function setupHeader(){
+  var el = document.getElementById('header-right');
+  try {
+    var user = pcAuth.getUser();
+    if (user) {
+      el.innerHTML = '<span class="header-user">' + user.display_name + '</span><button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
+    }
+  } catch(e) {}
+}
 
-async function loadAll(){try{var r1=await fetch(SB_URL+'/rest/v1/cos_categories?select=*&order=sort_order.asc',{headers:apiHeaders()});pcCategories=await r1.json();var r2=await fetch(SB_URL+'/rest/v1/inventory_items?select=*&order=name.asc',{headers:apiHeaders()});pcItems=await r2.json();var r3=await fetch(SB_URL+'/rest/v1/inventory_venue_profiles?select=*',{headers:apiHeaders()});pcProfiles=await r3.json();updateStats();populateCatFilter();renderPendingBanner();renderItemsTab();renderCatsTab();}catch(e){document.getElementById('items-list').innerHTML='<div class="loading">Error loading data. Please refresh.</div>';}}
+async function loadAll(){try{var hdrs=apiHeaders();var r1=await fetch(SB_URL+'/rest/v1/cos_categories?select=*&order=sort_order.asc',{headers:hdrs});pcCategories=await r1.json();var r2=await fetch(SB_URL+'/rest/v1/inventory_items?select=*&order=name.asc',{headers:hdrs});pcItems=await r2.json();var r3=await fetch(SB_URL+'/rest/v1/inventory_venue_profiles?select=*',{headers:hdrs});pcProfiles=await r3.json();updateStats();populateCatFilter();renderPendingBanner();renderItemsTab();renderCatsTab();}catch(e){document.getElementById('items-list').innerHTML='<div class="loading">Error loading data. Please refresh.</div>';}}
 
 function updateStats(){var activeCount=0;for(var i=0;i<pcItems.length;i++){if(pcItems[i].active&&pcItems[i].status!=='pending')activeCount++;}document.getElementById('stat-total').textContent=pcItems.length;document.getElementById('stat-active').textContent=activeCount;document.getElementById('stat-cats').textContent=pcCategories.length;document.getElementById('stat-profiles').textContent=pcProfiles.length;}
 
 function renderPendingBanner(){var pending=[];for(var i=0;i<pcItems.length;i++){if(pcItems[i].status==='pending')pending.push(pcItems[i]);}var banner=document.getElementById('pending-banner');if(pending.length===0){banner.style.display='none';return;}banner.style.display='block';document.getElementById('pending-banner-title').textContent=pending.length+' item'+(pending.length!==1?'s':'')+' pending review';var html='';for(var i=0;i<pending.length;i++){var it=pending[i];html+='<div class="pending-item-row"><div><div class="pending-item-name">'+it.name+'</div><div class="pending-item-meta">';if(it.added_by_venue)html+='Added at '+it.added_by_venue;if(it.added_by_name)html+=' by '+it.added_by_name;if(it.vendor)html+=' &middot; '+it.vendor;html+=' &middot; '+fmt(it.case_cost)+'/case</div></div><button class="approve-btn" onclick="approveItem(\''+it.id+'\')">Approve</button><button class="merge-btn" onclick="openMerge(\''+it.id+'\')">Merge into existing</button></div>';}document.getElementById('pending-items-list').innerHTML=html;}
 
-async function approveItem(id){try{await fetch(SB_URL+'/rest/v1/inventory_items?id=eq.'+id,{method:'PATCH',headers:Object.assign({},apiHeaders(),{'Prefer':'return=minimal'}),body:JSON.stringify({status:'approved'})});await loadAll();}catch(e){alert('Could not approve. Try again.');}}
+async function approveItem(id){try{var hdrs=apiHeaders();hdrs['Prefer']='return=minimal';await fetch(SB_URL+'/rest/v1/inventory_items?id=eq.'+id,{method:'PATCH',headers:hdrs,body:JSON.stringify({status:'approved'})});await loadAll();}catch(e){alert('Could not approve. Try again.');}}
 
 function openMerge(pendingId){mergePendingId=pendingId;mergeTargetId=null;document.getElementById('merge-search-input').value='';document.getElementById('merge-results').style.display='none';document.getElementById('merge-results').innerHTML='';document.getElementById('selected-merge-item').style.display='none';document.getElementById('merge-confirm-btn').style.display='none';var pendingItem=null;for(var i=0;i<pcItems.length;i++){if(pcItems[i].id===pendingId){pendingItem=pcItems[i];break;}}if(pendingItem)document.getElementById('merge-desc').textContent='Merging "'+pendingItem.name+'" -- search for the existing item it should be combined with. Count submissions will be reassigned to the target item.';document.getElementById('merge-overlay').classList.add('open');setTimeout(function(){document.getElementById('merge-search-input').focus();},100);}
 function closeMerge(){document.getElementById('merge-overlay').classList.remove('open');mergePendingId=null;mergeTargetId=null;}
@@ -324,7 +317,7 @@ function onMergeSearch(query){var q=query.trim().toLowerCase();var resultsEl=doc
 
 function selectMergeTarget(id,name){mergeTargetId=id;var item=null;for(var i=0;i<pcItems.length;i++){if(pcItems[i].id===id){item=pcItems[i];break;}}var cat=item?getCatById(item.cos_category_id):null;document.getElementById('selected-merge-name').textContent=name;document.getElementById('selected-merge-meta').textContent=(cat?cat.name+' ':'')+' &middot; '+fmt(item?item.cost_per_unit:0)+'/'+(item?(item.unit_label||'each'):'each');document.getElementById('selected-merge-item').style.display='block';document.getElementById('merge-results').style.display='none';document.getElementById('merge-confirm-btn').style.display='block';document.getElementById('merge-confirm-btn').textContent='Merge into '+name;document.getElementById('merge-search-input').value='';}
 
-async function confirmMerge(){if(!mergePendingId||!mergeTargetId)return;var btn=document.getElementById('merge-confirm-btn');btn.disabled=true;btn.textContent='Merging...';try{await fetch(SB_URL+'/rest/v1/inventory_counts?item_id=eq.'+mergePendingId,{method:'PATCH',headers:Object.assign({},apiHeaders(),{'Prefer':'return=minimal'}),body:JSON.stringify({item_id:mergeTargetId})});await fetch(SB_URL+'/rest/v1/inventory_venue_profiles?item_id=eq.'+mergePendingId,{method:'PATCH',headers:Object.assign({},apiHeaders(),{'Prefer':'return=minimal'}),body:JSON.stringify({item_id:mergeTargetId})});await fetch(SB_URL+'/rest/v1/inventory_items?id=eq.'+mergePendingId,{method:'DELETE',headers:apiHeaders()});closeMerge();await loadAll();}catch(e){alert('Merge failed. Please try again.');btn.disabled=false;btn.textContent='Merge into this item';}}
+async function confirmMerge(){if(!mergePendingId||!mergeTargetId)return;var btn=document.getElementById('merge-confirm-btn');btn.disabled=true;btn.textContent='Merging...';try{var hdrs=apiHeaders();var patchHdrs=Object.assign({},hdrs);patchHdrs['Prefer']='return=minimal';await fetch(SB_URL+'/rest/v1/inventory_counts?item_id=eq.'+mergePendingId,{method:'PATCH',headers:patchHdrs,body:JSON.stringify({item_id:mergeTargetId})});await fetch(SB_URL+'/rest/v1/inventory_venue_profiles?item_id=eq.'+mergePendingId,{method:'PATCH',headers:patchHdrs,body:JSON.stringify({item_id:mergeTargetId})});await fetch(SB_URL+'/rest/v1/inventory_items?id=eq.'+mergePendingId,{method:'DELETE',headers:hdrs});closeMerge();await loadAll();}catch(e){alert('Merge failed. Please try again.');btn.disabled=false;btn.textContent='Merge into this item';}}
 
 function populateCatFilter(){var sel=document.getElementById('cat-filter');sel.innerHTML='<option value="">All categories</option>';for(var i=0;i<pcCategories.length;i++){var opt=document.createElement('option');opt.value=pcCategories[i].id;opt.textContent=pcCategories[i].name;sel.appendChild(opt);}}
 function populateCatSelect(selectedId){var sel=document.getElementById('edit-category');sel.innerHTML='<option value="">Select category...</option>';for(var i=0;i<pcCategories.length;i++){var opt=document.createElement('option');opt.value=pcCategories[i].id;opt.textContent=pcCategories[i].name+' \u00b7 '+pcCategories[i].gl_code;if(pcCategories[i].id===selectedId)opt.selected=true;sel.appendChild(opt);}}
@@ -347,15 +340,23 @@ function renderVenueCheckboxes(itemId){var html='';for(var i=0;i<VENUES.length;i
 
 function toggleVenueLabel(cb,code){var lbl=document.getElementById('vl-'+code);if(!lbl)return;if(cb.checked)lbl.classList.add('checked');else lbl.classList.remove('checked');}
 
-async function saveItem(){var errEl=document.getElementById('panel-error');errEl.style.display='none';var name=document.getElementById('edit-name').value.trim();var catId=document.getElementById('edit-category').value;var vendor=document.getElementById('edit-vendor').value.trim();var vendorAlt=document.getElementById('edit-vendor-alt').value.trim();var caseCost=parseFloat(document.getElementById('edit-case-cost').value)||0;var units=parseFloat(document.getElementById('edit-units').value)||1;var purchaseUnit=document.getElementById('edit-purchase-unit').value.trim()||'each';var countUnit=document.getElementById('edit-count-unit').value;var active=document.getElementById('edit-active').checked;var cpu=units>0?caseCost/units:0;if(!name){errEl.textContent='Item name is required.';errEl.style.display='block';return;}if(!catId){errEl.textContent='Please select a category.';errEl.style.display='block';return;}var itemId=document.getElementById('edit-id').value;if(!itemId)itemId=crypto.randomUUID();var payload={id:itemId,name:name,cos_category_id:catId,vendor:vendor||null,vendor_alt:vendorAlt||null,case_cost:caseCost,units_per_case:units,unit_label:purchaseUnit,purchase_unit:purchaseUnit,count_unit:countUnit,cost_per_unit:cpu,active:active,status:'approved'};var btn=document.getElementById('save-btn');btn.disabled=true;btn.textContent='Saving...';try{var method=isNewItem?'POST':'PATCH';var url=isNewItem?SB_URL+'/rest/v1/inventory_items':SB_URL+'/rest/v1/inventory_items?id=eq.'+itemId;var bodyObj=isNewItem?payload:(function(){var o={};for(var k in payload){if(k!=='id')o[k]=payload[k];}return o;})();var res=await fetch(url,{method:method,headers:Object.assign({},apiHeaders(),{'Prefer':'return=minimal'}),body:JSON.stringify(bodyObj)});if(!res.ok)throw new Error(await res.text());var checkedVenues=[];var checks=document.querySelectorAll('#venue-checkboxes input[type=checkbox]');for(var i=0;i<checks.length;i++){if(checks[i].checked){var code=checks[i].parentElement.id.replace('vl-','');checkedVenues.push(code);}}await fetch(SB_URL+'/rest/v1/inventory_venue_profiles?item_id=eq.'+itemId,{method:'DELETE',headers:apiHeaders()});if(checkedVenues.length>0){var profileRows=[];for(var vi=0;vi<checkedVenues.length;vi++){profileRows.push({id:crypto.randomUUID(),venue:checkedVenues[vi],item_id:itemId});}await fetch(SB_URL+'/rest/v1/inventory_venue_profiles',{method:'POST',headers:Object.assign({},apiHeaders(),{'Prefer':'return=minimal'}),body:JSON.stringify(profileRows)});}await loadAll();closePanel();}catch(e){errEl.textContent='Save failed. Please try again.';errEl.style.display='block';btn.disabled=false;btn.textContent=isNewItem?'Add item':'Save changes';}}
+async function saveItem(){var errEl=document.getElementById('panel-error');errEl.style.display='none';var name=document.getElementById('edit-name').value.trim();var catId=document.getElementById('edit-category').value;var vendor=document.getElementById('edit-vendor').value.trim();var vendorAlt=document.getElementById('edit-vendor-alt').value.trim();var caseCost=parseFloat(document.getElementById('edit-case-cost').value)||0;var units=parseFloat(document.getElementById('edit-units').value)||1;var purchaseUnit=document.getElementById('edit-purchase-unit').value.trim()||'each';var countUnit=document.getElementById('edit-count-unit').value;var active=document.getElementById('edit-active').checked;var cpu=units>0?caseCost/units:0;if(!name){errEl.textContent='Item name is required.';errEl.style.display='block';return;}if(!catId){errEl.textContent='Please select a category.';errEl.style.display='block';return;}var itemId=document.getElementById('edit-id').value;if(!itemId)itemId=crypto.randomUUID();var payload={id:itemId,name:name,cos_category_id:catId,vendor:vendor||null,vendor_alt:vendorAlt||null,case_cost:caseCost,units_per_case:units,unit_label:purchaseUnit,purchase_unit:purchaseUnit,count_unit:countUnit,cost_per_unit:cpu,active:active,status:'approved'};var btn=document.getElementById('save-btn');btn.disabled=true;btn.textContent='Saving...';try{var hdrs=apiHeaders();hdrs['Prefer']='return=minimal';var method=isNewItem?'POST':'PATCH';var url=isNewItem?SB_URL+'/rest/v1/inventory_items':SB_URL+'/rest/v1/inventory_items?id=eq.'+itemId;var bodyObj=isNewItem?payload:(function(){var o={};for(var k in payload){if(k!=='id')o[k]=payload[k];}return o;})();var res=await fetch(url,{method:method,headers:hdrs,body:JSON.stringify(bodyObj)});if(!res.ok)throw new Error(await res.text());var checkedVenues=[];var checks=document.querySelectorAll('#venue-checkboxes input[type=checkbox]');for(var i=0;i<checks.length;i++){if(checks[i].checked){var code=checks[i].parentElement.id.replace('vl-','');checkedVenues.push(code);}}var delHdrs=apiHeaders();await fetch(SB_URL+'/rest/v1/inventory_venue_profiles?item_id=eq.'+itemId,{method:'DELETE',headers:delHdrs});if(checkedVenues.length>0){var profileRows=[];for(var vi=0;vi<checkedVenues.length;vi++){profileRows.push({id:crypto.randomUUID(),venue:checkedVenues[vi],item_id:itemId});}var insHdrs=apiHeaders();insHdrs['Prefer']='return=minimal';await fetch(SB_URL+'/rest/v1/inventory_venue_profiles',{method:'POST',headers:insHdrs,body:JSON.stringify(profileRows)});}await loadAll();closePanel();}catch(e){errEl.textContent='Save failed. Please try again.';errEl.style.display='block';btn.disabled=false;btn.textContent=isNewItem?'Add item':'Save changes';}}
 
-function triggerDelete(id){requirePassword('Enter the admin password to delete this item. This cannot be undone.',function(){confirmDelete(id);});}
-async function confirmDelete(id){var item=null;for(var i=0;i<pcItems.length;i++){if(pcItems[i].id===id){item=pcItems[i];break;}}if(!confirm('Delete "'+(item?item.name:'this item')+'"?\n\nThis will remove all venue profiles and cannot be undone.'))return;try{await fetch(SB_URL+'/rest/v1/inventory_items?id=eq.'+id,{method:'DELETE',headers:apiHeaders()});if(selectedItemId===id)closePanel();await loadAll();}catch(e){alert('Delete failed. Please try again.');}}
+function triggerDelete(id){
+  try {
+    if (pcAuth.isAdmin()) { confirmDelete(id); return; }
+  } catch(e) {}
+  alert('Admin login required to delete items. Please sign in from the Toolkit page.');
+}
+
+async function confirmDelete(id){var item=null;for(var i=0;i<pcItems.length;i++){if(pcItems[i].id===id){item=pcItems[i];break;}}if(!confirm('Delete "'+(item?item.name:'this item')+'"?\n\nThis will remove all venue profiles and cannot be undone.'))return;try{var hdrs=apiHeaders();await fetch(SB_URL+'/rest/v1/inventory_items?id=eq.'+id,{method:'DELETE',headers:hdrs});if(selectedItemId===id)closePanel();await loadAll();}catch(e){alert('Delete failed. Please try again.');}}
 
 function renderCatsTab(){var html='<table class="cat-table"><thead><tr><th>Category</th><th>GL code</th><th>Inventory rollup</th><th>Items</th></tr></thead><tbody>';for(var i=0;i<pcCategories.length;i++){var cat=pcCategories[i];var count=0;for(var j=0;j<pcItems.length;j++){if(pcItems[j].cos_category_id===cat.id)count++;}html+='<tr><td style="font-weight:600;">'+cat.name+'</td><td style="color:#888;font-family:monospace;">'+cat.gl_code+'</td><td><span class="rollup-pill">'+cat.inventory_rollup_label+' \u00b7 '+cat.inventory_rollup_gl+'</span></td><td style="color:#888;">'+count+'</td></tr>';}html+='</tbody></table>';document.getElementById('cats-content').innerHTML=html;}
 
 function switchTab(tab){document.getElementById('tab-items').classList.toggle('active',tab==='items');document.getElementById('tab-cats').classList.toggle('active',tab==='cats');document.getElementById('panel-items').style.display=tab==='items'?'block':'none';document.getElementById('panel-cats').style.display=tab==='cats'?'block':'none';}
 
+// Initialize — no login gate, page loads for everyone
+setupHeader();
 loadAll();
 </script>
 </body>
