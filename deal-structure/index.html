@@ -14,14 +14,6 @@
 }
 body { background: var(--bg); font-family: var(--font); color: var(--primary); min-height: 100vh; }
 
-#login-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; }
-.login-card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 48px 40px; width: 100%; max-width: 380px; text-align: center; }
-.login-logo { font-size: 28px; font-weight: 800; letter-spacing: -0.03em; margin-bottom: 4px; }
-.login-sub { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--label); margin-bottom: 36px; }
-.login-card input[type="password"] { width: 100%; padding: 14px 16px; border: 1.5px solid var(--border); border-radius: 10px; font-size: 15px; font-family: var(--font); outline: none; transition: border-color 0.15s; margin-bottom: 12px; background: var(--bg); }
-.login-card input[type="password"]:focus { border-color: var(--primary); }
-.login-error { font-size: 12px; color: #e05c5c; margin-bottom: 12px; min-height: 16px; }
-
 #app { display: none; }
 
 header { background: var(--card); border-bottom: 1px solid var(--border); padding: 0 32px; display: flex; align-items: center; justify-content: space-between; height: 64px; position: sticky; top: 0; z-index: 100; }
@@ -32,6 +24,9 @@ header { background: var(--card); border-bottom: 1px solid var(--border); paddin
 .header-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
 .header-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: var(--primary); color: white; padding: 3px 8px; border-radius: 20px; }
 .header-right { display: flex; align-items: center; gap: 12px; }
+.header-user { font-size: 11px; color: var(--label); }
+.sign-out-link { font-size: 11px; color: var(--label); cursor: pointer; text-decoration: underline; }
+.sign-out-link:hover { color: var(--primary); }
 
 .btn-primary { background: var(--primary); color: white; border: none; padding: 10px 20px; border-radius: 10px; font-size: 13px; font-weight: 700; font-family: var(--font); cursor: pointer; display: flex; align-items: center; gap: 8px; transition: opacity 0.15s; }
 .btn-primary:hover { opacity: 0.85; }
@@ -145,16 +140,6 @@ header { background: var(--card); border-bottom: 1px solid var(--border); paddin
 </head>
 <body>
 
-<div id="login-screen">
-  <div class="login-card">
-    <div class="login-logo">Popcorn Chez</div>
-    <div class="login-sub">Deal Structure</div>
-    <input type="password" id="pw-input" placeholder="Password" autocomplete="current-password">
-    <div class="login-error" id="login-error"></div>
-    <button class="btn-primary" style="width:100%;justify-content:center;" onclick="checkLogin()">Enter</button>
-  </div>
-</div>
-
 <div id="app">
   <header>
     <div class="header-left">
@@ -164,6 +149,8 @@ header { background: var(--card); border-bottom: 1px solid var(--border); paddin
       <span class="header-badge">Admin</span>
     </div>
     <div class="header-right">
+      <span class="header-user" id="header-user"></span>
+      <span class="sign-out-link" onclick="pcAuth.signOut()">Sign out</span>
       <span class="saved-indicator" id="saved-ind">&#10003; Saved</span>
       <button class="btn-primary" id="save-btn" onclick="saveDealStructure()" style="display:none;">Save Changes</button>
     </div>
@@ -214,10 +201,10 @@ header { background: var(--card); border-bottom: 1px solid var(--border); paddin
 
 <div class="toast" id="toast"></div>
 
+<script src="/pc-auth.js"></script>
 <script>
 var SB_URL='https://aoazlttdjowhlfcksoyl.supabase.co';
 var SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvYXpsdHRkam93aGxmY2tzb3lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNzU4MjMsImV4cCI6MjA5MDg1MTgyM30.tagP_88g7R3d_p7a4Kp0NirnJgkAR5AQQImCt414SJg';
-var ADMIN_PW='popcorn2026';
 var SUPPORT_STAND='Support Staff',HAWKING_STAND='Hawking',CLIENT_STAND='Client Staffing Needs',NONEVENT_STAND='Non-Event Labor';
 
 var VENUE_STANDS={
@@ -241,10 +228,33 @@ var BILLING_ROLES=['Bartender','Beer Tender','Concessions Cashier','Concessions 
 var dealTemplates={},standDeals={},billingRates={},payRates={};
 var dealDirty=false,activeVenue='',openPanel=null;
 
-function checkLogin(){var pw=document.getElementById('pw-input').value;if(pw===ADMIN_PW){document.getElementById('login-screen').style.display='none';document.getElementById('app').style.display='block';loadDealStructure();}else{document.getElementById('login-error').textContent='Incorrect password.';document.getElementById('pw-input').value='';}}
-document.getElementById('pw-input').addEventListener('keydown',function(e){if(e.key==='Enter')checkLogin();});
+// Auth-aware fetch helper — uses authenticated token
+function sbFetch(method, path, body) {
+  var headers = pcAuth.headers();
+  headers['Prefer'] = 'return=representation';
+  return fetch(SB_URL + '/rest/v1/' + path, {
+    method: method,
+    headers: headers,
+    body: body ? JSON.stringify(body) : undefined
+  }).then(function(res) {
+    if (!res.ok) return res.text().then(function(t) { throw new Error(t); });
+    return res.status === 204 ? null : res.json();
+  });
+}
 
-function sbFetch(method,path,body){return fetch(SB_URL+'/rest/v1/'+path,{method:method,headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:body?JSON.stringify(body):undefined}).then(function(res){if(!res.ok)return res.text().then(function(t){throw new Error(t);});return res.status===204?null:res.json();});}
+// Auth-aware fetch with minimal return
+function sbFetchMinimal(method, path, body) {
+  var headers = pcAuth.headers();
+  headers['Prefer'] = 'return=minimal';
+  return fetch(SB_URL + '/rest/v1/' + path, {
+    method: method,
+    headers: headers,
+    body: body ? JSON.stringify(body) : undefined
+  }).then(function(res) {
+    if (!res.ok) return res.text().then(function(t) { throw new Error(t); });
+    return null;
+  });
+}
 
 function dKey(v,dt){return v+'||'+dt;}
 function sdKey(v,s){return v+'||'+s;}
@@ -252,7 +262,29 @@ function brKey(v,r){return v+'||'+r;}
 
 function getRevenueStands(venue){var stands=VENUE_STANDS[venue]||[];var r=[];for(var i=0;i<stands.length;i++){if(stands[i]!==SUPPORT_STAND&&stands[i]!==NONEVENT_STAND)r.push(stands[i]);}return r;}
 
-function loadDealStructure(){showToast('Loading deal structure...');Promise.all([sbFetch('GET','deal_templates?select=*'),sbFetch('GET','stand_deals?select=*'),sbFetch('GET','client_billing_rates?select=*'),sbFetch('GET','pay_rates?select=state,role,base_rate')]).then(function(res){dealTemplates={};(res[0]||[]).forEach(function(row){dealTemplates[dKey(row.venue,row.deal_type)]=row;});standDeals={};(res[1]||[]).forEach(function(row){standDeals[sdKey(row.venue,row.stand)]=row;});billingRates={};(res[2]||[]).forEach(function(row){billingRates[brKey(row.venue,row.role)]=row;});payRates={};(res[3]||[]).forEach(function(row){payRates[row.state+'||'+row.role]=row.base_rate;});buildTabs();renderDeals();showToast('Deal structure loaded',true);}).catch(function(e){showToast('Error loading deal structure.');console.error(e);});}
+function init(user) {
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('header-user').textContent = user.display_name;
+  loadDealStructure();
+}
+
+function loadDealStructure(){
+  return new Promise(function(resolve){
+    showToast('Loading deal structure...');
+    Promise.all([
+      sbFetch('GET','deal_templates?select=*'),
+      sbFetch('GET','stand_deals?select=*'),
+      sbFetch('GET','client_billing_rates?select=*'),
+      sbFetch('GET','pay_rates?select=state,role,base_rate')
+    ]).then(function(res){
+      dealTemplates={};(res[0]||[]).forEach(function(row){dealTemplates[dKey(row.venue,row.deal_type)]=row;});
+      standDeals={};(res[1]||[]).forEach(function(row){standDeals[sdKey(row.venue,row.stand)]=row;});
+      billingRates={};(res[2]||[]).forEach(function(row){billingRates[brKey(row.venue,row.role)]=row;});
+      payRates={};(res[3]||[]).forEach(function(row){payRates[row.state+'||'+row.role]=row.base_rate;});
+      buildTabs();renderDeals();showToast('Deal structure loaded',true);resolve();
+    }).catch(function(e){showToast('Error loading deal structure.');console.error(e);resolve();});
+  });
+}
 
 function buildTabs(){var el=document.getElementById('venue-tabs');var vk=Object.keys(VENUE_STANDS);el.innerHTML=vk.map(function(v,i){return'<button class="venue-btn'+(i===0?' active':'')+'" onclick="switchVenue(\''+v+'\',this)">'+(VENUE_LABELS[v]||v)+'</button>';}).join('');activeVenue=vk[0];}
 
@@ -297,15 +329,44 @@ function renderBilling(v){var tbody=document.getElementById('billing-tbody');var
 
 function onBillingInput(inp){var v=inp.dataset.v,r=inp.dataset.r;var val=parseFloat(inp.value)||0;var k=brKey(v,r);if(val>0){if(!billingRates[k])billingRates[k]={venue:v,role:r};billingRates[k].billing_rate=val;}else{delete billingRates[k];}markDirty();}
 
-function saveDealStructure(){var btn=document.getElementById('save-btn');btn.textContent='Saving...';btn.disabled=true;var tplRows=[];Object.keys(dealTemplates).forEach(function(k){var t=dealTemplates[k];tplRows.push({venue:t.venue,deal_type:t.deal_type,rev_split_pct:t.rev_split_pct||null,bev_food_pct:t.bev_food_pct||null,bev_bev_pct:t.bev_bev_pct||null,bev_food_cut:t.bev_food_cut||null,bev_bev_comm:t.bev_bev_comm||null,labor_comm:t.labor_comm||null,reimb_comm:t.reimb_comm||null,updated_at:new Date().toISOString()});});var sdRows=[];Object.keys(standDeals).forEach(function(k){var s=standDeals[k];sdRows.push({venue:s.venue,stand:s.stand,deal_type:s.deal_type,has_override:s.has_override||false,override_rev_split_pct:s.override_rev_split_pct||null,override_bev_food_pct:s.override_bev_food_pct||null,override_bev_bev_pct:s.override_bev_bev_pct||null,override_bev_food_cut:s.override_bev_food_cut||null,override_bev_bev_comm:s.override_bev_bev_comm||null,override_labor_comm:s.override_labor_comm||null,override_reimb_comm:s.override_reimb_comm||null,updated_at:new Date().toISOString()});});var brRows=[];Object.keys(billingRates).forEach(function(k){var b=billingRates[k];if(b.billing_rate>0)brRows.push({venue:b.venue,role:b.role,billing_rate:b.billing_rate,updated_at:new Date().toISOString()});});
-var delHeaders={'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY};Promise.all([fetch(SB_URL+'/rest/v1/deal_templates?venue=neq.ZZZZZ',{method:'DELETE',headers:delHeaders}),fetch(SB_URL+'/rest/v1/stand_deals?venue=neq.ZZZZZ',{method:'DELETE',headers:delHeaders}),fetch(SB_URL+'/rest/v1/client_billing_rates?venue=neq.ZZZZZ',{method:'DELETE',headers:delHeaders})]).then(function(){var postHeaders={'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=minimal'};var promises=[];if(tplRows.length>0)promises.push(fetch(SB_URL+'/rest/v1/deal_templates',{method:'POST',headers:postHeaders,body:JSON.stringify(tplRows)}).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t)});}));if(sdRows.length>0)promises.push(fetch(SB_URL+'/rest/v1/stand_deals',{method:'POST',headers:postHeaders,body:JSON.stringify(sdRows)}).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t)});}));if(brRows.length>0)promises.push(fetch(SB_URL+'/rest/v1/client_billing_rates',{method:'POST',headers:postHeaders,body:JSON.stringify(brRows)}).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t)});}));return Promise.all(promises);}).then(function(){dealDirty=false;btn.style.display='none';btn.textContent='Save Changes';btn.disabled=false;var ind=document.getElementById('saved-ind');ind.classList.add('show');setTimeout(function(){ind.classList.remove('show');},3000);showToast('Deal structure saved',true);var savedVenue=activeVenue;loadDealStructure().then(function(){var tabs=document.querySelectorAll('#venue-tabs .venue-btn');for(var i=0;i<tabs.length;i++){if(tabs[i].textContent===(VENUE_LABELS[savedVenue]||savedVenue)){switchVenue(savedVenue,tabs[i]);break;}}});}).catch(function(e){showToast('Error saving deal structure.');btn.textContent='Save Changes';btn.disabled=false;console.error(e);});}
+function saveDealStructure(){
+  var btn=document.getElementById('save-btn');btn.textContent='Saving...';btn.disabled=true;
+  var tplRows=[];Object.keys(dealTemplates).forEach(function(k){var t=dealTemplates[k];tplRows.push({venue:t.venue,deal_type:t.deal_type,rev_split_pct:t.rev_split_pct||null,bev_food_pct:t.bev_food_pct||null,bev_bev_pct:t.bev_bev_pct||null,bev_food_cut:t.bev_food_cut||null,bev_bev_comm:t.bev_bev_comm||null,labor_comm:t.labor_comm||null,reimb_comm:t.reimb_comm||null,updated_at:new Date().toISOString()});});
+  var sdRows=[];Object.keys(standDeals).forEach(function(k){var s=standDeals[k];sdRows.push({venue:s.venue,stand:s.stand,deal_type:s.deal_type,has_override:s.has_override||false,override_rev_split_pct:s.override_rev_split_pct||null,override_bev_food_pct:s.override_bev_food_pct||null,override_bev_bev_pct:s.override_bev_bev_pct||null,override_bev_food_cut:s.override_bev_food_cut||null,override_bev_bev_comm:s.override_bev_bev_comm||null,override_labor_comm:s.override_labor_comm||null,override_reimb_comm:s.override_reimb_comm||null,updated_at:new Date().toISOString()});});
+  var brRows=[];Object.keys(billingRates).forEach(function(k){var b=billingRates[k];if(b.billing_rate>0)brRows.push({venue:b.venue,role:b.role,billing_rate:b.billing_rate,updated_at:new Date().toISOString()});});
 
-var _origLoad=loadDealStructure;
-loadDealStructure=function(){return new Promise(function(resolve){showToast('Loading deal structure...');Promise.all([fetch(SB_URL+'/rest/v1/deal_templates?select=*',{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}}).then(function(r){return r.json();}),fetch(SB_URL+'/rest/v1/stand_deals?select=*',{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}}).then(function(r){return r.json();}),fetch(SB_URL+'/rest/v1/client_billing_rates?select=*',{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}}).then(function(r){return r.json();}),fetch(SB_URL+'/rest/v1/pay_rates?select=state,role,base_rate',{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}}).then(function(r){return r.json();})]).then(function(res){dealTemplates={};(res[0]||[]).forEach(function(row){dealTemplates[dKey(row.venue,row.deal_type)]=row;});standDeals={};(res[1]||[]).forEach(function(row){standDeals[sdKey(row.venue,row.stand)]=row;});billingRates={};(res[2]||[]).forEach(function(row){billingRates[brKey(row.venue,row.role)]=row;});payRates={};(res[3]||[]).forEach(function(row){payRates[row.state+'||'+row.role]=row.base_rate;});buildTabs();renderDeals();showToast('Deal structure loaded',true);resolve();}).catch(function(e){showToast('Error loading deal structure.');console.error(e);resolve();});});}
+  var delHeaders = pcAuth.headers();
+  Promise.all([
+    fetch(SB_URL+'/rest/v1/deal_templates?venue=neq.ZZZZZ',{method:'DELETE',headers:delHeaders}),
+    fetch(SB_URL+'/rest/v1/stand_deals?venue=neq.ZZZZZ',{method:'DELETE',headers:delHeaders}),
+    fetch(SB_URL+'/rest/v1/client_billing_rates?venue=neq.ZZZZZ',{method:'DELETE',headers:delHeaders})
+  ]).then(function(){
+    var promises=[];
+    if(tplRows.length>0) promises.push(sbFetchMinimal('POST','deal_templates',tplRows));
+    if(sdRows.length>0) promises.push(sbFetchMinimal('POST','stand_deals',sdRows));
+    if(brRows.length>0) promises.push(sbFetchMinimal('POST','client_billing_rates',brRows));
+    return Promise.all(promises);
+  }).then(function(){
+    dealDirty=false;btn.style.display='none';btn.textContent='Save Changes';btn.disabled=false;
+    var ind=document.getElementById('saved-ind');ind.classList.add('show');setTimeout(function(){ind.classList.remove('show');},3000);
+    showToast('Deal structure saved',true);
+    var savedVenue=activeVenue;
+    loadDealStructure().then(function(){
+      var tabs=document.querySelectorAll('#venue-tabs .venue-btn');
+      for(var i=0;i<tabs.length;i++){if(tabs[i].textContent===(VENUE_LABELS[savedVenue]||savedVenue)){switchVenue(savedVenue,tabs[i]);break;}}
+    });
+  }).catch(function(e){showToast('Error saving deal structure.');btn.textContent='Save Changes';btn.disabled=false;console.error(e);});
+}
 
 window.addEventListener('beforeunload',function(e){if(dealDirty){e.preventDefault();e.returnValue='';}});
 
 function showToast(msg,good){var t=document.getElementById('toast');t.textContent=msg;t.className='toast'+(good?' green':'');t.classList.add('show');setTimeout(function(){t.classList.remove('show');},3000);}
+
+// ── Auth gate ──
+pcAuth.require({
+  pageSlug: 'deal-structure',
+  onReady: function(user) { init(user); }
+});
 </script>
 </body>
 </html>
