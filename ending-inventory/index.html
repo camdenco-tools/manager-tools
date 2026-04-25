@@ -20,10 +20,13 @@ header {
 .hdivider { width: 1px; height: 20px; background: #e8e8e4; }
 .header-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
 .header-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: #1a1a1a; color: white; padding: 3px 8px; border-radius: 20px; }
+.header-right { display: flex; align-items: center; gap: 12px; }
+.header-user { font-size: 12px; color: #999; font-weight: 600; }
+.sign-out-btn { font-size: 11px; font-weight: 700; color: #999; background: none; border: 1px solid #e8e8e4; padding: 5px 12px; border-radius: 8px; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+.sign-out-btn:hover { color: #1a1a1a; border-color: #1a1a1a; }
 
 .container { max-width: 860px; margin: 0 auto; padding: 20px 16px 60px; }
 
-/* VENUE PICKER */
 .venue-picker { background: white; border-radius: 16px; padding: 20px; margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
 .venue-picker-title { font-size: 13px; font-weight: 700; color: #1a1a1a; margin-bottom: 14px; }
 .venue-tiles { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -62,7 +65,6 @@ header {
 .print-opt { padding: 7px 14px; border: 1px solid #ddd; border-radius: 9px; font-size: 13px; color: #1a1a1a; background: none; cursor: pointer; font-family: inherit; }
 .print-opt.all-opt { background: #1a1a1a; color: white; border-color: #1a1a1a; }
 
-/* COUNT TABLE */
 .cat-section { border: 1px solid #eee; border-radius: 14px; overflow: visible; margin-bottom: 10px; position: relative; }
 .cat-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; background: #f8f8f6; cursor: pointer; border-radius: 14px 14px 0 0; }
 .cat-name { font-size: 13px; font-weight: 700; color: #1a1a1a; }
@@ -109,7 +111,6 @@ header {
 .sd-pending { background: #FAEEDA; }
 .sd-pending .sd-name { color: #633806; }
 
-/* NEW ITEM MODAL */
 .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
 .modal-overlay.open { display: flex; }
 .modal { background: white; border-radius: 16px; padding: 24px; width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto; }
@@ -177,6 +178,7 @@ header {
     <span class="header-title">Inventory Counts</span>
     <span class="header-badge">Manager</span>
   </div>
+  <div class="header-right" id="header-right"></div>
 </header>
 
 <div class="modal-overlay" id="new-item-modal">
@@ -267,6 +269,7 @@ header {
   <div id="success-wrap"></div>
 </div>
 
+<script src="/pc-auth.js"></script>
 <script>
 var SUPA_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
 var SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvYXpsdHRkam93aGxmY2tzb3lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNzU4MjMsImV4cCI6MjA5MDg1MTgyM30.tagP_88g7R3d_p7a4Kp0NirnJgkAR5AQQImCt414SJg';
@@ -292,7 +295,18 @@ var newItemTargetCatId = '';
 var priorRolloverMonth = '';
 
 function apiHeaders() {
+  try { var h = pcAuth.headers(); if (h) return Object.assign(h, {'Content-Type':'application/json'}); } catch(e) {}
   return {'apikey':SUPA_KEY,'Authorization':'Bearer ' + SUPA_KEY,'Content-Type':'application/json'};
+}
+
+function setupHeader() {
+  var el = document.getElementById('header-right');
+  try {
+    var user = pcAuth.getUser();
+    if (user) {
+      el.innerHTML = '<span class="header-user">' + user.display_name + '</span><button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
+    }
+  } catch(e) {}
 }
 
 function fmt(n) { return '$' + parseFloat(n || 0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}); }
@@ -374,11 +388,12 @@ function selectMonth(val) {
 
 async function loadAll() {
   try {
-    var r1 = await fetch(SUPA_URL + '/rest/v1/cos_categories?select=*&order=sort_order.asc', {headers:apiHeaders()});
+    var hdrs = apiHeaders();
+    var r1 = await fetch(SUPA_URL + '/rest/v1/cos_categories?select=*&order=sort_order.asc', {headers:hdrs});
     pcCategories = await r1.json();
-    var r2 = await fetch(SUPA_URL + '/rest/v1/inventory_items?select=*&active=eq.true&order=name.asc', {headers:apiHeaders()});
+    var r2 = await fetch(SUPA_URL + '/rest/v1/inventory_items?select=*&active=eq.true&order=name.asc', {headers:hdrs});
     pcAllItems = await r2.json();
-    var r3 = await fetch(SUPA_URL + '/rest/v1/inventory_venue_profiles?select=*', {headers:apiHeaders()});
+    var r3 = await fetch(SUPA_URL + '/rest/v1/inventory_venue_profiles?select=*', {headers:hdrs});
     pcProfiles = await r3.json();
     populateCatSelectModal();
     renderVenueTiles();
@@ -400,12 +415,13 @@ function populateCatSelectModal() {
 
 async function loadCount() {
   if (!currentVenue) return;
+  var hdrs = apiHeaders();
   var monthDate = currentMonth + '-01';
   var prevDate = getPrevMonthDate(currentMonth);
   try {
-    var r2 = await fetch(SUPA_URL + '/rest/v1/inventory_counts?venue=eq.' + currentVenue + '&count_month=eq.' + monthDate + '&select=*', {headers:apiHeaders()});
+    var r2 = await fetch(SUPA_URL + '/rest/v1/inventory_counts?venue=eq.' + currentVenue + '&count_month=eq.' + monthDate + '&select=*', {headers:hdrs});
     pcCurrentCounts = await r2.json();
-    var r1 = await fetch(SUPA_URL + '/rest/v1/inventory_counts?venue=eq.' + currentVenue + '&count_month=eq.' + prevDate + '&select=*', {headers:apiHeaders()});
+    var r1 = await fetch(SUPA_URL + '/rest/v1/inventory_counts?venue=eq.' + currentVenue + '&count_month=eq.' + prevDate + '&select=*', {headers:hdrs});
     var directPrior = await r1.json();
     priorRolloverMonth = '';
     if (directPrior.length > 0) {
@@ -423,6 +439,7 @@ async function loadCount() {
 }
 
 async function findMostRecentCount(venue, beforeMonth) {
+  var hdrs = apiHeaders();
   var parts = beforeMonth.split('-');
   var y = parseInt(parts[0]);
   var m = parseInt(parts[1]) - 1;
@@ -431,7 +448,7 @@ async function findMostRecentCount(venue, beforeMonth) {
     if (m < 0) { m = 11; y -= 1; }
     var checkDate = y + '-' + String(m + 1).padStart(2, '0') + '-01';
     try {
-      var r = await fetch(SUPA_URL + '/rest/v1/inventory_counts?venue=eq.' + venue + '&count_month=eq.' + checkDate + '&select=*', {headers:apiHeaders()});
+      var r = await fetch(SUPA_URL + '/rest/v1/inventory_counts?venue=eq.' + venue + '&count_month=eq.' + checkDate + '&select=*', {headers:hdrs});
       var rows = await r.json();
       if (rows.length > 0) {
         var monthLabel = new Date(y, m, 1).toLocaleString('en-US', {month:'long', year:'numeric'});
@@ -839,9 +856,10 @@ async function submitCount() {
   var monthDate = currentMonth + '-01';
   var btn = document.getElementById('submit-count-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+  var hdrs = apiHeaders();
   try {
     if (isResubmit) {
-      await fetch(SUPA_URL + '/rest/v1/inventory_counts?venue=eq.' + currentVenue + '&count_month=eq.' + monthDate + '&item_id=neq.' + SENTINEL_ID, {method:'DELETE', headers:apiHeaders()});
+      await fetch(SUPA_URL + '/rest/v1/inventory_counts?venue=eq.' + currentVenue + '&count_month=eq.' + monthDate + '&item_id=neq.' + SENTINEL_ID, {method:'DELETE', headers:hdrs});
     }
     var rows = [];
     for (var i = 0; i < pcCurrentCounts.length; i++) {
@@ -863,7 +881,9 @@ async function submitCount() {
     var CHUNK = 50;
     for (var start = 0; start < rows.length; start += CHUNK) {
       var chunk = rows.slice(start, start + CHUNK);
-      var res = await fetch(SUPA_URL + '/rest/v1/inventory_counts', {method:'POST', headers:Object.assign({}, apiHeaders(), {'Prefer':'return=minimal'}), body:JSON.stringify(chunk)});
+      var insHdrs = Object.assign({}, hdrs);
+      insHdrs['Prefer'] = 'return=minimal';
+      var res = await fetch(SUPA_URL + '/rest/v1/inventory_counts', {method:'POST', headers:insHdrs, body:JSON.stringify(chunk)});
       if (!res.ok) throw new Error(await res.text());
     }
     var venueLabel = '';
@@ -939,8 +959,11 @@ function onAddBlur(drid) {
 }
 
 async function addItemFromSearch(itemId) {
+  var hdrs = apiHeaders();
+  var insHdrs = Object.assign({}, hdrs);
+  insHdrs['Prefer'] = 'return=minimal';
   try {
-    await fetch(SUPA_URL + '/rest/v1/inventory_venue_profiles', {method:'POST', headers:Object.assign({}, apiHeaders(), {'Prefer':'return=minimal'}), body:JSON.stringify({id:crypto.randomUUID(), venue:currentVenue, item_id:itemId})});
+    await fetch(SUPA_URL + '/rest/v1/inventory_venue_profiles', {method:'POST', headers:insHdrs, body:JSON.stringify({id:crypto.randomUUID(), venue:currentVenue, item_id:itemId})});
     pcProfiles.push({venue:currentVenue, item_id:itemId});
     await loadCount();
   } catch(e) { alert('Could not add item. Try again.'); }
@@ -1011,10 +1034,13 @@ async function saveNewItem() {
   var itemPayload = {id:itemId, name:name, cos_category_id:catId, vendor:vendor||null, case_cost:caseCost, units_per_case:units, unit_label:purchaseUnit, purchase_unit:purchaseUnit, count_unit:countUnit, cost_per_unit:cpu, active:true, status:'pending', added_by_venue:currentVenue, added_by_name:'field'};
   var btn = document.querySelector('#new-item-modal .modal-save');
   if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+  var hdrs = apiHeaders();
+  var insHdrs = Object.assign({}, hdrs);
+  insHdrs['Prefer'] = 'return=minimal';
   try {
-    var r = await fetch(SUPA_URL + '/rest/v1/inventory_items', {method:'POST', headers:Object.assign({}, apiHeaders(), {'Prefer':'return=minimal'}), body:JSON.stringify(itemPayload)});
+    var r = await fetch(SUPA_URL + '/rest/v1/inventory_items', {method:'POST', headers:insHdrs, body:JSON.stringify(itemPayload)});
     if (!r.ok) throw new Error(await r.text());
-    await fetch(SUPA_URL + '/rest/v1/inventory_venue_profiles', {method:'POST', headers:Object.assign({}, apiHeaders(), {'Prefer':'return=minimal'}), body:JSON.stringify({id:crypto.randomUUID(), venue:currentVenue, item_id:itemId})});
+    await fetch(SUPA_URL + '/rest/v1/inventory_venue_profiles', {method:'POST', headers:insHdrs, body:JSON.stringify({id:crypto.randomUUID(), venue:currentVenue, item_id:itemId})});
     pcAllItems.push(itemPayload);
     pcProfiles.push({venue:currentVenue, item_id:itemId});
     if (countVal > 0) {
@@ -1078,6 +1104,7 @@ function clearAllCounts() {
   recalcProgress();
 }
 
+setupHeader();
 renderVenueTiles();
 loadAll();
 </script>
