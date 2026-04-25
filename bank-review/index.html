@@ -846,15 +846,109 @@ async function matchCharges(lines, batchMonth, fileName, fileType) {
 
   currentCharges = charges;
 
+  // ── STEP 3: Check for duplicates against existing bank_charges ──
+  document.getElementById('processing-step').textContent = 'Checking for duplicates...';
+  var existingBankCharges = [];
+  try {
+    var bcRes = await fetch(SUPA_URL + '/rest/v1/bank_charges?charge_date=gte.' + fromStr + '&charge_date=lte.' + toStr + '&select=charge_date,amount,raw_description', { headers: hdrs() });
+    existingBankCharges = await bcRes.json();
+    if (!Array.isArray(existingBankCharges)) existingBankCharges = [];
+  } catch(e) {}
+
+  var dupCount = 0;
+  var newCharges = [];
+  for (var dc = 0; dc < currentCharges.length; dc++) {
+    var ch = currentCharges[dc];
+    var isDup = false;
+    for (var ec = 0; ec < existingBankCharges.length; ec++) {
+      var ex = existingBankCharges[ec];
+      // Same date, same amount (within $0.01), similar description
+      if (ex.charge_date === ch.charge_date &&
+          Math.abs(parseFloat(ex.amount) - ch.amount) < 0.02) {
+        // Check description similarity (first 20 chars match)
+        var exDesc = (ex.raw_description || '').substring(0, 20).toLowerCase();
+        var chDesc = (ch.raw_description || '').substring(0, 20).toLowerCase();
+        if (exDesc === chDesc || exDesc.indexOf(chDesc.substring(0, 10)) !== -1 || chDesc.indexOf(exDesc.substring(0, 10)) !== -1) {
+          isDup = true;
+          dupCount++;
+          break;
+        }
+      }
+    }
+    if (!isDup) newCharges.push(ch);
+  }
+
+  if (dupCount > 0) {
+    console.log('Skipped ' + dupCount + ' duplicate charges');
+  }
+
+  currentCharges = newCharges;
+
+  if (!currentCharges.length) {
+    alert('All charges in this file were already uploaded previously (' + dupCount + ' duplicates found).');
+    document.getElementById('upload-card').style.display = 'block';
+    document.getElementById('processing-card').style.display = 'none';
+    document.getElementById('review-section').style.display = 'none';
+    return;
+  }
+
+  // ── STEP 4: Write all charges to database immediately ──
+  document.getElementById('processing-step').textContent = 'Saving ' + currentCharges.length + ' charges...';
+  var writeErrors = 0;
+  for (var w = 0; w < currentCharges.length; w++) {
+    var wc = currentCharges[w];
+    try {
+      await fetch(SUPA_URL + '/rest/v1/bank_charges', {
+        method: 'POST',
+        headers: Object.assign({}, hdrs(), {'Content-Type': 'application/json', 'Prefer': 'return=minimal'}),
+        body: JSON.stringify({
+          id: wc.id, batch_id: wc.batch_id, charge_date: wc.charge_date,
+          raw_description: wc.raw_description, amount: wc.amount,
+          vendor_name: wc.vendor_name, category_id: wc.category_id,
+          status: wc.status, matched_purchase_id: wc.matched_purchase_id,
+          batch_month: wc.batch_month,
+          uploaded_by: wc.uploaded_by, uploaded_at: new Date().toISOString()
+        })
+      });
+    } catch(e) { writeErrors++; }
+  }
+
+  // Save batch record
+  try {
+    var matchedCount = currentCharges.filter(function(c) { return c.status === 'matched'; }).length;
+    var expCount = currentCharges.filter(function(c) { return c.status === 'expense_pending'; }).length;
+    var foodCount = currentCharges.filter(function(c) { return c.status === 'food_pending'; }).length;
+    await fetch(SUPA_URL + '/rest/v1/bank_upload_batches', {
+      method: 'POST',
+      headers: Object.assign({}, hdrs(), {'Content-Type': 'application/json', 'Prefer': 'return=minimal'}),
+      body: JSON.stringify({
+        id: currentBatchId,
+        file_name: fileName,
+        file_type: fileType,
+        batch_month: batchMonth,
+        total_charges: currentCharges.length,
+        total_amount: currentCharges.reduce(function(s,c) { return s + c.amount; }, 0),
+        matched_count: matchedCount,
+        expense_count: expCount,
+        pending_count: foodCount,
+        uploaded_by: currentUser ? currentUser.display_name : 'admin',
+        status: 'reviewed'
+      })
+    });
+  } catch(e) {}
+
+  if (writeErrors) console.log(writeErrors + ' charges failed to save');
+  if (dupCount > 0) alert(dupCount + ' duplicate charge(s) were skipped (already uploaded previously).');
+
   // Initialize expense checkboxes (all checked by default)
   expenseChecked = {};
-  charges.forEach(function(c) {
+  currentCharges.forEach(function(c) {
     if (c.status === 'expense_pending') expenseChecked[c.id] = true;
   });
 
   // Initialize food checkboxes (all checked by default)
   foodChecked = {};
-  charges.forEach(function(c) {
+  currentCharges.forEach(function(c) {
     if (c.status === 'food_pending') foodChecked[c.id] = true;
   });
 
@@ -862,6 +956,7 @@ async function matchCharges(lines, batchMonth, fileName, fileType) {
   document.getElementById('review-section').style.display = 'block';
 
   renderReview();
+  loadHistory();
 }
 
 // ── Render review sections ──
@@ -1103,17 +1198,11 @@ async function saveExpenses() {
   for (var i = 0; i < toSave.length; i++) {
     var c = toSave[i];
     try {
-      // Write to bank_charges table
-      await fetch(SUPA_URL + '/rest/v1/bank_charges', {
-        method: 'POST',
+      // Update bank_charges status and category (record already exists from upload)
+      await fetch(SUPA_URL + '/rest/v1/bank_charges?id=eq.' + c.id, {
+        method: 'PATCH',
         headers: Object.assign({}, hdrs(), {'Content-Type': 'application/json', 'Prefer': 'return=minimal'}),
-        body: JSON.stringify({
-          id: c.id, batch_id: c.batch_id, charge_date: c.charge_date,
-          raw_description: c.raw_description, amount: c.amount,
-          vendor_name: c.vendor_name, category_id: c.category_id,
-          status: 'expense', batch_month: c.batch_month,
-          uploaded_by: c.uploaded_by, uploaded_at: new Date().toISOString()
-        })
+        body: JSON.stringify({ status: 'expense', category_id: c.category_id })
       });
 
       // Write to expenses table
@@ -1128,14 +1217,12 @@ async function saveExpenses() {
         })
       });
 
-      // Update local state
       c.status = 'saved_expense';
     } catch(e) { errors++; }
   }
 
   if (errors) alert(errors + ' expense(s) failed to save.');
 
-  // Remove saved items and re-render
   currentCharges = currentCharges.filter(function(c) { return c.status !== 'saved_expense'; });
   renderReview();
 }
@@ -1161,69 +1248,29 @@ async function sendToManagers() {
   for (var i = 0; i < toSend.length; i++) {
     var c = toSend[i];
     try {
-      await fetch(SUPA_URL + '/rest/v1/bank_charges', {
-        method: 'POST',
+      // Update status in database (record already exists from upload)
+      await fetch(SUPA_URL + '/rest/v1/bank_charges?id=eq.' + c.id, {
+        method: 'PATCH',
         headers: Object.assign({}, hdrs(), {'Content-Type': 'application/json', 'Prefer': 'return=minimal'}),
-        body: JSON.stringify({
-          id: c.id, batch_id: c.batch_id, charge_date: c.charge_date,
-          raw_description: c.raw_description, amount: c.amount,
-          vendor_name: c.vendor_name, category_id: c.category_id,
-          status: 'pending_venue', batch_month: c.batch_month,
-          uploaded_by: c.uploaded_by, uploaded_at: new Date().toISOString()
-        })
+        body: JSON.stringify({ status: 'pending_venue' })
       });
       c.status = 'sent_to_managers';
     } catch(e) { errors++; }
   }
 
-  // Save matched charges too (for audit trail)
-  var matched = currentCharges.filter(function(c) { return c.status === 'matched'; });
-  for (var m = 0; m < matched.length; m++) {
-    var mc = matched[m];
-    try {
-      await fetch(SUPA_URL + '/rest/v1/bank_charges', {
-        method: 'POST',
-        headers: Object.assign({}, hdrs(), {'Content-Type': 'application/json', 'Prefer': 'return=minimal'}),
-        body: JSON.stringify({
-          id: mc.id, batch_id: mc.batch_id, charge_date: mc.charge_date,
-          raw_description: mc.raw_description, amount: mc.amount,
-          vendor_name: mc.vendor_name, category_id: mc.category_id,
-          status: 'matched', matched_purchase_id: mc.matched_purchase_id,
-          batch_month: mc.batch_month,
-          uploaded_by: mc.uploaded_by, uploaded_at: new Date().toISOString()
-        })
-      });
-    } catch(e) {}
-  }
-
-  // Save batch record
-  var batchMonth = document.getElementById('batch-month').value;
-  try {
-    await fetch(SUPA_URL + '/rest/v1/bank_upload_batches', {
-      method: 'POST',
-      headers: Object.assign({}, hdrs(), {'Content-Type': 'application/json', 'Prefer': 'return=minimal'}),
-      body: JSON.stringify({
-        id: currentBatchId,
-        batch_month: batchMonth,
-        total_charges: currentCharges.length,
-        total_amount: currentCharges.reduce(function(s,c) { return s + c.amount; }, 0),
-        matched_count: matched.length,
-        expense_count: currentCharges.filter(function(c) { return c.status === 'saved_expense'; }).length,
-        pending_count: toSend.length,
-        uploaded_by: currentUser ? currentUser.display_name : 'admin',
-        status: 'reviewed'
-      })
-    });
-  } catch(e) {}
-
   if (errors) alert(errors + ' charge(s) failed to send.');
 
-  // Show success and reset
-  currentCharges = [];
-  document.getElementById('review-section').style.display = 'none';
-  document.getElementById('upload-card').style.display = 'block';
+  // Remove sent items from local view
+  currentCharges = currentCharges.filter(function(c) { return c.status !== 'sent_to_managers'; });
 
-  alert('Done! ' + toSend.length + ' charge(s) sent to the Purchases page for venue assignment.');
+  if (currentCharges.filter(function(c) { return c.status === 'food_pending' || c.status === 'expense_pending'; }).length === 0) {
+    // All done -- show upload card
+    document.getElementById('review-section').style.display = 'none';
+    document.getElementById('upload-card').style.display = 'block';
+    alert('Done! ' + toSend.length + ' charge(s) sent to the Purchases page for venue assignment.');
+  } else {
+    renderReview();
+  }
   loadHistory();
 }
 
@@ -1300,8 +1347,55 @@ async function loadHistory() {
   } catch(e) {}
 }
 
+// ── Load pending charges from database (restore unfinished sessions) ──
+async function loadPendingCharges() {
+  try {
+    var res = await fetch(SUPA_URL + '/rest/v1/bank_charges?status=in.(expense_pending,food_pending,matched)&select=id,batch_id,charge_date,raw_description,amount,vendor_name,category_id,status,matched_purchase_id,batch_month,uploaded_by&order=charge_date.asc', { headers: hdrs() });
+    var rows = await res.json();
+    if (!Array.isArray(rows) || !rows.length) return;
+
+    // Look up category names
+    currentCharges = rows.map(function(r) {
+      var cat = null;
+      for (var i = 0; i < ALL_CATEGORIES.length; i++) {
+        if (ALL_CATEGORIES[i].id === r.category_id) { cat = ALL_CATEGORIES[i]; break; }
+      }
+      return {
+        id: r.id,
+        batch_id: r.batch_id,
+        charge_date: r.charge_date,
+        raw_description: r.raw_description,
+        amount: parseFloat(r.amount),
+        vendor_name: r.vendor_name,
+        category_id: r.category_id,
+        category_name: cat ? cat.name : 'Food Purchases',
+        category_gl: cat ? cat.gl_group : 'cogs',
+        status: r.status,
+        matched_purchase: null,
+        matched_purchase_id: r.matched_purchase_id,
+        batch_month: r.batch_month,
+        uploaded_by: r.uploaded_by
+      };
+    });
+
+    currentBatchId = currentCharges[0].batch_id;
+
+    // Initialize checkboxes
+    expenseChecked = {};
+    foodChecked = {};
+    currentCharges.forEach(function(c) {
+      if (c.status === 'expense_pending') expenseChecked[c.id] = true;
+      if (c.status === 'food_pending') foodChecked[c.id] = true;
+    });
+
+    document.getElementById('upload-card').style.display = 'none';
+    document.getElementById('review-section').style.display = 'block';
+    renderReview();
+  } catch(e) {}
+}
+
 // ── Init ──
-function init(user) {
+async function init(user) {
   currentUser = user;
   document.getElementById('app').style.display = 'block';
   document.getElementById('header-right').innerHTML =
@@ -1309,9 +1403,10 @@ function init(user) {
     '<button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
   document.getElementById('batch-month').value = thisMonth();
   setupDragDrop();
-  loadReferenceData();
+  await loadReferenceData();
   loadReturned();
   loadHistory();
+  loadPendingCharges();
 }
 
 pcAuth.require({
