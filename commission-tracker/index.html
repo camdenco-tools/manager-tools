@@ -1,0 +1,1169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Commission &amp; Profitability Tracker &mdash; Popcorn Chez</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #f0f0ec; --card: #ffffff; --primary: #1a1a1a;
+    --green: #1D9E75; --green-light: #e8f7f2; --label: #999;
+    --border: #e8e8e4; --shadow: 0 2px 12px rgba(0,0,0,0.06);
+    --radius: 16px; --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --red: #c0392b; --red-light: #fde8e8;
+    --amber: #856404; --amber-light: #fff3cd;
+    --blue: #2471a3; --blue-light: #deeef9;
+  }
+  body { background: var(--bg); font-family: var(--font); color: var(--primary); min-height: 100vh; }
+
+  /* App shell */
+  #app { display: none; }
+  header { background: var(--card); border-bottom: 1px solid var(--border); padding: 0 32px; display: flex; align-items: center; justify-content: space-between; height: 64px; position: sticky; top: 0; z-index: 100; }
+  .header-left { display: flex; align-items: center; gap: 16px; }
+  .back-link { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--label); text-decoration: none; display: flex; align-items: center; gap: 6px; transition: color 0.15s; }
+  .back-link:hover { color: var(--primary); }
+  .header-divider { width: 1px; height: 20px; background: var(--border); }
+  .header-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+  .header-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: var(--primary); color: white; padding: 3px 8px; border-radius: 20px; }
+  .header-right { display: flex; align-items: center; gap: 16px; }
+  .header-user { font-size: 12px; font-weight: 600; color: var(--label); }
+  .sign-out-btn { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--label); background: none; border: 1.5px solid var(--border); padding: 5px 12px; border-radius: 8px; cursor: pointer; font-family: var(--font); transition: all 0.15s; }
+  .sign-out-btn:hover { border-color: var(--primary); color: var(--primary); }
+  .main-content { max-width: 1200px; margin: 0 auto; padding: 32px 32px 80px; }
+
+  /* Controls */
+  .controls-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 24px; }
+  .ctrl-group { display: flex; align-items: center; gap: 8px; }
+  .ctrl-label { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--label); }
+  .ctrl-date { padding: 9px 12px; border: 1.5px solid var(--border); border-radius: 10px; font-size: 13px; font-weight: 600; font-family: var(--font); background: var(--card); color: var(--primary); outline: none; transition: border-color 0.15s; }
+  .ctrl-date:focus { border-color: var(--primary); }
+  .ctrl-select { padding: 9px 14px; border: 1.5px solid var(--border); border-radius: 10px; font-size: 12px; font-weight: 700; font-family: var(--font); background: var(--card); color: var(--primary); outline: none; cursor: pointer; }
+  .preset-btn { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; padding: 8px 14px; border-radius: 8px; border: 1.5px solid var(--border); background: var(--card); color: var(--label); cursor: pointer; transition: all 0.15s; font-family: var(--font); }
+  .preset-btn:hover { border-color: var(--primary); color: var(--primary); }
+  .preset-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+  .ctrl-to { font-size: 12px; color: var(--label); font-weight: 600; }
+
+  /* Stat cards */
+  .stat-strip { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 28px; }
+  .stat-card { background: var(--card); border-radius: 12px; padding: 18px 20px; box-shadow: var(--shadow); }
+  .stat-label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--label); margin-bottom: 6px; }
+  .stat-value { font-size: 26px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
+  .stat-value.green { color: var(--green); }
+  .stat-value.red { color: var(--red); }
+  .stat-value.blue { color: var(--blue); }
+  .stat-sub { font-size: 11px; color: var(--label); margin-top: 4px; }
+  .stat-sub .source-tag { font-size: 9px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; background: var(--bg); color: var(--label); margin-left: 2px; }
+
+  /* Table */
+  .section-label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--label); margin-bottom: 12px; }
+  .table-card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); overflow-x: auto; }
+  .v-table { width: 100%; min-width: 700px; border-collapse: collapse; }
+  .v-table thead th { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--label); padding: 14px 16px; text-align: left; background: var(--bg); border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .v-table thead th.r { text-align: right; }
+  .v-table tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; }
+  .v-table tbody tr:last-child { border-bottom: none; }
+  .v-table tbody tr.venue-row { cursor: pointer; }
+  .v-table tbody tr.venue-row:hover { background: #fafaf8; }
+  .v-table td { padding: 14px 16px; font-size: 13px; vertical-align: middle; }
+  .v-table td.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .v-table td.nm { font-weight: 700; }
+  .v-table tr.total-row { background: var(--bg); }
+  .v-table tr.total-row td { font-weight: 700; }
+  .v-table tr.stand-row td { padding-left: 44px; font-size: 12px; color: #666; }
+  .v-table tr.stand-row td.r { color: #666; }
+  .v-table tr.event-row td { padding-left: 68px; font-size: 11px; color: #999; border-bottom-color: #f4f4f2; }
+  .v-table tr.event-row td.r { color: #999; }
+
+  /* Venue chips */
+  .venue-chip { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 8px; border-radius: 6px; margin-right: 8px; }
+  .vc-FMP { background: #fde8e6; color: #c0392b; }
+  .vc-Mann { background: #e8f5d8; color: #2d5a08; }
+  .vc-BWH { background: #fdeede; color: #e67e22; }
+  .vc-ACCC { background: #fde4cc; color: #c0620a; }
+  .vc-Cure { background: #deeef9; color: #2471a3; }
+  .vc-Subaru { background: #f0e8fa; color: #7d3fbf; }
+  .vc-DE { background: #e0f2f0; color: #00796b; }
+  .vc-Montage { background: #eceff1; color: #607d8b; }
+  .vc-SATB { background: #f4f4f2; color: #888780; }
+  .vc-Villanova { background: #e8eaf6; color: #1a237e; }
+  .vc-Kirkwood { background: #fde8e8; color: #b71c1c; }
+
+  /* Deal type badges */
+  .deal-chip { display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; margin-left: 6px; }
+  .dc-rev_split { background: var(--green-light); color: var(--green); }
+  .dc-rev_bev { background: #f0e8fa; color: #7d3fbf; }
+  .dc-labor { background: #f4f4f2; color: #888780; }
+  .dc-reimb { background: #fdeede; color: #e67e22; }
+
+  /* Profit/margin colors */
+  .profit-pos { color: var(--green); font-weight: 700; }
+  .profit-neg { color: var(--red); font-weight: 700; }
+  .margin-pill { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px; }
+  .mg-good { background: var(--green-light); color: var(--green); }
+  .mg-ok { background: var(--amber-light); color: var(--amber); }
+  .mg-bad { background: var(--red-light); color: var(--red); }
+
+  /* Expand arrow */
+  .expand-arrow { font-size: 10px; color: var(--label); margin-right: 6px; display: inline-block; transition: transform 0.15s; }
+  .expand-arrow.open { transform: rotate(90deg); }
+
+  /* Mismatch panel */
+  .mismatch-panel { background: var(--amber-light); border: 1.5px solid #f5d9a0; border-radius: var(--radius); padding: 20px 24px; margin-top: 24px; }
+  .mismatch-title { font-size: 12px; font-weight: 700; color: var(--amber); margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+  .mismatch-sub { font-size: 11px; color: var(--amber); margin-bottom: 14px; opacity: 0.8; }
+  .mismatch-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid rgba(133,100,4,0.15); flex-wrap: wrap; }
+  .mismatch-row:first-of-type { border-top: none; }
+  .mm-venue { font-size: 11px; font-weight: 700; color: var(--amber); min-width: 60px; }
+  .mm-stand { font-size: 13px; font-weight: 700; color: var(--primary); min-width: 140px; }
+  .mm-amount { font-size: 13px; font-weight: 700; color: var(--amber); min-width: 80px; font-variant-numeric: tabular-nums; }
+  .mm-entries { font-size: 11px; color: var(--amber); opacity: 0.7; min-width: 60px; }
+  .mm-select { padding: 6px 10px; border: 1.5px solid #f5d9a0; border-radius: 8px; font-size: 12px; font-weight: 600; font-family: var(--font); background: white; color: var(--primary); outline: none; cursor: pointer; min-width: 160px; }
+  .mm-select:focus { border-color: var(--amber); }
+  .mm-save { font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 6px; border: none; background: var(--amber); color: white; cursor: pointer; font-family: var(--font); transition: opacity 0.15s; }
+  .mm-save:hover { opacity: 0.85; }
+  .mm-save:disabled { opacity: 0.4; cursor: default; }
+
+  /* Actions */
+  .actions-bar { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+  .btn-secondary { background: transparent; color: var(--primary); border: 1.5px solid var(--border); padding: 9px 18px; border-radius: 10px; font-size: 13px; font-weight: 700; font-family: var(--font); cursor: pointer; transition: all 0.15s; }
+  .btn-secondary:hover { border-color: var(--primary); }
+  .btn-primary { background: var(--primary); color: white; border: none; padding: 10px 20px; border-radius: 10px; font-size: 13px; font-weight: 700; font-family: var(--font); cursor: pointer; transition: opacity 0.15s; }
+  .btn-primary:hover { opacity: 0.85; }
+
+  /* Toast */
+  .toast { position: fixed; bottom: 28px; right: 28px; background: var(--primary); color: white; padding: 12px 20px; border-radius: 10px; font-size: 13px; font-weight: 600; box-shadow: 0 8px 24px rgba(0,0,0,0.2); z-index: 999; transform: translateY(80px); opacity: 0; transition: all 0.25s ease; }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.green { background: var(--green); }
+
+  /* Loading */
+  .loading-overlay { text-align: center; padding: 60px 20px; color: var(--label); }
+  .loading-overlay .spinner { display: inline-block; width: 24px; height: 24px; border: 3px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.6s linear infinite; margin-bottom: 12px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Empty */
+  .empty-state { padding: 60px 20px; text-align: center; color: var(--label); }
+  .empty-state h3 { font-size: 16px; font-weight: 700; color: var(--primary); margin-bottom: 6px; }
+  .empty-state p { font-size: 13px; }
+
+  /* Labor source legend */
+  .labor-legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 11px; color: var(--label); margin-top: 4px; }
+  .labor-legend span { display: flex; align-items: center; gap: 4px; }
+  .labor-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .ld-request { background: var(--green); }
+  .ld-par { background: var(--blue); }
+  .ld-headcount { background: #e67e22; }
+
+  /* Date display */
+  .date-range-display { font-size: 12px; color: var(--label); font-weight: 600; }
+
+  /* Access denied */
+  .access-denied { display: flex; align-items: center; justify-content: center; min-height: 60vh; text-align: center; color: var(--label); }
+  .access-denied h2 { font-size: 20px; color: var(--primary); margin-bottom: 8px; }
+  .access-denied p { font-size: 14px; }
+
+  @media (max-width: 768px) {
+    header { padding: 12px 16px; height: auto; flex-wrap: wrap; gap: 10px; }
+    .main-content { padding: 20px 16px 80px; }
+    .stat-strip { grid-template-columns: repeat(2, 1fr); }
+    .controls-row { gap: 8px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <header>
+    <div class="header-left">
+      <a href="/" class="back-link">&#8592; Toolkit</a>
+      <div class="header-divider"></div>
+      <span class="header-title">Commission &amp; Profitability Tracker</span>
+      <span class="header-badge">Admin</span>
+    </div>
+    <div class="header-right" id="header-right">
+      <span class="date-range-display" id="date-range-display"></span>
+    </div>
+  </header>
+
+  <div class="main-content">
+    <div class="controls-row">
+      <div class="ctrl-group">
+        <input type="date" class="ctrl-date" id="date-from" onchange="onDateChange()">
+        <span class="ctrl-to">to</span>
+        <input type="date" class="ctrl-date" id="date-to" onchange="onDateChange()">
+      </div>
+      <div class="ctrl-group">
+        <select class="ctrl-select" id="venue-filter" onchange="renderAll()">
+          <option value="">All venues</option>
+        </select>
+      </div>
+      <div class="ctrl-group" style="margin-left:auto;">
+        <button class="preset-btn" onclick="setPreset('last-event',this)">Last event</button>
+        <button class="preset-btn" onclick="setPreset('this-month',this)">This month</button>
+        <button class="preset-btn" onclick="setPreset('last-month',this)">Last month</button>
+        <button class="preset-btn" onclick="setPreset('ytd',this)">YTD</button>
+      </div>
+    </div>
+
+    <div id="loading" class="loading-overlay">
+      <div class="spinner"></div>
+      <div>Loading data...</div>
+    </div>
+
+    <div id="dashboard" style="display:none;">
+      <div class="stat-strip">
+        <div class="stat-card">
+          <div class="stat-label">Gross sales</div>
+          <div class="stat-value" id="s-gross">--</div>
+          <div class="stat-sub" id="s-gross-sub"></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Commission revenue</div>
+          <div class="stat-value green" id="s-comm">--</div>
+          <div class="stat-sub" id="s-comm-sub"></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Est. labor</div>
+          <div class="stat-value red" id="s-labor">--</div>
+          <div class="stat-sub" id="s-labor-sub"></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Est. profit</div>
+          <div class="stat-value green" id="s-profit">--</div>
+          <div class="stat-sub" id="s-profit-sub"></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Margin</div>
+          <div class="stat-value blue" id="s-margin">--</div>
+          <div class="stat-sub" id="s-margin-sub"></div>
+        </div>
+      </div>
+
+      <div id="labor-source-legend" class="labor-legend" style="margin-bottom:24px;"></div>
+
+      <div class="section-label">Venue breakdown (click to expand)</div>
+      <div class="table-card">
+        <table class="v-table">
+          <thead>
+            <tr>
+              <th>Venue</th>
+              <th class="r">Gross sales</th>
+              <th class="r">Commission rev</th>
+              <th class="r">Est. labor</th>
+              <th class="r">Est. profit</th>
+              <th class="r">Margin</th>
+            </tr>
+          </thead>
+          <tbody id="venue-tbody"></tbody>
+        </table>
+        <div id="empty-msg" class="empty-state" style="display:none;">
+          <h3>No sales data</h3>
+          <p>No sales found for the selected date range.</p>
+        </div>
+      </div>
+
+      <div id="mismatch-container"></div>
+
+      <div class="actions-bar">
+        <button class="btn-secondary" onclick="exportCSV()">Export CSV</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/pc-auth.js"></script>
+<script>
+(function() {
+
+var SB_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
+
+// Allowed email(s) for this page — Keith only
+var ALLOWED_EMAILS = ['keith@camdenco.com'];
+
+var VENUE_LABELS = {FMP:'Freedom Mortgage Pavilion',Mann:'Mann Music Center',BWH:'Boardwalk Hall',ACCC:'AC Convention Center',Cure:'Cure Insurance Arena',Subaru:'Subaru Park',DE:'DE Chase Field House',Montage:'Montage Mountain',SATB:'Sports at the Beach',Villanova:'Villanova',Kirkwood:'Kirkwood'};
+var VENUE_STATES = {FMP:'NJ',Mann:'PA',BWH:'NJ',ACCC:'NJ',Cure:'NJ',Subaru:'PA',DE:'DE',Montage:'PA',SATB:'DE',Villanova:'PA',Kirkwood:'DE'};
+var SUPPORT_STAND = 'Support Staff';
+var HAWKING_STAND = 'Hawking';
+var CLIENT_STAND = 'Client Staffing Needs';
+var NONEVENT_STAND = 'Non-Event Labor';
+var DEAL_LABELS = {rev_split:'Rev split',rev_bev:'Rev + bev',labor:'Labor',reimb:'Reimb'};
+
+// All raw data
+var allSales = [], allEvents = [], allDealTemplates = {}, allStandDeals = {};
+var allStaffingReqs = [], allParLevels = [], allPayRates = {};
+var allVenueAliases = {}, allStandAliases = {};
+var allBillingRates = {};
+
+// Configured stands from stand_deals
+var configuredStands = {};
+
+// State
+var expanded = {};
+var activePreset = 'last-event';
+
+// ---- AUTH HEADERS ----
+function apiHeaders() {
+  return pcAuth.headers();
+}
+
+function setupHeader(user) {
+  var headerRight = document.getElementById('header-right');
+  var userSpan = document.createElement('span');
+  userSpan.className = 'header-user';
+  userSpan.textContent = user.display_name || user.email;
+  headerRight.insertBefore(userSpan, headerRight.firstChild);
+
+  var signOutBtn = document.createElement('button');
+  signOutBtn.className = 'sign-out-btn';
+  signOutBtn.textContent = 'Sign out';
+  signOutBtn.onclick = function() { pcAuth.signOut(); };
+  headerRight.appendChild(signOutBtn);
+}
+
+// ---- INIT (called after auth) ----
+function init(user) {
+  // Check if user's email is in the allowed list
+  var userEmail = (user.email || '').toLowerCase();
+  var allowed = ALLOWED_EMAILS.some(function(e) { return e.toLowerCase() === userEmail; });
+
+  if (!allowed) {
+    document.getElementById('app').style.display = 'block';
+    document.querySelector('.main-content').innerHTML =
+      '<div class="access-denied">' +
+      '<div><h2>Access restricted</h2>' +
+      '<p>This page is restricted to specific admin accounts.</p></div>' +
+      '</div>';
+    setupHeader(user);
+    return;
+  }
+
+  document.getElementById('app').style.display = 'block';
+  setupHeader(user);
+  loadAllData();
+}
+
+// ---- SUPABASE ----
+function sbGet(path) {
+  return fetch(SB_URL + '/rest/v1/' + path, {
+    headers: apiHeaders()
+  }).then(function(r) { return r.ok ? r.json() : r.text().then(function(t) { throw new Error(t); }); });
+}
+
+function sbPost(path, body) {
+  return fetch(SB_URL + '/rest/v1/' + path, {
+    method: 'POST',
+    headers: Object.assign({}, apiHeaders(), {'Content-Type': 'application/json', 'Prefer': 'return=representation'}),
+    body: JSON.stringify(body)
+  }).then(function(r) { return r.ok ? r.json() : r.text().then(function(t) { throw new Error(t); }); });
+}
+
+// ---- FISCAL CALENDAR (4-4-5) ----
+function getFiscalYear(year) {
+  var jan1 = new Date(year, 0, 1);
+  var dayOfWeek = jan1.getDay();
+  var firstMon = new Date(year, 0, 1 + ((8 - dayOfWeek) % 7));
+  if (dayOfWeek === 1) firstMon = jan1;
+
+  var pattern = [4, 4, 5, 4, 4, 5, 4, 4, 5, 4, 4, 5];
+  var months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var periods = [];
+  var cursor = new Date(firstMon);
+
+  for (var i = 0; i < 12; i++) {
+    var start = new Date(cursor);
+    cursor.setDate(cursor.getDate() + pattern[i] * 7 - 1);
+    var end = new Date(cursor);
+    periods.push({
+      name: months[i],
+      start: fmtDate(start),
+      end: fmtDate(end),
+      weeks: pattern[i],
+      quarter: Math.floor(i / 3) + 1
+    });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return periods;
+}
+
+function getCurrentFiscalPeriod() {
+  var today = todayStr();
+  var year = new Date().getFullYear();
+  var periods = getFiscalYear(year);
+  for (var i = 0; i < periods.length; i++) {
+    if (today >= periods[i].start && today <= periods[i].end) return periods[i];
+  }
+  periods = getFiscalYear(year - 1);
+  for (var j = 0; j < periods.length; j++) {
+    if (today >= periods[j].start && today <= periods[j].end) return periods[j];
+  }
+  return null;
+}
+
+function getPreviousFiscalPeriod() {
+  var today = todayStr();
+  var year = new Date().getFullYear();
+  var periods = getFiscalYear(year);
+  var allPeriods = getFiscalYear(year - 1).concat(periods);
+  for (var i = 0; i < allPeriods.length; i++) {
+    if (today >= allPeriods[i].start && today <= allPeriods[i].end) {
+      return i > 0 ? allPeriods[i - 1] : null;
+    }
+  }
+  return null;
+}
+
+function getFiscalYearStart() {
+  var year = new Date().getFullYear();
+  var periods = getFiscalYear(year);
+  var today = todayStr();
+  if (today < periods[0].start) {
+    periods = getFiscalYear(year - 1);
+  }
+  return periods[0].start;
+}
+
+// ---- DATA LOADING ----
+function loadAllData() {
+  Promise.all([
+    sbGet('sales?select=*&order=event_date.desc'),
+    sbGet('events?select=*&order=event_date.desc'),
+    sbGet('deal_templates?select=*'),
+    sbGet('stand_deals?select=*'),
+    sbGet('staffing_requests?select=*'),
+    sbGet('par_levels?select=*'),
+    sbGet('pay_rates?select=*'),
+    sbGet('venue_aliases?select=*'),
+    sbGet('stand_aliases?select=*'),
+    sbGet('client_billing_rates?select=*')
+  ]).then(function(res) {
+    allSales = res[0] || [];
+    allEvents = res[1] || [];
+
+    allDealTemplates = {};
+    (res[2] || []).forEach(function(r) { allDealTemplates[r.venue + '||' + r.deal_type] = r; });
+
+    allStandDeals = {};
+    configuredStands = {};
+    (res[3] || []).forEach(function(r) {
+      allStandDeals[r.venue + '||' + r.stand] = r;
+      if (!configuredStands[r.venue]) configuredStands[r.venue] = [];
+      configuredStands[r.venue].push(r.stand);
+    });
+
+    allStaffingReqs = res[4] || [];
+
+    allParLevels = res[5] || [];
+
+    allPayRates = {};
+    (res[6] || []).forEach(function(r) { allPayRates[r.state + '||' + r.role] = r.base_rate; });
+
+    allVenueAliases = {};
+    (res[7] || []).forEach(function(r) { allVenueAliases[r.alias_name] = r.maps_to_venue; });
+
+    allStandAliases = {};
+    (res[8] || []).forEach(function(r) { allStandAliases[r.venue + '||' + r.alias_name] = r.maps_to_stand; });
+
+    allBillingRates = {};
+    (res[9] || []).forEach(function(r) { allBillingRates[r.venue + '||' + r.role] = r.billing_rate; });
+
+    populateVenueFilter();
+    setPreset('last-event');
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+  }).catch(function(e) {
+    showToast('Error loading data');
+    console.error(e);
+  });
+}
+
+function populateVenueFilter() {
+  var venues = {};
+  allSales.forEach(function(s) {
+    var v = resolveVenue(s.venue);
+    if (v) venues[v] = true;
+  });
+  var sel = document.getElementById('venue-filter');
+  var keys = Object.keys(venues).sort();
+  sel.innerHTML = '<option value="">All venues</option>' +
+    keys.map(function(v) { return '<option value="' + v + '">' + (VENUE_LABELS[v] || v) + '</option>'; }).join('');
+}
+
+// ---- RESOLVE ALIASES ----
+function resolveVenue(rawVenue) {
+  if (VENUE_LABELS[rawVenue]) return rawVenue;
+  if (allVenueAliases[rawVenue]) return allVenueAliases[rawVenue];
+  return null;
+}
+
+function resolveStand(venue, rawStand) {
+  var key = venue + '||' + rawStand;
+  if (allStandAliases[key]) return allStandAliases[key];
+  return rawStand;
+}
+
+function isConfiguredStand(venue, stand) {
+  var sd = allStandDeals[venue + '||' + stand];
+  return !!sd;
+}
+
+// ---- DATE HELPERS ----
+function todayStr() { return new Date().toISOString().split('T')[0]; }
+function fmtDate(d) {
+  var y = d.getFullYear(), m = d.getMonth() + 1, day = d.getDate();
+  return y + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day;
+}
+function fmtMoney(n) { return (n < 0 ? '-' : '') + '$' + Math.abs(Math.round(n)).toLocaleString(); }
+function fmtPct(n) { return (Math.round(n * 10) / 10).toFixed(1) + '%'; }
+
+// ---- PRESETS ----
+function setPreset(preset, btn) {
+  activePreset = preset;
+  document.querySelectorAll('.preset-btn').forEach(function(b) { b.classList.remove('active'); });
+  if (btn) btn.classList.add('active');
+
+  var from = document.getElementById('date-from');
+  var to = document.getElementById('date-to');
+
+  if (preset === 'last-event') {
+    var lastDate = getLastEventDate();
+    from.value = lastDate;
+    to.value = lastDate;
+    if (btn) btn.classList.add('active');
+  } else if (preset === 'this-month') {
+    var p = getCurrentFiscalPeriod();
+    if (p) { from.value = p.start; to.value = p.end; }
+  } else if (preset === 'last-month') {
+    var pp = getPreviousFiscalPeriod();
+    if (pp) { from.value = pp.start; to.value = pp.end; }
+  } else if (preset === 'ytd') {
+    from.value = getFiscalYearStart();
+    to.value = todayStr();
+  }
+
+  updateDateDisplay();
+  renderAll();
+}
+window.setPreset = setPreset;
+
+function onDateChange() {
+  activePreset = '';
+  document.querySelectorAll('.preset-btn').forEach(function(b) { b.classList.remove('active'); });
+  updateDateDisplay();
+  renderAll();
+}
+window.onDateChange = onDateChange;
+
+function updateDateDisplay() {
+  var from = document.getElementById('date-from').value;
+  var to = document.getElementById('date-to').value;
+  var el = document.getElementById('date-range-display');
+  if (from === to) {
+    var d = new Date(from + 'T12:00:00');
+    el.textContent = d.toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric', year:'numeric'});
+  } else {
+    var d1 = new Date(from + 'T12:00:00');
+    var d2 = new Date(to + 'T12:00:00');
+    el.textContent = d1.toLocaleDateString('en-US', {month:'short', day:'numeric'}) + ' - ' + d2.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+  }
+}
+
+function getLastEventDate() {
+  var dates = {};
+  allSales.forEach(function(s) { if (s.event_date) dates[s.event_date] = true; });
+  var sorted = Object.keys(dates).sort().reverse();
+  return sorted.length > 0 ? sorted[0] : todayStr();
+}
+
+// ---- COMMISSION CALCULATION ----
+function calcCommission(venue, stand, grossSales) {
+  var sdKey = venue + '||' + stand;
+  var sd = allStandDeals[sdKey];
+  if (!sd) return {commission: 0, dealType: null, cosRelatable: false};
+
+  var dt = sd.deal_type;
+  var tpl = allDealTemplates[venue + '||' + dt] || {};
+  var result = {dealType: dt, cosRelatable: false, commission: 0};
+
+  if (dt === 'rev_split') {
+    var pct = (sd.has_override && sd.override_rev_split_pct != null) ? sd.override_rev_split_pct : (tpl.rev_split_pct || 70);
+    result.commission = grossSales * pct / 100;
+    result.cosRelatable = true;
+  } else if (dt === 'rev_bev') {
+    var foodPct = (sd.has_override && sd.override_bev_food_pct != null) ? sd.override_bev_food_pct : (tpl.bev_food_pct || 91);
+    var bevPct = (sd.has_override && sd.override_bev_bev_pct != null) ? sd.override_bev_bev_pct : (tpl.bev_bev_pct || 9);
+    var foodCut = (sd.has_override && sd.override_bev_food_cut != null) ? sd.override_bev_food_cut : (tpl.bev_food_cut || 70);
+    var bevComm = (sd.has_override && sd.override_bev_bev_comm != null) ? sd.override_bev_bev_comm : (tpl.bev_bev_comm || 10);
+    var foodSales = grossSales * foodPct / 100;
+    var bevSales = grossSales * bevPct / 100;
+    result.commission = (foodSales * foodCut / 100) + (bevSales * bevComm / 100);
+    result.cosRelatable = true;
+  } else if (dt === 'labor') {
+    var commRate = (sd.has_override && sd.override_labor_comm != null) ? sd.override_labor_comm : (tpl.labor_comm || 15);
+    result.commission = grossSales * commRate / 100;
+    result.cosRelatable = false;
+  } else if (dt === 'reimb') {
+    var reimbComm = (sd.has_override && sd.override_reimb_comm != null) ? sd.override_reimb_comm : (tpl.reimb_comm || 5);
+    result.commission = grossSales * reimbComm / 100;
+    result.cosRelatable = false;
+  }
+
+  return result;
+}
+
+// ---- LABOR ESTIMATION ----
+function estimateLabor(venue, eventIds) {
+  var state = VENUE_STATES[venue] || 'NJ';
+  var totalLabor = 0;
+  var sources = {request: 0, par: 0, headcount: 0};
+
+  for (var i = 0; i < eventIds.length; i++) {
+    var eid = eventIds[i].id;
+    var evt = eventIds[i].event;
+    var hours = getEventHours(evt);
+
+    var reqs = allStaffingReqs.filter(function(r) { return r.event_id === eid; });
+    if (reqs.length > 0) {
+      var evtLabor = 0;
+      reqs.forEach(function(r) {
+        var rate = allPayRates[state + '||' + r.role] || 15;
+        evtLabor += (r.headcount || 0) * rate * hours;
+      });
+      totalLabor += evtLabor;
+      sources.request++;
+      continue;
+    }
+
+    var pars = allParLevels.filter(function(p) {
+      return p.venue === venue && p.tier === (evt.staffing_tier || 'full');
+    });
+    if (pars.length > 0) {
+      var parLabor = 0;
+      pars.forEach(function(p) {
+        var rate = allPayRates[state + '||' + p.role] || 15;
+        parLabor += (p.default_count || 0) * rate * hours;
+      });
+      totalLabor += parLabor;
+      sources.par++;
+      continue;
+    }
+
+    var salesForEvent = allSales.filter(function(s) {
+      var rv = resolveVenue(s.venue);
+      return rv === venue && s.event_date === evt.event_date && s.staff_count;
+    });
+    if (salesForEvent.length > 0) {
+      var maxCount = 0;
+      salesForEvent.forEach(function(s) { if (s.staff_count > maxCount) maxCount = s.staff_count; });
+      var avgRate = getBlendedRate(state);
+      totalLabor += maxCount * avgRate * hours;
+      sources.headcount++;
+    }
+  }
+
+  return {total: totalLabor, sources: sources};
+}
+
+function getEventHours(evt) {
+  if (evt.gates_open && evt.estimated_end_time) {
+    var g = parseTime(evt.gates_open);
+    var e = parseTime(evt.estimated_end_time);
+    var diff = (e - g) / 3600000;
+    if (diff > 0 && diff < 24) return diff;
+  }
+  if (evt.gates_open && evt.end_time) {
+    var g2 = parseTime(evt.gates_open);
+    var e2 = parseTime(evt.end_time);
+    var diff2 = (e2 - g2) / 3600000;
+    if (diff2 > 0 && diff2 < 24) return diff2;
+  }
+  return 6;
+}
+
+function parseTime(t) {
+  if (!t) return 0;
+  var parts = t.split(':');
+  var d = new Date(2000, 0, 1, parseInt(parts[0]), parseInt(parts[1] || 0));
+  return d.getTime();
+}
+
+function getBlendedRate(state) {
+  var total = 0, count = 0;
+  Object.keys(allPayRates).forEach(function(k) {
+    if (k.startsWith(state + '||')) { total += allPayRates[k]; count++; }
+  });
+  return count > 0 ? total / count : 15;
+}
+
+function calcStandLabor(venue, stand, eventDate, evt) {
+  var state = VENUE_STATES[venue] || 'NJ';
+  var hours = evt ? getEventHours(evt) : 6;
+  var eid = evt ? evt.id : null;
+
+  if (eid) {
+    var reqs = allStaffingReqs.filter(function(r) {
+      return r.event_id === eid && r.stand === stand;
+    });
+    if (reqs.length > 0) {
+      var cost = 0;
+      reqs.forEach(function(r) {
+        var rate = allPayRates[state + '||' + r.role] || 15;
+        cost += (r.headcount || 0) * rate * hours;
+      });
+      return {cost: cost, source: 'request'};
+    }
+  }
+
+  var tier = evt ? (evt.staffing_tier || 'full') : 'full';
+  var pars = allParLevels.filter(function(p) {
+    return p.venue === venue && p.stand === stand && p.tier === tier;
+  });
+  if (pars.length > 0) {
+    var parCost = 0;
+    pars.forEach(function(p) {
+      var rate = allPayRates[state + '||' + p.role] || 15;
+      parCost += (p.default_count || 0) * rate * hours;
+    });
+    return {cost: parCost, source: 'par'};
+  }
+
+  return {cost: 0, source: 'none'};
+}
+
+// ---- MAIN RENDER ----
+function renderAll() {
+  var dateFrom = document.getElementById('date-from').value;
+  var dateTo = document.getElementById('date-to').value;
+  var venueFilter = document.getElementById('venue-filter').value;
+
+  if (!dateFrom || !dateTo) return;
+
+  var filteredSales = allSales.filter(function(s) {
+    return s.event_date >= dateFrom && s.event_date <= dateTo;
+  });
+
+  var venueData = {};
+  var mismatches = [];
+
+  filteredSales.forEach(function(s) {
+    var venue = resolveVenue(s.venue);
+    if (!venue) {
+      mismatches.push({rawVenue: s.venue, rawStand: s.stand, amount: parseFloat(s.amount) || 0, isMissingVenue: true});
+      return;
+    }
+
+    var stand = resolveStand(venue, s.stand);
+    var amount = parseFloat(s.amount) || 0;
+
+    if (!isConfiguredStand(venue, stand)) {
+      var isSkipStand = false;
+      if (stand === 'Overall') isSkipStand = true;
+      if (stand === SUPPORT_STAND) isSkipStand = true;
+      if (stand === HAWKING_STAND) isSkipStand = true;
+      if (stand === CLIENT_STAND) isSkipStand = true;
+      if (stand === NONEVENT_STAND) isSkipStand = true;
+      if (!isSkipStand) {
+        mismatches.push({rawVenue: s.venue, resolvedVenue: venue, rawStand: s.stand, resolvedStand: stand, amount: amount, isMissingVenue: false});
+      }
+      return;
+    }
+
+    if (venueFilter && venue !== venueFilter) return;
+
+    if (!venueData[venue]) venueData[venue] = {stands: {}, events: {}};
+    if (!venueData[venue].stands[stand]) venueData[venue].stands[stand] = {gross: 0, entries: 0, eventSales: {}};
+    venueData[venue].stands[stand].gross += amount;
+    venueData[venue].stands[stand].entries++;
+
+    var evtDate = s.event_date || 'unknown';
+    var evtName = s.event_name || '';
+    var eKey = evtDate;
+    if (!venueData[venue].stands[stand].eventSales[eKey]) {
+      venueData[venue].stands[stand].eventSales[eKey] = {date: evtDate, name: evtName, gross: 0, staffCount: s.staff_count || 0};
+    }
+    venueData[venue].stands[stand].eventSales[eKey].gross += amount;
+    if (s.staff_count) venueData[venue].stands[stand].eventSales[eKey].staffCount = s.staff_count;
+
+    if (s.event_date) {
+      var evtKey = venue + '||' + s.event_date;
+      if (!venueData[venue].events[evtKey]) {
+        var evt = findEvent(venue, s.event_date);
+        venueData[venue].events[evtKey] = evt;
+      }
+    }
+  });
+
+  var grandGross = 0, grandComm = 0, grandLabor = 0;
+  var grandEvents = 0;
+  var totalSources = {request: 0, par: 0, headcount: 0};
+  var venueRows = [];
+
+  Object.keys(venueData).sort().forEach(function(venue) {
+    var vd = venueData[venue];
+    var venueGross = 0, venueComm = 0;
+
+    var standRows = [];
+    Object.keys(vd.stands).sort().forEach(function(stand) {
+      var sd = vd.stands[stand];
+      var commResult = calcCommission(venue, stand, sd.gross);
+      venueGross += sd.gross;
+      venueComm += commResult.commission;
+
+      var eventDetail = [];
+      var standLaborTotal = 0;
+      Object.keys(sd.eventSales).sort().forEach(function(eKey) {
+        var es = sd.eventSales[eKey];
+        var evtComm = calcCommission(venue, stand, es.gross);
+
+        var evtObj = vd.events[venue + '||' + es.date];
+        var evtLabor = calcStandLabor(venue, stand, es.date, evtObj);
+        standLaborTotal += evtLabor.cost;
+
+        var evtProfit = evtComm.commission - evtLabor.cost;
+        var evtMargin = evtComm.commission > 0 ? (evtProfit / evtComm.commission * 100) : 0;
+
+        eventDetail.push({
+          date: es.date,
+          name: es.name,
+          gross: es.gross,
+          commission: evtComm.commission,
+          labor: evtLabor.cost,
+          laborSource: evtLabor.source,
+          profit: evtProfit,
+          margin: evtMargin,
+          staffCount: es.staffCount
+        });
+      });
+
+      var standProfit = commResult.commission - standLaborTotal;
+      var standMargin = commResult.commission > 0 ? (standProfit / commResult.commission * 100) : 0;
+
+      standRows.push({
+        stand: stand,
+        venue: venue,
+        gross: sd.gross,
+        commission: commResult.commission,
+        labor: standLaborTotal,
+        profit: standProfit,
+        margin: standMargin,
+        dealType: commResult.dealType,
+        entries: sd.entries,
+        eventDetail: eventDetail
+      });
+    });
+
+    var eventList = [];
+    Object.keys(vd.events).forEach(function(ek) {
+      var evt = vd.events[ek];
+      if (evt) eventList.push({id: evt.id, event: evt});
+    });
+    var laborResult = estimateLabor(venue, eventList);
+    var venueLabor = laborResult.total;
+
+    totalSources.request += laborResult.sources.request;
+    totalSources.par += laborResult.sources.par;
+    totalSources.headcount += laborResult.sources.headcount;
+
+    var venueProfit = venueComm - venueLabor;
+    var venueMargin = venueComm > 0 ? (venueProfit / venueComm * 100) : 0;
+
+    grandGross += venueGross;
+    grandComm += venueComm;
+    grandLabor += venueLabor;
+    grandEvents += eventList.length;
+
+    venueRows.push({
+      venue: venue,
+      gross: venueGross,
+      commission: venueComm,
+      labor: venueLabor,
+      profit: venueProfit,
+      margin: venueMargin,
+      stands: standRows,
+      eventCount: eventList.length
+    });
+  });
+
+  var grandProfit = grandComm - grandLabor;
+  var grandMargin = grandComm > 0 ? (grandProfit / grandComm * 100) : 0;
+  var laborPctOfComm = grandComm > 0 ? (grandLabor / grandComm * 100) : 0;
+
+  document.getElementById('s-gross').textContent = fmtMoney(grandGross);
+  document.getElementById('s-gross-sub').textContent = grandEvents + ' event' + (grandEvents !== 1 ? 's' : '');
+  document.getElementById('s-comm').textContent = fmtMoney(grandComm);
+  document.getElementById('s-comm-sub').textContent = grandGross > 0 ? fmtPct(grandComm / grandGross * 100) + ' avg take' : '';
+  document.getElementById('s-labor').textContent = fmtMoney(grandLabor);
+  document.getElementById('s-labor-sub').textContent = fmtPct(laborPctOfComm) + ' of commission rev';
+  document.getElementById('s-profit').textContent = fmtMoney(grandProfit);
+  document.getElementById('s-profit').className = 'stat-value ' + (grandProfit >= 0 ? 'green' : 'red');
+  document.getElementById('s-profit-sub').textContent = 'Revenue - labor';
+  document.getElementById('s-margin').textContent = fmtPct(grandMargin);
+  document.getElementById('s-margin-sub').textContent = 'Profit / revenue';
+
+  var legendEl = document.getElementById('labor-source-legend');
+  var legendParts = [];
+  if (totalSources.request > 0) legendParts.push('<span><span class="labor-dot ld-request"></span>' + totalSources.request + ' via staffing request</span>');
+  if (totalSources.par > 0) legendParts.push('<span><span class="labor-dot ld-par"></span>' + totalSources.par + ' via par levels</span>');
+  if (totalSources.headcount > 0) legendParts.push('<span><span class="labor-dot ld-headcount"></span>' + totalSources.headcount + ' via headcount</span>');
+  legendEl.innerHTML = legendParts.length > 0 ? '<span style="font-weight:700;color:var(--primary)">Labor sources:</span>' + legendParts.join('') : '';
+
+  renderVenueTable(venueRows, grandGross, grandComm, grandLabor, grandProfit, grandMargin);
+  renderMismatches(mismatches, venueFilter);
+
+  document.getElementById('empty-msg').style.display = venueRows.length === 0 ? 'block' : 'none';
+}
+window.renderAll = renderAll;
+
+function findEvent(venue, eventDate) {
+  for (var i = 0; i < allEvents.length; i++) {
+    if (allEvents[i].venue === venue && allEvents[i].event_date === eventDate) return allEvents[i];
+  }
+  for (var j = 0; j < allEvents.length; j++) {
+    var rv = resolveVenue(allEvents[j].venue);
+    if (rv === venue && allEvents[j].event_date === eventDate) return allEvents[j];
+  }
+  return {id: null, event_date: eventDate, venue: venue, gates_open: null, estimated_end_time: null, staffing_tier: 'full'};
+}
+
+function renderVenueTable(venueRows, tGross, tComm, tLabor, tProfit, tMargin) {
+  var tbody = document.getElementById('venue-tbody');
+  if (venueRows.length === 0) { tbody.innerHTML = ''; return; }
+
+  var html = '';
+  venueRows.forEach(function(vr) {
+    var isExp = expanded[vr.venue];
+    var arrow = '<span class="expand-arrow' + (isExp ? ' open' : '') + '">&#9654;</span>';
+
+    html += '<tr class="venue-row" onclick="toggleVenue(\'' + vr.venue + '\')">' +
+      '<td class="nm">' + arrow + '<span class="venue-chip vc-' + vr.venue + '">' + vr.venue + '</span>' + (VENUE_LABELS[vr.venue] || vr.venue) + '</td>' +
+      '<td class="r">' + fmtMoney(vr.gross) + '</td>' +
+      '<td class="r ' + profitCls(vr.commission) + '">' + fmtMoney(vr.commission) + '</td>' +
+      '<td class="r">' + fmtMoney(vr.labor) + '</td>' +
+      '<td class="r ' + profitCls(vr.profit) + '">' + fmtMoney(vr.profit) + '</td>' +
+      '<td class="r">' + marginPill(vr.margin) + '</td>' +
+      '</tr>';
+
+    if (isExp) {
+      vr.stands.forEach(function(sr) {
+        var dealBadge = sr.dealType ? '<span class="deal-chip dc-' + sr.dealType + '">' + (DEAL_LABELS[sr.dealType] || sr.dealType) + '</span>' : '';
+        var standKey = vr.venue + '||' + sr.stand;
+        var isStandExp = expanded[standKey];
+        var standArrow = sr.eventDetail.length > 1 ? '<span class="expand-arrow' + (isStandExp ? ' open' : '') + '" style="font-size:8px;margin-right:4px;">&#9654;</span>' : '<span style="display:inline-block;width:16px;"></span>';
+        var standClick = sr.eventDetail.length > 1 ? ' onclick="toggleVenue(\'' + standKey.replace(/'/g, "\\'") + '\');event.stopPropagation();" style="cursor:pointer;"' : '';
+
+        var slabor = sr.labor > 0 ? fmtMoney(sr.labor) : '<span style="color:var(--label)">--</span>';
+        var sprofit = sr.labor > 0 ? '<span class="' + profitCls(sr.profit) + '">' + fmtMoney(sr.profit) + '</span>' : '<span style="color:var(--label)">--</span>';
+        var smargin = sr.labor > 0 ? marginPill(sr.margin) : '<span style="color:var(--label)">--</span>';
+
+        html += '<tr class="stand-row"' + standClick + '>' +
+          '<td>' + standArrow + sr.stand + dealBadge + '</td>' +
+          '<td class="r">' + fmtMoney(sr.gross) + '</td>' +
+          '<td class="r">' + fmtMoney(sr.commission) + '</td>' +
+          '<td class="r">' + slabor + '</td>' +
+          '<td class="r">' + sprofit + '</td>' +
+          '<td class="r">' + smargin + '</td>' +
+          '</tr>';
+
+        if (isStandExp) {
+          sr.eventDetail.forEach(function(ed) {
+            var d = new Date(ed.date + 'T12:00:00');
+            var dateStr = d.toLocaleDateString('en-US', {month:'short', day:'numeric'});
+            var evtLabel = ed.name ? dateStr + ' — ' + ed.name : dateStr;
+
+            var elabor = ed.labor > 0 ? fmtMoney(ed.labor) : '<span style="color:var(--label)">--</span>';
+            var eprofit = ed.labor > 0 ? '<span class="' + profitCls(ed.profit) + '">' + fmtMoney(ed.profit) + '</span>' : '<span style="color:var(--label)">--</span>';
+            var emargin = ed.labor > 0 ? marginPill(ed.margin) : '<span style="color:var(--label)">--</span>';
+            var esource = ed.laborSource !== 'none' ? '<span class="source-tag">' + ed.laborSource + '</span>' : '';
+
+            html += '<tr class="event-row">' +
+              '<td>' + evtLabel + '</td>' +
+              '<td class="r">' + fmtMoney(ed.gross) + '</td>' +
+              '<td class="r">' + fmtMoney(ed.commission) + '</td>' +
+              '<td class="r">' + elabor + ' ' + esource + '</td>' +
+              '<td class="r">' + eprofit + '</td>' +
+              '<td class="r">' + emargin + '</td>' +
+              '</tr>';
+          });
+        }
+      });
+    }
+  });
+
+  html += '<tr class="total-row">' +
+    '<td class="nm">Total</td>' +
+    '<td class="r">' + fmtMoney(tGross) + '</td>' +
+    '<td class="r ' + profitCls(tComm) + '">' + fmtMoney(tComm) + '</td>' +
+    '<td class="r">' + fmtMoney(tLabor) + '</td>' +
+    '<td class="r ' + profitCls(tProfit) + '">' + fmtMoney(tProfit) + '</td>' +
+    '<td class="r">' + marginPill(tMargin) + '</td>' +
+    '</tr>';
+
+  tbody.innerHTML = html;
+}
+
+function profitCls(v) { return v >= 0 ? 'profit-pos' : 'profit-neg'; }
+function marginPill(m) {
+  var cls = m >= 40 ? 'mg-good' : (m >= 15 ? 'mg-ok' : 'mg-bad');
+  return '<span class="margin-pill ' + cls + '">' + fmtPct(m) + '</span>';
+}
+
+function toggleVenue(v) {
+  expanded[v] = !expanded[v];
+  renderAll();
+}
+window.toggleVenue = toggleVenue;
+
+// ---- MISMATCHES ----
+function renderMismatches(mismatches, venueFilter) {
+  var container = document.getElementById('mismatch-container');
+  if (mismatches.length === 0) { container.innerHTML = ''; return; }
+
+  var grouped = {};
+  var totalMismatchAmount = 0;
+  mismatches.forEach(function(m) {
+    var venue = m.resolvedVenue || m.rawVenue;
+    if (venueFilter && venue !== venueFilter) return;
+    var key = venue + '||' + m.rawStand;
+    if (!grouped[key]) grouped[key] = {venue: venue, rawVenue: m.rawVenue, stand: m.rawStand, amount: 0, count: 0, isMissingVenue: m.isMissingVenue};
+    grouped[key].amount += m.amount;
+    grouped[key].count++;
+    totalMismatchAmount += m.amount;
+  });
+
+  var keys = Object.keys(grouped);
+  if (keys.length === 0) { container.innerHTML = ''; return; }
+
+  var html = '<div class="mismatch-panel">' +
+    '<div class="mismatch-title"><span style="font-size:14px;">&#9888;</span> ' + keys.length + ' unmatched stand' + (keys.length !== 1 ? 's' : '') + '</div>' +
+    '<div class="mismatch-sub">' + fmtMoney(totalMismatchAmount) + ' in sales not assigned to a deal structure. Assign them to a configured stand to include in calculations.</div>';
+
+  keys.sort().forEach(function(k) {
+    var g = grouped[k];
+    var venue = g.venue;
+
+    var stands = configuredStands[venue] || [];
+    var opts = '<option value="">Route to...</option>';
+    stands.forEach(function(s) {
+      opts += '<option value="' + s.replace(/"/g, '&quot;') + '">' + s + '</option>';
+    });
+
+    var selectId = 'mm-' + k.replace(/[^a-zA-Z0-9]/g, '_');
+
+    html += '<div class="mismatch-row">' +
+      '<span class="mm-venue">' + venue + '</span>' +
+      '<span class="mm-stand">' + g.stand + '</span>' +
+      '<span class="mm-amount">' + fmtMoney(g.amount) + '</span>' +
+      '<span class="mm-entries">' + g.count + ' entr' + (g.count !== 1 ? 'ies' : 'y') + '</span>' +
+      '<select class="mm-select" id="' + selectId + '">' + opts + '</select>' +
+      '<button class="mm-save" onclick="saveAlias(\'' + venue.replace(/'/g, "\\'") + '\',\'' + g.stand.replace(/'/g, "\\'") + '\',\'' + selectId + '\')" disabled>Assign</button>' +
+      '</div>';
+  });
+
+  html += '</div>';
+  container.innerHTML = html;
+
+  keys.forEach(function(k) {
+    var selectId = 'mm-' + k.replace(/[^a-zA-Z0-9]/g, '_');
+    var sel = document.getElementById(selectId);
+    if (sel) {
+      sel.addEventListener('change', function() {
+        var btn = this.nextElementSibling;
+        if (btn) btn.disabled = !this.value;
+      });
+    }
+  });
+}
+
+function saveAlias(venue, aliasStand, selectId) {
+  var sel = document.getElementById(selectId);
+  if (!sel || !sel.value) return;
+
+  var mapsTo = sel.value;
+  var payload = {venue: venue, alias_name: aliasStand, maps_to_stand: mapsTo};
+
+  sbPost('stand_aliases', payload).then(function(res) {
+    allStandAliases[venue + '||' + aliasStand] = mapsTo;
+    showToast(aliasStand + ' \u2192 ' + mapsTo, true);
+    renderAll();
+  }).catch(function(e) {
+    showToast('Error saving alias');
+    console.error(e);
+  });
+}
+window.saveAlias = saveAlias;
+
+// ---- EXPORT ----
+function exportCSV() {
+  var dateFrom = document.getElementById('date-from').value;
+  var dateTo = document.getElementById('date-to').value;
+  var venueFilter = document.getElementById('venue-filter').value;
+
+  var headers = ['Venue', 'Stand', 'Deal Type', 'Gross Sales', 'Commission Revenue', 'Est. Labor', 'Est. Profit', 'Margin'];
+  var rows = [];
+
+  var filteredSales = allSales.filter(function(s) {
+    return s.event_date >= dateFrom && s.event_date <= dateTo;
+  });
+
+  var venueData = {};
+  filteredSales.forEach(function(s) {
+    var venue = resolveVenue(s.venue);
+    if (!venue) return;
+    var stand = resolveStand(venue, s.stand);
+    if (!isConfiguredStand(venue, stand)) return;
+    if (venueFilter && venue !== venueFilter) return;
+
+    if (!venueData[venue]) venueData[venue] = {};
+    if (!venueData[venue][stand]) venueData[venue][stand] = 0;
+    venueData[venue][stand] += parseFloat(s.amount) || 0;
+  });
+
+  Object.keys(venueData).sort().forEach(function(venue) {
+    Object.keys(venueData[venue]).sort().forEach(function(stand) {
+      var gross = venueData[venue][stand];
+      var comm = calcCommission(venue, stand, gross);
+      rows.push([
+        VENUE_LABELS[venue] || venue,
+        stand,
+        DEAL_LABELS[comm.dealType] || '',
+        gross.toFixed(2),
+        comm.commission.toFixed(2),
+        '', '', ''
+      ]);
+    });
+  });
+
+  var csv = [headers.join(',')].concat(rows.map(function(r) {
+    return r.map(function(v) { return '"' + String(v).replace(/"/g, '""') + '"'; }).join(',');
+  })).join('\n');
+
+  var a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = 'commission-tracker-' + dateFrom + '-to-' + dateTo + '.csv';
+  a.click();
+  showToast('CSV exported', true);
+}
+window.exportCSV = exportCSV;
+
+// ---- TOAST ----
+function showToast(msg, good) {
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast' + (good ? ' green' : '');
+  t.classList.add('show');
+  setTimeout(function() { t.classList.remove('show'); }, 3000);
+}
+
+// ---- AUTH GATE ----
+pcAuth.require({
+  pageSlug: 'commission-tracker',
+  onReady: function(user) {
+    init(user);
+  }
+});
+
+})();
+</script>
+</body>
+</html>
