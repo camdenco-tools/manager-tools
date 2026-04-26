@@ -20,6 +20,10 @@ header {
 .hdivider { width: 1px; height: 20px; background: #e8e8e4; }
 .header-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
 .header-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: #1a1a1a; color: white; padding: 3px 8px; border-radius: 20px; }
+.header-right { display: flex; align-items: center; gap: 12px; }
+.header-user { font-size: 12px; color: #999; font-weight: 600; }
+.sign-out-btn { font-size: 11px; font-weight: 700; color: #999; background: none; border: 1px solid #e8e8e4; padding: 5px 12px; border-radius: 8px; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+.sign-out-btn:hover { color: #1a1a1a; border-color: #1a1a1a; }
 
 .page-body { padding: 20px 16px 60px; }
 .container { max-width: 560px; margin: 0 auto; }
@@ -88,6 +92,7 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
     <span class="header-title">Log Sales</span>
     <span class="header-badge">Nightly</span>
   </div>
+  <div class="header-right" id="header-right"></div>
 </header>
 
 <div class="page-body">
@@ -170,9 +175,9 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
   </div>
 </div>
 
+<script src="/pc-auth.js"></script>
 <script>
 var SUPA_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
-var SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvYXpsdHRkam93aGxmY2tzb3lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNzU4MjMsImV4cCI6MjA5MDg1MTgyM30.tagP_88g7R3d_p7a4Kp0NirnJgkAR5AQQImCt414SJg';
 
 var VENUE_LABELS = {
   'Mann': 'Mann Music Center', 'FMP': 'FMP', 'ACCC': 'ACCC',
@@ -201,6 +206,10 @@ var eventsOnDate = [];
 var uploadedRegister = null;
 var uploadedUnits = null;
 
+function apiHeaders() {
+  return pcAuth.headers();
+}
+
 function todayLocal() {
   var d = new Date();
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
@@ -215,8 +224,6 @@ function scoreboardDate() {
   }
   return { date: todayLocal(), label: "Tonight's sales" };
 }
-
-document.getElementById('evt-date').value = todayLocal();
 
 function isBlockedFile(file) {
   var name = file.name.toLowerCase();
@@ -277,7 +284,7 @@ async function handleDateChange() {
   try {
     var res = await fetch(
       SUPA_URL + '/rest/v1/events?event_date=eq.' + date + '&select=venue,event_name&order=venue.asc',
-      { headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY } }
+      { headers: apiHeaders() }
     );
     var rows = await res.json();
     if (Array.isArray(rows)) eventsOnDate = rows;
@@ -341,9 +348,11 @@ function handleVenueChange() {
 }
 
 async function uploadPhoto(file, path) {
+  var hdrs = apiHeaders();
+  hdrs['Content-Type'] = file.type;
   var res = await fetch(SUPA_URL + '/storage/v1/object/sale-photos/' + path, {
     method: 'POST',
-    headers: { 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': file.type },
+    headers: hdrs,
     body: file
   });
   if (!res.ok) return null;
@@ -378,12 +387,12 @@ async function submitSale() {
     if (uploadedUnits) {
       unitsUrl = await uploadPhoto(uploadedUnits, saleId + '-units.' + uploadedUnits.name.split('.').pop());
     }
+    var hdrs = apiHeaders();
+    hdrs['Content-Type'] = 'application/json';
+    hdrs['Prefer'] = 'return=minimal';
     var res = await fetch(SUPA_URL + '/rest/v1/sales', {
       method: 'POST',
-      headers: {
-        'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY,
-        'Content-Type': 'application/json', 'Prefer': 'return=minimal'
-      },
+      headers: hdrs,
       body: JSON.stringify({
         id: saleId, event_date: date, event_name: evtName || null,
         venue: venue, stand: stand, amount: amount, tip_amount: tipAmount,
@@ -434,7 +443,7 @@ async function loadScoreboard() {
   try {
     var res = await fetch(
       SUPA_URL + '/rest/v1/sales?event_date=eq.' + sb.date + '&select=venue,stand,amount,tip_amount,event_name,photo_url,units_photo_url',
-      { headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY } }
+      { headers: apiHeaders() }
     );
     var rows = await res.json();
     if (!Array.isArray(rows) || !rows.length) {
@@ -501,9 +510,21 @@ function toggleList(id, chId) {
   ch.innerHTML = open ? '&#9654;' : '&#9660;';
 }
 
-handleDateChange();
-loadScoreboard();
-setInterval(loadScoreboard, 60000);
+// Login gate
+pcAuth.require({
+  pageSlug: 'log-sales',
+  onReady: function(user) {
+    var el = document.getElementById('header-right');
+    if (el && user) {
+      el.innerHTML = '<span class="header-user">' + (user.display_name || user.email) + '</span>' +
+        '<button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
+    }
+    document.getElementById('evt-date').value = todayLocal();
+    handleDateChange();
+    loadScoreboard();
+    setInterval(loadScoreboard, 60000);
+  }
+});
 </script>
 </body>
 </html>
