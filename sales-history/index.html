@@ -189,7 +189,6 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
 <script src="/pc-auth.js"></script>
 <script>
 var SUPA_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
-var SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvYXpsdHRkam93aGxmY2tzb3lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNzU4MjMsImV4cCI6MjA5MDg1MTgyM30.tagP_88g7R3d_p7a4Kp0NirnJgkAR5AQQImCt414SJg';
 
 var VENUE_LABELS = {
   'Mann':'Mann Music Center','FMP':'FMP','ACCC':'ACCC','BWH':'Boardwalk Hall',
@@ -218,23 +217,12 @@ var editRegClear = false;
 var editUnitsClear = false;
 
 function apiHeaders() {
-  try { var h = pcAuth.headers(); if (h) return h; } catch(e) {}
-  return {'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY};
-}
-
-function setupHeader() {
-  var el = document.getElementById('header-right');
-  try {
-    var user = pcAuth.getUser();
-    if (user) {
-      el.innerHTML = '<span class="header-user">' + user.display_name + '</span><button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
-    }
-  } catch(e) {}
+  return pcAuth.headers();
 }
 
 function requireAdmin(desc, cb) {
-  try { if (pcAuth.isAdmin()) { cb(); return; } } catch(e) {}
-  try { if (pcAuth.getUser()) { alert('Your account does not have admin access for this action.'); return; } } catch(e) {}
+  if (pcAuth.isAdmin()) { cb(); return; }
+  if (pcAuth.getUser()) { alert('Your account does not have admin access for this action.'); return; }
   alert('Admin login required. Please sign in from the Toolkit page.');
 }
 
@@ -242,9 +230,6 @@ function todayLocal() {
   var d = new Date();
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
-
-document.getElementById('s-from').value = '2023-01-01';
-document.getElementById('s-to').value = todayLocal();
 
 async function searchHistory() {
   var from = document.getElementById('s-from').value;
@@ -543,7 +528,19 @@ function exportCSV() {
   a.click();
 }
 
-pcAuth.init(function() { setupHeader(); });
+// Login gate — must sign in to access this page
+pcAuth.require({
+  pageSlug: 'sales-history',
+  onReady: function(user) {
+    var el = document.getElementById('header-right');
+    if (el && user) {
+      el.innerHTML = '<span class="header-user">' + (user.display_name || user.email) + '</span>' +
+        '<button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
+    }
+    document.getElementById('s-from').value = '2023-01-01';
+    document.getElementById('s-to').value = todayLocal();
+  }
+});
 </script>
 </body>
 </html>
