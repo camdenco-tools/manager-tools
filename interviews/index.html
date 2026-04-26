@@ -15,6 +15,10 @@ header { background: #fff; border-bottom: 1px solid #e8e8e4; padding: 0 32px; di
 .hdivider { width: 1px; height: 20px; background: #e8e8e4; }
 .header-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
 .header-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: #1a1a1a; color: white; padding: 3px 8px; border-radius: 20px; }
+.header-right { display: flex; align-items: center; gap: 12px; }
+.header-user { font-size: 12px; color: #999; font-weight: 600; }
+.sign-out-btn { font-size: 11px; font-weight: 700; color: #999; background: none; border: 1px solid #e8e8e4; padding: 5px 12px; border-radius: 8px; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+.sign-out-btn:hover { color: #1a1a1a; border-color: #1a1a1a; }
 
 .page-body { padding: 20px 16px 60px; }
 
@@ -101,6 +105,7 @@ input:focus, select:focus { outline: none; border-color: #2d7dd2; }
     <span class="header-title">Interview Scheduling</span>
     <span class="header-badge">Admin</span>
   </div>
+  <div class="header-right" id="header-right"></div>
 </header>
 
 <div class="page-body">
@@ -110,13 +115,15 @@ input:focus, select:focus { outline: none; border-color: #2d7dd2; }
 </div>
 </div>
 
+<script src="/pc-auth.js"></script>
 <script>
 var SUPABASE_URL='https://aoazlttdjowhlfcksoyl.supabase.co';
-var SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvYXpsdHRkam93aGxmY2tzb3lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNzU4MjMsImV4cCI6MjA5MDg1MTgyM30.tagP_88g7R3d_p7a4Kp0NirnJgkAR5AQQImCt414SJg';
 
 var DAY_NAMES=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var MONTH_NAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 var iaSlots=[],iaBookings=[],iaWeekStart=null,iaLoading=true;
+
+function apiHeaders() { return Object.assign({}, pcAuth.headers(), {'Content-Type':'application/json'}); }
 
 function getSunday(d){var day=d.getDay();return new Date(d.getFullYear(),d.getMonth(),d.getDate()-day);}
 function initWeekStart(){iaWeekStart=getSunday(new Date());}
@@ -128,7 +135,7 @@ function formatDateNice(s){var d=parseDate(s);return DAY_NAMES[d.getDay()]+', '+
 function isToday(d){var now=new Date();return d.getFullYear()===now.getFullYear()&&d.getMonth()===now.getMonth()&&d.getDate()===now.getDate();}
 function isPast(slotDate,slotTime){var now=new Date();var p=slotTime.split(':');var sd=parseDate(slotDate);sd.setHours(parseInt(p[0]),parseInt(p[1]),0);return sd<now;}
 
-function sbFetch(path,opts){var method=opts&&opts.method?opts.method:'GET';var headers={'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json'};if(opts&&opts.prefer)headers['Prefer']=opts.prefer;var cfg={method:method,headers:headers};if(opts&&opts.body)cfg.body=JSON.stringify(opts.body);return fetch(SUPABASE_URL+path,cfg);}
+function sbFetch(path,opts){var method=opts&&opts.method?opts.method:'GET';var headers=apiHeaders();if(opts&&opts.prefer)headers['Prefer']=opts.prefer;var cfg={method:method,headers:headers};if(opts&&opts.body)cfg.body=JSON.stringify(opts.body);return fetch(SUPABASE_URL+path,cfg);}
 
 function loadData(){iaLoading=true;render();var p1=sbFetch('/rest/v1/interview_slots?select=*&order=slot_date.asc,start_time.asc').then(function(r){return r.json();}).catch(function(){return[];});var p2=sbFetch('/rest/v1/interview_bookings?select=*,interview_slots(*)&status=eq.scheduled&order=booked_at.desc').then(function(r){return r.json();}).catch(function(){return[];});Promise.all([p1,p2]).then(function(res){iaSlots=res[0]||[];iaBookings=res[1]||[];iaLoading=false;render();});}
 
@@ -183,8 +190,19 @@ function iaCancelBooking(bookingId,slotId){sbFetch('/rest/v1/interview_bookings?
 
 function iaCloseModal(e){if(e?e.target===e.currentTarget:true)document.getElementById('ia-modal').innerHTML='';}
 
-initWeekStart();
-loadData();
+// Login gate
+pcAuth.require({
+  pageSlug: 'interviews',
+  onReady: function(user) {
+    var el = document.getElementById('header-right');
+    if (el && user) {
+      el.innerHTML = '<span class="header-user">' + (user.display_name || user.email) + '</span>' +
+        '<button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
+    }
+    initWeekStart();
+    loadData();
+  }
+});
 </script>
 </body>
 </html>
