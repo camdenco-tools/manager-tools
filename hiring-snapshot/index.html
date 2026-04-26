@@ -84,7 +84,6 @@ header {
 <script src="/pc-auth.js"></script>
 <script>
 var SUPABASE_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
-var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvYXpsdHRkam93aGxmY2tzb3lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNzU4MjMsImV4cCI6MjA5MDg1MTgyM30.tagP_88g7R3d_p7a4Kp0NirnJgkAR5AQQImCt414SJg';
 
 var ACTIVE_WINDOW_DAYS = 14;
 var pcAllCandidates = [];
@@ -93,18 +92,7 @@ var pcSearch = '';
 var pcLoading = true;
 
 function apiHeaders() {
-  try { var h = pcAuth.headers(); if (h) return h; } catch(e) {}
-  return { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY };
-}
-
-function setupHeader() {
-  var el = document.getElementById('header-right');
-  try {
-    var user = pcAuth.getUser();
-    if (user) {
-      el.innerHTML = '<span class="header-user">' + user.display_name + '</span><button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
-    }
-  } catch(e) {}
+  return pcAuth.headers();
 }
 
 function sbFetch(path) {
@@ -342,8 +330,18 @@ function renderCandidateList() {
 function pcPeekFilter(f) { pcFilter = f; render(); }
 function pcPeekSearch(v) { pcSearch = v; var el = document.getElementById('pcpeek-list'); if (el) el.innerHTML = renderCandidateList(); }
 
-pcAuth.init(function() { setupHeader(); });
-loadAll();
+// Login gate — must sign in to access this page
+pcAuth.require({
+  pageSlug: 'hiring-snapshot',
+  onReady: function(user) {
+    var el = document.getElementById('header-right');
+    if (el && user) {
+      el.innerHTML = '<span class="header-user">' + (user.display_name || user.email) + '</span>' +
+        '<button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
+    }
+    loadAll();
+  }
+});
 </script>
 </body>
 </html>
