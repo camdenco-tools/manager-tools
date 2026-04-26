@@ -272,7 +272,6 @@ header {
 <script src="/pc-auth.js"></script>
 <script>
 var SUPA_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
-var SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvYXpsdHRkam93aGxmY2tzb3lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNzU4MjMsImV4cCI6MjA5MDg1MTgyM30.tagP_88g7R3d_p7a4Kp0NirnJgkAR5AQQImCt414SJg';
 var SENTINEL_ID = 'e2bf5cd1-5f50-4b11-b4b3-30c06907bffc';
 var VENUES = [
   {code:'Mann',label:'Mann Music Center'},{code:'FMP',label:'Freedom Mortgage Pavilion'},
@@ -295,18 +294,7 @@ var newItemTargetCatId = '';
 var priorRolloverMonth = '';
 
 function apiHeaders() {
-  try { var h = pcAuth.headers(); if (h) return Object.assign(h, {'Content-Type':'application/json'}); } catch(e) {}
-  return {'apikey':SUPA_KEY,'Authorization':'Bearer ' + SUPA_KEY,'Content-Type':'application/json'};
-}
-
-function setupHeader() {
-  var el = document.getElementById('header-right');
-  try {
-    var user = pcAuth.getUser();
-    if (user) {
-      el.innerHTML = '<span class="header-user">' + user.display_name + '</span><button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
-    }
-  } catch(e) {}
+  return Object.assign({}, pcAuth.headers(), {'Content-Type':'application/json'});
 }
 
 function fmt(n) { return '$' + parseFloat(n || 0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}); }
@@ -1104,9 +1092,19 @@ function clearAllCounts() {
   recalcProgress();
 }
 
-pcAuth.init(function() { setupHeader(); });
-renderVenueTiles();
-loadAll();
+// Login gate — must sign in to access this page
+pcAuth.require({
+  pageSlug: 'ending-inventory',
+  onReady: function(user) {
+    var el = document.getElementById('header-right');
+    if (el && user) {
+      el.innerHTML = '<span class="header-user">' + (user.display_name || user.email) + '</span>' +
+        '<button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
+    }
+    renderVenueTiles();
+    loadAll();
+  }
+});
 </script>
 </body>
 </html>
