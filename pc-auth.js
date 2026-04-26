@@ -16,12 +16,13 @@
     </script>
   
   What it does:
-    1. Checks for existing session (localStorage token)
-    2. If no session or expired, shows a login overlay
-    3. After login, fetches the user's role from user_roles
-    4. Checks that the user has the required pageSlug in their page_access array
-    5. If admin, always passes (admins have access to everything)
-    6. Calls onReady with the user object
+    1. Checks URL hash for password recovery tokens (from reset emails)
+    2. Checks for existing session (localStorage token)
+    3. If no session or expired, shows a login overlay
+    4. After login, fetches the user's role from user_roles
+    5. Checks that the user has the required pageSlug in their page_access array
+    6. If admin, always passes (admins have access to everything)
+    7. Calls onReady with the user object
     
   The login overlay is injected into the page automatically.
   It uses the same visual style as all other pages.
@@ -45,6 +46,131 @@ var pcAuth = (function() {
     if (accessToken) h['Authorization'] = 'Bearer ' + accessToken;
     return h;
   }
+
+  // ── Password Recovery Detection ──
+
+  function parseHash() {
+    var hash = window.location.hash;
+    if (!hash || hash.length < 2) return null;
+    var params = {};
+    var pairs = hash.substring(1).split('&');
+    for (var i = 0; i < pairs.length; i++) {
+      var kv = pairs[i].split('=');
+      if (kv.length === 2) {
+        params[decodeURIComponent(kv[0])] = decodeURIComponent(kv[1]);
+      }
+    }
+    return params;
+  }
+
+  function checkForRecoveryToken() {
+    var params = parseHash();
+    if (!params) return false;
+    if (params.type === 'recovery' ? params.access_token : false) {
+      accessToken = params.access_token;
+      // Store the token so the session works after password change
+      try {
+        localStorage.setItem('sb_access_token', params.access_token);
+        if (params.refresh_token) localStorage.setItem('sb_refresh_token', params.refresh_token);
+      } catch(e) {}
+      // Clear the hash so the token isn't visible
+      try { history.replaceState(null, '', window.location.pathname + window.location.search); } catch(e) {}
+      showPasswordResetForm();
+      return true;
+    }
+    return false;
+  }
+
+  function showPasswordResetForm() {
+    // Remove any existing overlay
+    var existing = document.getElementById('pcAuthOverlay');
+    if (existing) existing.remove();
+
+    var overlay = document.createElement('div');
+    overlay.id = 'pcAuthOverlay';
+    overlay.innerHTML = [
+      '<div style="max-width:400px;margin:120px auto;padding:40px;background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.08);text-align:center;">',
+      '  <h2 style="margin-bottom:8px;font-size:20px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;">Set New Password</h2>',
+      '  <p style="color:#666;margin-bottom:24px;font-size:14px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;">Choose a password for your CamdenCo Toolkit account.</p>',
+      '  <input type="password" id="pcAuthNewPw" placeholder="New password" autocomplete="new-password"',
+      '    style="width:100%;padding:10px 14px;margin-bottom:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;">',
+      '  <input type="password" id="pcAuthConfirmPw" placeholder="Confirm password" autocomplete="new-password"',
+      '    style="width:100%;padding:10px 14px;margin-bottom:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;">',
+      '  <button id="pcAuthResetBtn"',
+      '    style="width:100%;padding:10px;background:#1a1a1a;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;">Set Password</button>',
+      '  <div id="pcAuthResetError" style="color:#dc2626;font-size:13px;margin-top:8px;display:none;"></div>',
+      '  <div id="pcAuthResetSuccess" style="color:#16a34a;font-size:13px;margin-top:8px;display:none;"></div>',
+      '</div>'
+    ].join('\n');
+
+    overlay.style.cssText = 'position:fixed;inset:0;background:#f5f5f5;z-index:10000;overflow-y:auto;';
+    document.body.appendChild(overlay);
+
+    document.getElementById('pcAuthResetBtn').addEventListener('click', doPasswordReset);
+    document.getElementById('pcAuthConfirmPw').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') doPasswordReset();
+    });
+    document.getElementById('pcAuthNewPw').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') document.getElementById('pcAuthConfirmPw').focus();
+    });
+  }
+
+  function doPasswordReset() {
+    var newPw = document.getElementById('pcAuthNewPw').value;
+    var confirmPw = document.getElementById('pcAuthConfirmPw').value;
+    var errEl = document.getElementById('pcAuthResetError');
+    var successEl = document.getElementById('pcAuthResetSuccess');
+    var btn = document.getElementById('pcAuthResetBtn');
+    if (errEl) errEl.style.display = 'none';
+    if (successEl) successEl.style.display = 'none';
+
+    if (!newPw) {
+      if (errEl) { errEl.textContent = 'Please enter a new password.'; errEl.style.display = 'block'; }
+      return;
+    }
+    if (newPw.length < 6) {
+      if (errEl) { errEl.textContent = 'Password must be at least 6 characters.'; errEl.style.display = 'block'; }
+      return;
+    }
+    if (newPw !== confirmPw) {
+      if (errEl) { errEl.textContent = 'Passwords do not match.'; errEl.style.display = 'block'; }
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+
+    fetch(SUPABASE_URL + '/auth/v1/user', {
+      method: 'PUT',
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: newPw })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.error) {
+        if (errEl) { errEl.textContent = data.error.message || 'Failed to update password.'; errEl.style.display = 'block'; }
+        btn.disabled = false;
+        btn.textContent = 'Set Password';
+        return;
+      }
+      if (successEl) {
+        successEl.textContent = 'Password updated! Redirecting...';
+        successEl.style.display = 'block';
+      }
+      // Short delay then proceed to normal auth flow
+      setTimeout(function() {
+        removeLoginOverlay();
+        fetchUserRole();
+      }, 1500);
+    })
+    .catch(function() {
+      if (errEl) { errEl.textContent = 'Connection error. Please try again.'; errEl.style.display = 'block'; }
+      btn.disabled = false;
+      btn.textContent = 'Set Password';
+    });
+  }
+
+  // ── Login Overlay ──
 
   function injectLoginOverlay() {
     if (document.getElementById('pcAuthOverlay')) return;
@@ -182,7 +308,7 @@ var pcAuth = (function() {
       var user = rows[0];
 
       // Auto-link auth_id if matched by email but auth_id was null
-      if (!user.auth_id && authUserId) {
+      if (!user.auth_id ? authUserId : false) {
         fetch(SUPABASE_URL + '/rest/v1/user_roles?id=eq.' + user.id, {
           method: 'PATCH',
           headers: authHeaders(),
@@ -199,17 +325,19 @@ var pcAuth = (function() {
       }
 
       // Check page access
-      if (config.pageSlug && user.role !== 'admin') {
-        var hasAccess = (user.page_access || []).indexOf(config.pageSlug) !== -1;
-        if (!hasAccess) {
-          showError('You don\'t have access to this page. Contact your admin.');
-          return;
+      if (config ? config.pageSlug : false) {
+        if (user.role !== 'admin') {
+          var hasAccess = (user.page_access || []).indexOf(config.pageSlug) !== -1;
+          if (!hasAccess) {
+            showError('You don\'t have access to this page. Contact your admin.');
+            return;
+          }
         }
       }
 
       currentUser = user;
       removeLoginOverlay();
-      if (config.onReady) config.onReady(user);
+      if (config ? config.onReady : false) config.onReady(user);
     })
     .catch(function() {
       showError('Error loading account. Please try again.');
@@ -217,6 +345,9 @@ var pcAuth = (function() {
   }
 
   function tryAutoLogin() {
+    // First check for password recovery token in URL hash
+    if (checkForRecoveryToken()) return;
+
     try {
       var token = localStorage.getItem('sb_access_token');
       if (!token) {
@@ -284,6 +415,9 @@ var pcAuth = (function() {
 
     // Silent init for ungated pages — restores session if available, no login overlay
     init: function(cb) {
+      // Check for recovery token even on ungated pages
+      if (checkForRecoveryToken()) return;
+
       try {
         var token = localStorage.getItem('sb_access_token');
         if (!token) { if (cb) cb(null); return; }
@@ -321,9 +455,9 @@ var pcAuth = (function() {
         })
         .then(function(r) { if (r) return r.json(); return null; })
         .then(function(rows) {
-          if (rows && rows.length > 0 && rows[0].is_active) {
+          if (rows ? (rows.length > 0 ? rows[0].is_active : false) : false) {
             currentUser = rows[0];
-            if (!currentUser.auth_id && authUserId) {
+            if (!currentUser.auth_id ? authUserId : false) {
               fetch(SUPABASE_URL + '/rest/v1/user_roles?id=eq.' + currentUser.id, { method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ auth_id: authUserId }) }).catch(function() {});
               currentUser.auth_id = authUserId;
             }
@@ -338,7 +472,7 @@ var pcAuth = (function() {
     getUser: function() { return currentUser; },
     getToken: function() { return accessToken; },
     getRole: function() { return currentUser ? currentUser.role : null; },
-    isAdmin: function() { return currentUser && currentUser.role === 'admin'; },
+    isAdmin: function() { return currentUser ? currentUser.role === 'admin' : false; },
     hasAccess: function(slug) {
       if (!currentUser) return false;
       if (currentUser.role === 'admin') return true;
