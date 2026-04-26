@@ -129,25 +129,13 @@ header { background: var(--card); border-bottom: 1px solid var(--border); paddin
 <script src="/pc-auth.js"></script>
 <script>
 var SB_URL='https://aoazlttdjowhlfcksoyl.supabase.co';
-var SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvYXpsdHRkam93aGxmY2tzb3lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNzU4MjMsImV4cCI6MjA5MDg1MTgyM30.tagP_88g7R3d_p7a4Kp0NirnJgkAR5AQQImCt414SJg';
 
 var pcCategories=[],pcItems=[],pcProfiles=[];
 
 function apiHeaders(){
-  try { var h = pcAuth.headers(); if (h) return Object.assign(h, {'Content-Type':'application/json'}); } catch(e) {}
-  return {'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'};
+  return Object.assign({}, pcAuth.headers(), {'Content-Type':'application/json'});
 }
 function fmt(n){return'$'+parseFloat(n||0).toFixed(2);}
-
-function setupHeader(){
-  var el = document.getElementById('header-right');
-  try {
-    var user = pcAuth.getUser();
-    if (user) {
-      el.innerHTML = '<span class="header-user">' + user.display_name + '</span><button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
-    }
-  } catch(e) {}
-}
 
 async function loadAll(){try{var hdrs=apiHeaders();var r1=await fetch(SB_URL+'/rest/v1/cos_categories?select=*&order=sort_order.asc',{headers:hdrs});pcCategories=await r1.json();var r2=await fetch(SB_URL+'/rest/v1/inventory_items?select=*&order=name.asc',{headers:hdrs});pcItems=await r2.json();var r3=await fetch(SB_URL+'/rest/v1/inventory_venue_profiles?select=*',{headers:hdrs});pcProfiles=await r3.json();renderProfiles();}catch(e){document.getElementById('profiles-content').innerHTML='<div class="loading">Error loading data. Please refresh.</div>';}}
 
@@ -163,8 +151,18 @@ var cats=document.querySelectorAll('.cat-section');cats.forEach(function(section
 
 function showToast(msg,good){var t=document.getElementById('toast');t.textContent=msg;t.className='toast'+(good?' green':' red');t.classList.add('show');setTimeout(function(){t.classList.remove('show');},2000);}
 
-pcAuth.init(function() { setupHeader(); });
-loadAll();
+// Login gate — must sign in to access this page
+pcAuth.require({
+  pageSlug: 'venue-item-profiles',
+  onReady: function(user) {
+    var el = document.getElementById('header-right');
+    if (el && user) {
+      el.innerHTML = '<span class="header-user">' + (user.display_name || user.email) + '</span>' +
+        '<button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
+    }
+    loadAll();
+  }
+});
 </script>
 </body>
 </html>
