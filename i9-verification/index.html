@@ -15,6 +15,10 @@ header { background: #fff; border-bottom: 1px solid #e8e8e4; padding: 0 32px; di
 .hdivider { width: 1px; height: 20px; background: #e8e8e4; }
 .header-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
 .header-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: #1a1a1a; color: white; padding: 3px 8px; border-radius: 20px; }
+.header-right { display: flex; align-items: center; gap: 12px; }
+.header-user { font-size: 12px; color: #999; font-weight: 500; }
+.sign-out-btn { font-size: 11px; color: #c0392b; background: none; border: 1px solid #f0c0c0; padding: 4px 10px; border-radius: 6px; cursor: pointer; font-weight: 600; }
+.sign-out-btn:hover { background: #fdf0ee; }
 
 .page-body { padding: 20px 16px 60px; }
 
@@ -72,10 +76,6 @@ header { background: #fff; border-bottom: 1px solid #e8e8e4; padding: 0 32px; di
 .stat-box { flex: 1; background: #fff; border-radius: 8px; padding: 10px 12px; text-align: center; border: 1px solid #eee; }
 .stat-num { font-size: 22px; font-weight: 600; }
 .stat-lbl { font-size: 11px; color: #888; margin-top: 2px; }
-.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-.modal-box { background: #fff; border-radius: 10px; padding: 24px; max-width: 360px; width: 90%; }
-.modal-box h3 { margin: 0 0 8px; font-size: 16px; }
-.modal-box p { font-size: 14px; color: #555; margin: 0 0 16px; }
 .error-msg { color: #c0392b; font-size: 12px; margin-top: 4px; }
 .print-only { display: none; }
 @media print { .no-print { display: none !important; } .print-only { display: block; } .layout { display: block; } .panel-left { display: none; } }
@@ -90,24 +90,34 @@ header { background: #fff; border-bottom: 1px solid #e8e8e4; padding: 0 32px; di
     <span class="header-title">I-9 Verification</span>
     <span class="header-badge">Documents</span>
   </div>
+  <div class="header-right" id="header-right"></div>
 </header>
 
 <div class="page-body">
 <div id="i9ver">
   <div id="i9ver-main"></div>
-  <div id="i9ver-modal"></div>
 </div>
 </div>
 <div id="i9ver-lightbox" style="display:none;"><img id="i9ver-lightbox-img" src="" /></div>
 
+<script src="/pc-auth.js"></script>
 <script>
 var SUPABASE_URL='https://aoazlttdjowhlfcksoyl.supabase.co';
-var SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvYXpsdHRkam93aGxmY2tzb3lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNzU4MjMsImV4cCI6MjA5MDg1MTgyM30.tagP_88g7R3d_p7a4Kp0NirnJgkAR5AQQImCt414SJg';
-var ADMIN_PASSWORD='popcorn2026';
+
+function apiHeaders() {
+  return pcAuth.headers();
+}
 
 var pcI9Records=[],pcI9Selected=null,pcI9Filter='all',pcI9Search='',pcI9EditedFields={},pcI9Loading=true;
 
-function supabaseFetch(path,opts){var defaults={headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json'}};if(opts&&opts.headers){for(var k in opts.headers)defaults.headers[k]=opts.headers[k];}var merged={method:opts&&opts.method?opts.method:'GET',headers:defaults.headers};if(opts&&opts.body)merged.body=opts.body;return fetch(SUPABASE_URL+path,merged);}
+function supabaseFetch(path,opts){
+  var h = apiHeaders();
+  h['Content-Type'] = 'application/json';
+  if(opts && opts.headers){for(var k in opts.headers) h[k]=opts.headers[k];}
+  var merged={method:opts && opts.method?opts.method:'GET',headers:h};
+  if(opts && opts.body) merged.body=opts.body;
+  return fetch(SUPABASE_URL+path,merged);
+}
 
 function loadRecords(){pcI9Loading=true;render();supabaseFetch('/rest/v1/i9_records?select=*&order=submitted_at.desc').then(function(r){return r.json();}).then(function(data){pcI9Records=data;pcI9Loading=false;if(pcI9Selected){for(var i=0;i<pcI9Records.length;i++){if(pcI9Records[i].id===pcI9Selected.id){pcI9Selected=pcI9Records[i];break;}}}render();}).catch(function(){pcI9Loading=false;render();});}
 
@@ -159,9 +169,16 @@ function i9FieldEdited(field,value){pcI9EditedFields[field]=value;if(pcI9Selecte
 
 function i9VerifyRecord(){var nameEl=document.getElementById('verifier-name');var errEl=document.getElementById('verify-err');if(!nameEl)return;var verifierName=nameEl.value.trim();if(!verifierName){errEl.innerHTML='Please enter your name.';return;}var btn=document.getElementById('verify-btn');btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Saving...';var hasEdits=false;for(var k in pcI9EditedFields){if(pcI9EditedFields[k]){hasEdits=true;break;}}var updates={verification_status:'verified',verified_by:verifierName,verified_at:new Date().toISOString(),fields_edited_during_verification:hasEdits,hire_date:pcI9Selected.submitted_at?pcI9Selected.submitted_at.substring(0,10):new Date().toISOString().substring(0,10)};for(var field in pcI9EditedFields)updates[field]=pcI9EditedFields[field];if(hasEdits){var existingNote=pcI9Selected.verification_notes||'';updates.verification_notes=existingNote?(existingNote+' | Fields edited during verification by '+verifierName):('Fields edited during verification by '+verifierName);}supabaseFetch('/rest/v1/i9_records?id=eq.'+pcI9Selected.id,{method:'PATCH',headers:{'Prefer':'return=minimal'},body:JSON.stringify(updates)}).then(function(r){if(r.ok||r.status===204){pcI9EditedFields={};loadRecords();}else{return r.text().then(function(t){throw new Error(t);});}}).catch(function(err){errEl.innerHTML='Save failed: '+err.message;btn.disabled=false;btn.innerHTML='Mark as verified';});}
 
-function i9UnlockEdit(){document.getElementById('i9ver-modal').innerHTML='<div class="modal-overlay" onclick="i9CloseModal(event)"><div class="modal-box"><h3>Admin access required</h3><p>Enter the admin password to edit this verified record.</p><input type="password" id="admin-pw-input" placeholder="Admin password" style="margin-bottom:8px;" /><div class="error-msg" id="admin-pw-err"></div><div style="display:flex;gap:8px;margin-top:12px;"><button class="btn" style="flex:1;" onclick="i9CloseModal(null)">Cancel</button><button class="btn btn-primary" style="flex:1;" onclick="i9CheckAdminPw()">Unlock</button></div></div></div>';}
-function i9CheckAdminPw(){var pw=document.getElementById('admin-pw-input').value;if(pw===ADMIN_PASSWORD){i9CloseModal(null);pcI9Selected.verification_status='pending';pcI9EditedFields={};render();}else{document.getElementById('admin-pw-err').innerHTML='Incorrect password.';}}
-function i9CloseModal(e){if(e?e.target===e.currentTarget:true)document.getElementById('i9ver-modal').innerHTML='';}
+function i9UnlockEdit(){
+  if(!pcAuth.isAdmin()){
+    alert('Admin access required. Sign in as admin from the Toolkit.');
+    return;
+  }
+  pcI9Selected.verification_status='pending';
+  pcI9EditedFields={};
+  render();
+}
+
 function i9PrintRecord(){window.print();}
 
 function i9ExportCSV(){var filtered=getFilteredRecords();var cols=['employee_name','date_of_birth','is_minor','list_type','doc1_list','doc1_type','doc1_number','doc1_expiration','doc1_issuing_authority','doc1_ai_confidence','doc2_list','doc2_type','doc2_number','doc2_expiration','doc2_issuing_authority','doc2_ai_confidence','compliance_status','verification_status','verified_by','verified_at','hire_date','fields_edited_during_verification','verification_notes','submitted_at'];var rows=[cols.join(',')];for(var i=0;i<filtered.length;i++){var rec=filtered[i];var row=[];for(var j=0;j<cols.length;j++){var val=rec[cols[j]];if(val===null||val===undefined)val='';val=String(val).replace(/"/g,'""');if(val.indexOf(',')>-1||val.indexOf('"')>-1)val='"'+val+'"';row.push(val);}rows.push(row.join(','));}var csv=rows.join('\n');var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='i9-records-'+new Date().toISOString().substring(0,10)+'.csv';a.click();}
@@ -170,9 +187,43 @@ function i9SelectRecord(id){for(var i=0;i<pcI9Records.length;i++){if(pcI9Records
 function i9SetFilter(f){pcI9Filter=f;render();}
 function i9SearchChanged(val){pcI9Search=val;render();}
 
-function i9LoadSignedUrl(storagePath,imgId){fetch(SUPABASE_URL+'/storage/v1/object/sign/i9-photos/'+storagePath,{method:'POST',headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json'},body:JSON.stringify({expiresIn:3600})}).then(function(r){return r.json();}).then(function(data){var el=document.getElementById(imgId);if(!el)return;if(data.signedURL){var signed=data.signedURL;el.src=signed.indexOf('http')===0?signed:SUPABASE_URL+'/storage/v1'+(signed.indexOf('/')===0?signed:'/'+signed);}else if(data.error){el.parentNode.innerHTML='<div style="background:#fdecea;border:1px solid #f4b8b8;border-radius:6px;padding:10px;font-size:12px;color:#8b1a1a;">Photo unavailable: '+data.error+'</div>';}}).catch(function(){var el=document.getElementById(imgId);if(el)el.parentNode.innerHTML='<div style="background:#fdecea;border:1px solid #f4b8b8;border-radius:6px;padding:10px;font-size:12px;color:#8b1a1a;">Could not load photo</div>';});}
+function i9LoadSignedUrl(storagePath,imgId){
+  var h = apiHeaders();
+  h['Content-Type'] = 'application/json';
+  fetch(SUPABASE_URL+'/storage/v1/object/sign/i9-photos/'+storagePath,{
+    method:'POST',
+    headers:h,
+    body:JSON.stringify({expiresIn:3600})
+  }).then(function(r){return r.json();}).then(function(data){
+    var el=document.getElementById(imgId);
+    if(!el)return;
+    if(data.signedURL){
+      var signed=data.signedURL;
+      el.src=signed.indexOf('http')===0?signed:SUPABASE_URL+'/storage/v1'+(signed.indexOf('/')===0?signed:'/'+signed);
+    }else if(data.error){
+      el.parentNode.innerHTML='<div style="background:#fdecea;border:1px solid #f4b8b8;border-radius:6px;padding:10px;font-size:12px;color:#8b1a1a;">Photo unavailable: '+data.error+'</div>';
+    }
+  }).catch(function(){
+    var el=document.getElementById(imgId);
+    if(el)el.parentNode.innerHTML='<div style="background:#fdecea;border:1px solid #f4b8b8;border-radius:6px;padding:10px;font-size:12px;color:#8b1a1a;">Could not load photo</div>';
+  });
+}
 
-loadRecords();
+function init(){
+  loadRecords();
+}
+
+pcAuth.require({
+  pageSlug: 'i9-verification',
+  onReady: function(user) {
+    var el = document.getElementById('header-right');
+    if (el && user) {
+      el.innerHTML = '<span class="header-user">' + (user.display_name || user.email) + '</span>' +
+        '<button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
+    }
+    init();
+  }
+});
 
 // Lightbox
 (function(){var lb=document.getElementById('i9ver-lightbox');var lbImg=document.getElementById('i9ver-lightbox-img');var lbScale=1,lbDragX=0,lbDragY=0,lbStartX=0,lbStartY=0,lbDragging=false;function lbApplyTransform(){lbImg.style.transform='translate('+lbDragX+'px, '+lbDragY+'px) scale('+lbScale+')';}function lbReset(){lbScale=1;lbDragX=0;lbDragY=0;lbImg.style.transform='';}lb.addEventListener('click',function(e){if(e.target===lb){lb.style.display='none';lbReset();}});lbImg.addEventListener('wheel',function(e){e.preventDefault();var delta=e.deltaY>0?0.9:1.1;lbScale=Math.min(Math.max(lbScale*delta,0.5),5);lbApplyTransform();});lbImg.addEventListener('mousedown',function(e){if(lbScale<=1)return;lbDragging=true;lbStartX=e.clientX-lbDragX;lbStartY=e.clientY-lbDragY;lbImg.classList.add('dragging');e.preventDefault();});document.addEventListener('mousemove',function(e){if(!lbDragging)return;lbDragX=e.clientX-lbStartX;lbDragY=e.clientY-lbStartY;lbApplyTransform();});document.addEventListener('mouseup',function(){lbDragging=false;lbImg.classList.remove('dragging');});lbImg.addEventListener('dblclick',function(){if(lbScale>1)lbReset();else{lbScale=2.5;lbApplyTransform();}});document.addEventListener('keydown',function(e){if(lb.style.display==='none')return;if(e.key==='Escape'){lb.style.display='none';lbReset();}});window.i9OpenLightbox=function(src){lbReset();lbImg.src=src;lb.style.display='flex';};})();
