@@ -3,6 +3,7 @@
   Netlify: /cos-labor/index.html → tools.camdenco.com/cos-labor/
   Migrated from WordPress: April 25, 2026
   Auth conversion: April 25, 2026
+  Login gate conversion: April 26, 2026
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -275,7 +276,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 <script src="/pc-auth.js"></script>
 <script>
 var SUPA_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
-var SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvYXpsdHRkam93aGxmY2tzb3lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNzU4MjMsImV4cCI6MjA5MDg1MTgyM30.tagP_88g7R3d_p7a4Kp0NirnJgkAR5AQQImCt414SJg';
 
 var VENUES = [
   {code:'ACCC', label:'ACCC'},{code:'BWH', label:'BWH'},{code:'Mann', label:'Mann'},
@@ -322,22 +322,11 @@ var isLocked = false;
 var cachedSales=[],cachedPurchases=[],cachedInventory={},cachedPriorInventory={},cachedStaffing=[],cachedPayRates=[],cachedDealTemplates=[],cachedStandDeals=[],cachedBillingRates=[],cachedPayroll=[],cachedManual=[],cachedSnapshot=null,cachedEvents=[];
 
 function apiHeaders() {
-  try { var h = pcAuth.headers(); if (h) return h; } catch(e) {}
-  return {'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY};
-}
-
-function setupHeader() {
-  var el = document.getElementById('header-right');
-  try {
-    var user = pcAuth.getUser();
-    if (user) {
-      el.innerHTML = '<span class="header-user">' + user.display_name + '</span><button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
-    }
-  } catch(e) {}
+  return pcAuth.headers();
 }
 
 function requireAdmin(desc, cb) {
-  try { if (pcAuth.isAdmin()) { cb(); return; } } catch(e) {}
+  if (pcAuth.isAdmin()) { cb(); return; }
   alert('Admin login required. Please sign in from the Toolkit page.');
 }
 
@@ -655,12 +644,21 @@ function deletePurchase(id){requireAdmin('Admin access required to delete a purc
 
 async function lockPeriod(){requireAdmin('Admin access required to lock this period.',function(){promptName('Lock period','Who is locking this period?',async function(name){var p=FISCAL_PERIODS[currentPeriodIdx];var pk=getPeriodKey(p);var codes=VENUES.map(function(v){return v.code;});var allData={};codes.forEach(function(c){allData[c]=buildVenueData(c);});try{await supaUpsert('eom_snapshots',{fiscal_period:pk,locked_by:name,locked_at:new Date().toISOString(),snapshot_data:JSON.stringify(allData)});loadAllData();}catch(e){alert('Error locking period. Please try again.');}});});}
 
-/* Initialize */
-pcAuth.init(function() { setupHeader(); });
-currentPeriodIdx=findCurrentPeriod();
-renderPills();
-updatePeriodDisplay();
-loadAllData();
+/* Login gate — must sign in to access this page */
+pcAuth.require({
+  pageSlug: 'cos-labor',
+  onReady: function(user) {
+    var el = document.getElementById('header-right');
+    if (el && user) {
+      el.innerHTML = '<span class="header-user">' + (user.display_name || user.email) + '</span>' +
+        '<button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
+    }
+    currentPeriodIdx = findCurrentPeriod();
+    renderPills();
+    updatePeriodDisplay();
+    loadAllData();
+  }
+});
 </script>
 </body>
 </html>
