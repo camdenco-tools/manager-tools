@@ -282,6 +282,58 @@ var pcAuth = (function() {
       tryAutoLogin();
     },
 
+    // Silent init for ungated pages — restores session if available, no login overlay
+    init: function(cb) {
+      try {
+        var token = localStorage.getItem('sb_access_token');
+        if (!token) { if (cb) cb(null); return; }
+        accessToken = token;
+        fetch(SUPABASE_URL + '/auth/v1/user', {
+          headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token }
+        })
+        .then(function(r) {
+          if (!r.ok) {
+            var refresh = localStorage.getItem('sb_refresh_token');
+            if (refresh) {
+              return fetch(SUPABASE_URL + '/auth/v1/token?grant_type=refresh_token', {
+                method: 'POST',
+                headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ refresh_token: refresh })
+              }).then(function(r2) { return r2.json(); }).then(function(data) {
+                if (data.access_token) {
+                  accessToken = data.access_token;
+                  try { localStorage.setItem('sb_access_token', data.access_token); localStorage.setItem('sb_refresh_token', data.refresh_token); } catch(e) {}
+                  return fetch(SUPABASE_URL + '/auth/v1/user', { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + accessToken } });
+                }
+                accessToken = null; if (cb) cb(null); return null;
+              });
+            }
+            accessToken = null; if (cb) cb(null); return null;
+          }
+          return r;
+        })
+        .then(function(r) { if (r) return r.json(); return null; })
+        .then(function(authUser) {
+          if (!authUser || !authUser.id) { accessToken = null; if (cb) cb(null); return; }
+          authUserId = authUser.id;
+          authUserEmail = authUser.email;
+          return fetch(SUPABASE_URL + '/rest/v1/user_roles?select=*&or=(auth_id.eq.' + authUser.id + ',email.eq.' + encodeURIComponent(authUser.email) + ')', { headers: authHeaders() });
+        })
+        .then(function(r) { if (r) return r.json(); return null; })
+        .then(function(rows) {
+          if (rows && rows.length > 0 && rows[0].is_active) {
+            currentUser = rows[0];
+            if (!currentUser.auth_id && authUserId) {
+              fetch(SUPABASE_URL + '/rest/v1/user_roles?id=eq.' + currentUser.id, { method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ auth_id: authUserId }) }).catch(function() {});
+              currentUser.auth_id = authUserId;
+            }
+          }
+          if (cb) cb(currentUser);
+        })
+        .catch(function() { accessToken = null; if (cb) cb(null); });
+      } catch(e) { if (cb) cb(null); }
+    },
+
     // Expose for other pages to use
     getUser: function() { return currentUser; },
     getToken: function() { return accessToken; },
