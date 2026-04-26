@@ -23,6 +23,10 @@
   .hdivider { width: 1px; height: 20px; background: var(--border); }
   .header-title { font-size: 15px; font-weight: 700; }
   .header-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: #607d8b; color: white; padding: 3px 8px; border-radius: 20px; }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  .header-user { font-size: 12px; color: var(--label); font-weight: 600; }
+  .sign-out-btn { font-size: 11px; font-weight: 700; color: var(--label); background: none; border: 1px solid var(--border); padding: 5px 12px; border-radius: 8px; cursor: pointer; font-family: var(--font); transition: all 0.15s; }
+  .sign-out-btn:hover { color: var(--primary); border-color: var(--primary); }
   .main { max-width: 960px; margin: 0 auto; padding: 28px 24px 80px; }
   .filter-section { background: var(--card); border-radius: 12px; border: 1px solid var(--border); padding: 16px 20px; margin-bottom: 20px; box-shadow: var(--shadow); }
   .filter-label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--label); margin-bottom: 12px; }
@@ -146,6 +150,7 @@
     <span class="header-title">Availability Responses</span>
     <span class="header-badge">Manager View</span>
   </div>
+  <div class="header-right" id="header-right"></div>
 </header>
 
 <div class="main">
@@ -190,9 +195,13 @@
 
 <div class="toast" id="toast"></div>
 
+<script src="/pc-auth.js"></script>
 <script>
 var SB_URL='https://aoazlttdjowhlfcksoyl.supabase.co';
-var SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvYXpsdHRkam93aGxmY2tzb3lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNzU4MjMsImV4cCI6MjA5MDg1MTgyM30.tagP_88g7R3d_p7a4Kp0NirnJgkAR5AQQImCt414SJg';
+
+function apiHeaders() {
+  return pcAuth.headers();
+}
 
 var VENUE_LABELS={FMP:'Freedom Mortgage Pavilion',Mann:'Mann Music Center',BWH:'Boardwalk Hall',ACCC:'AC Convention Center',Cure:'Cure Insurance Arena',Subaru:'Subaru Park',DE:'DE Chase Field House',Montage:'Montage Mountain',SATB:'Sports at the Beach',Villanova:'Villanova',Kirkwood:'Kirkwood'};
 var VENUE_BADGE_STYLES={FMP:'background:#fde8e6;color:#7a1a12;',Mann:'background:#e8f5d8;color:#2d5a08;',Cure:'background:#deeef9;color:#0e3f6a;',Subaru:'background:#f0e8fa;color:#4a1a7a;',Villanova:'background:#e8eaf6;color:#0d1257;',Montage:'background:#eceff1;color:#2c3e47;',DE:'background:#e0f2f0;color:#004d40;',BWH:'background:#fdeede;color:#8a3e00;',ACCC:'background:#fde4cc;color:#7a3200;',SATB:'background:#f4f4f2;color:#444441;',Kirkwood:'background:#fde8e8;color:#7a1212;'};
@@ -204,7 +213,7 @@ var NOT_SHOW_INITIAL=4;
 var pcEvents=[],pcEmployees=[],pcAvailability={},pcStaffingRequests={},pcParLevels={},pcHistoryCounts={},pcStaffingStatus={};
 var selectedVenues={},pendingDeleteId=null,pendingDeleteName=null;
 
-function sbFetch(path){return fetch(SB_URL+'/rest/v1/'+path,{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}}).then(function(r){if(!r.ok)throw new Error(r.status);return r.json();});}
+function sbFetch(path){return fetch(SB_URL+'/rest/v1/'+path,{headers:apiHeaders()}).then(function(r){if(!r.ok)throw new Error(r.status);return r.json();});}
 
 function init(){
 var today=new Date();var ds=today.getFullYear()+'-'+pad(today.getMonth()+1)+'-'+pad(today.getDate());
@@ -311,7 +320,7 @@ el=e.target.closest('.show-more-not');if(el){var eid=el.getAttribute('data-evtid
 document.getElementById('toggle-all-btn').addEventListener('click',function(){var allOn=Object.keys(selectedVenues).every(function(v){return selectedVenues[v];});Object.keys(selectedVenues).forEach(function(v){selectedVenues[v]=!allOn;var pill=document.getElementById('pill-'+v);if(pill)pill.className='venue-pill'+(selectedVenues[v]?'':' off');});document.getElementById('toggle-all-btn').textContent=allOn?'Select all':'Deselect all';render();});
 document.getElementById('venue-pills').addEventListener('click',function(e){var pill=e.target.closest('.venue-pill');if(!pill)return;var v=pill.getAttribute('data-venue');selectedVenues[v]=!selectedVenues[v];pill.className='venue-pill'+(selectedVenues[v]?'':' off');var allOn=Object.keys(selectedVenues).every(function(v2){return selectedVenues[v2];});document.getElementById('toggle-all-btn').textContent=allOn?'Deselect all':'Select all';render();});
 document.getElementById('confirm-cancel-btn').addEventListener('click',function(){pendingDeleteId=null;pendingDeleteName=null;document.getElementById('confirm-backdrop').classList.remove('open');});
-document.getElementById('confirm-delete-btn').addEventListener('click',function(){if(!pendingDeleteId)return;var btn=document.getElementById('confirm-delete-btn');btn.disabled=true;btn.textContent='Removing...';var delId=pendingDeleteId;fetch(SB_URL+'/rest/v1/availability?id=eq.'+delId,{method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}}).then(function(){Object.keys(pcAvailability).forEach(function(eid){pcAvailability[eid]=pcAvailability[eid].filter(function(r){return r.id!==delId;});});pendingDeleteId=null;pendingDeleteName=null;document.getElementById('confirm-backdrop').classList.remove('open');btn.disabled=false;btn.textContent='Yes, remove them';render();showToast('Signup removed.');}).catch(function(e){console.error(e);showToast('Error removing signup. Please try again.');btn.disabled=false;btn.textContent='Yes, remove them';});});
+document.getElementById('confirm-delete-btn').addEventListener('click',function(){if(!pendingDeleteId)return;var btn=document.getElementById('confirm-delete-btn');btn.disabled=true;btn.textContent='Removing...';var delId=pendingDeleteId;fetch(SB_URL+'/rest/v1/availability?id=eq.'+delId,{method:'DELETE',headers:apiHeaders()}).then(function(){Object.keys(pcAvailability).forEach(function(eid){pcAvailability[eid]=pcAvailability[eid].filter(function(r){return r.id!==delId;});});pendingDeleteId=null;pendingDeleteName=null;document.getElementById('confirm-backdrop').classList.remove('open');btn.disabled=false;btn.textContent='Yes, remove them';render();showToast('Signup removed.');}).catch(function(e){console.error(e);showToast('Error removing signup. Please try again.');btn.disabled=false;btn.textContent='Yes, remove them';});});
 document.getElementById('do-print-btn').addEventListener('click',function(){window.print();});
 document.getElementById('close-print-btn').addEventListener('click',function(){document.getElementById('print-overlay').classList.remove('open');});}
 
@@ -334,8 +343,18 @@ function fmtTime(t){if(!t)return'--';var parts=t.split(':');var h=parseInt(parts
 function pad(n){return n<=9?'0'+n:''+n;}
 function showToast(msg,good){var t=document.getElementById('toast');t.textContent=msg;t.className='toast'+(good?' green':'');t.classList.add('show');setTimeout(function(){t.classList.remove('show');},3500);}
 
-attachHandlers();
-init();
+pcAuth.require({
+  pageSlug: 'availability-responses',
+  onReady: function(user) {
+    var el = document.getElementById('header-right');
+    if (el && user) {
+      el.innerHTML = '<span class="header-user">' + (user.display_name || user.email) + '</span>' +
+        '<button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
+    }
+    attachHandlers();
+    init();
+  }
+});
 </script>
 </body>
 </html>
