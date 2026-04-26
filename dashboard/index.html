@@ -24,6 +24,9 @@ header { background: var(--card); border-bottom: 1px solid var(--border); paddin
 .header-title { font-size: 15px; font-weight: 700; }
 .header-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: var(--primary); color: white; padding: 3px 8px; border-radius: 20px; }
 .header-right { display: flex; align-items: center; gap: 10px; }
+.header-user { font-size: 11px; color: var(--label); font-weight: 600; }
+.sign-out-btn { font-size: 11px; font-weight: 700; color: var(--label); background: none; border: 1px solid var(--border); padding: 5px 12px; border-radius: 8px; cursor: pointer; font-family: var(--font); transition: all 0.15s; }
+.sign-out-btn:hover { color: var(--primary); border-color: var(--primary); }
 .last-updated { font-size: 11px; color: var(--label); }
 .refresh-btn { font-size: 12px; font-weight: 700; color: var(--label); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 6px 14px; cursor: pointer; font-family: var(--font); }
 .refresh-btn:hover { color: var(--primary); background: var(--border); }
@@ -144,7 +147,7 @@ header { background: var(--card); border-bottom: 1px solid var(--border); paddin
     <span class="header-title">Staffing Dashboard</span>
     <span class="header-badge">Live</span>
   </div>
-  <div class="header-right">
+  <div class="header-right" id="header-right">
     <span class="last-updated" id="last-updated">Loading...</span>
     <button class="refresh-btn" onclick="init()">&#8635; Refresh</button>
   </div>
@@ -180,15 +183,17 @@ header { background: var(--card); border-bottom: 1px solid var(--border); paddin
 
 <div class="toast" id="toast"></div>
 
+<script src="/pc-auth.js"></script>
 <script>
 const SB_URL='https://aoazlttdjowhlfcksoyl.supabase.co';
-const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvYXpsdHRkam93aGxmY2tzb3lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNzU4MjMsImV4cCI6MjA5MDg1MTgyM30.tagP_88g7R3d_p7a4Kp0NirnJgkAR5AQQImCt414SJg';
 const VENUE_LABELS={FMP:'Freedom Mortgage Pavilion',Mann:'Mann Music Center',BWH:'Boardwalk Hall',ACCC:'AC Convention Center',Cure:'Cure Insurance Arena',Subaru:'Subaru Park',DE:'DE Chase Field House',Montage:'Montage Mountain',SATB:'Sports at the Beach',Villanova:'Villanova',Kirkwood:'Kirkwood'};
 const ALL_VENUES=Object.keys(VENUE_LABELS);
 const SUPPORT_STAND='Support Staff';
 const HAWKING_STAND='Hawking';
 const VENUE_STANDS={Mann:[SUPPORT_STAND,HAWKING_STAND,'Upper Concession','Upper Popcorn','Lower Popcorn','Upper Pizza','Lower Pizza','Farm & Fry Truck','Crescendo','Lawn Portable','Stage Left Bar','Upper Linear Bar','Food Court Bar 2','Parkside Tent Bar','Parkside GA View Bar'],FMP:[SUPPORT_STAND,HAWKING_STAND,'Stand 782','SC1','LM1','LM2','WWI','Ben Kettle','Walt Kettle','IC1','BWI','Ziggys','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4','Mobile Cart 5'],Cure:[SUPPORT_STAND,HAWKING_STAND,'Popcorn','Candy','Cotton Candy'],ACCC:[SUPPORT_STAND,HAWKING_STAND,'Stand 1','Stand 2'],BWH:[SUPPORT_STAND,HAWKING_STAND,'North Stand','South Stand'],DE:[SUPPORT_STAND,HAWKING_STAND,'VIP Bar','Cafe','Popcorn','Bar','Farm & Fry'],Subaru:[SUPPORT_STAND,HAWKING_STAND,'Popcorn','VIP'],Villanova:[SUPPORT_STAND,HAWKING_STAND,'Stand 1'],Montage:[SUPPORT_STAND,HAWKING_STAND,'BW Pizza','Midway Pizza','Midway Popcorn','Boardwalk Popcorn','Festival Foods','Potato Stand','Boardwalk New Food','Mobile Cart 1','Mobile Cart 2'],SATB:[SUPPORT_STAND,HAWKING_STAND,'Stand 1','Ice Cream 1','Stand 2','Stand 3','Catering'],Kirkwood:[SUPPORT_STAND,HAWKING_STAND,'Stand 1']};
 const FISCAL_PERIODS=[{name:'June 2025',start:'2025-05-25',end:'2025-06-28'},{name:'July 2025',start:'2025-06-29',end:'2025-08-02'},{name:'August 2025',start:'2025-08-03',end:'2025-08-30'},{name:'September 2025',start:'2025-08-31',end:'2025-09-27'},{name:'October 2025',start:'2025-09-28',end:'2025-11-01'},{name:'November 2025',start:'2025-11-02',end:'2025-11-29'},{name:'December 2025',start:'2025-11-30',end:'2026-01-03'},{name:'January 2026',start:'2026-01-04',end:'2026-01-31'},{name:'February 2026',start:'2026-02-01',end:'2026-02-28'},{name:'March 2026',start:'2026-03-01',end:'2026-04-04'},{name:'April 2026',start:'2026-04-05',end:'2026-05-02'},{name:'May 2026',start:'2026-05-03',end:'2026-05-30'},{name:'June 2026',start:'2026-05-31',end:'2026-07-04'},{name:'July 2026',start:'2026-07-05',end:'2026-08-01'},{name:'August 2026',start:'2026-08-02',end:'2026-09-05'},{name:'September 2026',start:'2026-09-06',end:'2026-10-03'},{name:'October 2026',start:'2026-10-04',end:'2026-10-31'},{name:'November 2026',start:'2026-11-01',end:'2026-11-28'},{name:'December 2026',start:'2026-12-06',end:'2027-01-02'}];
+
+function apiHeaders() { return pcAuth.headers(); }
 
 function getCurrentFiscalPeriod(){const today=todayStr();for(const p of FISCAL_PERIODS){if(today>=p.start&&today<=p.end)return p;}return FISCAL_PERIODS[FISCAL_PERIODS.length-1];}
 function getPriorFiscalPeriod(){const curr=getCurrentFiscalPeriod();const idx=FISCAL_PERIODS.indexOf(curr);return idx>0?FISCAL_PERIODS[idx-1]:null;}
@@ -199,7 +204,7 @@ function fmtDateShort(ds){return new Date(ds+'T12:00:00').toLocaleDateString('en
 function fmtDateFull(ds){return new Date(ds+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});}
 function fmtMoney(n){return '$'+Math.round(n).toLocaleString();}
 function fmtMoneyDec(n){return '$'+n.toFixed(2);}
-async function sbFetch(p){const r=await fetch(SB_URL+'/rest/v1/'+p,{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});if(!r.ok)throw new Error(await r.text());return r.json();}
+async function sbFetch(p){const r=await fetch(SB_URL+'/rest/v1/'+p,{headers:apiHeaders()});if(!r.ok)throw new Error(await r.text());return r.json();}
 
 let drillOpen=true;
 let drillConfirmedOpen=true;
@@ -228,8 +233,22 @@ function renderLatestSales(latestSales,latestDate,events){const card=document.ge
 
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3500);}
 
-init();
-setInterval(init,300000);
+// Login gate
+pcAuth.require({
+  pageSlug: 'dashboard',
+  onReady: function(user) {
+    var hrEl = document.getElementById('header-right');
+    if (hrEl && user) {
+      var userHtml = '<span class="header-user">' + (user.display_name || user.email) + '</span>' +
+        '<button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
+      // Prepend user info before existing refresh controls
+      var existing = hrEl.innerHTML;
+      hrEl.innerHTML = userHtml + existing;
+    }
+    init();
+    setInterval(init, 300000);
+  }
+});
 </script>
 </body>
 </html>
