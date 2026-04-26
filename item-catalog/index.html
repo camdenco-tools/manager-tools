@@ -278,7 +278,6 @@ header { background: var(--card); border-bottom: 1px solid var(--border); paddin
 <script src="/pc-auth.js"></script>
 <script>
 var SB_URL='https://aoazlttdjowhlfcksoyl.supabase.co';
-var SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvYXpsdHRkam93aGxmY2tzb3lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNzU4MjMsImV4cCI6MjA5MDg1MTgyM30.tagP_88g7R3d_p7a4Kp0NirnJgkAR5AQQImCt414SJg';
 var VENUES=[{code:'Mann',label:'Mann Music Center'},{code:'FMP',label:'FMP'},{code:'Cure',label:'Cure Arena'},{code:'ACCC',label:'ACCC'},{code:'BWH',label:'Jim Whelan BWH'},{code:'DE',label:'DE Chase'},{code:'Subaru',label:'Subaru Park'},{code:'Villanova',label:'Villanova'},{code:'Montage',label:'Montage'},{code:'SATB',label:'SATB'},{code:'Kirkwood',label:'Kirkwood'}];
 
 var pcCategories=[],pcItems=[],pcProfiles=[];
@@ -286,21 +285,9 @@ var selectedItemId=null,isNewItem=false;
 var mergePendingId=null,mergeTargetId=null;
 
 function apiHeaders(){
-  try { var h = pcAuth.headers(); if (h) return Object.assign(h, {'Content-Type':'application/json'}); } catch(e) {}
-  return {'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'};
+  return Object.assign({}, pcAuth.headers(), {'Content-Type':'application/json'});
 }
 function fmt(n){return'$'+parseFloat(n||0).toFixed(2);}
-
-// Show user info in header if logged in
-function setupHeader(){
-  var el = document.getElementById('header-right');
-  try {
-    var user = pcAuth.getUser();
-    if (user) {
-      el.innerHTML = '<span class="header-user">' + user.display_name + '</span><button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
-    }
-  } catch(e) {}
-}
 
 async function loadAll(){try{var hdrs=apiHeaders();var r1=await fetch(SB_URL+'/rest/v1/cos_categories?select=*&order=sort_order.asc',{headers:hdrs});pcCategories=await r1.json();var r2=await fetch(SB_URL+'/rest/v1/inventory_items?select=*&order=name.asc',{headers:hdrs});pcItems=await r2.json();var r3=await fetch(SB_URL+'/rest/v1/inventory_venue_profiles?select=*',{headers:hdrs});pcProfiles=await r3.json();updateStats();populateCatFilter();renderPendingBanner();renderItemsTab();renderCatsTab();}catch(e){document.getElementById('items-list').innerHTML='<div class="loading">Error loading data. Please refresh.</div>';}}
 
@@ -343,10 +330,11 @@ function toggleVenueLabel(cb,code){var lbl=document.getElementById('vl-'+code);i
 async function saveItem(){var errEl=document.getElementById('panel-error');errEl.style.display='none';var name=document.getElementById('edit-name').value.trim();var catId=document.getElementById('edit-category').value;var vendor=document.getElementById('edit-vendor').value.trim();var vendorAlt=document.getElementById('edit-vendor-alt').value.trim();var caseCost=parseFloat(document.getElementById('edit-case-cost').value)||0;var units=parseFloat(document.getElementById('edit-units').value)||1;var purchaseUnit=document.getElementById('edit-purchase-unit').value.trim()||'each';var countUnit=document.getElementById('edit-count-unit').value;var active=document.getElementById('edit-active').checked;var cpu=units>0?caseCost/units:0;if(!name){errEl.textContent='Item name is required.';errEl.style.display='block';return;}if(!catId){errEl.textContent='Please select a category.';errEl.style.display='block';return;}var itemId=document.getElementById('edit-id').value;if(!itemId)itemId=crypto.randomUUID();var payload={id:itemId,name:name,cos_category_id:catId,vendor:vendor||null,vendor_alt:vendorAlt||null,case_cost:caseCost,units_per_case:units,unit_label:purchaseUnit,purchase_unit:purchaseUnit,count_unit:countUnit,cost_per_unit:cpu,active:active,status:'approved'};var btn=document.getElementById('save-btn');btn.disabled=true;btn.textContent='Saving...';try{var hdrs=apiHeaders();hdrs['Prefer']='return=minimal';var method=isNewItem?'POST':'PATCH';var url=isNewItem?SB_URL+'/rest/v1/inventory_items':SB_URL+'/rest/v1/inventory_items?id=eq.'+itemId;var bodyObj=isNewItem?payload:(function(){var o={};for(var k in payload){if(k!=='id')o[k]=payload[k];}return o;})();var res=await fetch(url,{method:method,headers:hdrs,body:JSON.stringify(bodyObj)});if(!res.ok)throw new Error(await res.text());var checkedVenues=[];var checks=document.querySelectorAll('#venue-checkboxes input[type=checkbox]');for(var i=0;i<checks.length;i++){if(checks[i].checked){var code=checks[i].parentElement.id.replace('vl-','');checkedVenues.push(code);}}var delHdrs=apiHeaders();await fetch(SB_URL+'/rest/v1/inventory_venue_profiles?item_id=eq.'+itemId,{method:'DELETE',headers:delHdrs});if(checkedVenues.length>0){var profileRows=[];for(var vi=0;vi<checkedVenues.length;vi++){profileRows.push({id:crypto.randomUUID(),venue:checkedVenues[vi],item_id:itemId});}var insHdrs=apiHeaders();insHdrs['Prefer']='return=minimal';await fetch(SB_URL+'/rest/v1/inventory_venue_profiles',{method:'POST',headers:insHdrs,body:JSON.stringify(profileRows)});}await loadAll();closePanel();}catch(e){errEl.textContent='Save failed. Please try again.';errEl.style.display='block';btn.disabled=false;btn.textContent=isNewItem?'Add item':'Save changes';}}
 
 function triggerDelete(id){
-  try {
-    if (pcAuth.isAdmin()) { confirmDelete(id); return; }
-  } catch(e) {}
-  alert('Admin login required to delete items. Please sign in from the Toolkit page.');
+  if (!pcAuth.isAdmin()) {
+    alert('Admin login required to delete items. Please sign in as admin from the Toolkit page.');
+    return;
+  }
+  confirmDelete(id);
 }
 
 async function confirmDelete(id){var item=null;for(var i=0;i<pcItems.length;i++){if(pcItems[i].id===id){item=pcItems[i];break;}}if(!confirm('Delete "'+(item?item.name:'this item')+'"?\n\nThis will remove all venue profiles and cannot be undone.'))return;try{var hdrs=apiHeaders();await fetch(SB_URL+'/rest/v1/inventory_items?id=eq.'+id,{method:'DELETE',headers:hdrs});if(selectedItemId===id)closePanel();await loadAll();}catch(e){alert('Delete failed. Please try again.');}}
@@ -355,9 +343,18 @@ function renderCatsTab(){var html='<table class="cat-table"><thead><tr><th>Categ
 
 function switchTab(tab){document.getElementById('tab-items').classList.toggle('active',tab==='items');document.getElementById('tab-cats').classList.toggle('active',tab==='cats');document.getElementById('panel-items').style.display=tab==='items'?'block':'none';document.getElementById('panel-cats').style.display=tab==='cats'?'block':'none';}
 
-// Initialize — no login gate, page loads for everyone
-pcAuth.init(function() { setupHeader(); });
-loadAll();
+// Login gate — must sign in to access this page
+pcAuth.require({
+  pageSlug: 'item-catalog',
+  onReady: function(user) {
+    var el = document.getElementById('header-right');
+    if (el && user) {
+      el.innerHTML = '<span class="header-user">' + (user.display_name || user.email) + '</span>' +
+        '<button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
+    }
+    loadAll();
+  }
+});
 </script>
 </body>
 </html>
