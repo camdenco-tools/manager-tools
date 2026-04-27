@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Handbook Signatures | Camden Co. Manager Tools</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; color: #1a1a1a; }
+
+    header {
+      background: #1a1a1a; color: #fff; padding: 14px 24px; display: flex;
+      align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100;
+    }
+    .header-left { display: flex; align-items: center; gap: 16px; }
+    .header-left a { color: #999; text-decoration: none; font-size: 13px; }
+    .header-left a:hover { color: #fff; }
+    header h1 { font-size: 16px; font-weight: 600; }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+    .header-user { font-size: 12px; color: #999; font-weight: 500; }
+    .sign-out-btn { font-size: 11px; color: #c0392b; background: none; border: 1px solid #f0c0c0; padding: 4px 10px; border-radius: 6px; cursor: pointer; font-weight: 600; }
+    .sign-out-btn:hover { background: rgba(240,192,192,0.15); }
+
+    .sub-bar {
+      background: #fff; border-bottom: 1px solid #e5e7eb; padding: 12px 24px;
+      display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    }
+    .sub-bar input {
+      padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px;
+      font-size: 14px; width: 240px; outline: none;
+    }
+    .sub-bar input:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+    .stat-pills { display: flex; gap: 8px; margin-left: auto; }
+    .stat-pill {
+      padding: 4px 14px; border-radius: 20px; font-size: 12px; font-weight: 600;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .stat-pill.green { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+    .stat-pill.amber { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+    .filter-pills { display: flex; gap: 6px; }
+    .filter-pill {
+      padding: 5px 14px; border-radius: 20px; font-size: 12px; font-weight: 600;
+      border: 1px solid #d1d5db; background: #fff; color: #374151; cursor: pointer;
+    }
+    .filter-pill:hover { background: #f9fafb; }
+    .filter-pill.active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+
+    .content { max-width: 1100px; margin: 0 auto; padding: 24px; }
+
+    .table-wrap { background: #fff; border-radius: 12px; border: 1px solid #e5e7eb; overflow: hidden; }
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      text-align: left; padding: 12px 16px; font-size: 12px; font-weight: 600;
+      color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em;
+      background: #fafafa; border-bottom: 1px solid #e5e7eb;
+    }
+    tbody td { padding: 12px 16px; font-size: 14px; border-bottom: 1px solid #f3f4f6; }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover { background: #f9fafb; }
+    tbody tr.clickable { cursor: pointer; }
+
+    .badge {
+      display: inline-block; padding: 3px 10px; border-radius: 12px;
+      font-size: 11px; font-weight: 600;
+    }
+    .badge.signed { background: #f0fdf4; color: #166534; }
+    .badge.unsigned { background: #fef2f2; color: #991b1b; }
+
+    .empty-state { text-align: center; padding: 60px 24px; color: #9ca3af; }
+    .empty-state p { font-size: 15px; }
+
+    /* Detail modal */
+    .modal-overlay {
+      display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.5); z-index: 200; justify-content: center; align-items: center;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal-box {
+      background: #fff; border-radius: 14px; width: 520px; max-width: 95vw;
+      max-height: 90vh; overflow-y: auto; padding: 28px;
+    }
+    .modal-box h2 { font-size: 18px; margin-bottom: 16px; }
+    .modal-close {
+      float: right; background: none; border: none; font-size: 20px;
+      cursor: pointer; color: #999; padding: 0 4px;
+    }
+    .modal-close:hover { color: #333; }
+    .detail-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f3f4f6; }
+    .detail-label { font-size: 13px; color: #6b7280; font-weight: 500; }
+    .detail-value { font-size: 14px; font-weight: 500; }
+    .sig-preview { margin: 16px 0; text-align: center; }
+    .sig-preview img { max-width: 300px; height: auto; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; background: #fff; }
+    .modal-actions { margin-top: 20px; display: flex; gap: 10px; }
+    .btn { padding: 9px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-primary:hover { background: #1d4ed8; }
+    .btn-outline { background: #fff; border: 1px solid #d1d5db; color: #374151; }
+    .btn-outline:hover { background: #f9fafb; }
+
+    @media (max-width: 768px) {
+      .sub-bar { flex-direction: column; align-items: stretch; }
+      .sub-bar input { width: 100%; }
+      .stat-pills { margin-left: 0; }
+      .content { padding: 16px; }
+      .modal-box { padding: 20px; }
+      table { font-size: 13px; }
+      thead th, tbody td { padding: 10px 12px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <a href="/">&larr; Toolkit</a>
+    <h1>Handbook Signatures</h1>
+  </div>
+  <div class="header-right" id="header-right"></div>
+</header>
+
+<div class="sub-bar">
+  <input type="text" id="searchInput" placeholder="Search employees..." />
+  <div class="filter-pills">
+    <button class="filter-pill active" data-filter="all" onclick="setFilter('all')">All</button>
+    <button class="filter-pill" data-filter="signed" onclick="setFilter('signed')">Signed</button>
+    <button class="filter-pill" data-filter="unsigned" onclick="setFilter('unsigned')">Unsigned</button>
+  </div>
+  <div class="stat-pills">
+    <div class="stat-pill green" id="statSigned">&#10003; 0 signed</div>
+    <div class="stat-pill amber" id="statUnsigned">&#9679; 0 unsigned</div>
+  </div>
+</div>
+
+<div class="content">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Employee</th>
+          <th>Punch ID</th>
+          <th>Status</th>
+          <th>Signed</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody">
+        <tr><td colspan="4" class="empty-state"><p>Loading...</p></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="modal-overlay" id="detailModal">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeModal()">&times;</button>
+    <h2 id="modalName"></h2>
+    <div id="modalDetails"></div>
+    <div class="sig-preview" id="modalSig"></div>
+    <div class="modal-actions" id="modalActions"></div>
+  </div>
+</div>
+
+<script src="/pc-auth.js"></script>
+<script>
+  var SB_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
+  var HANDBOOK_VERSION = '2026-04-24';
+
+  var allEmployees = [];
+  var signatures = [];
+  var merged = [];
+  var currentFilter = 'all';
+
+  function apiHeaders() {
+    return pcAuth.headers();
+  }
+
+  function apiHeadersJson() {
+    return Object.assign({}, apiHeaders(), { 'Content-Type': 'application/json' });
+  }
+
+  function loadData() {
+    Promise.all([
+      fetch(SB_URL + '/rest/v1/employees?is_active=eq.true&select=id,first_name,last_name,punch_id&order=last_name.asc,first_name.asc', {
+        headers: apiHeaders()
+      }).then(function(r) { return r.json(); }),
+      fetch(SB_URL + '/rest/v1/handbook_signatures?handbook_version=eq.' + HANDBOOK_VERSION + '&select=id,employee_id,employee_first_name,employee_last_name,punch_id,signed_at,signature_data,signed_pdf', {
+        headers: apiHeaders()
+      }).then(function(r) { return r.json(); })
+    ]).then(function(results) {
+      allEmployees = results[0] || [];
+      signatures = results[1] || [];
+      mergeData();
+      render();
+    }).catch(function(err) {
+      console.error('Load error:', err);
+      document.getElementById('tableBody').innerHTML =
+        '<tr><td colspan="4" class="empty-state"><p>Error loading data. Please refresh.</p></td></tr>';
+    });
+  }
+
+  function mergeData() {
+    var sigMap = {};
+    signatures.forEach(function(s) {
+      sigMap[s.employee_id] = s;
+    });
+
+    merged = allEmployees.map(function(emp) {
+      var sig = sigMap[emp.id] || null;
+      return {
+        id: emp.id,
+        first_name: emp.first_name,
+        last_name: emp.last_name,
+        punch_id: emp.punch_id,
+        signed: !!sig,
+        signed_at: sig ? sig.signed_at : null,
+        signature_data: sig ? sig.signature_data : null,
+        signed_pdf: sig ? sig.signed_pdf : null,
+        sig_id: sig ? sig.id : null
+      };
+    });
+  }
+
+  function render() {
+    var search = document.getElementById('searchInput').value.trim().toLowerCase();
+    var filtered = merged.filter(function(emp) {
+      var name = (emp.first_name + ' ' + emp.last_name).toLowerCase();
+      var matchSearch = !search || name.indexOf(search) > -1 || (emp.punch_id && emp.punch_id.indexOf(search) > -1);
+      var matchFilter = currentFilter === 'all' ||
+        (currentFilter === 'signed' && emp.signed) ||
+        (currentFilter === 'unsigned' && !emp.signed);
+      return matchSearch && matchFilter;
+    });
+
+    var signedCount = merged.filter(function(e) { return e.signed; }).length;
+    var unsignedCount = merged.length - signedCount;
+    document.getElementById('statSigned').innerHTML = '&#10003; ' + signedCount + ' signed';
+    document.getElementById('statUnsigned').innerHTML = '&#9679; ' + unsignedCount + ' unsigned';
+
+    var tbody = document.getElementById('tableBody');
+    if (filtered.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" class="empty-state"><p>No employees match your search.</p></td></tr>';
+      return;
+    }
+
+    var html = '';
+    filtered.forEach(function(emp) {
+      var badge = emp.signed
+        ? '<span class="badge signed">Signed</span>'
+        : '<span class="badge unsigned">Not Signed</span>';
+      var dateStr = '';
+      if (emp.signed_at) {
+        var d = new Date(emp.signed_at);
+        dateStr = (d.getMonth() + 1) + '/' + d.getDate() + '/' + d.getFullYear();
+      }
+      var clickable = emp.signed ? ' class="clickable" onclick="showDetail(\'' + emp.id + '\')"' : '';
+      html += '<tr' + clickable + '>' +
+        '<td><strong>' + emp.first_name + ' ' + emp.last_name + '</strong></td>' +
+        '<td>' + (emp.punch_id || '—') + '</td>' +
+        '<td>' + badge + '</td>' +
+        '<td>' + (dateStr || '—') + '</td>' +
+        '</tr>';
+    });
+    tbody.innerHTML = html;
+  }
+
+  function setFilter(f) {
+    currentFilter = f;
+    var pills = document.querySelectorAll('.filter-pill');
+    pills.forEach(function(p) {
+      if (p.getAttribute('data-filter') === f) {
+        p.classList.add('active');
+      } else {
+        p.classList.remove('active');
+      }
+    });
+    render();
+  }
+
+  function showDetail(empId) {
+    var emp = merged.find(function(e) { return e.id === empId; });
+    if (!emp || !emp.signed) return;
+
+    var d = new Date(emp.signed_at);
+    var dateStr = (d.getMonth() + 1) + '/' + d.getDate() + '/' + d.getFullYear();
+    var h = d.getHours();
+    var ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12;
+    if (h === 0) h = 12;
+    var min = d.getMinutes();
+    var timeStr = h + ':' + (min < 10 ? '0' + min : min) + ' ' + ampm;
+
+    document.getElementById('modalName').textContent = emp.first_name + ' ' + emp.last_name;
+
+    document.getElementById('modalDetails').innerHTML =
+      '<div class="detail-row"><span class="detail-label">Punch ID</span><span class="detail-value">' + emp.punch_id + '</span></div>' +
+      '<div class="detail-row"><span class="detail-label">Handbook Version</span><span class="detail-value">April 24, 2026</span></div>' +
+      '<div class="detail-row"><span class="detail-label">Date Signed</span><span class="detail-value">' + dateStr + '</span></div>' +
+      '<div class="detail-row"><span class="detail-label">Time Signed</span><span class="detail-value">' + timeStr + '</span></div>';
+
+    var sigHtml = '';
+    if (emp.signature_data) {
+      sigHtml = '<p style="font-size:12px;color:#6b7280;margin-bottom:8px;">Employee Signature</p>' +
+        '<img src="' + emp.signature_data + '" alt="Signature" />';
+    }
+    document.getElementById('modalSig').innerHTML = sigHtml;
+
+    var actionsHtml = '';
+    if (emp.signed_pdf) {
+      actionsHtml += '<button class="btn btn-primary" onclick="downloadPdf(\'' + empId + '\')">&#128196; Download Signed PDF</button>';
+    }
+    actionsHtml += '<button class="btn btn-outline" onclick="closeModal()">Close</button>';
+    document.getElementById('modalActions').innerHTML = actionsHtml;
+
+    document.getElementById('detailModal').classList.add('show');
+  }
+
+  function closeModal() {
+    document.getElementById('detailModal').classList.remove('show');
+  }
+
+  function downloadPdf(empId) {
+    var emp = merged.find(function(e) { return e.id === empId; });
+    if (!emp || !emp.signed_pdf) return;
+
+    var byteChars = atob(emp.signed_pdf);
+    var byteNums = new Array(byteChars.length);
+    for (var i = 0; i < byteChars.length; i++) {
+      byteNums[i] = byteChars.charCodeAt(i);
+    }
+    var byteArray = new Uint8Array(byteNums);
+    var blob = new Blob([byteArray], { type: 'application/pdf' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'Handbook_Acknowledgment_' + emp.last_name + '_' + emp.first_name + '.pdf';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function() { URL.revokeObjectURL(url); }, 5000);
+  }
+
+  // Close modal on overlay click
+  document.getElementById('detailModal').addEventListener('click', function(ev) {
+    if (ev.target === this) closeModal();
+  });
+
+  // Search input
+  document.getElementById('searchInput').addEventListener('input', function() {
+    render();
+  });
+
+  // Escape key closes modal
+  document.addEventListener('keydown', function(ev) {
+    if (ev.key === 'Escape') closeModal();
+  });
+
+  function init() {
+    loadData();
+  }
+
+  pcAuth.require({
+    pageSlug: 'handbook-signatures',
+    onReady: function(user) {
+      var el = document.getElementById('header-right');
+      if (el && user) {
+        el.innerHTML = '<span class="header-user">' + (user.display_name || user.email) + '</span>' +
+          '<button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
+      }
+      init();
+    }
+  });
+</script>
+</body>
+</html>
