@@ -306,7 +306,28 @@ function pcPipeReactivate(){if(!pcSelected)return;var now=new Date().toISOString
 function pcPipeCloseModal(e){if(e?e.target===e.currentTarget:true)document.getElementById('pcpipe-modal').innerHTML='';}
 function getSignedUrl(storagePath,callback){var h=apiHeadersJson();fetch(SUPABASE_URL+'/storage/v1/object/sign/candidate-files/'+storagePath,{method:'POST',headers:h,body:JSON.stringify({expiresIn:3600})}).then(function(r){return r.json();}).then(function(data){if(data.signedURL)callback(SUPABASE_URL+data.signedURL);else callback(null);}).catch(function(){callback(null);});}
 function pcPipeTriggerDocUpload(cid,fk){var el=document.getElementById('doc-input-'+fk);if(el)el.click();}
-function pcPipeOpenFile(cid,fk){var c=null;for(var i=0;i<pcCandidates.length;i++){if(pcCandidates[i].id===cid){c=pcCandidates[i];break;}}if(!c)return;var rawUrl=null;if(fk==='resume')rawUrl=c.resume_url;else if(fk==='working-papers')rawUrl=c.working_papers_url;else rawUrl=c[fk]||null;if(!rawUrl)return;var parts=rawUrl.split('/candidate-files/');var sp=parts.length>1?parts[1]:null;if(!sp)return;getSignedUrl(sp,function(url){if(url)window.open(url,'_blank');else alert('Could not open file. Please try again.');});}
+function pcPipeOpenFile(cid,fk){
+  var c=null;
+  for(var i=0;i<pcCandidates.length;i++){if(pcCandidates[i].id===cid){c=pcCandidates[i];break;}}
+  if(!c)return;
+  var rawUrl=null;
+  if(fk==='resume')rawUrl=c.resume_url;
+  else if(fk==='working-papers')rawUrl=c.working_papers_url;
+  else rawUrl=c[fk]||null;
+  if(!rawUrl)return;
+  var sp=null;
+  if(rawUrl.indexOf('/candidate-files/')>-1){
+    sp=rawUrl.split('/candidate-files/')[1];
+    if(sp&&sp.indexOf('?')>-1)sp=sp.split('?')[0];
+  } else if(rawUrl.indexOf('://')===-1){
+    sp=rawUrl;
+  }
+  if(!sp){alert('Could not open file. Please try again.');return;}
+  getSignedUrl(sp,function(url){
+    if(url)window.open(url,'_blank');
+    else alert('Could not open file. Please try again.');
+  });
+}
 
 /* ── Phone Edit Feature ── */
 function pcPipeEditPhone(){pcEditingPhone=true;render();}
