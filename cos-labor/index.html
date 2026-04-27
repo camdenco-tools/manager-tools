@@ -460,7 +460,7 @@ function calcRevenue(sale) {
 function calcEstimatedLabor(venueCode,weekStart,weekEnd) {
   var total=0;var eventsInWeek=cachedEvents.filter(function(e){return e.event_date>=weekStart&&e.event_date<=weekEnd;});
   eventsInWeek.forEach(function(evt){var requests=cachedStaffing.filter(function(sr){return sr.event_id===evt.id&&resolveVenueCode(sr.venue)===venueCode;});
-    requests.forEach(function(sr){var headcount=sr.headcount||0;if(headcount<=0)return;var reportTime=evt.report_time||evt.gates_open;var endTime=evt.end_time;var hours=6;
+    requests.forEach(function(sr){var headcount=sr.headcount||0;if(headcount<=0)return;var reportTime=evt.report_time||evt.gates_open;var endTime=evt.estimated_end_time;var hours=6;
       if(reportTime){var startParts=reportTime.split(':');var startH=parseInt(startParts[0]);var startM=parseInt(startParts[1]||0);if(!evt.report_time&&evt.gates_open){startH=startH-1;if(startH<0)startH=0;}var endH=23;var endM=0;if(endTime){var endParts=endTime.split(':');endH=parseInt(endParts[0]);endM=parseInt(endParts[1]||0);}hours=(endH+endM/60)-(startH+startM/60);if(hours<=0)hours=6;}
       var state=VENUE_STATE[venueCode]||'NJ';var rate=0;for(var k=0;k<cachedPayRates.length;k++){if(cachedPayRates[k].state===state&&cachedPayRates[k].role===sr.role){rate=parseFloat(cachedPayRates[k].base_rate||0);break;}}
       total+=headcount*hours*rate;});});
@@ -470,7 +470,7 @@ function calcEstimatedLabor(venueCode,weekStart,weekEnd) {
 /* Estimated labor credit */
 function calcEstimatedLaborCredit(venueCode) {
   var total=0;cachedEvents.forEach(function(evt){var requests=cachedStaffing.filter(function(sr){return sr.event_id===evt.id&&resolveVenueCode(sr.venue)===venueCode&&sr.stand==='Client Staffing Needs';});
-    requests.forEach(function(sr){var headcount=sr.headcount||0;if(headcount<=0)return;var reportTime=evt.report_time||evt.gates_open;var endTime=evt.end_time;var hours=6;
+    requests.forEach(function(sr){var headcount=sr.headcount||0;if(headcount<=0)return;var reportTime=evt.report_time||evt.gates_open;var endTime=evt.estimated_end_time;var hours=6;
       if(reportTime){var startParts=reportTime.split(':');var startH=parseInt(startParts[0]);var startM=parseInt(startParts[1]||0);if(!evt.report_time&&evt.gates_open){startH=startH-1;if(startH<0)startH=0;}var endH=23;var endM=0;if(endTime){var endParts=endTime.split(':');endH=parseInt(endParts[0]);endM=parseInt(endParts[1]||0);}hours=(endH+endM/60)-(startH+startM/60);if(hours<=0)hours=6;}
       var billingRate=0;for(var k=0;k<cachedBillingRates.length;k++){if(cachedBillingRates[k].venue===venueCode&&cachedBillingRates[k].role===sr.role){billingRate=parseFloat(cachedBillingRates[k].billing_rate||0);break;}}
       total+=headcount*hours*billingRate;});});
