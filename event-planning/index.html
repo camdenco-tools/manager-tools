@@ -88,6 +88,23 @@
   .locked-banner.show { display: flex; }
   .resubmit-banner { display: none; background: #e8f7f2; border-bottom: 1px solid #9FE1CB; padding: 10px 28px; font-size: 12px; font-weight: 700; color: #0F6E56; align-items: center; gap: 8px; }
   .resubmit-banner.show { display: flex; }
+  .changelog-section { border-bottom: 1px solid var(--border); }
+  .changelog-trigger { padding: 10px 28px; display: flex; align-items: center; gap: 8px; cursor: pointer; transition: background 0.15s; user-select: none; }
+  .changelog-trigger:hover { background: #fafaf8; }
+  .changelog-icon { font-size: 14px; color: var(--label); transition: transform 0.2s; display: inline-block; }
+  .changelog-icon.open { transform: rotate(90deg); }
+  .changelog-trigger-text { font-size: 12px; font-weight: 700; color: var(--label); }
+  .changelog-count { font-size: 10px; font-weight: 700; background: #e8f7f2; color: var(--green); padding: 2px 8px; border-radius: 10px; }
+  .changelog-panel { display: none; padding: 0 28px 14px; }
+  .changelog-panel.open { display: block; }
+  .changelog-entry { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-radius: 8px; background: #fafaf8; margin-bottom: 4px; }
+  .changelog-entry-left { display: flex; flex-direction: column; gap: 2px; }
+  .changelog-entry-name { font-size: 13px; font-weight: 700; }
+  .changelog-entry-date { font-size: 11px; color: var(--label); }
+  .changelog-entry-right { text-align: right; }
+  .changelog-entry-staff { font-size: 14px; font-weight: 800; }
+  .changelog-entry-forecast { font-size: 11px; color: var(--label); }
+  .changelog-entry-num { font-size: 10px; font-weight: 700; color: #bbb; margin-right: 8px; }
   .comp-section { border-bottom: 1px solid var(--border); }
   .comp-trigger { padding: 10px 28px; display: flex; align-items: center; gap: 8px; cursor: pointer; transition: background 0.15s; user-select: none; }
   .comp-trigger:hover { background: #fafaf8; }
@@ -203,14 +220,6 @@
   .toast { position: fixed; bottom: 28px; right: 28px; background: var(--primary); color: white; padding: 12px 20px; border-radius: 10px; font-size: 13px; font-weight: 600; box-shadow: 0 8px 24px rgba(0,0,0,0.2); z-index: 999; transform: translateY(80px); opacity: 0; transition: all 0.25s ease; }
   .toast.show { transform: translateY(0); opacity: 1; }
   .toast.green { background: var(--green); }
-  .notify-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 300; align-items: center; justify-content: center; padding: 20px; }
-  .notify-backdrop.open { display: flex; }
-  .notify-box { background: var(--card); border-radius: var(--radius); padding: 28px; width: 100%; max-width: 400px; box-shadow: 0 24px 64px rgba(0,0,0,0.2); }
-  .notify-title { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
-  .notify-desc { font-size: 13px; color: var(--label); line-height: 1.6; margin-bottom: 20px; }
-  .notify-btns { display: flex; gap: 10px; }
-  .notify-send { flex: 1; padding: 11px; background: var(--green); color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; font-family: var(--font); }
-  .notify-skip { padding: 11px 16px; background: var(--bg); color: var(--label); border: 1px solid var(--border); border-radius: 10px; font-size: 14px; cursor: pointer; font-family: var(--font); }
   .adhoc-modal { background: var(--card); border-radius: var(--radius); width: 100%; max-width: 480px; box-shadow: 0 24px 64px rgba(0,0,0,0.22); animation: slideUp 0.2s ease; margin: auto; }
   .adhoc-header { padding: 22px 28px; background: #2d7a3d; color: white; display: flex; align-items: center; justify-content: space-between; border-radius: var(--radius) var(--radius) 0 0; }
   .adhoc-header-left div:first-child { font-size: 18px; font-weight: 800; }
@@ -298,6 +307,14 @@
     </div>
     <div class="locked-banner" id="locked-banner"><span>[LOCK]</span> This event is locked &mdash; past 7:00 AM day-of.</div>
     <div class="resubmit-banner" id="resubmit-banner"><span>&#10003;</span> Previously submitted &mdash; you can update and resubmit until 7:00 AM day-of.</div>
+    <div class="changelog-section" id="changelog-section" style="display:none;">
+      <div class="changelog-trigger" onclick="toggleChangelog()">
+        <span class="changelog-icon" id="changelog-icon">&#9654;</span>
+        <span class="changelog-trigger-text">Submission history</span>
+        <span class="changelog-count" id="changelog-count">0</span>
+      </div>
+      <div class="changelog-panel" id="changelog-panel"></div>
+    </div>
     <div class="comp-section" id="comp-section" style="display:none;">
       <div class="comp-trigger" onclick="toggleCompPanel()">
         <span class="comp-trigger-icon" id="comp-icon">&#9654;</span>
@@ -322,7 +339,7 @@
       </div>
     </div>
     <div class="modal-top-fields" id="modal-top-fields">
-      <div class="f-group"><label class="f-label">Submitted by</label><input type="text" class="f-input" id="f-manager" placeholder="Your name" style="width:220px;"></div>
+      <div class="f-group"><label class="f-label">Submitted by</label><input type="text" class="f-input" id="f-manager" readonly style="width:220px;background:var(--bg);cursor:default;"></div>
       <div id="modal-forecast-hint" style="flex:1;font-size:12px;color:#bbb;padding-bottom:3px;line-height:1.6;min-width:200px;">Enter sales forecast <strong style="color:#999;">per stand</strong> below. Staff total per stand adds up automatically from your role inputs.</div>
     </div>
     <div class="stands-area" id="stands-area"></div>
@@ -342,7 +359,7 @@
     <div class="adhoc-body">
       <div class="adhoc-date-display" id="adhoc-date-display">--</div>
       <div class="adhoc-form-group"><label>Venue</label><select id="adhoc-venue" onchange="onAdhocVenueChange()"><option value="">Select venue...</option><option value="FMP">Freedom Mortgage Pavilion</option><option value="Mann">Mann Music Center</option><option value="BWH">Boardwalk Hall</option><option value="ACCC">AC Convention Center</option><option value="Cure">Cure Insurance Arena</option><option value="Subaru">Subaru Park</option><option value="DE">DE Chase Field House</option><option value="Montage">Montage Mountain</option><option value="SATB">Sports at the Beach</option><option value="Villanova">Villanova</option><option value="Kirkwood">Kirkwood</option></select></div>
-      <div class="adhoc-form-group"><label>Your Name</label><input type="text" id="adhoc-manager" placeholder="Enter your full name"></div>
+      <div class="adhoc-form-group"><label>Your Name</label><input type="text" id="adhoc-manager" readonly style="background:var(--bg);cursor:default;"></div>
       <div class="adhoc-time-row"><div class="adhoc-form-group"><label>Report Time</label><input type="time" id="adhoc-report-time"></div><div class="adhoc-form-group"><label>End Time</label><input type="time" id="adhoc-end-time"></div></div>
       <div class="adhoc-form-group"><label>Notes (optional)</label><textarea id="adhoc-notes" placeholder="Special instructions..."></textarea></div>
       <div id="adhoc-roles-area"></div>
@@ -351,23 +368,16 @@
   </div>
 </div>
 
-<div class="notify-backdrop" id="notify-backdrop">
-  <div class="notify-box">
-    <div class="notify-title">Notify staffing manager?</div>
-    <div class="notify-desc" id="notify-desc"></div>
-    <div class="notify-btns"><button class="notify-skip" onclick="closeNotify()">Skip</button><button class="notify-send" onclick="sendNotifyEmail()">Send email &#8594;</button></div>
-  </div>
-</div>
 <div class="toast" id="toast"></div>
 
 <script src="/pc-auth.js"></script>
 <script>
-const SB_URL='https://aoazlttdjowhlfcksoyl.supabase.co';
-const STAFFING_EMAIL='staffing@camdenco.com';
-const VC={FMP:'#c0392b',Mann:'#5a9e1a',Cure:'#2471a3',Subaru:'#7d3fbf',Villanova:'#1a237e',Montage:'#607d8b',DE:'#00796b',BWH:'#e67e22',ACCC:'#c0620a',SATB:'#888780',Kirkwood:'#b71c1c'};
-const VL={FMP:'Freedom Mortgage Pavilion',Mann:'Mann Music Center',BWH:'Boardwalk Hall',ACCC:'AC Convention Center',Cure:'Cure Insurance Arena',Subaru:'Subaru Park',DE:'DE Chase Field House',Montage:'Montage Mountain',SATB:'Sports at the Beach',Villanova:'Villanova',Kirkwood:'Kirkwood'};
-const SS='Support Staff',HS='Hawking',CS='Client Staffing Needs',NS='Non-Event Labor';
-const VS={
+var SB_URL='https://aoazlttdjowhlfcksoyl.supabase.co';
+var STAFFING_EMAIL='staffing@camdenco.com';
+var VC={FMP:'#c0392b',Mann:'#5a9e1a',Cure:'#2471a3',Subaru:'#7d3fbf',Villanova:'#1a237e',Montage:'#607d8b',DE:'#00796b',BWH:'#e67e22',ACCC:'#c0620a',SATB:'#888780',Kirkwood:'#b71c1c'};
+var VL={FMP:'Freedom Mortgage Pavilion',Mann:'Mann Music Center',BWH:'Boardwalk Hall',ACCC:'AC Convention Center',Cure:'Cure Insurance Arena',Subaru:'Subaru Park',DE:'DE Chase Field House',Montage:'Montage Mountain',SATB:'Sports at the Beach',Villanova:'Villanova',Kirkwood:'Kirkwood'};
+var SS='Support Staff',HS='Hawking',CS='Client Staffing Needs',NS='Non-Event Labor';
+var VS={
   Mann:[SS,HS,'Upper Concession','Upper Popcorn','Lower Popcorn','Skyline Popcorn','Upper Pizza','Lower Pizza','Skyline Pizza','Farm & Fry Truck','Crescendo','Lawn Portable','Stage Left Bar','Upper Linear Bar','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4','Mobile Cart 5','Mobile Cart 6','Mobile Cart 7','Mobile Cart 8','Mobile Cart 9','Mobile Cart 10',CS],
   FMP:[SS,HS,'Stand 782','783','SC1','LM1','LM2','WWI','Ben Kettle','Walt Kettle','IC1','BWI','UD1','Ziggys Walt','Ziggys Ben','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4','Mobile Cart 5',CS],
   Cure:[SS,HS,'Popcorn','Candy','Cotton Candy',CS],ACCC:[SS,HS,'Stand 1','Stand 2',CS],
@@ -377,130 +387,156 @@ const VS={
   Montage:[SS,HS,'BW Pizza','Midway Pizza','Midway Popcorn','Boardwalk Popcorn','Festival Foods','Potato Stand','Boardwalk New Food','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4',CS],
   SATB:[SS,HS,'Stand 1','Ice Cream 1','Stand 2','Stand 3','Catering',CS],Kirkwood:[SS,HS,'Stand 1',CS]
 };
-const RR=['Bartender','Beer Tender','Concessions Cashier','Concessions Cook','Concessions Lead','Pizza Cashier','Pizza Maker','Pizza Lead','Prep Cook','Barback','Hawker'];
-const SR=['Cleaning Crew','Warehouse/Runner','Supervisor','Venue Manager'];
-const HR=['Hawker','Supervisor','Barback'];
-const AR=[...RR,'Cleaning Crew','Warehouse/Runner','Supervisor','Venue Manager'];
+var RR=['Bartender','Beer Tender','Concessions Cashier','Concessions Cook','Concessions Lead','Pizza Cashier','Pizza Maker','Pizza Lead','Prep Cook','Barback','Hawker'];
+var SR=['Cleaning Crew','Warehouse/Runner','Supervisor','Venue Manager'];
+var HR=['Hawker','Supervisor','Barback'];
+var AR=[].concat(RR,['Cleaning Crew','Warehouse/Runner','Supervisor','Venue Manager']);
 function rolesFor(s){if(s===SS)return SR;if(s===HS)return HR;if(s===CS||s===NS)return AR;return RR;}
-const DEX={'Cleaning Crew':1,'Warehouse/Runner':1,'Supervisor':1,'Venue Manager':1};
+var DEX={'Cleaning Crew':1,'Warehouse/Runner':1,'Supervisor':1,'Venue Manager':1};
 
-function apiHeaders() { return Object.assign({}, pcAuth.headers(), {'Content-Type':'application/json','Prefer':'return=representation'}); }
-function apiHeadersMin() { return Object.assign({}, pcAuth.headers(), {'Content-Type':'application/json','Prefer':'return=minimal'}); }
+function apiHeaders(){return Object.assign({},pcAuth.headers(),{'Content-Type':'application/json','Prefer':'return=representation'});}
+function apiHeadersMin(){return Object.assign({},pcAuth.headers(),{'Content-Type':'application/json','Prefer':'return=minimal'});}
 
-let pcE=[],pL={},pSh={},pEx={},subs={},sStatus={},allSales=[];
-let cY,cM,aEI=null,isLk=false,pNE=null,adhD=null;
-let cMode='same',cSel=[],cOther=null,cPanOpen=false,cRefOpen=false;
-let _ddResults=[];
+var pcE=[],pL={},pSh={},pEx={},subs={},sStatus={},allSales=[],reqLog={};
+var cY,cM,aEI=null,isLk=false,adhD=null;
+var cMode='same',cSel=[],cOther=null,cPanOpen=false,cRefOpen=false;
+var _ddResults=[];
+var loggedInUser=null;
+var clOpen=false;
 
-function sb(m,p,b){return fetch(SB_URL+'/rest/v1/'+p,{method:m,headers:apiHeaders(),body:b?JSON.stringify(b):undefined}).then(r=>{if(!r.ok)return r.text().then(t=>{throw new Error(t)});return r.status===204?null:r.json()});}
+function sb(m,p,b){return fetch(SB_URL+'/rest/v1/'+p,{method:m,headers:apiHeaders(),body:b?JSON.stringify(b):undefined}).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t);});return r.status===204?null:r.json();});}
 
-function init(){const n=new Date();cY=n.getFullYear();cM=n.getMonth();Promise.all([loadE(),loadP(),loadS(),loadSS(),loadSales()]).then(()=>renderCal());}
-function loadE(){return sb('GET','events?order=event_date.asc').then(d=>{pcE=d||[]}).catch(e=>console.error(e));}
-function loadP(){return sb('GET','par_levels?select=venue,stand,role,default_count,show_in_planning,excluded_from_total,tier').then(d=>{pL={};pSh={};pEx={};(d||[]).forEach(r=>{const t=r.tier||'full',k=`${r.venue}||${r.stand}||${r.role}||${t}`;pL[k]=r.default_count;pSh[k]=r.show_in_planning!==false;pEx[k]=r.excluded_from_total===true;});}).catch(e=>console.error(e));}
-function loadS(){return sb('GET','staffing_requests?select=id,event_id,venue,stand,role,headcount,manager_name,sales_forecast,staff_notes,submitted_at').then(d=>{subs={};(d||[]).forEach(r=>{subs[`${r.event_id}||${r.venue}||${r.stand}||${r.role}`]=r;if(!subs['_e_'+r.event_id])subs['_e_'+r.event_id]=[];subs['_e_'+r.event_id].push(r);});}).catch(e=>console.error(e));}
-function loadSS(){return sb('GET','event_staffing_status?select=event_id,venue,is_confirmed,confirmed_by,confirmed_at').then(d=>{sStatus={};(d||[]).forEach(r=>{sStatus[`${r.event_id}||${r.venue}`]=r;});}).catch(e=>console.error(e));}
-function loadSales(){return sb('GET','sales?select=event_date,event_name,venue,stand,amount,staff_count,tip_amount&order=event_date.desc').then(d=>{allSales=d||[];}).catch(e=>console.error(e));}
+function init(){var n=new Date();cY=n.getFullYear();cM=n.getMonth();Promise.all([loadE(),loadP(),loadS(),loadSS(),loadSales(),loadLog()]).then(function(){renderCal();});}
+function loadE(){return sb('GET','events?order=event_date.asc').then(function(d){pcE=d||[];}).catch(function(e){console.error(e);});}
+function loadP(){return sb('GET','par_levels?select=venue,stand,role,default_count,show_in_planning,excluded_from_total,tier').then(function(d){pL={};pSh={};pEx={};(d||[]).forEach(function(r){var t=r.tier||'full',k=r.venue+'||'+r.stand+'||'+r.role+'||'+t;pL[k]=r.default_count;pSh[k]=r.show_in_planning!==false;pEx[k]=r.excluded_from_total===true;});}).catch(function(e){console.error(e);});}
+function loadS(){return sb('GET','staffing_requests?select=id,event_id,venue,stand,role,headcount,manager_name,sales_forecast,staff_notes,submitted_at').then(function(d){subs={};(d||[]).forEach(function(r){subs[r.event_id+'||'+r.venue+'||'+r.stand+'||'+r.role]=r;if(!subs['_e_'+r.event_id])subs['_e_'+r.event_id]=[];subs['_e_'+r.event_id].push(r);});}).catch(function(e){console.error(e);});}
+function loadSS(){return sb('GET','event_staffing_status?select=event_id,venue,is_confirmed,confirmed_by,confirmed_at').then(function(d){sStatus={};(d||[]).forEach(function(r){sStatus[r.event_id+'||'+r.venue]=r;});}).catch(function(e){console.error(e);});}
+function loadSales(){return sb('GET','sales?select=event_date,event_name,venue,stand,amount,staff_count,tip_amount&order=event_date.desc').then(function(d){allSales=d||[];}).catch(function(e){console.error(e);});}
+function loadLog(){return sb('GET','staffing_request_log?select=id,event_id,venue,manager_name,total_staff,total_forecast,action,created_at&order=created_at.desc').then(function(d){reqLog={};(d||[]).forEach(function(r){var k=r.event_id+'||'+r.venue;if(!reqLog[k])reqLog[k]=[];reqLog[k].push(r);});}).catch(function(e){console.error(e);});}
 
-function pc(v,s,r,t){return pL[`${v}||${s}||${r}||${t||'full'}`]||0;}
-function sc(ei,v,s,r){const x=subs[`${ei}||${v}||${s}||${r}`];return x?x.headcount:null;}
-function isSub(ei){const s=subs['_e_'+ei];return s&&s.length>0;}
-function isCon(ei,v){const s=sStatus[`${ei}||${v}`];return s?s.is_confirmed:false;}
+function pc(v,s,r,t){return pL[v+'||'+s+'||'+r+'||'+(t||'full')]||0;}
+function sc(ei,v,s,r){var x=subs[ei+'||'+v+'||'+s+'||'+r];return x?x.headcount:null;}
+function isSub(ei){var s=subs['_e_'+ei];return s&&s.length>0;}
+function isCon(ei,v){var s=sStatus[ei+'||'+v];return s?s.is_confirmed:false;}
 function isAd(e){return e.event_type==='adhoc';}
-function getNote(ei,v,s){const rows=subs['_e_'+ei]||[];for(const r of rows)if(r.stand===s&&r.staff_notes)return r.staff_notes;return'';}
-function exTot(v,s,r,t){if(s===SS)return true;const k=`${v}||${s}||${r}||${t||'full'}`;if(k in pEx)return pEx[k];return DEX[r]===1;}
-function shPl(v,s,r,t){const k=`${v}||${s}||${r}||${t||'full'}`;if(k in pSh)return pSh[k];return true;}
+function getNote(ei,v,s){var rows=subs['_e_'+ei]||[];for(var i=0;i<rows.length;i++)if(rows[i].stand===s&&rows[i].staff_notes)return rows[i].staff_notes;return'';}
+function exTot(v,s,r,t){if(s===SS)return true;var k=v+'||'+s+'||'+r+'||'+(t||'full');if(k in pEx)return pEx[k];return DEX[r]===1;}
+function shPl(v,s,r,t){var k=v+'||'+s+'||'+r+'||'+(t||'full');if(k in pSh)return pSh[k];return true;}
 function standsFor(e){return isAd(e)?[NS]:(VS[e.venue]||[]);}
-function evtStaff(e){const rows=subs['_e_'+e.id],sts=standsFor(e),tier=e.staffing_tier||'full';if(rows&&rows.length>0)return rows.reduce((s,r)=>exTot(r.venue,r.stand,r.role,tier)?s:s+(r.headcount||0),0);let t=0;sts.forEach(st=>rolesFor(st).forEach(ro=>{if(!exTot(e.venue,st,ro,tier))t+=pc(e.venue,st,ro,tier);}));return t;}
-function dayTot(ds){return pcE.filter(e=>e.event_date===ds).reduce((s,e)=>s+evtStaff(e),0);}
+function evtStaff(e){var rows=subs['_e_'+e.id],sts=standsFor(e),tier=e.staffing_tier||'full';if(rows&&rows.length>0)return rows.reduce(function(s,r){return exTot(r.venue,r.stand,r.role,tier)?s:s+(r.headcount||0);},0);var t=0;sts.forEach(function(st){rolesFor(st).forEach(function(ro){if(!exTot(e.venue,st,ro,tier))t+=pc(e.venue,st,ro,tier);});});return t;}
+function dayTot(ds){return pcE.filter(function(e){return e.event_date===ds;}).reduce(function(s,e){return s+evtStaff(e);},0);}
 function isLocked(ds){return new Date()>=new Date(ds+'T07:00:00');}
 function changeMonth(d){cM+=d;if(cM>11){cM=0;cY++;}if(cM<0){cM=11;cY--;}renderCal();}
 
-const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
-const DAYS=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+var MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+var DAYS=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 function toDS(d){return d.toISOString().split('T')[0];}
-function fmtTime(t){if(!t)return'--';const p=t.split(':'),h=parseInt(p[0]);return(h%12||12)+':'+p[1]+' '+(h>=12?'PM':'AM');}
-function showToast(m,g){const t=document.getElementById('toast');t.textContent=m;t.className='toast'+(g?' green':'');t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3500);}
+function fmtTime(t){if(!t)return'--';var p=t.split(':'),h=parseInt(p[0]);return(h%12||12)+':'+p[1]+' '+(h>=12?'PM':'AM');}
+function showToast(m,g){var t=document.getElementById('toast');t.textContent=m;t.className='toast'+(g?' green':'');t.classList.add('show');setTimeout(function(){t.classList.remove('show');},3500);}
 
 function renderCal(){
-  document.getElementById('month-label').textContent=`${MONTHS[cM]} ${cY}`;
-  const g=document.getElementById('cal-grid');g.innerHTML='';const ts=toDS(new Date());
-  const f=new Date(cY,cM,1),l=new Date(cY,cM+1,0),sd=f.getDay();
-  for(let i=0;i<sd;i++)g.appendChild(bCell(new Date(cY,cM,1-(sd-i)),true,ts));
-  for(let d=1;d<=l.getDate();d++)g.appendChild(bCell(new Date(cY,cM,d),false,ts));
-  const tot=g.children.length,rem=tot%7===0?0:7-(tot%7);
-  for(let j=1;j<=rem;j++)g.appendChild(bCell(new Date(cY,cM+1,j),true,ts));
+  document.getElementById('month-label').textContent=MONTHS[cM]+' '+cY;
+  var g=document.getElementById('cal-grid');g.innerHTML='';var ts=toDS(new Date());
+  var f=new Date(cY,cM,1),l=new Date(cY,cM+1,0),sd=f.getDay();
+  for(var i=0;i<sd;i++)g.appendChild(bCell(new Date(cY,cM,1-(sd-i)),true,ts));
+  for(var d=1;d<=l.getDate();d++)g.appendChild(bCell(new Date(cY,cM,d),false,ts));
+  var tot=g.children.length,rem=tot%7===0?0:7-(tot%7);
+  for(var j=1;j<=rem;j++)g.appendChild(bCell(new Date(cY,cM+1,j),true,ts));
 }
 
 function bCell(date,other,ts){
-  const ds=toDS(date),de=pcE.filter(e=>e.event_date===ds),dt=dayTot(ds);
-  const ce=de.filter(e=>!isAd(e)),as=ce.length>0&&ce.every(e=>isSub(e.id)),hp=ce.some(e=>!isSub(e.id));
-  const c=document.createElement('div');let cl='cal-day';
+  var ds=toDS(date),de=pcE.filter(function(e){return e.event_date===ds;}),dt=dayTot(ds);
+  var ce=de.filter(function(e){return!isAd(e);}),as=ce.length>0&&ce.every(function(e){return isSub(e.id);}),hp=ce.some(function(e){return!isSub(e.id);});
+  var c=document.createElement('div');var cl='cal-day';
   if(other)cl+=' other-month';if(ds===ts)cl+=' is-today';
   if(as&&ce.length>0)cl+=' all-submitted';if(hp)cl+=' has-pending';if(dt>=70&&!as)cl+=' is-heavy';
   c.className=cl;
-  const top=document.createElement('div');top.className='day-top';
-  const n=document.createElement('div');n.className='day-num';n.textContent=date.getDate();top.appendChild(n);
-  const ab=document.createElement('button');ab.className='day-add-btn';ab.textContent='+';ab.title='Add non-event day labor';
-  ab.onclick=ev=>{ev.stopPropagation();openAdhoc(ds);};top.appendChild(ab);
-  if(de.length>0&&!other){const tot=document.createElement('div');tot.className='day-staff-total '+(as?'dst-green':dt>=70?'dst-red':dt>=40?'dst-amber':'dst-grey');tot.textContent=dt;top.appendChild(tot);}
+  var top=document.createElement('div');top.className='day-top';
+  var n=document.createElement('div');n.className='day-num';n.textContent=date.getDate();top.appendChild(n);
+  var ab=document.createElement('button');ab.className='day-add-btn';ab.textContent='+';ab.title='Add non-event day labor';
+  ab.onclick=function(ev){ev.stopPropagation();openAdhoc(ds);};top.appendChild(ab);
+  if(de.length>0&&!other){var tot2=document.createElement('div');tot2.className='day-staff-total '+(as?'dst-green':dt>=70?'dst-red':dt>=40?'dst-amber':'dst-grey');tot2.textContent=dt;top.appendChild(tot2);}
   c.appendChild(top);
-  de.forEach(evt=>{const sub=isSub(evt.id),con=isCon(evt.id,evt.venue),cnt=evtStaff(evt),ad=isAd(evt);
-    const p=document.createElement('button');p.className=`event-pill pv-${evt.venue}${sub?' submitted':''}${ad?' adhoc-pill':''}`;
-    p.onclick=()=>openModal(evt.id);
-    p.innerHTML=`${sub?'<span class="pill-dot"></span>':''}<span class="pill-name">${ad?evt.venue+' - Non-Event':evt.event_name}</span>${con?'<span class="pill-staffed">&#10003;</span>':''}<span class="pill-count">${cnt}</span>`;
+  de.forEach(function(evt){var sub=isSub(evt.id),con=isCon(evt.id,evt.venue),cnt=evtStaff(evt),ad=isAd(evt);
+    var p=document.createElement('button');p.className='event-pill pv-'+evt.venue+(sub?' submitted':'')+(ad?' adhoc-pill':'');
+    p.onclick=(function(id){return function(){openModal(id);};})(evt.id);
+    p.innerHTML=(sub?'<span class="pill-dot"></span>':'')+'<span class="pill-name">'+(ad?evt.venue+' - Non-Event':evt.event_name)+'</span>'+(con?'<span class="pill-staffed">&#10003;</span>':'')+'<span class="pill-count">'+cnt+'</span>';
     c.appendChild(p);});
   return c;
 }
 
-function openAdhoc(ds){adhD=ds;const d=new Date(ds+'T12:00:00');document.getElementById('adhoc-date-display').textContent=d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
-  document.getElementById('adhoc-venue').value='';document.getElementById('adhoc-manager').value='';document.getElementById('adhoc-report-time').value='';document.getElementById('adhoc-end-time').value='';document.getElementById('adhoc-notes').value='';document.getElementById('adhoc-roles-area').innerHTML='';
-  const b=document.getElementById('adhoc-submit-btn');b.disabled=false;b.textContent='Create and Submit Request';document.getElementById('adhoc-backdrop').className='modal-backdrop open';}
+function openAdhoc(ds){adhD=ds;var d=new Date(ds+'T12:00:00');document.getElementById('adhoc-date-display').textContent=d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+  document.getElementById('adhoc-venue').value='';
+  document.getElementById('adhoc-manager').value=loggedInUser?(loggedInUser.display_name||loggedInUser.email):'';
+  document.getElementById('adhoc-report-time').value='';document.getElementById('adhoc-end-time').value='';document.getElementById('adhoc-notes').value='';document.getElementById('adhoc-roles-area').innerHTML='';
+  var b=document.getElementById('adhoc-submit-btn');b.disabled=false;b.textContent='Create and Submit Request';document.getElementById('adhoc-backdrop').className='modal-backdrop open';}
 function closeAdhocModal(){document.getElementById('adhoc-backdrop').className='modal-backdrop';adhD=null;}
 
-function onAdhocVenueChange(){const v=document.getElementById('adhoc-venue').value,a=document.getElementById('adhoc-roles-area');if(!v){a.innerHTML='';return;}
-  const ar=rolesFor(NS);let hp=false;for(const r of ar)if(`${v}||${NS}||${r}||full`in pSh){hp=true;break;}
-  const roles=ar.filter(r=>!hp||shPl(v,NS,r,'full'));if(!roles.length){a.innerHTML='<div class="adhoc-roles-empty">No roles configured.</div>';return;}
-  let h='<div class="adhoc-roles-label">Staff Needed</div><div class="adhoc-roles-grid">';
-  roles.forEach(r=>{h+=`<div class="adhoc-role-card"><div class="adhoc-role-name">${r}</div><input type="number" class="adhoc-role-input" min="0" max="99" value="0" data-role="${r}"></div>`;});
+function onAdhocVenueChange(){var v=document.getElementById('adhoc-venue').value,a=document.getElementById('adhoc-roles-area');if(!v){a.innerHTML='';return;}
+  var ar=rolesFor(NS);var hp=false;for(var i=0;i<ar.length;i++)if((v+'||'+NS+'||'+ar[i]+'||full') in pSh){hp=true;break;}
+  var roles=ar.filter(function(r){return!hp||shPl(v,NS,r,'full');});if(!roles.length){a.innerHTML='<div class="adhoc-roles-empty">No roles configured.</div>';return;}
+  var h='<div class="adhoc-roles-label">Staff Needed</div><div class="adhoc-roles-grid">';
+  roles.forEach(function(r){h+='<div class="adhoc-role-card"><div class="adhoc-role-name">'+r+'</div><input type="number" class="adhoc-role-input" min="0" max="99" value="0" data-role="'+r+'"></div>';});
   a.innerHTML=h+'</div>';}
 
-function submitAdhocEvent(){const v=document.getElementById('adhoc-venue').value;if(!v){showToast('Please select a venue.');return;}
-  const mgr=document.getElementById('adhoc-manager').value.trim();if(!mgr){showToast('Please enter your name.');return;}
-  const rt=document.getElementById('adhoc-report-time').value;if(!rt){showToast('Please enter a report time.');return;}
-  const et=document.getElementById('adhoc-end-time').value;if(!et){showToast('Please enter an end time.');return;}
-  const notes=document.getElementById('adhoc-notes').value.trim()||null;const sRows=[];let hasS=false;
-  document.querySelectorAll('#adhoc-roles-area .adhoc-role-input').forEach(inp=>{const q=parseInt(inp.value)||0;if(q>0)hasS=true;sRows.push({role:inp.dataset.role,headcount:q});});
-  const btn=document.getElementById('adhoc-submit-btn');btn.disabled=true;btn.textContent='Creating...';
-  sb('POST','events',{venue:v,event_name:'Non-Event Labor',event_date:adhD,event_type:'adhoc',report_time:rt,end_time:et,notes,staffing_tier:'full'})
-  .then(res=>{const id=res?(res[0]?res[0].id:res.id):null;if(!id)throw new Error('No ID');if(!hasS)return;
-    return fetch(SB_URL+'/rest/v1/staffing_requests',{method:'POST',headers:apiHeadersMin(),body:JSON.stringify(sRows.map(sr=>({event_id:id,venue:v,stand:NS,role:sr.role,headcount:sr.headcount,manager_name:mgr,sales_forecast:null,staff_notes:notes,submitted_at:new Date().toISOString()})))});})
-  .then(()=>{showToast(hasS?'Non-event labor created and submitted':'Non-event labor created',true);closeAdhocModal();return Promise.all([loadE(),loadS(),loadSS()]);}).then(()=>renderCal())
-  .catch(e=>{showToast('Error creating event.');btn.disabled=false;btn.textContent='Create and Submit Request';console.error(e);});}
+function submitAdhocEvent(){var v=document.getElementById('adhoc-venue').value;if(!v){showToast('Please select a venue.');return;}
+  var mgr=loggedInUser?(loggedInUser.display_name||loggedInUser.email):'';if(!mgr){showToast('Unable to identify logged-in user.');return;}
+  var rt=document.getElementById('adhoc-report-time').value;if(!rt){showToast('Please enter a report time.');return;}
+  var et=document.getElementById('adhoc-end-time').value;if(!et){showToast('Please enter an end time.');return;}
+  var notes=document.getElementById('adhoc-notes').value.trim()||null;var sRows=[];var hasS=false;
+  document.querySelectorAll('#adhoc-roles-area .adhoc-role-input').forEach(function(inp){var q=parseInt(inp.value)||0;if(q>0)hasS=true;sRows.push({role:inp.dataset.role,headcount:q});});
+  var btn=document.getElementById('adhoc-submit-btn');btn.disabled=true;btn.textContent='Creating...';
+  sb('POST','events',{venue:v,event_name:'Non-Event Labor',event_date:adhD,event_type:'adhoc',report_time:rt,end_time:et,notes:notes,staffing_tier:'full'})
+  .then(function(res){var id=res?(res[0]?res[0].id:res.id):null;if(!id)throw new Error('No ID');if(!hasS)return;
+    return fetch(SB_URL+'/rest/v1/staffing_requests',{method:'POST',headers:apiHeadersMin(),body:JSON.stringify(sRows.map(function(sr){return{event_id:id,venue:v,stand:NS,role:sr.role,headcount:sr.headcount,manager_name:mgr,sales_forecast:null,staff_notes:notes,submitted_at:new Date().toISOString()};}))});})
+  .then(function(){showToast(hasS?'Non-event labor created and submitted':'Non-event labor created',true);closeAdhocModal();return Promise.all([loadE(),loadS(),loadSS()]);}).then(function(){renderCal();})
+  .catch(function(e){showToast('Error creating event.');btn.disabled=false;btn.textContent='Create and Submit Request';console.error(e);});}
+
+function toggleChangelog(){clOpen=!clOpen;document.getElementById('changelog-icon').className='changelog-icon'+(clOpen?' open':'');document.getElementById('changelog-panel').className='changelog-panel'+(clOpen?' open':'');}
+
+function renderChangelog(evtId,venue){
+  var entries=reqLog[evtId+'||'+venue]||[];
+  var sec=document.getElementById('changelog-section');
+  if(entries.length===0){sec.style.display='none';return;}
+  sec.style.display='';
+  document.getElementById('changelog-count').textContent=entries.length+' submission'+(entries.length!==1?'s':'');
+  clOpen=false;document.getElementById('changelog-icon').className='changelog-icon';document.getElementById('changelog-panel').className='changelog-panel';
+  var panel=document.getElementById('changelog-panel');var h='';
+  entries.forEach(function(entry,i){
+    var num=entries.length-i;
+    var dt=new Date(entry.created_at);
+    var dateStr=dt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+' at '+dt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+    var fc=entry.total_forecast>0?'$'+Math.round(entry.total_forecast).toLocaleString():'--';
+    h+='<div class="changelog-entry"><div class="changelog-entry-left"><div><span class="changelog-entry-num">#'+num+'</span><span class="changelog-entry-name">'+entry.manager_name+'</span></div><div class="changelog-entry-date">'+dateStr+'</div></div><div class="changelog-entry-right"><div class="changelog-entry-staff">'+entry.total_staff+' staff</div><div class="changelog-entry-forecast">Forecast: '+fc+'</div></div></div>';
+  });
+  panel.innerHTML=h;
+}
 
 function openModal(evtId){
-  const evt=pcE.find(e=>e.id===evtId);if(!evt)return;aEI=evtId;
-  const ad=isAd(evt),color=ad?'#2d7a3d':(VC[evt.venue]||'#1a1a1a'),sub=isSub(evtId);
+  var evt=pcE.find(function(e){return e.id===evtId;});if(!evt)return;aEI=evtId;
+  var ad=isAd(evt),color=ad?'#2d7a3d':(VC[evt.venue]||'#1a1a1a'),sub=isSub(evtId);
   isLk=isLocked(evt.event_date);
   document.getElementById('modal-header').style.background=color;
   document.getElementById('modal').style.setProperty('--vc',color);
   document.getElementById('modal-venue-label').textContent=VL[evt.venue]||evt.venue;
   document.getElementById('modal-event-name').textContent=ad?'Non-Event Day Labor':evt.event_name;
-  const dd=new Date(evt.event_date+'T12:00:00');
-  let meta=`${DAYS[dd.getDay()]}, ${MONTHS[dd.getMonth()]} ${dd.getDate()} ${dd.getFullYear()}`;
-  if(ad){meta+=` <span>|</span> Report: ${evt.report_time?fmtTime(evt.report_time):'TBD'} <span>|</span> End: ${evt.end_time?fmtTime(evt.end_time):'TBD'}`;}
-  else{const g=evt.gates_open?fmtTime(evt.gates_open):'Gates TBD';const att=evt.expected_attendance?`Exp. ${Number(evt.expected_attendance).toLocaleString()} attendance`:'';meta+=` <span>|</span> ${g}${att?' <span>|</span> '+att:''}`;}
+  var dd=new Date(evt.event_date+'T12:00:00');
+  var meta=DAYS[dd.getDay()]+', '+MONTHS[dd.getMonth()]+' '+dd.getDate()+' '+dd.getFullYear();
+  if(ad){meta+=' <span>|</span> Report: '+(evt.report_time?fmtTime(evt.report_time):'TBD')+' <span>|</span> End: '+(evt.end_time?fmtTime(evt.end_time):'TBD');}
+  else{var g=evt.gates_open?fmtTime(evt.gates_open):'Gates TBD';var att=evt.expected_attendance?'Exp. '+Number(evt.expected_attendance).toLocaleString()+' attendance':'';meta+=' <span>|</span> '+g+(att?' <span>|</span> '+att:'');}
   document.getElementById('modal-meta').innerHTML=meta;
   document.getElementById('locked-banner').className='locked-banner'+(isLk?' show':'');
   document.getElementById('resubmit-banner').className='resubmit-banner'+(sub&&!isLk?' show':'');
-  const sr=sStatus[`${evtId}||${evt.venue}`],con=sr?sr.is_confirmed:false;
-  const si=document.getElementById('staffed-indicator');if(con){si.style.display='flex';document.getElementById('staffed-indicator-by').textContent='by '+(sr.confirmed_by||'');}else si.style.display='none';
-  const mgr=document.getElementById('f-manager');const rows=subs['_e_'+evtId]||[];mgr.value=rows.length?rows[0].manager_name:'';mgr.disabled=isLk;
+  var sr=sStatus[evtId+'||'+evt.venue],con=sr?sr.is_confirmed:false;
+  var si=document.getElementById('staffed-indicator');if(con){si.style.display='flex';document.getElementById('staffed-indicator-by').textContent='by '+(sr.confirmed_by||'');}else si.style.display='none';
+  document.getElementById('f-manager').value=loggedInUser?(loggedInUser.display_name||loggedInUser.email):'';
   document.getElementById('modal-forecast-hint').style.display=ad?'none':'block';
+  renderChangelog(evtId,evt.venue);
   cMode='same';cSel=[];cOther=null;cPanOpen=false;cRefOpen=false;
-  const cs=document.getElementById('comp-section');cs.style.display=ad?'none':'block';
+  var cs=document.getElementById('comp-section');cs.style.display=ad?'none':'block';
   if(!ad)resetComp(evt);
   buildStands(evt);
-  const btn=document.getElementById('submit-btn');btn.disabled=isLk;btn.style.background=color;
+  var btn=document.getElementById('submit-btn');btn.disabled=isLk;btn.style.background=color;
   btn.textContent=isLk?'Locked - past 7:00 AM':sub?'Resubmit staffing request':'Submit staffing request';
   document.getElementById('lock-note').textContent=isLk?'Locked - past 7:00 AM day-of.':'Locks at 7:00 AM day-of';
   document.getElementById('modal-backdrop').className='modal-backdrop open';
@@ -510,7 +546,7 @@ function resetComp(evt){
   document.getElementById('comp-icon').className='comp-trigger-icon';
   document.getElementById('comp-hint').textContent='optional';
   document.getElementById('comp-panel').className='comp-panel';
-  document.getElementById('comp-input').placeholder=`Search past events at ${VL[evt.venue]||evt.venue}...`;
+  document.getElementById('comp-input').placeholder='Search past events at '+(VL[evt.venue]||evt.venue)+'...';
   document.getElementById('comp-input').value='';
   document.getElementById('comp-chips').innerHTML='';
   document.getElementById('comp-dd').className='comp-dropdown';document.getElementById('comp-dd').innerHTML='';
@@ -521,82 +557,82 @@ function resetComp(evt){
 
 function toggleCompPanel(){cPanOpen=!cPanOpen;document.getElementById('comp-icon').className='comp-trigger-icon'+(cPanOpen?' open':'');document.getElementById('comp-panel').className='comp-panel'+(cPanOpen?' open':'');}
 
-function toggleCompMode(){const evt=pcE.find(e=>e.id===aEI);if(!evt)return;
+function toggleCompMode(){var evt=pcE.find(function(e){return e.id===aEI;});if(!evt)return;
   if(cMode==='same'){cMode='other';cSel=[];cOther=null;document.getElementById('comp-mode-btn').className='comp-mode-btn active';document.getElementById('comp-mode-btn').textContent='Switch to same venue';document.getElementById('comp-input').placeholder='Search all past events...';}
-  else{cMode='same';cOther=null;document.getElementById('comp-mode-btn').className='comp-mode-btn';document.getElementById('comp-mode-btn').innerHTML='Compare other venue &#8594;';document.getElementById('comp-input').placeholder=`Search past events at ${VL[evt.venue]||evt.venue}...`;}
+  else{cMode='same';cOther=null;document.getElementById('comp-mode-btn').className='comp-mode-btn';document.getElementById('comp-mode-btn').innerHTML='Compare other venue &#8594;';document.getElementById('comp-input').placeholder='Search past events at '+(VL[evt.venue]||evt.venue)+'...';}
   document.getElementById('comp-input').value='';document.getElementById('comp-chips').innerHTML='';document.getElementById('comp-dd').className='comp-dropdown';document.getElementById('comp-ref').className='comp-ref';document.getElementById('footer-comp').innerHTML='';rebuildHist();}
 
-function aggSales(venue){const bk={};allSales.forEach(s=>{if(venue&&s.venue!==venue)return;const k=`${s.event_date}||${s.event_name||'Unknown'}||${s.venue}`;if(!bk[k])bk[k]={event_date:s.event_date,event_name:s.event_name||'Unknown',venue:s.venue,stands:[],tot:0,staff:0};bk[k].stands.push({stand:s.stand,amount:parseFloat(s.amount)||0,staff_count:parseInt(s.staff_count)||0});bk[k].tot+=parseFloat(s.amount)||0;bk[k].staff+=parseInt(s.staff_count)||0;});return Object.values(bk).sort((a,b)=>b.event_date.localeCompare(a.event_date));}
+function aggSales(venue){var bk={};allSales.forEach(function(s){if(venue&&s.venue!==venue)return;var k=s.event_date+'||'+(s.event_name||'Unknown')+'||'+s.venue;if(!bk[k])bk[k]={event_date:s.event_date,event_name:s.event_name||'Unknown',venue:s.venue,stands:[],tot:0,staff:0};bk[k].stands.push({stand:s.stand,amount:parseFloat(s.amount)||0,staff_count:parseInt(s.staff_count)||0});bk[k].tot+=parseFloat(s.amount)||0;bk[k].staff+=parseInt(s.staff_count)||0;});return Object.values(bk).sort(function(a,b){return b.event_date.localeCompare(a.event_date);});}
 
-function runCompSearch(){const evt=pcE.find(e=>e.id===aEI);if(!evt)return;
-  const q=document.getElementById('comp-input').value.trim().toLowerCase();
-  let res=aggSales(cMode==='same'?evt.venue:null).filter(r=>r.event_date<evt.event_date);
-  if(q)res=res.filter(r=>r.event_name.toLowerCase().includes(q));
+function runCompSearch(){var evt=pcE.find(function(e){return e.id===aEI;});if(!evt)return;
+  var q=document.getElementById('comp-input').value.trim().toLowerCase();
+  var res=aggSales(cMode==='same'?evt.venue:null).filter(function(r){return r.event_date<evt.event_date;});
+  if(q)res=res.filter(function(r){return r.event_name.toLowerCase().indexOf(q)>=0;});
   _ddResults=res.slice(0,30);renderDD(evt);}
 
-function renderDD(evt){const dd=document.getElementById('comp-dd');
+function renderDD(evt){var dd=document.getElementById('comp-dd');
   if(!_ddResults.length){dd.innerHTML='<div class="comp-dd-empty">No past sales found.</div>';dd.className='comp-dropdown open';return;}
-  const selKeys=cMode==='same'?cSel.map(e=>`${e.event_date}||${e.event_name}||${e.venue}`):[];const maxR=cMode==='same'&&cSel.length>=2;
-  let h=`<div class="comp-dd-hdr"><span>${cMode==='same'?'Past events at '+(VL[evt.venue]||evt.venue):'All past events'}</span>`;
-  if(cMode==='same'&&cSel.length>0)h+=`<span class="comp-dd-count">${cSel.length} of 2 selected</span>`;
+  var selKeys=cMode==='same'?cSel.map(function(e){return e.event_date+'||'+e.event_name+'||'+e.venue;}):[];var maxR=cMode==='same'&&cSel.length>=2;
+  var h='<div class="comp-dd-hdr"><span>'+(cMode==='same'?'Past events at '+(VL[evt.venue]||evt.venue):'All past events')+'</span>';
+  if(cMode==='same'&&cSel.length>0)h+='<span class="comp-dd-count">'+cSel.length+' of 2 selected</span>';
   h+='</div>';
-  _ddResults.forEach((r,i)=>{const k=`${r.event_date}||${r.event_name}||${r.venue}`,isSel=selKeys.includes(k),isDis=maxR&&!isSel;
-    const d=new Date(r.event_date+'T12:00:00'),dl=d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),sc2=r.stands.length;
-    const vt=cMode==='other'?` &middot; ${VL[r.venue]||r.venue}`:'';
-    if(cMode==='same')h+=`<div class="comp-dd-row${isSel?' sel':''}${isDis?' dis':''}" onclick="togSel(${i})"><input type="checkbox" class="comp-dd-cb" ${isSel?'checked':''} ${isDis?'disabled':''}tabindex="-1">`;
-    else h+=`<div class="comp-dd-row" onclick="selOther(${i})">`;
-    h+=`<div class="comp-dd-info"><div class="comp-dd-name">${r.event_name}</div><div class="comp-dd-meta">${dl} &middot; ${sc2} stand${sc2!==1?'s':''} reported${vt}</div></div>`;
-    h+=`<div class="comp-dd-right"><div class="comp-dd-amt">$${Math.round(r.tot).toLocaleString()}</div><div class="comp-dd-staff">${r.staff} staff</div></div></div>`;});
-  if(cMode==='same')h+=`<div class="comp-dd-foot"><button class="comp-done-btn" style="background:${VC[evt.venue]||'#1a1a1a'}" onclick="closeDd()">Done</button></div>`;
+  _ddResults.forEach(function(r,i){var k=r.event_date+'||'+r.event_name+'||'+r.venue,isSel2=selKeys.indexOf(k)>=0,isDis=maxR&&!isSel2;
+    var d=new Date(r.event_date+'T12:00:00'),dl=d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),sc2=r.stands.length;
+    var vt=cMode==='other'?' &middot; '+(VL[r.venue]||r.venue):'';
+    if(cMode==='same')h+='<div class="comp-dd-row'+(isSel2?' sel':'')+(isDis?' dis':'')+'" onclick="togSel('+i+')"><input type="checkbox" class="comp-dd-cb" '+(isSel2?'checked':'')+' '+(isDis?'disabled':'')+'tabindex="-1">';
+    else h+='<div class="comp-dd-row" onclick="selOther('+i+')">';
+    h+='<div class="comp-dd-info"><div class="comp-dd-name">'+r.event_name+'</div><div class="comp-dd-meta">'+dl+' &middot; '+sc2+' stand'+(sc2!==1?'s':'')+' reported'+vt+'</div></div>';
+    h+='<div class="comp-dd-right"><div class="comp-dd-amt">$'+Math.round(r.tot).toLocaleString()+'</div><div class="comp-dd-staff">'+r.staff+' staff</div></div></div>';});
+  if(cMode==='same')h+='<div class="comp-dd-foot"><button class="comp-done-btn" style="background:'+(VC[evt.venue]||'#1a1a1a')+'" onclick="closeDd()">Done</button></div>';
   dd.innerHTML=h;dd.className='comp-dropdown open';}
 
-function togSel(i){const r=_ddResults[i];if(!r)return;const k=`${r.event_date}||${r.event_name}||${r.venue}`;
-  const ei=cSel.findIndex(e=>`${e.event_date}||${e.event_name}||${e.venue}`===k);
+function togSel(i){var r=_ddResults[i];if(!r)return;var k=r.event_date+'||'+r.event_name+'||'+r.venue;
+  var ei=-1;for(var j=0;j<cSel.length;j++){if(cSel[j].event_date+'||'+cSel[j].event_name+'||'+cSel[j].venue===k){ei=j;break;}}
   if(ei>=0)cSel.splice(ei,1);else if(cSel.length<2)cSel.push(r);
-  const evt=pcE.find(e=>e.id===aEI);renderDD(evt);renderChips(evt);rebuildHist();updFootComp();}
+  var evt=pcE.find(function(e){return e.id===aEI;});renderDD(evt);renderChips(evt);rebuildHist();updFootComp();}
 
-function selOther(i){const r=_ddResults[i];if(!r)return;cOther=r;closeDd();renderChips(pcE.find(e=>e.id===aEI));renderRef();updFootComp();}
+function selOther(i){var r=_ddResults[i];if(!r)return;cOther=r;closeDd();renderChips(pcE.find(function(e){return e.id===aEI;}));renderRef();updFootComp();}
 function closeDd(){document.getElementById('comp-dd').className='comp-dropdown';}
 
-function renderChips(evt){const a=document.getElementById('comp-chips');let h='';
-  if(cMode==='same')cSel.forEach((ce,i)=>{const d=new Date(ce.event_date+'T12:00:00'),ml=d.toLocaleDateString('en-US',{month:'short',year:'numeric'});
-    h+=`<div class="comp-chip" style="background:${VC[evt.venue]||'#1a1a1a'};color:#fff;">${ce.event_name} &middot; ${ml} <span class="comp-chip-x" onclick="rmSel(${i})">&#10005;</span></div>`;});
-  else if(cOther){const ce=cOther,d=new Date(ce.event_date+'T12:00:00'),ml=d.toLocaleDateString('en-US',{month:'short',year:'numeric'});
-    h+=`<div class="comp-chip" style="background:#7d3fbf;color:#fff;">${ce.event_name} &middot; ${VL[ce.venue]||ce.venue} &middot; ${ml} <span class="comp-chip-x" onclick="rmOther()">&#10005;</span></div>`;}
+function renderChips(evt){var a=document.getElementById('comp-chips');var h='';
+  if(cMode==='same')cSel.forEach(function(ce,i){var d=new Date(ce.event_date+'T12:00:00'),ml=d.toLocaleDateString('en-US',{month:'short',year:'numeric'});
+    h+='<div class="comp-chip" style="background:'+(VC[evt.venue]||'#1a1a1a')+';color:#fff;">'+ce.event_name+' &middot; '+ml+' <span class="comp-chip-x" onclick="rmSel('+i+')">&#10005;</span></div>';});
+  else if(cOther){var ce2=cOther,d2=new Date(ce2.event_date+'T12:00:00'),ml2=d2.toLocaleDateString('en-US',{month:'short',year:'numeric'});
+    h+='<div class="comp-chip" style="background:#7d3fbf;color:#fff;">'+ce2.event_name+' &middot; '+(VL[ce2.venue]||ce2.venue)+' &middot; '+ml2+' <span class="comp-chip-x" onclick="rmOther()">&#10005;</span></div>';}
   a.innerHTML=h;document.getElementById('comp-hint').textContent=(cSel.length||cOther)?'':'optional';}
 
-function rmSel(i){cSel.splice(i,1);renderChips(pcE.find(e=>e.id===aEI));rebuildHist();updFootComp();}
-function rmOther(){cOther=null;renderChips(pcE.find(e=>e.id===aEI));document.getElementById('comp-ref').className='comp-ref';updFootComp();}
+function rmSel(i){cSel.splice(i,1);renderChips(pcE.find(function(e){return e.id===aEI;}));rebuildHist();updFootComp();}
+function rmOther(){cOther=null;renderChips(pcE.find(function(e){return e.id===aEI;}));document.getElementById('comp-ref').className='comp-ref';updFootComp();}
 
-function renderRef(){if(!cOther)return;const r=cOther,d=new Date(r.event_date+'T12:00:00'),dl=d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
-  document.getElementById('ref-title').textContent=`${r.event_name} at ${VL[r.venue]||r.venue}`;
+function renderRef(){if(!cOther)return;var r=cOther,d=new Date(r.event_date+'T12:00:00'),dl=d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  document.getElementById('ref-title').textContent=r.event_name+' at '+(VL[r.venue]||r.venue);
   document.getElementById('ref-date').textContent=dl;
-  document.getElementById('ref-total').textContent=`$${Math.round(r.tot).toLocaleString()}`;
-  document.getElementById('ref-stot').textContent=`${r.staff} staff`;
-  const sorted=[...r.stands].sort((a,b)=>b.amount-a.amount);
-  let bh='<div style="padding:0 14px;">';
-  sorted.forEach(s=>{const pp=s.staff_count>0?`${s.staff_count} staff &middot; $${Math.round(s.amount/s.staff_count).toLocaleString()}/person`:'No staff data';
-    bh+=`<div class="comp-ref-row"><div><div class="comp-ref-sname">${s.stand}</div><div class="comp-ref-smeta">${pp}</div></div><div class="comp-ref-samt">$${Math.round(s.amount).toLocaleString()}</div></div>`;});
-  bh+='</div>';const pc2=r.staff>0?`$${Math.round(r.tot/r.staff).toLocaleString()}/staff`:'--';
-  bh+=`<div class="comp-ref-foot"><span>${sorted.length} stand${sorted.length!==1?'s':''} &middot; sorted by sales</span><span>Per capita avg: ${pc2}</span></div>`;
+  document.getElementById('ref-total').textContent='$'+Math.round(r.tot).toLocaleString();
+  document.getElementById('ref-stot').textContent=r.staff+' staff';
+  var sorted=[].concat(r.stands).sort(function(a,b){return b.amount-a.amount;});
+  var bh='<div style="padding:0 14px;">';
+  sorted.forEach(function(s){var pp=s.staff_count>0?s.staff_count+' staff &middot; $'+Math.round(s.amount/s.staff_count).toLocaleString()+'/person':'No staff data';
+    bh+='<div class="comp-ref-row"><div><div class="comp-ref-sname">'+s.stand+'</div><div class="comp-ref-smeta">'+pp+'</div></div><div class="comp-ref-samt">$'+Math.round(s.amount).toLocaleString()+'</div></div>';});
+  bh+='</div>';var pc2=r.staff>0?'$'+Math.round(r.tot/r.staff).toLocaleString()+'/staff':'--';
+  bh+='<div class="comp-ref-foot"><span>'+sorted.length+' stand'+(sorted.length!==1?'s':'')+' &middot; sorted by sales</span><span>Per capita avg: '+pc2+'</span></div>';
   document.getElementById('ref-body').innerHTML=bh;cRefOpen=false;
   document.getElementById('ref-body').className='comp-ref-body';document.getElementById('ref-chev').className='comp-ref-chev';
   document.getElementById('comp-ref').className='comp-ref show';}
 
 function toggleRefBody(){cRefOpen=!cRefOpen;document.getElementById('ref-body').className='comp-ref-body'+(cRefOpen?' open':'');document.getElementById('ref-chev').className='comp-ref-chev'+(cRefOpen?' open':'');}
 
-function rebuildHist(){document.querySelectorAll('.hist-chips').forEach(el=>{el.innerHTML='';el.style.display='none';});
+function rebuildHist(){document.querySelectorAll('.hist-chips').forEach(function(el){el.innerHTML='';el.style.display='none';});
   if(cMode!=='same'||!cSel.length)return;
-  document.querySelectorAll('.stand-card-header[data-sn]').forEach(hdr=>{const sn=hdr.dataset.sn;let hc=hdr.querySelector('.hist-chips');
-    if(!hc){hc=document.createElement('div');hc.className='hist-chips';const rt=hdr.querySelector('.stand-card-right');if(rt)rt.insertBefore(hc,rt.firstChild);}
-    let h='';cSel.forEach(ce=>{const ms=ce.stands.find(s=>s.stand===sn);if(ms){const d=new Date(ce.event_date+'T12:00:00'),ml=d.toLocaleDateString('en-US',{month:'short',year:'numeric'});
-      const sl=ms.staff_count>0?` &middot; ${ms.staff_count} staff`:'';h+=`<div class="hist-chip">${ce.event_name} &middot; ${ml} &middot; $${Math.round(ms.amount).toLocaleString()}${sl}</div>`;}});
+  document.querySelectorAll('.stand-card-header[data-sn]').forEach(function(hdr){var sn=hdr.dataset.sn;var hc=hdr.querySelector('.hist-chips');
+    if(!hc){hc=document.createElement('div');hc.className='hist-chips';var rt=hdr.querySelector('.stand-card-right');if(rt)rt.insertBefore(hc,rt.firstChild);}
+    var h='';cSel.forEach(function(ce){var ms=null;for(var i=0;i<ce.stands.length;i++){if(ce.stands[i].stand===sn){ms=ce.stands[i];break;}}if(ms){var d=new Date(ce.event_date+'T12:00:00'),ml=d.toLocaleDateString('en-US',{month:'short',year:'numeric'});
+      var sl=ms.staff_count>0?' &middot; '+ms.staff_count+' staff':'';h+='<div class="hist-chip">'+ce.event_name+' &middot; '+ml+' &middot; $'+Math.round(ms.amount).toLocaleString()+sl+'</div>';}});
     if(h){hc.innerHTML=h;hc.style.display='';}else{hc.innerHTML='';hc.style.display='none';}});}
 
-function updFootComp(){const el=document.getElementById('footer-comp');
-  if(cMode==='same'&&cSel.length){const ps=cSel.map(ce=>{const d=new Date(ce.event_date+'T12:00:00');return`${ce.event_name} ${d.toLocaleDateString('en-US',{month:'short',year:'numeric'})} $${Math.round(ce.tot).toLocaleString()}`;});
-    el.innerHTML=` <span style="color:var(--label);margin:0 4px;">|</span><span style="color:#854F0B;font-weight:700;">Comps: ${ps.join(' &middot; ')}</span>`;}
-  else if(cMode==='other'&&cOther){el.innerHTML=` <span style="color:var(--label);margin:0 4px;">|</span><span style="color:#4a1a7a;font-weight:700;">Ref: ${cOther.event_name} @ ${VL[cOther.venue]||cOther.venue} $${Math.round(cOther.tot).toLocaleString()}</span>`;}
+function updFootComp(){var el=document.getElementById('footer-comp');
+  if(cMode==='same'&&cSel.length){var ps=cSel.map(function(ce){var d=new Date(ce.event_date+'T12:00:00');return ce.event_name+' '+d.toLocaleDateString('en-US',{month:'short',year:'numeric'})+' $'+Math.round(ce.tot).toLocaleString();});
+    el.innerHTML=' <span style="color:var(--label);margin:0 4px;">|</span><span style="color:#854F0B;font-weight:700;">Comps: '+ps.join(' &middot; ')+'</span>';}
+  else if(cMode==='other'&&cOther){el.innerHTML=' <span style="color:var(--label);margin:0 4px;">|</span><span style="color:#4a1a7a;font-weight:700;">Ref: '+cOther.event_name+' @ '+(VL[cOther.venue]||cOther.venue)+' $'+Math.round(cOther.tot).toLocaleString()+'</span>';}
   else el.innerHTML='';}
 
 function makeNId(s){return'snote_'+s.replace(/[^a-zA-Z0-9]/g,'_');}
@@ -604,93 +640,110 @@ function makeCId(s){return'scb_'+s.replace(/[^a-zA-Z0-9]/g,'_');}
 function makeWId(s){return'snw_'+s.replace(/[^a-zA-Z0-9]/g,'_');}
 
 function buildStands(evt){
-  const venue=evt.venue,ad=isAd(evt),sts=standsFor(evt),area=document.getElementById('stands-area');
-  area.innerHTML=`<div class="stands-header"><span class="stands-title">${ad?'Non-Event Labor - '+(VL[venue]||venue):'Stands - '+(VL[venue]||venue)+' ('+sts.length+' stands)'}</span><span class="stands-hint">Zeroes are ignored on submission</span></div>`;
-  sts.forEach(stand=>{
-    const isSS=stand===SS,isH=stand===HS,isC=stand===CS,isN=stand===NS;const tier=evt.staffing_tier||'full';
-    let hp=false;if(isN)for(const r of rolesFor(stand))if(`${venue}||${stand}||${r}||${tier}`in pSh){hp=true;break;}
-    const roles=rolesFor(stand).filter(r=>(isN&&!hp)||shPl(venue,stand,r,tier));
-    const skipF=isSS||isC||isN;
-    const card=document.createElement('div');card.className='stand-card'+(isSS?' support-stand':isH?' hawking-stand':isC?' client-stand':isN?' nonevent-stand':'');
-    const hdr=document.createElement('div');hdr.className='stand-card-header';hdr.dataset.sn=stand;
-    const nm=document.createElement('span');nm.className='stand-card-name';
-    let badge='';if(isSS)badge='<span class="stand-type-badge support">Support Staff</span>';else if(isH)badge='<span class="stand-type-badge hawking">Hawking</span>';else if(isC)badge='<span class="stand-type-badge client">Client Contract</span>';else if(isN)badge='<span class="stand-type-badge nonevent">Non-Event</span>';
+  var venue=evt.venue,ad=isAd(evt),sts=standsFor(evt),area=document.getElementById('stands-area');
+  area.innerHTML='<div class="stands-header"><span class="stands-title">'+(ad?'Non-Event Labor - '+(VL[venue]||venue):'Stands - '+(VL[venue]||venue)+' ('+sts.length+' stands)')+'</span><span class="stands-hint">Zeroes are ignored on submission</span></div>';
+  sts.forEach(function(stand){
+    var isSS=stand===SS,isH=stand===HS,isC=stand===CS,isN=stand===NS;var tier=evt.staffing_tier||'full';
+    var hp=false;if(isN){var rlist=rolesFor(stand);for(var ri=0;ri<rlist.length;ri++)if((venue+'||'+stand+'||'+rlist[ri]+'||'+tier) in pSh){hp=true;break;}}
+    var roles=rolesFor(stand).filter(function(r){return(isN&&!hp)||shPl(venue,stand,r,tier);});
+    var skipF=isSS||isC||isN;
+    var card=document.createElement('div');card.className='stand-card'+(isSS?' support-stand':isH?' hawking-stand':isC?' client-stand':isN?' nonevent-stand':'');
+    var hdr=document.createElement('div');hdr.className='stand-card-header';hdr.dataset.sn=stand;
+    var nm=document.createElement('span');nm.className='stand-card-name';
+    var badge='';if(isSS)badge='<span class="stand-type-badge support">Support Staff</span>';else if(isH)badge='<span class="stand-type-badge hawking">Hawking</span>';else if(isC)badge='<span class="stand-type-badge client">Client Contract</span>';else if(isN)badge='<span class="stand-type-badge nonevent">Non-Event</span>';
     nm.innerHTML=stand+(badge?' '+badge:'');
-    const rt=document.createElement('div');rt.className='stand-card-right';
-    const hc=document.createElement('div');hc.className='hist-chips';hc.style.display='none';rt.appendChild(hc);
-    if(!skipF){const fl=document.createElement('span');fl.className='stand-forecast-label';fl.textContent='Forecast';
-      let ef='';const er=subs['_e_'+evt.id]||[];for(const row of er)if(row.stand===stand&&row.sales_forecast!=null){ef=row.sales_forecast;break;}
-      const fi=document.createElement('input');fi.type='text';fi.className='stand-forecast-input';fi.placeholder='$0';fi.dataset.stand=stand;fi.dataset.type='forecast';
-      if(ef)fi.value='$'+Number(ef).toLocaleString();fi.disabled=isLk;fi.addEventListener('input',()=>updTotals(evt));rt.appendChild(fl);rt.appendChild(fi);}
-    let pc2='#1a1a1a';if(isSS)pc2='#3b6dd4';else if(isH)pc2='#d4720a';else if(isC)pc2='#7d3fbf';else if(isN)pc2='#2d7a3d';else pc2=VC[venue]||'#1a1a1a';
-    const tp=document.createElement('div');tp.className='stand-total-pill';tp.id='stp_'+stand.replace(/[^a-zA-Z0-9]/g,'_');tp.style.background=pc2;
+    var rt=document.createElement('div');rt.className='stand-card-right';
+    var hc=document.createElement('div');hc.className='hist-chips';hc.style.display='none';rt.appendChild(hc);
+    if(!skipF){var fl=document.createElement('span');fl.className='stand-forecast-label';fl.textContent='Forecast';
+      var ef='';var er=subs['_e_'+evt.id]||[];for(var i=0;i<er.length;i++)if(er[i].stand===stand&&er[i].sales_forecast!=null){ef=er[i].sales_forecast;break;}
+      var fi=document.createElement('input');fi.type='text';fi.className='stand-forecast-input';fi.placeholder='$0';fi.dataset.stand=stand;fi.dataset.type='forecast';
+      if(ef)fi.value='$'+Number(ef).toLocaleString();fi.disabled=isLk;fi.addEventListener('input',function(){updTotals(evt);});rt.appendChild(fl);rt.appendChild(fi);}
+    var pc2='#1a1a1a';if(isSS)pc2='#3b6dd4';else if(isH)pc2='#d4720a';else if(isC)pc2='#7d3fbf';else if(isN)pc2='#2d7a3d';else pc2=VC[venue]||'#1a1a1a';
+    var tp=document.createElement('div');tp.className='stand-total-pill';tp.id='stp_'+stand.replace(/[^a-zA-Z0-9]/g,'_');tp.style.background=pc2;
     tp.innerHTML='<span class="stand-total-num">0</span><span class="stand-total-lbl">staff</span>';rt.appendChild(tp);
     hdr.appendChild(nm);hdr.appendChild(rt);card.appendChild(hdr);
-    const grid=document.createElement('div');grid.className='roles-grid';
-    roles.forEach(role=>{const s2=sc(evt.id,venue,stand,role),p2=pc(venue,stand,role,tier),val=s2!==null?s2:(ad?0:(p2>0?p2:0));
-      const cell=document.createElement('div');cell.className='role-cell';
-      const lbl=document.createElement('div');lbl.className='role-cell-name';lbl.textContent=role;
-      const inp=document.createElement('input');inp.type='number';inp.min=0;inp.max=99;inp.className='role-cell-input'+(val>0?' has-val':'');inp.value=val;inp.dataset.stand=stand;inp.dataset.role=role;inp.disabled=isLk;
-      inp.addEventListener('input',()=>{const v=parseInt(inp.value)||0;if(inp.value===''||v<0)inp.value=0;inp.className='role-cell-input'+(v>0?' has-val':'');updStandTot(stand);updTotals(evt);});
-      inp.addEventListener('blur',()=>{if(inp.value==='')inp.value=0;});cell.appendChild(lbl);cell.appendChild(inp);grid.appendChild(cell);});
+    var grid=document.createElement('div');grid.className='roles-grid';
+    roles.forEach(function(role){var s2=sc(evt.id,venue,stand,role),p2=pc(venue,stand,role,tier),val=s2!==null?s2:(ad?0:(p2>0?p2:0));
+      var cell=document.createElement('div');cell.className='role-cell';
+      var lbl=document.createElement('div');lbl.className='role-cell-name';lbl.textContent=role;
+      var inp=document.createElement('input');inp.type='number';inp.min=0;inp.max=99;inp.className='role-cell-input'+(val>0?' has-val':'');inp.value=val;inp.dataset.stand=stand;inp.dataset.role=role;inp.disabled=isLk;
+      inp.addEventListener('input',function(){var v2=parseInt(inp.value)||0;if(inp.value===''||v2<0)inp.value=0;inp.className='role-cell-input'+(v2>0?' has-val':'');updStandTot(stand);updTotals(evt);});
+      inp.addEventListener('blur',function(){if(inp.value==='')inp.value=0;});cell.appendChild(lbl);cell.appendChild(inp);grid.appendChild(cell);});
     card.appendChild(grid);
-    const savedNote=getNote(evt.id,venue,stand),cbId=makeCId(stand),wId=makeWId(stand),nId=makeNId(stand);
-    const tr=document.createElement('div');tr.className='staff-request-toggle-row';
-    const cb=document.createElement('input');cb.type='checkbox';cb.className='staff-request-cb';cb.id=cbId;cb.disabled=isLk;if(savedNote)cb.checked=true;
-    cb.addEventListener('change',()=>{const w=document.getElementById(wId);if(w)w.className='staff-request-note-wrap'+(cb.checked?' open':'');});
-    const cl=document.createElement('label');cl.htmlFor=cbId;cl.className='staff-request-toggle-label';cl.textContent='Request specific staff for this stand';
-    tr.appendChild(cb);tr.appendChild(cl);card.appendChild(tr);
-    const nw=document.createElement('div');nw.className='staff-request-note-wrap'+(savedNote?' open':'');nw.id=wId;
-    const ta=document.createElement('textarea');ta.className='staff-request-textarea';ta.id=nId;ta.placeholder='e.g. Please try to get Sarah and Mike for this stand.';ta.disabled=isLk;if(savedNote)ta.value=savedNote;
-    const hn=document.createElement('div');hn.className='staff-request-textarea-hint';hn.textContent='Visible to staffing manager on the Requirements page.';
+    var savedNote=getNote(evt.id,venue,stand),cbId=makeCId(stand),wId=makeWId(stand),nId=makeNId(stand);
+    var tr=document.createElement('div');tr.className='staff-request-toggle-row';
+    var cb=document.createElement('input');cb.type='checkbox';cb.className='staff-request-cb';cb.id=cbId;cb.disabled=isLk;if(savedNote)cb.checked=true;
+    cb.addEventListener('change',function(){var w=document.getElementById(wId);if(w)w.className='staff-request-note-wrap'+(cb.checked?' open':'');});
+    var cl2=document.createElement('label');cl2.htmlFor=cbId;cl2.className='staff-request-toggle-label';cl2.textContent='Request specific staff for this stand';
+    tr.appendChild(cb);tr.appendChild(cl2);card.appendChild(tr);
+    var nw=document.createElement('div');nw.className='staff-request-note-wrap'+(savedNote?' open':'');nw.id=wId;
+    var ta=document.createElement('textarea');ta.className='staff-request-textarea';ta.id=nId;ta.placeholder='e.g. Please try to get Sarah and Mike for this stand.';ta.disabled=isLk;if(savedNote)ta.value=savedNote;
+    var hn=document.createElement('div');hn.className='staff-request-textarea-hint';hn.textContent='Visible to staffing manager on the Requirements page.';
     nw.appendChild(ta);nw.appendChild(hn);card.appendChild(nw);area.appendChild(card);updStandTot(stand);});
   updTotals(evt);rebuildHist();}
 
-function updStandTot(stand){const p=document.getElementById('stp_'+stand.replace(/[^a-zA-Z0-9]/g,'_'));if(!p)return;let t=0;
-  document.querySelectorAll(`.role-cell-input[data-stand="${CSS.escape(stand)}"]`).forEach(i=>{t+=parseInt(i.value)||0;});p.querySelector('.stand-total-num').textContent=t;}
+function updStandTot(stand){var p=document.getElementById('stp_'+stand.replace(/[^a-zA-Z0-9]/g,'_'));if(!p)return;var t=0;
+  document.querySelectorAll('.role-cell-input[data-stand="'+CSS.escape(stand)+'"]').forEach(function(i){t+=parseInt(i.value)||0;});p.querySelector('.stand-total-num').textContent=t;}
 
-function updTotals(evt){const sts=standsFor(evt),ad=isAd(evt);let tS=0,tF=0,sW=0;
-  sts.forEach(stand=>{let st=0;document.querySelectorAll(`.role-cell-input[data-stand="${CSS.escape(stand)}"]`).forEach(i=>{st+=parseInt(i.value)||0;});if(st>0)sW++;if(stand!==SS)tS+=st;
-    const fi=document.querySelector(`.stand-forecast-input[data-stand="${CSS.escape(stand)}"]`);if(fi)tF+=parseFloat(fi.value.replace(/[$,]/g,''))||0;});
+function updTotals(evt){var sts=standsFor(evt),ad=isAd(evt);var tS=0,tF=0,sW=0;
+  sts.forEach(function(stand){var st=0;document.querySelectorAll('.role-cell-input[data-stand="'+CSS.escape(stand)+'"]').forEach(function(i){st+=parseInt(i.value)||0;});if(st>0)sW++;if(stand!==SS)tS+=st;
+    var fi=document.querySelector('.stand-forecast-input[data-stand="'+CSS.escape(stand)+'"]');if(fi)tF+=parseFloat(fi.value.replace(/[$,]/g,''))||0;});
   document.getElementById('modal-total-num').textContent=tS;document.getElementById('footer-total-staff').textContent=tS+' staff';document.getElementById('footer-stands-count').textContent=sW;
-  const fe=document.getElementById('footer-total-forecast');if(ad)fe.parentElement.style.display='none';else{fe.parentElement.style.display='';fe.textContent='$'+Math.round(tF).toLocaleString();}}
+  var fe=document.getElementById('footer-total-forecast');if(ad)fe.parentElement.style.display='none';else{fe.parentElement.style.display='';fe.textContent='$'+Math.round(tF).toLocaleString();}}
 
 function closeModal(){document.getElementById('modal-backdrop').className='modal-backdrop';aEI=null;}
 function handleBackdropClick(e){if(e.target===document.getElementById('modal-backdrop'))closeModal();}
 
 function submitRequest(){
-  const evt=pcE.find(e=>e.id===aEI);if(!evt)return;const mgr=document.getElementById('f-manager').value.trim();if(!mgr){showToast('Please enter your name before submitting.');return;}
-  const venue=evt.venue,ad=isAd(evt),sts=standsFor(evt),wasSub=isSub(aEI);let fErr=false;
-  if(!ad)sts.forEach(stand=>{if(stand===SS||stand===CS||stand===NS)return;let sc2=0;
-    document.querySelectorAll(`.role-cell-input[data-stand="${CSS.escape(stand)}"]`).forEach(i=>{sc2+=parseInt(i.value)||0;});
-    if(sc2>0){const fi=document.querySelector(`.stand-forecast-input[data-stand="${CSS.escape(stand)}"]`);const fv=fi?parseFloat(fi.value.replace(/[$,]/g,''))||0:0;
+  var evt=pcE.find(function(e){return e.id===aEI;});if(!evt)return;
+  var mgr=loggedInUser?(loggedInUser.display_name||loggedInUser.email):'';
+  if(!mgr){showToast('Unable to identify logged-in user.');return;}
+  var venue=evt.venue,ad=isAd(evt),sts=standsFor(evt),wasSub=isSub(aEI);var fErr=false;
+  if(!ad)sts.forEach(function(stand){if(stand===SS||stand===CS||stand===NS)return;var sc2=0;
+    document.querySelectorAll('.role-cell-input[data-stand="'+CSS.escape(stand)+'"]').forEach(function(i){sc2+=parseInt(i.value)||0;});
+    if(sc2>0){var fi=document.querySelector('.stand-forecast-input[data-stand="'+CSS.escape(stand)+'"]');var fv=fi?parseFloat(fi.value.replace(/[$,]/g,''))||0:0;
       if(fv<=0){if(fi)fi.classList.add('required-error');fErr=true;}else{if(fi)fi.classList.remove('required-error');}}});
   if(fErr){showToast('Please enter a forecasted sales amount for each staffed stand.');return;}
-  const rows=[];sts.forEach(stand=>{const isSS2=stand===SS,isC2=stand===CS,isN2=stand===NS,skipF=isSS2||isC2||isN2||ad;
-    const fi=document.querySelector(`.stand-forecast-input[data-stand="${CSS.escape(stand)}"]`);const fv=skipF?null:(fi?parseFloat(fi.value.replace(/[$,]/g,''))||0:0);
-    const cb=document.getElementById(makeCId(stand)),ta=document.getElementById(makeNId(stand));let sNote=null;if(cb?.checked&&ta){const nv=ta.value.trim();if(nv)sNote=nv;}
-    rolesFor(stand).forEach(role=>{const inp=document.querySelector(`.role-cell-input[data-stand="${CSS.escape(stand)}"][data-role="${CSS.escape(role)}"]`);if(!inp)return;
-      rows.push({event_id:evt.id,venue,stand,role,headcount:parseInt(inp.value)||0,manager_name:mgr,sales_forecast:(!skipF&&fv>0)?fv:null,staff_notes:sNote,submitted_at:new Date().toISOString()});});});
-  const btn=document.getElementById('submit-btn');btn.disabled=true;btn.textContent='Submitting...';
-  const hdr=pcAuth.headers();
-  fetch(`${SB_URL}/rest/v1/staffing_requests?event_id=eq.${evt.id}&venue=eq.${encodeURIComponent(venue)}`,{method:'DELETE',headers:hdr})
-  .then(()=>{const chs=[];for(let i=0;i<rows.length;i+=100)chs.push(rows.slice(i,i+100));
-    function ins(idx){if(idx>=chs.length)return Promise.resolve();return fetch(SB_URL+'/rest/v1/staffing_requests',{method:'POST',headers:apiHeadersMin(),body:JSON.stringify(chs[idx])}).then(()=>ins(idx+1));}return ins(0);})
-  .then(()=>{if(!wasSub)return false;return fetch(`${SB_URL}/rest/v1/event_staffing_status?event_id=eq.${evt.id}&venue=eq.${encodeURIComponent(venue)}&is_confirmed=eq.true`,{headers:hdr}).then(r=>r.json()).then(sr=>{
-    if(sr?.length>0)return fetch(`${SB_URL}/rest/v1/event_staffing_status?event_id=eq.${evt.id}&venue=eq.${encodeURIComponent(venue)}`,{method:'PATCH',headers:Object.assign({},hdr,{'Content-Type':'application/json','Prefer':'return=minimal'}),body:JSON.stringify({is_confirmed:false,confirmed_by:null,confirmed_at:null})}).then(()=>true);return false;});})
-  .then(clr=>{showToast('Staffing request submitted',true);closeModal();Promise.all([loadS(),loadSS()]).then(()=>renderCal());
-    if(clr){pNE=evt;const d=new Date(evt.event_date+'T12:00:00'),ds=d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'}),el=ad?'Non-Event Labor':evt.event_name;
-      document.getElementById('notify-desc').textContent=`Your updated submission for ${el} (${VL[evt.venue]||evt.venue}) on ${ds} cleared the staffing certification. Would you like to notify the staffing manager?`;document.getElementById('notify-backdrop').className='notify-backdrop open';}})
-  .catch(e=>{showToast('Error submitting. Please try again.');btn.disabled=false;btn.textContent=wasSub?'Resubmit staffing request':'Submit staffing request';btn.style.background=ad?'#2d7a3d':(VC[evt.venue]||'#1a1a1a');console.error(e);});}
-
-function closeNotify(){document.getElementById('notify-backdrop').className='notify-backdrop';pNE=null;}
-function sendNotifyEmail(){if(!pNE){closeNotify();return;}const evt=pNE,d=new Date(evt.event_date+'T12:00:00'),ds=d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'}),vn=VL[evt.venue]||evt.venue,el=isAd(evt)?'Non-Event Labor':evt.event_name;
-  window.location.href=`mailto:${STAFFING_EMAIL}?subject=${encodeURIComponent('Staffing update: '+el+' - '+vn+' - '+ds)}&body=${encodeURIComponent('Hi,\n\nThe staffing request for the following has been updated and the previous certification has been cleared:\n\nEvent: '+el+'\nVenue: '+vn+'\nDate: '+ds+'\n\nPlease review the updated staffing numbers and re-certify once confirmed.\n\nView on the Staffing Requirements page: https://tools.camdenco.com/staffing-requirements/\n\nThank you')}`;closeNotify();}
+  var rows=[];var totalStaff=0;var totalForecast=0;
+  sts.forEach(function(stand){var isSS2=stand===SS,isC2=stand===CS,isN2=stand===NS,skipF=isSS2||isC2||isN2||ad;
+    var fi=document.querySelector('.stand-forecast-input[data-stand="'+CSS.escape(stand)+'"]');var fv=skipF?null:(fi?parseFloat(fi.value.replace(/[$,]/g,''))||0:0);
+    if(fv&&fv>0)totalForecast+=fv;
+    var cb=document.getElementById(makeCId(stand)),ta=document.getElementById(makeNId(stand));var sNote=null;if(cb&&cb.checked&&ta){var nv=ta.value.trim();if(nv)sNote=nv;}
+    rolesFor(stand).forEach(function(role){var inp=document.querySelector('.role-cell-input[data-stand="'+CSS.escape(stand)+'"][data-role="'+CSS.escape(role)+'"]');if(!inp)return;
+      var hc=parseInt(inp.value)||0;
+      if(stand!==SS)totalStaff+=hc;
+      rows.push({event_id:evt.id,venue:venue,stand:stand,role:role,headcount:hc,manager_name:mgr,sales_forecast:(!skipF&&fv>0)?fv:null,staff_notes:sNote,submitted_at:new Date().toISOString()});});});
+  var btn=document.getElementById('submit-btn');btn.disabled=true;btn.textContent='Submitting...';
+  var hdr=pcAuth.headers();
+  // Step 1: Insert change log entry
+  fetch(SB_URL+'/rest/v1/staffing_request_log',{method:'POST',headers:apiHeadersMin(),body:JSON.stringify({event_id:evt.id,venue:venue,manager_name:mgr,total_staff:totalStaff,total_forecast:totalForecast,action:wasSub?'resubmitted':'submitted'})})
+  // Step 2: Delete old rows
+  .then(function(){return fetch(SB_URL+'/rest/v1/staffing_requests?event_id=eq.'+evt.id+'&venue=eq.'+encodeURIComponent(venue),{method:'DELETE',headers:hdr});})
+  // Step 3: Insert new rows in chunks
+  .then(function(){var chs=[];for(var i=0;i<rows.length;i+=100)chs.push(rows.slice(i,i+100));
+    function ins(idx){if(idx>=chs.length)return Promise.resolve();return fetch(SB_URL+'/rest/v1/staffing_requests',{method:'POST',headers:apiHeadersMin(),body:JSON.stringify(chs[idx])}).then(function(){return ins(idx+1);});}return ins(0);})
+  // Step 4: Auto-decertify if resubmission
+  .then(function(){if(!wasSub)return false;return fetch(SB_URL+'/rest/v1/event_staffing_status?event_id=eq.'+evt.id+'&venue=eq.'+encodeURIComponent(venue)+'&is_confirmed=eq.true',{headers:hdr}).then(function(r){return r.json();}).then(function(sr){
+    if(sr&&sr.length>0)return fetch(SB_URL+'/rest/v1/event_staffing_status?event_id=eq.'+evt.id+'&venue=eq.'+encodeURIComponent(venue),{method:'PATCH',headers:Object.assign({},hdr,{'Content-Type':'application/json','Prefer':'return=minimal'}),body:JSON.stringify({is_confirmed:false,confirmed_by:null,confirmed_at:null})}).then(function(){return true;});return false;});})
+  // Step 5: Send notification email via edge function
+  .then(function(certCleared){
+    var dd=new Date(evt.event_date+'T12:00:00');
+    var dateStr=dd.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+    var evtName=ad?'Non-Event Labor':evt.event_name;
+    fetch(SB_URL+'/functions/v1/send-staffing-notification',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+pcAuth.getToken()},
+      body:JSON.stringify({event_name:evtName,venue_name:VL[evt.venue]||evt.venue,event_date:dateStr,total_staff:totalStaff,total_forecast:totalForecast,manager_name:mgr,is_resubmission:wasSub,certification_cleared:certCleared===true})
+    }).catch(function(e){console.error('Email notification error:',e);});
+    showToast('Staffing request submitted',true);closeModal();return Promise.all([loadS(),loadSS(),loadLog()]);})
+  .then(function(){renderCal();})
+  .catch(function(e){showToast('Error submitting. Please try again.');btn.disabled=false;btn.textContent=wasSub?'Resubmit staffing request':'Submit staffing request';btn.style.background=ad?'#2d7a3d':(VC[evt.venue]||'#1a1a1a');console.error(e);});}
 
 // Login gate
 pcAuth.require({
   pageSlug: 'event-planning',
   onReady: function(user) {
+    loggedInUser = user;
     var el = document.getElementById('header-right');
     if (el && user) {
       el.innerHTML = '<span class="header-user">' + (user.display_name || user.email) + '</span>' +
