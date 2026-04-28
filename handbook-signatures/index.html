@@ -121,9 +121,9 @@
 <div class="sub-bar">
   <input type="text" id="searchInput" placeholder="Search employees..." />
   <div class="filter-pills">
-    <button class="filter-pill active" data-filter="all" onclick="setFilter('all')">All</button>
-    <button class="filter-pill" data-filter="signed" onclick="setFilter('signed')">Signed</button>
+    <button class="filter-pill active" data-filter="signed" onclick="setFilter('signed')">Signed</button>
     <button class="filter-pill" data-filter="unsigned" onclick="setFilter('unsigned')">Unsigned</button>
+    <button class="filter-pill" data-filter="all" onclick="setFilter('all')">All</button>
   </div>
   <div class="stat-pills">
     <div class="stat-pill green" id="statSigned">&#10003; 0 signed</div>
@@ -137,13 +137,12 @@
       <thead>
         <tr>
           <th>Employee</th>
-          <th>Punch ID</th>
           <th>Status</th>
           <th>Signed</th>
         </tr>
       </thead>
       <tbody id="tableBody">
-        <tr><td colspan="4" class="empty-state"><p>Loading...</p></td></tr>
+        <tr><td colspan="3" class="empty-state"><p>Loading...</p></td></tr>
       </tbody>
     </table>
   </div>
@@ -167,7 +166,7 @@
   var allEmployees = [];
   var signatures = [];
   var merged = [];
-  var currentFilter = 'all';
+  var currentFilter = 'signed';
 
   function apiHeaders() {
     return pcAuth.headers();
@@ -193,7 +192,7 @@
     }).catch(function(err) {
       console.error('Load error:', err);
       document.getElementById('tableBody').innerHTML =
-        '<tr><td colspan="4" class="empty-state"><p>Error loading data. Please refresh.</p></td></tr>';
+        '<tr><td colspan="3" class="empty-state"><p>Error loading data. Please refresh.</p></td></tr>';
     });
   }
 
@@ -223,11 +222,23 @@
     var search = document.getElementById('searchInput').value.trim().toLowerCase();
     var filtered = merged.filter(function(emp) {
       var name = (emp.first_name + ' ' + emp.last_name).toLowerCase();
-      var matchSearch = !search || name.indexOf(search) > -1 || (emp.punch_id && emp.punch_id.indexOf(search) > -1);
+      var matchSearch = !search || name.indexOf(search) > -1;
       var matchFilter = currentFilter === 'all' ||
         (currentFilter === 'signed' && emp.signed) ||
         (currentFilter === 'unsigned' && !emp.signed);
       return matchSearch && matchFilter;
+    });
+
+    /* Sort: signed (newest first), then unsigned (alpha) */
+    filtered.sort(function(a, b) {
+      if (a.signed && !b.signed) return -1;
+      if (!a.signed && b.signed) return 1;
+      if (a.signed && b.signed) {
+        return new Date(b.signed_at) - new Date(a.signed_at);
+      }
+      var aName = a.last_name + a.first_name;
+      var bName = b.last_name + b.first_name;
+      return aName.localeCompare(bName);
     });
 
     var signedCount = merged.filter(function(e) { return e.signed; }).length;
@@ -237,7 +248,7 @@
 
     var tbody = document.getElementById('tableBody');
     if (filtered.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="4" class="empty-state"><p>No employees match your search.</p></td></tr>';
+      tbody.innerHTML = '<tr><td colspan="3" class="empty-state"><p>No employees match your search.</p></td></tr>';
       return;
     }
 
@@ -254,7 +265,6 @@
       var clickable = emp.signed ? ' class="clickable" onclick="showDetail(\'' + emp.id + '\')"' : '';
       html += '<tr' + clickable + '>' +
         '<td><strong>' + emp.first_name + ' ' + emp.last_name + '</strong></td>' +
-        '<td>' + (emp.punch_id || '—') + '</td>' +
         '<td>' + badge + '</td>' +
         '<td>' + (dateStr || '—') + '</td>' +
         '</tr>';
