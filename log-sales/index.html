@@ -480,14 +480,15 @@ async function submitSale() {
   var evtName = document.getElementById('evt-name').value.trim();
   var venue = document.getElementById('venue-sel').value;
   var stand = document.getElementById('stand-sel').value;
-  var amount = parseFloat(document.getElementById('amount').value);
+  var amountRaw = document.getElementById('amount').value;
+  var amount = amountRaw === '' ? null : parseFloat(amountRaw);
   var staffCount = parseInt(document.getElementById('staff-count').value);
   var tipAmountRaw = document.getElementById('tip-amount').value;
   var tipAmount = tipAmountRaw === '' ? null : parseFloat(tipAmountRaw);
   var errEl = document.getElementById('error-msg');
   errEl.style.display = 'none';
 
-  if (!date || !venue || !stand || !amount || isNaN(amount)) {
+  if (!date || !venue || !stand || amount === null || isNaN(amount)) {
     errEl.textContent = 'Please fill in date, venue, stand, and sales total.';
     errEl.style.display = 'block'; return;
   }
@@ -512,10 +513,9 @@ async function submitSale() {
 
     btn.textContent = 'Saving...';
 
-    // Use return=representation so we get the id back (needed for edge function)
     var hdrs = apiHeaders();
     hdrs['Content-Type'] = 'application/json';
-    hdrs['Prefer'] = 'return=representation';
+    hdrs['Prefer'] = 'return=minimal';
     var res = await fetch(SUPA_URL + '/rest/v1/sales', {
       method: 'POST', headers: hdrs,
       body: JSON.stringify({
