@@ -848,7 +848,7 @@ async function saveEdit(assignId, saleId) {
     var hdrs = apiHeaders(); hdrs['Content-Type'] = 'application/json'; hdrs['Prefer'] = 'return=minimal';
     await fetch(SUPA_URL + '/rest/v1/sale_staff_assignments?id=eq.' + assignId, {
       method: 'PATCH', headers: hdrs,
-      body: JSON.stringify({ raw_name_text: a.raw_name_text, employee_id: a.employee_id, confidence: a.confidence, verified: true, verified_by: pcAuth.user() ? pcAuth.user().display_name : null, verified_at: new Date().toISOString() })
+      body: JSON.stringify({ raw_name_text: a.raw_name_text, employee_id: a.employee_id, confidence: a.confidence, verified: true, verified_by: pcAuth.getUser() ? pcAuth.getUser().display_name : null, verified_at: new Date().toISOString() })
     });
   } catch(e) {}
   renderPage();
@@ -896,7 +896,7 @@ async function saveAdd(saleId) {
     var hdrs = apiHeaders(); hdrs['Content-Type'] = 'application/json'; hdrs['Prefer'] = 'return=representation';
     var res = await fetch(SUPA_URL + '/rest/v1/sale_staff_assignments', {
       method: 'POST', headers: hdrs,
-      body: JSON.stringify({ sale_id: saleId, raw_name_text: newRow.raw_name_text, employee_id: newRow.employee_id, confidence: newRow.confidence, verified: true, verified_by: pcAuth.user() ? pcAuth.user().display_name : null, verified_at: new Date().toISOString() })
+      body: JSON.stringify({ sale_id: saleId, raw_name_text: newRow.raw_name_text, employee_id: newRow.employee_id, confidence: newRow.confidence, verified: true, verified_by: pcAuth.getUser() ? pcAuth.getUser().display_name : null, verified_at: new Date().toISOString() })
     });
     var created = await res.json();
     if (Array.isArray(created) && created[0]) { newRow.id = created[0].id; }
@@ -909,7 +909,7 @@ async function saveAdd(saleId) {
 async function confirmStand(saleId) {
   var assigns = (assignmentsData[saleId] || []).filter(function(a) { return !removedRows[a.id]; });
   var hdrs = apiHeaders(); hdrs['Content-Type'] = 'application/json'; hdrs['Prefer'] = 'return=minimal';
-  var verifiedBy = pcAuth.user() ? pcAuth.user().display_name : null;
+  var verifiedBy = pcAuth.getUser() ? pcAuth.getUser().display_name : null;
   var now = new Date().toISOString();
   for (var i = 0; i < assigns.length; i++) {
     assigns[i].verified = true;
@@ -928,7 +928,7 @@ async function confirmStand(saleId) {
 // ── Confirm all ───────────────────────────────────────────────────────────────
 async function confirmAll() {
   var hdrs = apiHeaders(); hdrs['Content-Type'] = 'application/json'; hdrs['Prefer'] = 'return=minimal';
-  var verifiedBy = pcAuth.user() ? pcAuth.user().display_name : null;
+  var verifiedBy = pcAuth.getUser() ? pcAuth.getUser().display_name : null;
   var now = new Date().toISOString();
   for (var saleId in assignmentsData) {
     var assigns = assignmentsData[saleId].filter(function(a) { return !removedRows[a.id] && !a.verified; });
