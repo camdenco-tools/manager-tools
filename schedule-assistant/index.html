@@ -238,10 +238,10 @@
   <div id="events-container"><div class="loading-msg">Loading...</div></div>
 </div>
 
-<div class="modal-backdrop" id="assign-modal" onclick="if(event.target===this)closeModal('assign-modal');">
+<div class="modal-backdrop" id="assign-modal">
   <div class="modal">
     <div class="modal-header">
-      <button class="modal-close" onclick="closeModal('assign-modal')">&times;</button>
+      <button class="modal-close" data-close-modal="assign-modal">&times;</button>
       <div class="modal-title" id="assign-title">Assign person</div>
       <div class="modal-sub" id="assign-sub">--</div>
     </div>
@@ -249,10 +249,10 @@
   </div>
 </div>
 
-<div class="modal-backdrop" id="scorecard-modal" onclick="if(event.target===this)closeModal('scorecard-modal');">
+<div class="modal-backdrop" id="scorecard-modal">
   <div class="modal">
     <div class="modal-header">
-      <button class="modal-close" onclick="closeModal('scorecard-modal')">&times;</button>
+      <button class="modal-close" data-close-modal="scorecard-modal">&times;</button>
       <div class="modal-title" id="scorecard-title">--</div>
       <div class="modal-sub" id="scorecard-sub">--</div>
     </div>
@@ -1333,6 +1333,28 @@ function openScorecardModal(evt, role) {
 function closeModal(id) {
   document.getElementById(id).classList.remove('open');
 }
+
+// Delegate handlers for modal close buttons and backdrop clicks
+document.addEventListener('click', function(e) {
+  // X button click
+  var closeBtn = e.target.closest('[data-close-modal]');
+  if (closeBtn) {
+    closeModal(closeBtn.getAttribute('data-close-modal'));
+    return;
+  }
+  // Backdrop click (clicked the backdrop itself, not its children)
+  if (e.target.classList && e.target.classList.contains('modal-backdrop') && e.target.classList.contains('open')) {
+    e.target.classList.remove('open');
+  }
+});
+
+// Escape key closes any open modal
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' || e.keyCode === 27) {
+    var openModals = document.querySelectorAll('.modal-backdrop.open, .confirm-backdrop.open');
+    openModals.forEach(function(m) { m.classList.remove('open'); });
+  }
+});
 
 // ============ UTILITIES ============
 
