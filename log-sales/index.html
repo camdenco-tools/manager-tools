@@ -101,6 +101,50 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
 .sd-btn-blue { background: #E6F1FB; color: #0C447C; }
 .sd-btn-amber { background: #FAEEDA; color: #633806; }
 
+/* Inline name review in scoreboard */
+.nr-list { margin-bottom: 8px; }
+.nr-row { display: flex; align-items: center; gap: 7px; padding: 5px 0; border-bottom: 1px solid #f5f5f5; }
+.nr-row:last-child { border-bottom: none; }
+.nr-row.removed .nr-name { text-decoration: line-through; color: #bbb; }
+.nr-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.nr-dot-g { background: #1D9E75; }
+.nr-dot-a { background: #EF9F27; }
+.nr-dot-r { background: #E24B4A; }
+.nr-dot-m { background: #7F77DD; }
+.nr-dot-gray { background: #ccc; }
+.nr-name { font-size: 12px; color: #1a1a1a; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nr-name.unreadable { color: #aaa; font-style: italic; }
+.nr-conf { font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: 20px; flex-shrink: 0; }
+.nr-conf-h { background: #EAF3DE; color: #27500A; }
+.nr-conf-m { background: #FAEEDA; color: #633806; }
+.nr-conf-l { background: #FCEBEB; color: #791F1F; }
+.nr-conf-manual { background: #EEEDFE; color: #3C3489; }
+.nr-btns { display: flex; gap: 3px; flex-shrink: 0; }
+.nr-btn { width: 22px; height: 22px; border-radius: 6px; border: 1px solid #eee; background: #fafafa; color: #aaa; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-family: inherit; }
+.nr-btn:hover { border-color: #888; color: #1a1a1a; }
+.nr-btn.danger:hover { background: #FCEBEB; color: #791F1F; border-color: #F09595; }
+.nr-btn.undo { background: #FAEEDA; color: #633806; border-color: #FAC775; }
+.nr-edit-panel { background: #f8f8f8; border: 1px solid #eee; border-radius: 8px; padding: 8px 10px; margin: 3px 0 5px; }
+.nr-input { width: 100%; padding: 6px 9px; border: 1px solid #ddd; border-radius: 7px; font-size: 12px; color: #1a1a1a; font-family: inherit; background: white; outline: none; margin-bottom: 5px; }
+.nr-input:focus { border-color: #1a1a1a; }
+.nr-ac { background: white; border: 1px solid #ddd; border-radius: 7px; overflow: hidden; margin-bottom: 5px; }
+.nr-ac-item { padding: 6px 9px; font-size: 12px; cursor: pointer; border-bottom: 1px solid #f5f5f5; color: #1a1a1a; }
+.nr-ac-item:last-child { border-bottom: none; }
+.nr-ac-item:hover { background: #f5f5f5; }
+.nr-ac-item-sub { font-size: 10px; color: #aaa; }
+.nr-ac-free { padding: 6px 9px; font-size: 12px; color: #185FA5; cursor: pointer; font-style: italic; }
+.nr-ac-free:hover { background: #E6F1FB; }
+.nr-ep-actions { display: flex; gap: 6px; }
+.nr-save { flex: 1; padding: 5px; background: #1a1a1a; color: white; border: none; border-radius: 7px; font-size: 11px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.nr-save:disabled { background: #ccc; cursor: not-allowed; }
+.nr-cancel { padding: 5px 10px; background: #f5f5f5; color: #555; border: 1px solid #ddd; border-radius: 7px; font-size: 11px; cursor: pointer; font-family: inherit; }
+.nr-add-row { display: flex; align-items: center; gap: 6px; padding: 5px 0; font-size: 12px; color: #185FA5; cursor: pointer; border-top: 1px solid #f0f0f0; margin-top: 3px; }
+.nr-add-icon { width: 18px; height: 18px; border-radius: 50%; background: #E6F1FB; border: 1px solid #B5D4F4; display: flex; align-items: center; justify-content: center; font-size: 13px; color: #185FA5; flex-shrink: 0; line-height: 1; }
+.nr-confirm-btn { width: 100%; padding: 7px; background: #1a1a1a; color: white; border: none; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; margin-top: 8px; }
+.nr-confirm-btn.done { background: #EAF3DE; color: #27500A; border: 1px solid #97C459; cursor: default; }
+.nr-mismatch { font-size: 10px; background: #EEEDFE; color: #3C3489; padding: 2px 7px; border-radius: 20px; display: inline-block; margin-bottom: 6px; }
+.nr-loading { font-size: 12px; color: #aaa; padding: 6px 0; }
+
 .spinner { display: inline-block; width: 8px; height: 8px; border: 1.5px solid #B5D4F4; border-top-color: #0C447C; border-radius: 50%; animation: spin 0.7s linear infinite; margin-right: 3px; vertical-align: middle; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -398,7 +442,7 @@ async function writeSalePhotos(saleId, type, urls) {
 
 async function fetchRoster() {
   try {
-    var res = await fetch(SUPA_URL + '/rest/v1/employees?is_active=eq.true&select=id,first_name,last_name&order=last_name.asc', { headers: apiHeaders() });
+    var res = await fetch(SUPA_URL + '/rest/v1/employees?is_active=eq.true&select=id,first_name,last_name,punch_id&order=last_name.asc', { headers: apiHeaders() });
     var rows = await res.json();
     return Array.isArray(rows) ? rows : [];
   } catch(e) { return []; }
@@ -674,24 +718,311 @@ function siPillHtml(saleId, hasSigning) {
   return '<span class="' + cls + '" id="si-pill-' + saleId + '">' + inner + '</span>';
 }
 
-function standDetailHtml(r, hasSigning) {
-  var status = hasSigning ? signinStatus[r.id] : null;
-  var html = '';
+// Per-stand assignment state for scoreboard inline review
+var sbAssignments = {}; // saleId -> array of assignment objects
+var sbRemoved = {};     // assignmentId -> bool
+var sbEditing = {};     // saleId -> assignmentId being edited
+var sbAdding = {};      // saleId -> bool
+var sbPending = {};     // assignmentId -> {text, empId}
+var sbAddPending = {};  // saleId -> {text, empId}
+
+async function loadStandDetail(saleId, hasSigning) {
+  var detailEl = document.getElementById('sd-' + saleId);
+  if (!detailEl) return;
+
+  // If no sign-in sheet, show add photo prompt
   if (!hasSigning) {
-    html += 'No sign-in sheet uploaded.';
-    html += '<div class="stand-detail-action"><button class="sd-btn sd-btn-blue" onclick="event.stopPropagation()">Add sign-in photo</button></div>';
-  } else if (!status || status.level === 'processing') {
-    html += 'Reading sign-in sheet...';
-  } else if (status.level === 'error') {
-    html += 'Could not read this sign-in sheet — the photo may be too blurry.';
-    html += '<div class="stand-detail-action"><button class="sd-btn sd-btn-amber" onclick="event.stopPropagation()">Retake photo</button></div>';
-  } else if (status.level === 'warning') {
-    html += status.label + ' — some lines were unreadable. Review on Tips Report.';
-    html += '<div class="stand-detail-action"><button class="sd-btn sd-btn-amber" onclick="event.stopPropagation()">Retake photo</button></div>';
-  } else {
-    html += status.label + ' — review and confirm on Tips Report.';
+    detailEl.innerHTML = '<div style="font-size:12px;color:#aaa;">No sign-in sheet uploaded.</div>' +
+      '<div class="stand-detail-action"><button class="sd-btn sd-btn-blue" onclick="event.stopPropagation()">Add sign-in photo</button></div>';
+    return;
   }
-  return html;
+
+  var status = signinStatus[saleId];
+  if (status && status.level === 'processing') {
+    detailEl.innerHTML = '<div class="nr-loading"><span class="spinner"></span>Reading sign-in sheet...</div>';
+    return;
+  }
+
+  // Load assignments if not cached
+  if (!sbAssignments[saleId]) {
+    detailEl.innerHTML = '<div class="nr-loading">Loading names...</div>';
+    try {
+      var res = await fetch(
+        SUPA_URL + '/rest/v1/sale_staff_assignments?sale_id=eq.' + saleId + '&select=*&order=created_at.asc',
+        { headers: apiHeaders() }
+      );
+      var rows = await res.json();
+      sbAssignments[saleId] = Array.isArray(rows) ? rows : [];
+    } catch(e) {
+      sbAssignments[saleId] = [];
+    }
+  }
+
+  renderStandDetail(saleId);
+}
+
+function renderStandDetail(saleId) {
+  var detailEl = document.getElementById('sd-' + saleId);
+  if (!detailEl) return;
+  var assigns = sbAssignments[saleId] || [];
+  var active = assigns.filter(function(a) { return !sbRemoved[a.id]; });
+  var allVerified = active.length > 0 && active.every(function(a) { return a.verified; });
+
+  if (!assigns.length) {
+    var status = signinStatus[saleId];
+    detailEl.innerHTML = '<div style="font-size:12px;color:#aaa;">' +
+      (status && status.level === 'error' ? 'Could not read sign-in sheet — photo may be too blurry.' : 'No names found on sign-in sheet.') +
+      '</div><div class="stand-detail-action"><button class="sd-btn sd-btn-amber" onclick="event.stopPropagation()">Retake photo</button></div>';
+    return;
+  }
+
+  // Get sale data for staff count mismatch check
+  var saleRow = null;
+  try {
+    // find in current scoreboard data by iterating byVenue structure — just use assigns.length vs status.summary
+    var status = signinStatus[saleId];
+    var enteredCount = status && status.summary ? status.summary.total : null;
+  } catch(e) {}
+
+  var html = '<div class="nr-list">';
+
+  assigns.forEach(function(a) {
+    var isRemoved = !!sbRemoved[a.id];
+    var isEditing = sbEditing[saleId] === a.id && !isRemoved;
+    var isUnreadable = a.raw_name_text === 'Unreadable';
+    var dotCls = isRemoved ? 'nr-dot-gray' : a.confidence === 'high' ? 'nr-dot-g' : a.confidence === 'medium' ? 'nr-dot-a' : 'nr-dot-r';
+    if (a.manual) dotCls = isRemoved ? 'nr-dot-gray' : 'nr-dot-m';
+    var confCls = a.manual ? 'nr-conf-manual' : a.confidence === 'high' ? 'nr-conf-h' : a.confidence === 'medium' ? 'nr-conf-m' : 'nr-conf-l';
+    var confText = a.manual ? 'manual' : a.confidence;
+
+    html += '<div class="nr-row' + (isRemoved ? ' removed' : '') + '" id="nr-' + a.id + '">';
+    html += '<div class="nr-dot ' + dotCls + '"></div>';
+    html += '<div class="nr-name' + (isUnreadable && !isRemoved ? ' unreadable' : '') + '">' + (a.raw_name_text || 'Unreadable') + '</div>';
+    if (!isRemoved) html += '<span class="nr-conf ' + confCls + '">' + confText + '</span>';
+    html += '<div class="nr-btns">';
+    if (!isRemoved) {
+      html += '<button class="nr-btn" onclick="sbStartEdit(\'' + saleId + '\',\'' + a.id + '\',event)" title="Edit">&#9998;</button>';
+      html += '<button class="nr-btn danger" onclick="sbToggleRemove(\'' + saleId + '\',\'' + a.id + '\',event)" title="Remove">&#215;</button>';
+    } else {
+      html += '<button class="nr-btn undo" onclick="sbToggleRemove(\'' + saleId + '\',\'' + a.id + '\',event)" title="Undo">&#8635;</button>';
+    }
+    html += '</div></div>';
+
+    if (isEditing) {
+      var pending = sbPending[a.id] || {};
+      html += '<div class="nr-edit-panel">';
+      html += '<input class="nr-input" id="nrepi-' + a.id + '" placeholder="Search roster or type name..." oninput="sbOnEditInput(\'' + saleId + '\',\'' + a.id + '\',this.value)" autocomplete="off" value="' + (pending.text || '').replace(/"/g,'&quot;') + '">';
+      html += '<div class="nr-ac" id="nreac-' + a.id + '" style="display:none;"></div>';
+      html += '<div class="nr-ep-actions">';
+      html += '<button class="nr-cancel" onclick="sbCancelEdit(\'' + saleId + '\',event)">Cancel</button>';
+      html += '<button class="nr-save" id="nres-' + a.id + '" onclick="sbSaveEdit(\'' + saleId + '\',\'' + a.id + '\',event)"' + (pending.text ? '' : ' disabled') + '>Save</button>';
+      html += '</div></div>';
+    }
+  });
+
+  html += '</div>';
+
+  // Add person row
+  if (sbAdding[saleId]) {
+    html += '<div class="nr-edit-panel">';
+    html += '<input class="nr-input" id="nradd-' + saleId + '" placeholder="Search roster or type name..." oninput="sbOnAddInput(\'' + saleId + '\',this.value)" autocomplete="off">';
+    html += '<div class="nr-ac" id="nraddac-' + saleId + '" style="display:none;"></div>';
+    html += '<div class="nr-ep-actions">';
+    html += '<button class="nr-cancel" onclick="sbCancelAdd(\'' + saleId + '\',event)">Cancel</button>';
+    html += '<button class="nr-save" id="nradds-' + saleId + '" onclick="sbSaveAdd(\'' + saleId + '\',event)" disabled>Add person</button>';
+    html += '</div></div>';
+  } else {
+    html += '<div class="nr-add-row" onclick="sbStartAdd(\'' + saleId + '\',event)"><div class="nr-add-icon">+</div>Add person</div>';
+  }
+
+  // Confirm button
+  if (!allVerified) {
+    html += '<button class="nr-confirm-btn" onclick="sbConfirmAll(\'' + saleId + '\',event)">Confirm names &amp; save</button>';
+  } else {
+    html += '<button class="nr-confirm-btn done" disabled>&#10003; Names confirmed</button>';
+  }
+
+  detailEl.innerHTML = html;
+
+  // Focus edit input if editing
+  if (sbEditing[saleId]) {
+    setTimeout(function() {
+      var inp = document.getElementById('nrepi-' + sbEditing[saleId]);
+      if (inp) inp.focus();
+    }, 30);
+  }
+  if (sbAdding[saleId]) {
+    setTimeout(function() {
+      var inp = document.getElementById('nradd-' + saleId);
+      if (inp) inp.focus();
+    }, 30);
+  }
+}
+
+function sbStartEdit(saleId, assignId, e) {
+  e.stopPropagation();
+  sbEditing[saleId] = sbEditing[saleId] === assignId ? null : assignId;
+  sbAdding[saleId] = false;
+  renderStandDetail(saleId);
+}
+
+function sbCancelEdit(saleId, e) {
+  e.stopPropagation();
+  sbEditing[saleId] = null;
+  renderStandDetail(saleId);
+}
+
+function sbToggleRemove(saleId, assignId, e) {
+  e.stopPropagation();
+  sbRemoved[assignId] = !sbRemoved[assignId];
+  if (sbEditing[saleId] === assignId) sbEditing[saleId] = null;
+  renderStandDetail(saleId);
+}
+
+function sbOnEditInput(saleId, assignId, val) {
+  if (!sbPending[assignId]) sbPending[assignId] = {};
+  sbPending[assignId].text = val; sbPending[assignId].empId = null;
+  var btn = document.getElementById('nres-' + assignId);
+  if (btn) btn.disabled = !val.trim();
+  sbShowAc('nreac-' + assignId, val,
+    function(empId, empName) {
+      sbPending[assignId] = { text: empName, empId: empId };
+      var inp = document.getElementById('nrepi-' + assignId); if (inp) inp.value = empName;
+      var ac = document.getElementById('nreac-' + assignId); if (ac) ac.style.display = 'none';
+      var b = document.getElementById('nres-' + assignId); if (b) b.disabled = false;
+    },
+    function(v) {
+      sbPending[assignId] = { text: v, empId: null };
+      var inp = document.getElementById('nrepi-' + assignId); if (inp) inp.value = v;
+      var ac = document.getElementById('nreac-' + assignId); if (ac) ac.style.display = 'none';
+      var b = document.getElementById('nres-' + assignId); if (b) b.disabled = false;
+    }
+  );
+}
+
+async function sbSaveEdit(saleId, assignId, e) {
+  e.stopPropagation();
+  var pending = sbPending[assignId];
+  if (!pending || !pending.text) return;
+  var assigns = sbAssignments[saleId] || [];
+  var a = assigns.find(function(x) { return x.id === assignId; });
+  if (!a) return;
+  a.raw_name_text = pending.text;
+  a.employee_id = pending.empId || null;
+  a.confidence = pending.empId ? 'high' : 'medium';
+  a.manual = true;
+  a.verified = true;
+  delete sbPending[assignId];
+  sbEditing[saleId] = null;
+  try {
+    var hdrs = apiHeaders(); hdrs['Content-Type'] = 'application/json'; hdrs['Prefer'] = 'return=minimal';
+    await fetch(SUPA_URL + '/rest/v1/sale_staff_assignments?id=eq.' + assignId, {
+      method: 'PATCH', headers: hdrs,
+      body: JSON.stringify({ raw_name_text: a.raw_name_text, employee_id: a.employee_id, confidence: a.confidence, verified: true, verified_by: pcAuth.getUser() ? pcAuth.getUser().display_name : null, verified_at: new Date().toISOString() })
+    });
+  } catch(err) {}
+  renderStandDetail(saleId);
+}
+
+function sbStartAdd(saleId, e) {
+  e.stopPropagation();
+  sbAdding[saleId] = true;
+  sbEditing[saleId] = null;
+  sbAddPending[saleId] = null;
+  renderStandDetail(saleId);
+}
+
+function sbCancelAdd(saleId, e) {
+  e.stopPropagation();
+  sbAdding[saleId] = false;
+  sbAddPending[saleId] = null;
+  renderStandDetail(saleId);
+}
+
+function sbOnAddInput(saleId, val) {
+  sbAddPending[saleId] = { text: val, empId: null };
+  var btn = document.getElementById('nradds-' + saleId); if (btn) btn.disabled = !val.trim();
+  sbShowAc('nraddac-' + saleId, val,
+    function(empId, empName) {
+      sbAddPending[saleId] = { text: empName, empId: empId };
+      var inp = document.getElementById('nradd-' + saleId); if (inp) inp.value = empName;
+      var ac = document.getElementById('nraddac-' + saleId); if (ac) ac.style.display = 'none';
+      var b = document.getElementById('nradds-' + saleId); if (b) b.disabled = false;
+    },
+    function(v) {
+      sbAddPending[saleId] = { text: v, empId: null };
+      var inp = document.getElementById('nradd-' + saleId); if (inp) inp.value = v;
+      var ac = document.getElementById('nraddac-' + saleId); if (ac) ac.style.display = 'none';
+      var b = document.getElementById('nradds-' + saleId); if (b) b.disabled = false;
+    }
+  );
+}
+
+async function sbSaveAdd(saleId, e) {
+  e.stopPropagation();
+  var pending = sbAddPending[saleId];
+  if (!pending || !pending.text.trim()) return;
+  var newRow = { id: 'local-' + Date.now(), sale_id: saleId, raw_name_text: pending.text, employee_id: pending.empId || null, confidence: pending.empId ? 'high' : 'medium', verified: true, manual: true };
+  if (!sbAssignments[saleId]) sbAssignments[saleId] = [];
+  sbAssignments[saleId].push(newRow);
+  try {
+    var hdrs = apiHeaders(); hdrs['Content-Type'] = 'application/json'; hdrs['Prefer'] = 'return=representation';
+    var res = await fetch(SUPA_URL + '/rest/v1/sale_staff_assignments', {
+      method: 'POST', headers: hdrs,
+      body: JSON.stringify({ sale_id: saleId, raw_name_text: newRow.raw_name_text, employee_id: newRow.employee_id, confidence: newRow.confidence, verified: true, verified_by: pcAuth.getUser() ? pcAuth.getUser().display_name : null, verified_at: new Date().toISOString() })
+    });
+    var created = await res.json();
+    if (Array.isArray(created) && created[0]) newRow.id = created[0].id;
+  } catch(err) {}
+  sbAdding[saleId] = false;
+  sbAddPending[saleId] = null;
+  renderStandDetail(saleId);
+}
+
+async function sbConfirmAll(saleId, e) {
+  e.stopPropagation();
+  var assigns = (sbAssignments[saleId] || []).filter(function(a) { return !sbRemoved[a.id]; });
+  var hdrs = apiHeaders(); hdrs['Content-Type'] = 'application/json'; hdrs['Prefer'] = 'return=minimal';
+  var verifiedBy = pcAuth.getUser() ? pcAuth.getUser().display_name : null;
+  var now = new Date().toISOString();
+  for (var i = 0; i < assigns.length; i++) {
+    assigns[i].verified = true;
+    if (!assigns[i].id.startsWith('local-')) {
+      try {
+        await fetch(SUPA_URL + '/rest/v1/sale_staff_assignments?id=eq.' + assigns[i].id, {
+          method: 'PATCH', headers: Object.assign({}, hdrs),
+          body: JSON.stringify({ verified: true, verified_by: verifiedBy, verified_at: now })
+        });
+      } catch(err) {}
+    }
+  }
+  renderStandDetail(saleId);
+}
+
+function sbShowAc(acId, val, onSelect, onFree) {
+  var ac = document.getElementById(acId);
+  if (!ac) return;
+  if (!val.trim()) { ac.style.display = 'none'; return; }
+  var matches = roster.filter(function(r) {
+    return (r.first_name + ' ' + r.last_name).toLowerCase().indexOf(val.toLowerCase()) !== -1;
+  }).slice(0, 5);
+  var html = '';
+  matches.forEach(function(r) {
+    var name = r.first_name + ' ' + r.last_name;
+    html += '<div class="nr-ac-item" onclick="(window[\'' + acId + '_s\'](\'' + r.id + '\',\'' + name.replace(/'/g,"\\'") + '\'))">' + name + '<div class="nr-ac-item-sub">Punch ID: ' + r.punch_id + '</div></div>';
+  });
+  if (val.length > 1) {
+    html += '<div class="nr-ac-free" onclick="window[\'' + acId + '_f\'](\'' + val.replace(/'/g,"\\'") + '\')">Save as &ldquo;' + val + '&rdquo; — not on roster</div>';
+  }
+  window[acId + '_s'] = onSelect;
+  window[acId + '_f'] = onFree;
+  ac.innerHTML = html;
+  ac.style.display = matches.length || val.length > 1 ? 'block' : 'none';
+}
+
+function standDetailHtml(r, hasSigning) {
+  // Returns placeholder — actual content loaded async when stand row is tapped
+  return '<div class="nr-loading" id="sd-inner-' + r.id + '">Tap to load names...</div>';
 }
 
 function renderFinalizeBlock(venue, eventDate, eventName, submittedSaleIds, staffedStands) {
@@ -732,9 +1063,14 @@ function renderFinalizeBlock(venue, eventDate, eventName, submittedSaleIds, staf
   existing.innerHTML = html;
 }
 
-function toggleStandDetail(id) {
+function toggleStandDetail(id, hasSigning) {
   var el = document.getElementById('sd-' + id);
-  if (el) el.style.display = el.style.display === 'block' ? 'none' : 'block';
+  if (!el) return;
+  var open = el.style.display === 'block';
+  el.style.display = open ? 'none' : 'block';
+  if (!open) {
+    loadStandDetail(id, hasSigning);
+  }
 }
 
 function toggleVenueBlock(venue) {
@@ -818,7 +1154,7 @@ async function loadScoreboard() {
       stands.sort(function(a,b) { return parseFloat(b.amount)-parseFloat(a.amount); });
       stands.forEach(function(r) {
         var hasSigning = !!signinHas[r.id];
-        html += '<div class="stand-row" onclick="toggleStandDetail(\'' + r.id + '\')">';
+        html += '<div class="stand-row" onclick="toggleStandDetail(\'' + r.id + '\',' + hasSigning + ')">';
         html += '<div class="stand-row-top">';
         html += '<div class="stand-row-name">' + r.stand + '</div>';
         html += '<div class="stand-row-right">';
