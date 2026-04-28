@@ -44,16 +44,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .content { display: none; padding: 20px; max-width: 1400px; margin: 0 auto; }
 .content.visible { display: block; }
 
-.stats-row { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
-.stat-card {
-  background: #fff; border-radius: 10px; padding: 16px 20px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.06); flex: 1; min-width: 140px;
-}
-.stat-card .label { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
-.stat-card .value { font-size: 28px; font-weight: 700; margin-top: 4px; }
-.stat-card .value.green { color: #16a34a; }
-.stat-card .value.amber { color: #d97706; }
-.stat-card .value.red { color: #dc2626; }
+
 
 .toolbar { display: flex; gap: 12px; margin-bottom: 16px; align-items: center; flex-wrap: wrap; }
 .toolbar input {
@@ -89,9 +80,27 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .user-table th:nth-child(2),
 .user-table th:nth-child(3) { text-align: left; }
 .user-table th.page-col {
-  writing-mode: vertical-rl; text-orientation: mixed;
-  transform: rotate(180deg); min-width: 36px; padding: 8px 4px;
-  max-width: 36px; white-space: nowrap;
+  min-width: 36px;
+  max-width: 36px;
+  padding: 0;
+  white-space: nowrap;
+  vertical-align: bottom;
+  height: 120px;
+  position: relative;
+}
+.user-table th.page-col > div {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%) rotate(-45deg);
+  transform-origin: center bottom;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 600;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  line-height: 1;
 }
 .user-table td {
   padding: 8px; border-bottom: 1px solid #f0f0f0; text-align: center;
@@ -218,24 +227,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 </div>
 
 <div class="content" id="mainContent">
-  <div class="stats-row">
-    <div class="stat-card">
-      <div class="label">Total Users</div>
-      <div class="value" id="statTotal">0</div>
-    </div>
-    <div class="stat-card">
-      <div class="label">Active</div>
-      <div class="value green" id="statActive">0</div>
-    </div>
-    <div class="stat-card">
-      <div class="label">Admins</div>
-      <div class="value amber" id="statAdmins">0</div>
-    </div>
-    <div class="stat-card">
-      <div class="label">Inactive</div>
-      <div class="value red" id="statInactive">0</div>
-    </div>
-  </div>
+
 
   <div class="toolbar">
     <input type="text" id="searchInput" placeholder="Search by name or email..." oninput="renderTable()">
@@ -458,20 +450,11 @@ function loadAllUsers() {
   .then(function(rows) {
     allUsers = rows || [];
     pendingChanges = {};
-    updateStats();
     renderTable();
   });
 }
 
-function updateStats() {
-  var total = allUsers.length;
-  var active = allUsers.filter(function(u) { return u.is_active; }).length;
-  var admins = allUsers.filter(function(u) { return u.role === 'admin'; }).length;
-  document.getElementById('statTotal').textContent = total;
-  document.getElementById('statActive').textContent = active;
-  document.getElementById('statAdmins').textContent = admins;
-  document.getElementById('statInactive').textContent = total - active;
-}
+
 
 function renderTable() {
   var search = document.getElementById('searchInput').value.toLowerCase();
@@ -480,7 +463,7 @@ function renderTable() {
 
   var hrow = '<tr><th>Name</th><th>Email</th><th>Role</th>';
   ALL_PAGES.forEach(function(p) {
-    hrow += '<th class="page-col">' + p.name + '</th>';
+    hrow += '<th class="page-col"><div>' + p.name + '</div></th>';
   });
   hrow += '<th>Active</th></tr>';
   thead.innerHTML = hrow;
