@@ -1,0 +1,1390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Popcorn Chez — Schedule Assistant</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #f0f0ec; --card: #ffffff; --primary: #1a1a1a;
+    --green: #1D9E75; --green-light: #e8f7f2; --green-tint: #f5fdf9;
+    --label: #999;
+    --border: #e8e8e4; --shadow: 0 2px 12px rgba(0,0,0,0.06);
+    --radius: 16px; --font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --blue: #378ADD; --blue-light: #E6F1FB; --blue-dark: #0C447C;
+    --red: #c0392b; --red-light: #fde8e8; --red-tint: #fef6f5;
+    --amber: #d97706; --amber-light: #fff3cd; --amber-tint: #fffdf4; --amber-dark: #856404;
+    --orange: #ea580c; --orange-light: #fff0e6;
+  }
+  body { background: var(--bg); font-family: var(--font); color: var(--primary); min-height: 100vh; }
+  header { background: var(--card); border-bottom: 1px solid var(--border); padding: 0 32px; display: flex; align-items: center; justify-content: space-between; height: 64px; position: sticky; top: 0; z-index: 50; }
+  .header-left { display: flex; align-items: center; gap: 16px; }
+  .back-link { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--label); text-decoration: none; transition: color 0.15s; }
+  .back-link:hover { color: var(--primary); }
+  .hdivider { width: 1px; height: 20px; background: var(--border); }
+  .header-title { font-size: 15px; font-weight: 700; }
+  .header-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: var(--blue); color: white; padding: 3px 8px; border-radius: 20px; }
+  .view-toggle { display: flex; align-items: center; gap: 4px; background: var(--bg); border-radius: 20px; padding: 3px; }
+  .view-toggle a { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; padding: 6px 14px; border-radius: 18px; text-decoration: none; color: var(--label); cursor: pointer; transition: all 0.15s; }
+  .view-toggle a:hover { color: var(--primary); }
+  .view-toggle a.active { background: var(--card); color: var(--primary); box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  .header-user { font-size: 12px; color: var(--label); font-weight: 600; }
+  .sign-out-btn { font-size: 11px; font-weight: 700; color: var(--label); background: none; border: 1px solid var(--border); padding: 5px 12px; border-radius: 8px; cursor: pointer; font-family: var(--font); transition: all 0.15s; }
+  .sign-out-btn:hover { color: var(--primary); border-color: var(--primary); }
+
+  .main { max-width: 1080px; margin: 0 auto; padding: 24px 24px 80px; }
+  .loading-msg { text-align: center; padding: 40px; font-size: 14px; color: var(--label); }
+
+  .filter-section { background: var(--card); border-radius: 12px; border: 1px solid var(--border); padding: 14px 18px; margin-bottom: 16px; box-shadow: var(--shadow); }
+  .filter-label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--label); margin-bottom: 10px; }
+  .venue-pills { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 8px; }
+  .venue-pill { padding: 6px 14px; border-radius: 18px; font-size: 12px; font-weight: 700; cursor: pointer; border: 2px solid var(--blue); background: var(--blue); color: white; font-family: var(--font); transition: all 0.12s; }
+  .venue-pill.off { background: var(--card); color: var(--label); border-color: var(--border); }
+  .filter-actions { display: flex; justify-content: flex-end; }
+  .toggle-all-btn { font-size: 12px; color: var(--blue); background: none; border: none; cursor: pointer; font-family: var(--font); font-weight: 600; padding: 0; }
+  .toggle-all-btn:hover { text-decoration: underline; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; padding: 9px 14px; background: var(--card); border-radius: 10px; border: 1px solid var(--border); font-size: 11px; color: #666; }
+  .legend-row { display: flex; align-items: center; gap: 6px; }
+  .legend-swatch { width: 16px; height: 12px; border-radius: 3px; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.06); }
+
+  .day-group { margin-bottom: 22px; }
+  .day-header { display: flex; align-items: center; gap: 12px; padding: 9px 0; margin-bottom: 8px; border-top: 2px solid var(--primary); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .day-header-date { font-size: 13px; font-weight: 800; letter-spacing: -0.01em; }
+  .day-header-spacer { flex: 1; }
+  .day-warning-pill { font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 12px; background: var(--orange-light); color: var(--orange); cursor: pointer; }
+  .day-warning-pill:hover { background: #ffe5d0; }
+  .day-total { font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: 14px; }
+  .dt-low { background: var(--green-light); color: var(--green); }
+  .dt-med { background: #fff3cd; color: #856404; }
+  .dt-high { background: #fde8e8; color: #c0392b; }
+  .day-total small { font-weight: 600; opacity: 0.7; margin-right: 3px; }
+
+  .event-card { background: var(--card); border-radius: 12px; border: 1px solid var(--border); margin-bottom: 8px; box-shadow: var(--shadow); overflow: hidden; }
+  .event-card.status-not-submitted .event-card-header { background: var(--red-tint); border-left: 3px solid var(--red); }
+  .event-card.status-submitted .event-card-header { background: var(--amber-tint); border-left: 3px solid #e8c94e; }
+  .event-card.status-staffed .event-card-header { background: var(--green-tint); border-left: 3px solid var(--green); }
+  .event-card.status-staffed .evt-name { text-decoration: line-through; text-decoration-color: var(--green); opacity: 0.6; }
+  .event-card.status-staffed .vbadge { opacity: 0.65; }
+  .event-card.status-staffed .evt-time { opacity: 0.55; }
+
+  .event-card-header { padding: 11px 16px; display: flex; align-items: center; gap: 10px; cursor: pointer; transition: background 0.12s; flex-wrap: wrap; }
+  .event-card-header.open { border-bottom: 1px solid var(--border); }
+  .evt-left { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; flex-wrap: wrap; }
+  .vbadge { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 11px; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
+  .evt-name { font-size: 14px; font-weight: 700; color: var(--primary); }
+  .evt-time { font-size: 12px; color: var(--label); white-space: nowrap; }
+  .unresolved-tag { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 10px; background: var(--orange-light); color: var(--orange); white-space: nowrap; }
+  .staffed-badge { font-size: 9px; font-weight: 800; background: var(--green); color: #fff; border-radius: 4px; padding: 2px 6px; letter-spacing: 0.04em; text-transform: uppercase; }
+  .status-text-tag { font-size: 9px; font-weight: 800; border-radius: 4px; padding: 2px 6px; letter-spacing: 0.04em; text-transform: uppercase; }
+  .status-text-tag.not-submitted { background: var(--red); color: #fff; }
+  .status-text-tag.submitted { background: #e8c94e; color: #4a3a00; }
+  .evt-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .coverage-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+  .coverage-counts { font-size: 13px; font-weight: 800; white-space: nowrap; }
+  .coverage-bar-wrap { width: 80px; height: 4px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .coverage-bar { height: 100%; }
+  .cov-green { color: var(--green); } .bar-green { background: var(--green); }
+  .cov-amber { color: var(--amber-dark); } .bar-amber { background: #e8c94e; }
+  .cov-red { color: var(--red); } .bar-red { background: var(--red); }
+  .mark-staffed-btn { font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 8px; background: var(--card); border: 1.5px solid var(--border); color: var(--primary); cursor: pointer; font-family: var(--font); white-space: nowrap; transition: all 0.12s; }
+  .mark-staffed-btn:hover { background: var(--green-light); border-color: var(--green); color: var(--green); }
+  .mark-staffed-btn.is-staffed { background: var(--green); border-color: var(--green); color: #fff; }
+  .mark-staffed-btn:disabled { opacity: 0.5; cursor: wait; }
+  .chevron { font-size: 12px; color: var(--label); }
+
+  .event-card-body { display: none; padding: 14px 16px; background: #fcfcfa; }
+  .event-card-body.open { display: block; }
+
+  .scorecard { display: flex; align-items: center; gap: 10px; padding: 4px 0 12px; flex-wrap: wrap; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+  .scorecard-label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--label); margin-right: 4px; }
+  .role-pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px 5px 10px; border-radius: 18px; font-size: 12px; font-weight: 600; cursor: pointer; border: 1.5px solid transparent; transition: transform 0.1s; font-family: var(--font); background: none; }
+  .role-pill:hover { transform: translateY(-1px); }
+  .role-pill .role-num { font-weight: 800; font-size: 13px; }
+  .role-pill.not-submitted { background: var(--red-light); border-color: #f3c2c2; }
+  .role-pill.not-submitted .role-name { color: #7a1f15; }
+  .role-pill.not-submitted .role-num { color: var(--red); }
+  .role-pill.submitted { background: var(--amber-light); border-color: #f5d9a0; }
+  .role-pill.submitted .role-name { color: var(--amber-dark); }
+  .role-pill.submitted .role-num { color: var(--amber-dark); }
+  .role-pill.staffed { background: var(--green-light); border-color: #a7e8c8; }
+  .role-pill.staffed .role-name { color: #0f5b3f; }
+  .role-pill.staffed .role-num { color: var(--green); }
+
+  .panel-section { margin-bottom: 12px; }
+  .panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .panel-title { font-size: 11px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--green); }
+  .panel-title.amber { color: var(--amber-dark); }
+  .display-btn { font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: 18px; border: 1.5px solid var(--border); background: var(--card); color: var(--primary); cursor: pointer; font-family: var(--font); }
+  .display-btn:hover { background: var(--bg); }
+
+  .names-grid { display: flex; flex-wrap: wrap; gap: 7px; }
+  .name-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--card); border-radius: 18px; padding: 4px 10px 4px 6px; border: 1.5px solid var(--border); transition: all 0.12s; max-width: 100%; }
+  .name-chip:not(.read-only) { cursor: pointer; }
+  .name-chip:not(.read-only):hover { border-color: var(--blue); }
+  .name-chip.has-multiple { border-color: var(--orange); background: var(--orange-light); }
+  .name-chip.has-multiple:hover { background: #ffe5d0; }
+  .name-chip.assigned-elsewhere { opacity: 0.5; background: var(--bg); border-color: var(--border); border-style: dashed; }
+  .name-chip.assigned-elsewhere .name-text { text-decoration: line-through; color: var(--label); }
+  .name-chip.assigned-here { border-color: var(--green); background: var(--green-light); }
+  .name-chip.removed { opacity: 0.55; background: var(--bg); border-style: dashed; }
+  .name-chip.removed .name-text { text-decoration: line-through; color: var(--label); }
+  .name-avatar { width: 22px; height: 22px; border-radius: 50%; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .name-text { font-size: 12px; font-weight: 600; color: var(--primary); }
+  .name-tag { font-size: 10px; color: var(--label); font-style: italic; }
+  .name-tag.assigned-here { color: var(--green); font-weight: 700; font-style: normal; }
+  .name-note { font-size: 10px; color: var(--blue-dark); font-style: italic; }
+  .multi-badge { font-size: 9px; font-weight: 800; background: var(--orange); color: #fff; border-radius: 8px; padding: 1px 5px; }
+  .delete-x { background: none; border: none; font-size: 14px; color: #ccc; cursor: pointer; line-height: 1; padding: 0 0 0 4px; font-family: var(--font); }
+  .delete-x:hover { color: var(--red); }
+  .restore-btn { background: none; border: none; font-size: 10px; color: var(--blue); cursor: pointer; font-weight: 700; font-family: var(--font); padding: 0 0 0 4px; }
+  .restore-btn:hover { text-decoration: underline; }
+  .no-signups-msg { font-size: 12px; color: var(--label); font-style: italic; padding: 4px 0; }
+
+  .removed-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--label); cursor: pointer; padding: 4px 10px; border-radius: 14px; background: transparent; border: 1px dashed var(--border); margin-top: 8px; font-family: var(--font); }
+  .removed-toggle:hover { border-color: var(--label); color: var(--primary); }
+
+  .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 200; align-items: center; justify-content: center; padding: 20px; }
+  .modal-backdrop.open { display: flex; }
+  .modal { background: var(--card); border-radius: var(--radius); width: 100%; max-width: 480px; box-shadow: 0 24px 64px rgba(0,0,0,0.2); overflow: hidden; max-height: 90vh; display: flex; flex-direction: column; }
+  .modal-header { padding: 18px 22px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .modal-title { font-size: 15px; font-weight: 800; margin-bottom: 4px; }
+  .modal-sub { font-size: 12px; color: var(--label); line-height: 1.5; }
+  .modal-body { padding: 14px 22px 18px; overflow-y: auto; }
+  .modal-close { float: right; background: none; border: none; font-size: 18px; color: var(--label); cursor: pointer; line-height: 1; font-family: var(--font); }
+
+  .assign-row { display: flex; align-items: center; gap: 12px; padding: 11px 13px; border: 1.5px solid var(--border); border-radius: 10px; cursor: pointer; margin-bottom: 7px; transition: all 0.12s; background: var(--card); }
+  .assign-row:hover { border-color: var(--blue); background: var(--blue-light); }
+  .assign-row.is-current { border-color: var(--green); background: var(--green-light); }
+  .assign-row-info { flex: 1; }
+  .assign-row-evt { font-size: 13px; font-weight: 700; }
+  .assign-row-meta { font-size: 11px; color: var(--label); margin-top: 2px; }
+  .assign-row-current { font-size: 10px; font-weight: 700; color: var(--green); letter-spacing: 0.06em; text-transform: uppercase; }
+  .assign-clear-btn { width: 100%; padding: 9px; background: var(--bg); border: 1.5px solid var(--border); border-radius: 10px; cursor: pointer; font-size: 12px; font-weight: 700; color: var(--label); font-family: var(--font); margin-top: 4px; }
+  .assign-clear-btn:hover { color: var(--primary); }
+
+  .stand-row { display: flex; align-items: flex-start; justify-content: space-between; padding: 11px 13px; border-bottom: 1px solid var(--border); gap: 12px; }
+  .stand-row:last-child { border-bottom: none; }
+  .stand-info { flex: 1; min-width: 0; }
+  .stand-name { font-size: 13px; font-weight: 700; }
+  .stand-name-meta { font-size: 10px; color: var(--label); font-weight: 600; margin-left: 4px; }
+  .stand-note { font-size: 11px; color: var(--amber-dark); background: var(--amber-tint); border: 1px solid #f5d9a0; border-radius: 6px; padding: 5px 8px; margin-top: 6px; line-height: 1.4; font-style: italic; }
+  .stand-count { font-size: 16px; font-weight: 800; color: var(--primary); flex-shrink: 0; }
+  .stand-count.par { color: var(--red); }
+
+  .confirm-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 300; align-items: center; justify-content: center; padding: 20px; }
+  .confirm-backdrop.open { display: flex; }
+  .confirm-modal { background: var(--card); border-radius: var(--radius); width: 100%; max-width: 380px; padding: 26px; box-shadow: 0 24px 64px rgba(0,0,0,0.2); }
+  .confirm-title { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+  .confirm-desc { font-size: 13px; color: var(--label); line-height: 1.6; margin-bottom: 18px; }
+  .confirm-name { font-weight: 700; color: var(--primary); }
+  .confirm-btns { display: flex; gap: 10px; justify-content: flex-end; }
+  .cancel-btn { padding: 9px 18px; border-radius: 8px; background: var(--bg); border: none; font-size: 13px; font-weight: 700; cursor: pointer; font-family: var(--font); color: var(--primary); }
+  .cancel-btn:hover { background: var(--border); }
+  .danger-btn { padding: 9px 18px; border-radius: 8px; background: var(--red); border: none; font-size: 13px; font-weight: 700; cursor: pointer; font-family: var(--font); color: #fff; }
+  .danger-btn:hover { opacity: 0.85; }
+
+  .name-prompt-input { width: 100%; padding: 10px 12px; border: 1.5px solid var(--border); border-radius: 8px; font-size: 14px; font-family: var(--font); margin-bottom: 12px; outline: none; }
+  .name-prompt-input:focus { border-color: var(--blue); }
+
+  .toast { position: fixed; bottom: 24px; right: 24px; background: var(--primary); color: white; padding: 12px 20px; border-radius: 10px; font-size: 13px; font-weight: 600; z-index: 999; transform: translateY(80px); opacity: 0; transition: all 0.25s ease; }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.green { background: var(--green); }
+  .toast.red { background: var(--red); }
+
+  @media (max-width: 700px) {
+    header { padding: 0 14px; flex-wrap: wrap; height: auto; padding-top: 10px; padding-bottom: 10px; gap: 8px; }
+    .main { padding: 14px 12px 60px; }
+    .evt-time { display: none; }
+    .coverage-bar-wrap { width: 60px; }
+    .mark-staffed-btn { padding: 5px 10px; font-size: 10px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <a href="/" class="back-link">&#8592; Toolkit</a>
+    <div class="hdivider"></div>
+    <span class="header-title">Schedule Assistant</span>
+    <span class="header-badge">Staffing Manager</span>
+  </div>
+  <div class="view-toggle">
+    <a class="active">List view</a>
+    <a href="/staffing-requirements/">Calendar view</a>
+  </div>
+  <div class="header-right" id="header-right"></div>
+</header>
+
+<div class="main">
+  <div class="filter-section" id="filter-section" style="display:none;">
+    <div class="filter-label">Filter by venue</div>
+    <div class="venue-pills" id="venue-pills"></div>
+    <div class="filter-actions">
+      <button class="toggle-all-btn" id="toggle-all-btn">Deselect all</button>
+    </div>
+  </div>
+
+  <div class="legend">
+    <div class="legend-row"><span class="legend-swatch" style="background:var(--red-tint);border-left:3px solid var(--red);"></span> Not submitted (par estimate)</div>
+    <div class="legend-row"><span class="legend-swatch" style="background:var(--amber-tint);border-left:3px solid #e8c94e;"></span> Submitted, awaiting staffing</div>
+    <div class="legend-row"><span class="legend-swatch" style="background:var(--green-tint);border-left:3px solid var(--green);"></span> Staffing confirmed</div>
+    <div class="legend-row"><span class="legend-swatch" style="background:var(--orange-light);border:1px solid var(--orange);"></span> Multi-event signup needs assignment</div>
+  </div>
+
+  <div id="events-container"><div class="loading-msg">Loading...</div></div>
+</div>
+
+<div class="modal-backdrop" id="assign-modal" onclick="if(event.target===this)closeModal('assign-modal');">
+  <div class="modal">
+    <div class="modal-header">
+      <button class="modal-close" onclick="closeModal('assign-modal')">&times;</button>
+      <div class="modal-title" id="assign-title">Assign person</div>
+      <div class="modal-sub" id="assign-sub">--</div>
+    </div>
+    <div class="modal-body" id="assign-body"></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="scorecard-modal" onclick="if(event.target===this)closeModal('scorecard-modal');">
+  <div class="modal">
+    <div class="modal-header">
+      <button class="modal-close" onclick="closeModal('scorecard-modal')">&times;</button>
+      <div class="modal-title" id="scorecard-title">--</div>
+      <div class="modal-sub" id="scorecard-sub">--</div>
+    </div>
+    <div class="modal-body" id="scorecard-body"></div>
+  </div>
+</div>
+
+<div class="confirm-backdrop" id="remove-confirm">
+  <div class="confirm-modal">
+    <div class="confirm-title">Remove this signup?</div>
+    <div class="confirm-desc">You are about to remove <span class="confirm-name" id="remove-name">--</span> from this event. They will be hidden from the manager view and the employee will not see this event in their sign-up list.</div>
+    <div class="confirm-btns">
+      <button class="cancel-btn" id="remove-cancel">Cancel</button>
+      <button class="danger-btn" id="remove-confirm-btn">Yes, remove them</button>
+    </div>
+  </div>
+</div>
+
+<div class="confirm-backdrop" id="staffed-confirm">
+  <div class="confirm-modal">
+    <div class="confirm-title" id="staffed-title">Confirm staffing</div>
+    <div class="confirm-desc">Enter your name to certify that this event is fully staffed and ready to go.</div>
+    <input type="text" class="name-prompt-input" id="staffed-name-input" placeholder="Your full name" />
+    <div class="confirm-btns">
+      <button class="cancel-btn" id="staffed-cancel">Cancel</button>
+      <button class="danger-btn" id="staffed-confirm-btn" style="background:var(--green);">Mark as staffed</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/pc-auth.js"></script>
+<script>
+(function() {
+
+var SB_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
+
+var VENUE_LABELS = {FMP:'Freedom Mortgage Pavilion',Mann:'Mann Music Center',BWH:'Boardwalk Hall',ACCC:'AC Convention Center',Cure:'Cure Insurance Arena',Subaru:'Subaru Park',DE:'DE Chase Field House',Montage:'Montage Mountain',SATB:'Sports at the Beach',Villanova:'Villanova',Kirkwood:'Kirkwood'};
+var VENUE_BADGE_STYLES = {FMP:'background:#fde8e6;color:#7a1a12;',Mann:'background:#e8f5d8;color:#2d5a08;',Cure:'background:#deeef9;color:#0e3f6a;',Subaru:'background:#f0e8fa;color:#4a1a7a;',Villanova:'background:#e8eaf6;color:#0d1257;',Montage:'background:#eceff1;color:#2c3e47;',DE:'background:#e0f2f0;color:#004d40;',BWH:'background:#fdeede;color:#8a3e00;',ACCC:'background:#fde4cc;color:#7a3200;',SATB:'background:#f4f4f2;color:#444441;',Kirkwood:'background:#fde8e8;color:#7a1212;'};
+var AVATAR_COLORS = [['#E6F1FB','#0C447C'],['#EAF3DE','#27500A'],['#FAEEDA','#633806'],['#EEEDFE','#3C3489'],['#FBEAF0','#72243E'],['#E1F5EE','#085041'],['#FCEBEB','#501313'],['#eceff1','#2c3e47']];
+var DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+var DAYS_SHORT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+var MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+var SUPPORT_STAND = 'Support Staff';
+var HAWKING_STAND = 'Hawking';
+var CLIENT_STAND = 'Client Staffing Needs';
+var NONEVENT_STAND = 'Non-Event Labor';
+
+// Same VENUE_STANDS list used elsewhere in the system - kept consistent
+var VENUE_STANDS = {
+  Mann: [SUPPORT_STAND, HAWKING_STAND, 'Upper Concession', 'Upper Popcorn', 'Lower Popcorn', 'Skyline Popcorn', 'Upper Pizza', 'Lower Pizza', 'Skyline Pizza', 'Farm & Fry Truck', 'Crescendo', 'Lawn Portable', 'Stage Left Bar', 'Upper Linear Bar', 'Mobile Cart 1', 'Mobile Cart 2', 'Mobile Cart 3', 'Mobile Cart 4', 'Mobile Cart 5', 'Mobile Cart 6', 'Mobile Cart 7', 'Mobile Cart 8', 'Mobile Cart 9', 'Mobile Cart 10', CLIENT_STAND],
+  FMP: [SUPPORT_STAND, HAWKING_STAND, 'Stand 782', '783', 'SC1', 'LM1', 'LM2', 'WWI', 'Ben Kettle', 'Walt Kettle', 'IC1', 'BWI', 'UD1', 'Ziggys Walt', 'Ziggys Ben', 'Mobile Cart 1', 'Mobile Cart 2', 'Mobile Cart 3', 'Mobile Cart 4', 'Mobile Cart 5', CLIENT_STAND],
+  Cure: [SUPPORT_STAND, HAWKING_STAND, 'Popcorn', 'Candy', 'Cotton Candy', CLIENT_STAND],
+  ACCC: [SUPPORT_STAND, HAWKING_STAND, 'Stand 1', 'Stand 2', CLIENT_STAND],
+  BWH: [SUPPORT_STAND, HAWKING_STAND, 'Popcorn 1', 'Popcorn 2', 'North Stand', 'South Stand', CLIENT_STAND],
+  DE: [SUPPORT_STAND, HAWKING_STAND, 'VIP Bar', 'Cafe', 'Popcorn', 'Bar', 'Farm & Fry', CLIENT_STAND],
+  Subaru: [SUPPORT_STAND, HAWKING_STAND, 'Popcorn', 'VIP', CLIENT_STAND],
+  Villanova: [SUPPORT_STAND, HAWKING_STAND, 'Stand 1', CLIENT_STAND],
+  Montage: [SUPPORT_STAND, HAWKING_STAND, 'BW Pizza', 'Midway Pizza', 'Midway Popcorn', 'Boardwalk Popcorn', 'Festival Foods', 'Potato Stand', 'Boardwalk New Food', 'Mobile Cart 1', 'Mobile Cart 2', 'Mobile Cart 3', 'Mobile Cart 4', CLIENT_STAND],
+  SATB: [SUPPORT_STAND, HAWKING_STAND, 'Stand 1', 'Ice Cream 1', 'Stand 2', 'Stand 3', 'Catering', CLIENT_STAND],
+  Kirkwood: [SUPPORT_STAND, HAWKING_STAND, 'Stand 1', CLIENT_STAND]
+};
+
+var REVENUE_ROLES = ['Bartender','Beer Tender','Concessions Cashier','Concessions Cook','Concessions Lead','Pizza Cashier','Pizza Maker','Pizza Lead','Prep Cook','Barback','Hawker'];
+var SUPPORT_ROLES = ['Cleaning Crew','Warehouse/Runner','Supervisor','Venue Manager'];
+var HAWKING_ROLES = ['Hawker','Supervisor','Barback'];
+var ALL_ROLES = ['Bartender','Beer Tender','Concessions Cashier','Concessions Cook','Concessions Lead','Pizza Cashier','Pizza Maker','Pizza Lead','Prep Cook','Barback','Hawker','Cleaning Crew','Warehouse/Runner','Supervisor','Venue Manager'];
+var DEFAULT_EXCLUDED = {'Cleaning Crew':true,'Warehouse/Runner':true,'Supervisor':true,'Venue Manager':true};
+
+function getRolesForStand(s) {
+  if (s === SUPPORT_STAND) return SUPPORT_ROLES;
+  if (s === HAWKING_STAND) return HAWKING_ROLES;
+  if (s === CLIENT_STAND || s === NONEVENT_STAND) return ALL_ROLES;
+  return REVENUE_ROLES;
+}
+
+// State
+var pcEvents = [];
+var pcAvailability = {};         // event_id -> array of avail rows (active only)
+var pcRemovedAvailability = {};  // event_id -> array of avail rows (removed only)
+var pcStaffingRequests = {};     // event_id||venue -> array of request rows
+var pcParLevels = {};            // venue||stand||role||tier -> par row
+var pcParExcludedFromTotal = {}; // same key -> boolean
+var pcStaffingStatus = {};       // event_id||venue -> status row
+var pcAssignments = {};          // staff_name||event_date -> assignment row
+var pcEmployees = [];
+
+var selectedVenues = {};
+var openCardIds = {};
+var showRemovedFor = {};         // event_id -> bool
+
+var pendingRemoveAvailId = null;
+var pendingRemoveName = null;
+var pendingStaffEvtId = null;
+var pendingStaffVenue = null;
+
+// ============ FETCH HELPERS ============
+
+function apiHeaders() { return pcAuth.headers(); }
+function apiHeadersJson() { return Object.assign({}, pcAuth.headers(), {'Content-Type':'application/json'}); }
+
+function sbFetch(path) {
+  return fetch(SB_URL + '/rest/v1/' + path, {headers: apiHeaders()}).then(function(r) {
+    if (!r.ok) return r.text().then(function(t) { throw new Error(t); });
+    return r.json();
+  });
+}
+
+// ============ INIT ============
+
+function init() {
+  var today = new Date();
+  var ds = today.getFullYear() + '-' + pad(today.getMonth() + 1) + '-' + pad(today.getDate());
+  var amp = String.fromCharCode(38);
+
+  Promise.all([
+    sbFetch('events?event_date=gte.' + ds + amp + 'event_type=neq.adhoc' + amp + 'order=event_date.asc'),
+    sbFetch('availability?select=id,staff_name,event_id,note,submitted_at,removed_at,removed_by'),
+    sbFetch('staffing_requests?select=event_id,venue,stand,role,headcount,manager_name,sales_forecast,staff_notes,submitted_at'),
+    sbFetch('par_levels?select=venue,stand,role,default_count,excluded_from_total,tier'),
+    sbFetch('event_staffing_status?select=event_id,venue,is_confirmed,confirmed_by,confirmed_at'),
+    sbFetch('availability_assignments?select=id,staff_name,event_date,assigned_event_id,assigned_by,assigned_at'),
+    sbFetch('employees?is_active=eq.true' + amp + 'select=id,first_name,last_name,phone' + amp + 'order=last_name.asc')
+  ]).then(function(res) {
+    pcEvents = res[0] || [];
+
+    // Split availability into active and removed
+    pcAvailability = {};
+    pcRemovedAvailability = {};
+    (res[1] || []).forEach(function(r) {
+      if (r.removed_at) {
+        if (!pcRemovedAvailability[r.event_id]) pcRemovedAvailability[r.event_id] = [];
+        pcRemovedAvailability[r.event_id].push(r);
+      } else {
+        if (!pcAvailability[r.event_id]) pcAvailability[r.event_id] = [];
+        pcAvailability[r.event_id].push(r);
+      }
+    });
+
+    pcStaffingRequests = {};
+    (res[2] || []).forEach(function(r) {
+      var k = r.event_id + '||' + r.venue;
+      if (!pcStaffingRequests[k]) pcStaffingRequests[k] = [];
+      pcStaffingRequests[k].push(r);
+    });
+
+    pcParLevels = {};
+    pcParExcludedFromTotal = {};
+    (res[3] || []).forEach(function(r) {
+      var tier = r.tier || 'full';
+      var k = r.venue + '||' + r.stand + '||' + r.role + '||' + tier;
+      pcParLevels[k] = r.default_count;
+      pcParExcludedFromTotal[k] = r.excluded_from_total === true;
+    });
+
+    pcStaffingStatus = {};
+    (res[4] || []).forEach(function(r) { pcStaffingStatus[r.event_id + '||' + r.venue] = r; });
+
+    pcAssignments = {};
+    (res[5] || []).forEach(function(r) { pcAssignments[r.staff_name + '||' + r.event_date] = r; });
+
+    pcEmployees = res[6] || [];
+
+    // Build venue filter pills
+    var venuesInEvents = [];
+    pcEvents.forEach(function(e) { if (venuesInEvents.indexOf(e.venue) === -1) venuesInEvents.push(e.venue); });
+    venuesInEvents.forEach(function(v) { selectedVenues[v] = true; });
+    buildVenuePills(venuesInEvents);
+
+    render();
+  }).catch(function(e) {
+    console.error('Load error:', e);
+    document.getElementById('events-container').innerHTML = '<div class="loading-msg">Error loading data. Please refresh.</div>';
+  });
+}
+
+// ============ VENUE FILTER ============
+
+function buildVenuePills(venues) {
+  var section = document.getElementById('filter-section');
+  var container = document.getElementById('venue-pills');
+  if (venues.length === 0) { section.style.display = 'none'; return; }
+  section.style.display = '';
+  container.innerHTML = '';
+  venues.forEach(function(v) {
+    var btn = document.createElement('button');
+    btn.className = 'venue-pill';
+    btn.id = 'pill-' + v;
+    btn.textContent = VENUE_LABELS[v] || v;
+    btn.setAttribute('data-venue', v);
+    btn.addEventListener('click', function() {
+      selectedVenues[v] = !selectedVenues[v];
+      btn.className = 'venue-pill' + (selectedVenues[v] ? '' : ' off');
+      updateToggleAllBtn();
+      render();
+    });
+    container.appendChild(btn);
+  });
+  updateToggleAllBtn();
+}
+
+function updateToggleAllBtn() {
+  var allOn = Object.keys(selectedVenues).every(function(v) { return selectedVenues[v]; });
+  document.getElementById('toggle-all-btn').textContent = allOn ? 'Deselect all' : 'Select all';
+}
+
+document.getElementById('toggle-all-btn').addEventListener('click', function() {
+  var allOn = Object.keys(selectedVenues).every(function(v) { return selectedVenues[v]; });
+  Object.keys(selectedVenues).forEach(function(v) {
+    selectedVenues[v] = !allOn;
+    var pill = document.getElementById('pill-' + v);
+    if (pill) pill.className = 'venue-pill' + (selectedVenues[v] ? '' : ' off');
+  });
+  updateToggleAllBtn();
+  render();
+});
+
+// ============ COMPUTATION HELPERS ============
+
+function isSubmitted(evtId, venue) {
+  var k = evtId + '||' + venue;
+  return pcStaffingRequests[k] && pcStaffingRequests[k].length > 0;
+}
+
+function isStaffed(evtId, venue) {
+  var s = pcStaffingStatus[evtId + '||' + venue];
+  return s && s.is_confirmed === true;
+}
+
+function shouldExcludeFromTotal(venue, stand, role, tier) {
+  if (stand === SUPPORT_STAND) return true;
+  tier = tier || 'full';
+  var k = venue + '||' + stand + '||' + role + '||' + tier;
+  if (k in pcParExcludedFromTotal) return pcParExcludedFromTotal[k];
+  return DEFAULT_EXCLUDED[role] === true;
+}
+
+function getEventNeed(evt) {
+  // Returns total people needed for this event, using submitted numbers if available else par
+  var rows = pcStaffingRequests[evt.id + '||' + evt.venue];
+  var tier = evt.staffing_tier || 'full';
+  if (rows && rows.length > 0) {
+    return rows.reduce(function(s, r) {
+      if (shouldExcludeFromTotal(r.venue, r.stand, r.role, tier)) return s;
+      return s + (r.headcount || 0);
+    }, 0);
+  }
+  // Fall back to par levels
+  var stands = VENUE_STANDS[evt.venue] || [];
+  var t = 0;
+  stands.forEach(function(st) {
+    getRolesForStand(st).forEach(function(ro) {
+      if (!shouldExcludeFromTotal(evt.venue, st, ro, tier)) {
+        var k = evt.venue + '||' + st + '||' + ro + '||' + tier;
+        t += (pcParLevels[k] || 0);
+      }
+    });
+  });
+  return t;
+}
+
+function getDayNeed(dateStr) {
+  return pcEvents.filter(function(e) { return e.event_date === dateStr; })
+    .reduce(function(s, e) { return s + getEventNeed(e); }, 0);
+}
+
+function getEventStatus(evt) {
+  if (isStaffed(evt.id, evt.venue)) return 'staffed';
+  if (isSubmitted(evt.id, evt.venue)) return 'submitted';
+  return 'not-submitted';
+}
+
+// Returns map: staff_name -> [event_ids on the same day they signed up for]
+function getDayMultiSignups(dateStr) {
+  var dayEvts = pcEvents.filter(function(e) { return e.event_date === dateStr; });
+  var nameMap = {};
+  dayEvts.forEach(function(evt) {
+    var avs = pcAvailability[evt.id] || [];
+    avs.forEach(function(av) {
+      if (!nameMap[av.staff_name]) nameMap[av.staff_name] = [];
+      nameMap[av.staff_name].push(evt.id);
+    });
+  });
+  return nameMap;
+}
+
+// Returns the assigned event_id for this person on this date, or null
+function getAssignment(staffName, dateStr) {
+  var rec = pcAssignments[staffName + '||' + dateStr];
+  return rec ? rec.assigned_event_id : null;
+}
+
+// Returns count of people signed up for this event excluding those assigned elsewhere on the same day
+function getEffectiveSignedUpCount(evt) {
+  var avs = pcAvailability[evt.id] || [];
+  var count = 0;
+  avs.forEach(function(av) {
+    var assignedTo = getAssignment(av.staff_name, evt.event_date);
+    if (assignedTo && assignedTo !== evt.id) return;
+    count++;
+  });
+  return count;
+}
+
+// Returns the count of unresolved multi-signups for this event (people with multi-signups on this day, not yet assigned)
+function getUnresolvedCountForEvent(evt) {
+  var nameMap = getDayMultiSignups(evt.event_date);
+  var avs = pcAvailability[evt.id] || [];
+  var count = 0;
+  avs.forEach(function(av) {
+    var multiList = nameMap[av.staff_name] || [];
+    if (multiList.length <= 1) return;
+    var assignedTo = getAssignment(av.staff_name, evt.event_date);
+    if (assignedTo) return;
+    count++;
+  });
+  return count;
+}
+
+// Returns total unresolved across all events on a given day (each unique person counted once)
+function getDayUnresolvedCount(dateStr) {
+  var nameMap = getDayMultiSignups(dateStr);
+  var count = 0;
+  Object.keys(nameMap).forEach(function(name) {
+    if (nameMap[name].length <= 1) return;
+    if (getAssignment(name, dateStr)) return;
+    count++;
+  });
+  return count;
+}
+
+// Returns role totals for an event (across all stands), as {roleName: count}
+// Uses submitted numbers if available, otherwise par levels
+function getEventRoleTotals(evt) {
+  var rows = pcStaffingRequests[evt.id + '||' + evt.venue];
+  var tier = evt.staffing_tier || 'full';
+  var totals = {};
+  if (rows && rows.length > 0) {
+    rows.forEach(function(r) {
+      if (shouldExcludeFromTotal(r.venue, r.stand, r.role, tier)) return;
+      if (!r.headcount) return;
+      totals[r.role] = (totals[r.role] || 0) + r.headcount;
+    });
+  } else {
+    var stands = VENUE_STANDS[evt.venue] || [];
+    stands.forEach(function(st) {
+      getRolesForStand(st).forEach(function(ro) {
+        if (shouldExcludeFromTotal(evt.venue, st, ro, tier)) return;
+        var k = evt.venue + '||' + st + '||' + ro + '||' + tier;
+        var ct = pcParLevels[k] || 0;
+        if (ct > 0) totals[ro] = (totals[ro] || 0) + ct;
+      });
+    });
+  }
+  return totals;
+}
+
+// ============ RENDER ============
+
+function render() {
+  var container = document.getElementById('events-container');
+  var visible = pcEvents.filter(function(e) { return selectedVenues[e.venue]; });
+  if (visible.length === 0) {
+    container.innerHTML = '<div class="loading-msg">No events match your venue selection.</div>';
+    return;
+  }
+
+  // Group by date
+  var byDate = {};
+  visible.forEach(function(e) {
+    if (!byDate[e.event_date]) byDate[e.event_date] = [];
+    byDate[e.event_date].push(e);
+  });
+
+  var sortedDates = Object.keys(byDate).sort();
+  container.innerHTML = '';
+  sortedDates.forEach(function(ds) {
+    container.appendChild(buildDayGroup(ds, byDate[ds]));
+  });
+}
+
+function buildDayGroup(dateStr, events) {
+  var dateObj = new Date(dateStr + 'T12:00:00');
+  var dayLabel = DAYS[dateObj.getDay()] + ', ' + MONTHS[dateObj.getMonth()] + ' ' + dateObj.getDate();
+  var dayNeed = getDayNeed(dateStr);
+  var allSubmitted = events.every(function(e) { return isSubmitted(e.id, e.venue); });
+  var dayNeedClass = dayNeed >= 60 ? 'dt-high' : (dayNeed >= 30 ? 'dt-med' : 'dt-low');
+  var dayUnresolved = getDayUnresolvedCount(dateStr);
+
+  var group = document.createElement('div');
+  group.className = 'day-group';
+
+  var hdr = document.createElement('div');
+  hdr.className = 'day-header';
+
+  var dateEl = document.createElement('div');
+  dateEl.className = 'day-header-date';
+  dateEl.textContent = dayLabel;
+  hdr.appendChild(dateEl);
+
+  var spacer = document.createElement('div');
+  spacer.className = 'day-header-spacer';
+  hdr.appendChild(spacer);
+
+  if (dayUnresolved > 0) {
+    var warn = document.createElement('span');
+    warn.className = 'day-warning-pill';
+    warn.textContent = dayUnresolved + ' unresolved multi-signup' + (dayUnresolved !== 1 ? 's' : '');
+    hdr.appendChild(warn);
+  }
+
+  var totEl = document.createElement('div');
+  totEl.className = 'day-total ' + dayNeedClass;
+  var prefix = allSubmitted ? '' : '~';
+  totEl.innerHTML = '<small>Need</small>' + prefix + dayNeed + ' people';
+  hdr.appendChild(totEl);
+
+  group.appendChild(hdr);
+
+  events.forEach(function(evt) { group.appendChild(buildEventCard(evt)); });
+  return group;
+}
+
+function buildEventCard(evt) {
+  var status = getEventStatus(evt);
+  var card = document.createElement('div');
+  card.className = 'event-card status-' + status;
+  card.id = 'card-' + evt.id;
+
+  var header = document.createElement('div');
+  header.className = 'event-card-header' + (openCardIds[evt.id] ? ' open' : '');
+  header.addEventListener('click', function(e) {
+    if (e.target.closest('.mark-staffed-btn')) return;
+    toggleCard(evt.id);
+  });
+
+  // Left side
+  var left = document.createElement('div');
+  left.className = 'evt-left';
+
+  var badge = document.createElement('span');
+  badge.className = 'vbadge';
+  badge.setAttribute('style', VENUE_BADGE_STYLES[evt.venue] || '');
+  badge.textContent = evt.venue;
+  left.appendChild(badge);
+
+  var nameSp = document.createElement('span');
+  nameSp.className = 'evt-name';
+  nameSp.textContent = evt.event_name;
+  left.appendChild(nameSp);
+
+  var timeSp = document.createElement('span');
+  timeSp.className = 'evt-time';
+  timeSp.textContent = formatShiftRange(evt);
+  left.appendChild(timeSp);
+
+  if (status === 'staffed') {
+    var sb = document.createElement('span');
+    sb.className = 'staffed-badge';
+    sb.textContent = 'Staffed';
+    left.appendChild(sb);
+  } else if (status === 'submitted') {
+    var sb2 = document.createElement('span');
+    sb2.className = 'status-text-tag submitted';
+    sb2.textContent = 'Submitted';
+    left.appendChild(sb2);
+  } else {
+    var sb3 = document.createElement('span');
+    sb3.className = 'status-text-tag not-submitted';
+    sb3.textContent = 'Not submitted';
+    left.appendChild(sb3);
+  }
+
+  var unresolvedCt = getUnresolvedCountForEvent(evt);
+  if (unresolvedCt > 0) {
+    var ut = document.createElement('span');
+    ut.className = 'unresolved-tag';
+    ut.textContent = '\u26A0 ' + unresolvedCt + ' unresolved';
+    left.appendChild(ut);
+  }
+
+  header.appendChild(left);
+
+  // Right side - coverage + mark staffed btn + chevron
+  var right = document.createElement('div');
+  right.className = 'evt-right';
+
+  var covWrap = document.createElement('div');
+  covWrap.className = 'coverage-wrap';
+  var signedUp = getEffectiveSignedUpCount(evt);
+  var need = getEventNeed(evt);
+  var prefix = isSubmitted(evt.id, evt.venue) ? '' : '~';
+  var pct = need > 0 ? Math.min(100, Math.round((signedUp / need) * 100)) : 0;
+  var covCls, barCls;
+  if (signedUp >= need && need > 0) { covCls = 'cov-green'; barCls = 'bar-green'; }
+  else if (need > 0 && signedUp / need >= 0.4) { covCls = 'cov-amber'; barCls = 'bar-amber'; }
+  else { covCls = 'cov-red'; barCls = 'bar-red'; }
+  covWrap.innerHTML = '<span class="coverage-counts ' + covCls + '">' + signedUp + ' / ' + prefix + need + '</span>' +
+    '<div class="coverage-bar-wrap"><div class="coverage-bar ' + barCls + '" style="width:' + pct + '%;"></div></div>';
+  right.appendChild(covWrap);
+
+  var staffBtn = document.createElement('button');
+  staffBtn.className = 'mark-staffed-btn' + (status === 'staffed' ? ' is-staffed' : '');
+  staffBtn.innerHTML = status === 'staffed' ? '\u2713 Staffed' : 'Mark staffed';
+  staffBtn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    handleStaffedClick(evt);
+  });
+  right.appendChild(staffBtn);
+
+  var chev = document.createElement('span');
+  chev.className = 'chevron';
+  chev.textContent = openCardIds[evt.id] ? '\u25B2' : '\u25BC';
+  right.appendChild(chev);
+
+  header.appendChild(right);
+  card.appendChild(header);
+
+  // Body - only build if open (we still attach but display is handled by class)
+  var body = document.createElement('div');
+  body.className = 'event-card-body' + (openCardIds[evt.id] ? ' open' : '');
+  if (openCardIds[evt.id]) buildCardBody(body, evt);
+  card.appendChild(body);
+
+  return card;
+}
+
+function buildCardBody(body, evt) {
+  body.innerHTML = '';
+
+  // Scorecard
+  var roleTotals = getEventRoleTotals(evt);
+  var roles = Object.keys(roleTotals);
+  if (roles.length > 0) {
+    var scorecard = document.createElement('div');
+    scorecard.className = 'scorecard';
+    var label = document.createElement('span');
+    label.className = 'scorecard-label';
+    var pillStateClass;
+    var pillPrefix = '';
+    var status = getEventStatus(evt);
+    if (status === 'staffed') {
+      label.textContent = 'Roles needed';
+      pillStateClass = 'staffed';
+    } else if (status === 'submitted') {
+      label.textContent = 'Roles needed';
+      pillStateClass = 'submitted';
+    } else {
+      label.textContent = 'Par level (not submitted)';
+      pillStateClass = 'not-submitted';
+      pillPrefix = '~';
+    }
+    scorecard.appendChild(label);
+
+    // Sort roles for stable display
+    roles.sort(function(a, b) { return roleTotals[b] - roleTotals[a]; });
+    roles.forEach(function(role) {
+      var btn = document.createElement('button');
+      btn.className = 'role-pill ' + pillStateClass;
+      btn.innerHTML = '<span class="role-name">' + escapeHtml(role) + '</span><span class="role-num">' + pillPrefix + roleTotals[role] + '</span>';
+      btn.addEventListener('click', function() { openScorecardModal(evt, role); });
+      scorecard.appendChild(btn);
+    });
+    body.appendChild(scorecard);
+  }
+
+  // Active signups panel
+  var avList = pcAvailability[evt.id] || [];
+  var panelSec = document.createElement('div');
+  panelSec.className = 'panel-section';
+  var phead = document.createElement('div');
+  phead.className = 'panel-header';
+  phead.innerHTML = '<span class="panel-title">Signed up (' + avList.length + ')</span>';
+  panelSec.appendChild(phead);
+
+  if (avList.length === 0) {
+    var emptyEl = document.createElement('div');
+    emptyEl.className = 'no-signups-msg';
+    emptyEl.textContent = 'Nobody signed up yet.';
+    panelSec.appendChild(emptyEl);
+  } else {
+    var grid = document.createElement('div');
+    grid.className = 'names-grid';
+    var nameMap = getDayMultiSignups(evt.event_date);
+    avList.forEach(function(av, i) {
+      grid.appendChild(buildNameChip(av, evt, nameMap, i));
+    });
+    panelSec.appendChild(grid);
+  }
+
+  // Removed signups toggle/list
+  var removedList = pcRemovedAvailability[evt.id] || [];
+  if (removedList.length > 0) {
+    var toggleBtn = document.createElement('button');
+    toggleBtn.className = 'removed-toggle';
+    var open = showRemovedFor[evt.id];
+    toggleBtn.textContent = (open ? 'Hide' : 'Show') + ' ' + removedList.length + ' removed signup' + (removedList.length !== 1 ? 's' : '');
+    toggleBtn.addEventListener('click', function() {
+      showRemovedFor[evt.id] = !open;
+      var freshBody = document.querySelector('#card-' + evt.id + ' .event-card-body');
+      buildCardBody(freshBody, evt);
+    });
+    panelSec.appendChild(toggleBtn);
+
+    if (open) {
+      var rgrid = document.createElement('div');
+      rgrid.className = 'names-grid';
+      rgrid.style.marginTop = '8px';
+      removedList.forEach(function(av, i) {
+        rgrid.appendChild(buildRemovedChip(av, evt, i));
+      });
+      panelSec.appendChild(rgrid);
+    }
+  }
+
+  body.appendChild(panelSec);
+}
+
+function buildNameChip(av, evt, nameMap, i) {
+  var multiList = nameMap[av.staff_name] || [];
+  var hasMulti = multiList.length > 1;
+  var assignedTo = getAssignment(av.staff_name, evt.event_date);
+  var col = AVATAR_COLORS[i % AVATAR_COLORS.length];
+  var initials = av.staff_name.split(' ').map(function(p) { return p[0] || ''; }).join('').toUpperCase().slice(0, 2);
+
+  var chip = document.createElement('div');
+  var classes = ['name-chip'];
+  if (hasMulti && !assignedTo) classes.push('has-multiple');
+  else if (assignedTo === evt.id) classes.push('assigned-here');
+  else if (assignedTo && assignedTo !== evt.id) classes.push('assigned-elsewhere');
+  chip.className = classes.join(' ');
+
+  if (hasMulti) {
+    chip.addEventListener('click', function(e) {
+      if (e.target.classList.contains('delete-x')) return;
+      openAssignModal(av.staff_name, evt);
+    });
+  }
+
+  var avatarHtml = '<div class="name-avatar" style="background:' + col[0] + ';color:' + col[1] + ';">' + initials + '</div>';
+  var nameHtml = '<span class="name-text">' + escapeHtml(av.staff_name) + '</span>';
+  var noteHtml = av.note ? '<span class="name-note">' + escapeHtml(av.note) + '</span>' : '';
+  var extraHtml = '';
+  if (hasMulti && !assignedTo) {
+    extraHtml = '<span class="multi-badge">' + multiList.length + 'x</span>';
+  } else if (assignedTo === evt.id) {
+    extraHtml = '<span class="name-tag assigned-here">\u2713 here</span>';
+  } else if (assignedTo && assignedTo !== evt.id) {
+    var otherEvt = findEventById(assignedTo);
+    var otherLabel = otherEvt ? otherEvt.venue : '';
+    extraHtml = '<span class="name-tag">\u2197 ' + escapeHtml(otherLabel) + '</span>';
+  }
+
+  chip.innerHTML = avatarHtml + nameHtml + noteHtml + extraHtml;
+
+  // Add a delete X (kept separate from chip click)
+  var delBtn = document.createElement('button');
+  delBtn.className = 'delete-x';
+  delBtn.innerHTML = '\u00D7';
+  delBtn.title = 'Remove signup';
+  delBtn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    openRemoveConfirm(av);
+  });
+  chip.appendChild(delBtn);
+
+  return chip;
+}
+
+function buildRemovedChip(av, evt, i) {
+  var col = AVATAR_COLORS[i % AVATAR_COLORS.length];
+  var initials = av.staff_name.split(' ').map(function(p) { return p[0] || ''; }).join('').toUpperCase().slice(0, 2);
+
+  var chip = document.createElement('div');
+  chip.className = 'name-chip removed read-only';
+
+  chip.innerHTML = '<div class="name-avatar" style="background:' + col[0] + ';color:' + col[1] + ';">' + initials + '</div>' +
+    '<span class="name-text">' + escapeHtml(av.staff_name) + '</span>' +
+    '<span class="name-tag">removed by ' + escapeHtml(av.removed_by || 'unknown') + '</span>';
+
+  var restoreBtn = document.createElement('button');
+  restoreBtn.className = 'restore-btn';
+  restoreBtn.textContent = 'Restore';
+  restoreBtn.addEventListener('click', function() { restoreSignup(av); });
+  chip.appendChild(restoreBtn);
+
+  return chip;
+}
+
+function findEventById(id) {
+  for (var i = 0; i < pcEvents.length; i++) if (pcEvents[i].id === id) return pcEvents[i];
+  return null;
+}
+
+function toggleCard(evtId) {
+  openCardIds[evtId] = !openCardIds[evtId];
+  // Re-render just this card
+  var oldCard = document.getElementById('card-' + evtId);
+  if (!oldCard) return;
+  var evt = findEventById(evtId);
+  if (!evt) return;
+  var newCard = buildEventCard(evt);
+  oldCard.parentNode.replaceChild(newCard, oldCard);
+}
+
+// ============ MARK STAFFED ============
+
+function handleStaffedClick(evt) {
+  var status = pcStaffingStatus[evt.id + '||' + evt.venue];
+  if (status && status.is_confirmed) {
+    if (!pcAuth.isAdmin()) {
+      showToast('Admin access required to reverse staffing confirmation. Contact Keith.', 'red');
+      return;
+    }
+    if (confirm('Reverse this staffing confirmation?')) {
+      reverseStaffed(evt);
+    }
+    return;
+  }
+  // Open name confirmation
+  pendingStaffEvtId = evt.id;
+  pendingStaffVenue = evt.venue;
+  document.getElementById('staffed-title').textContent = 'Confirm staffing for ' + evt.event_name;
+  var nameInput = document.getElementById('staffed-name-input');
+  var u = pcAuth.getUser();
+  nameInput.value = (u && u.display_name) ? u.display_name : '';
+  document.getElementById('staffed-confirm').classList.add('open');
+  setTimeout(function() { nameInput.focus(); }, 100);
+}
+
+document.getElementById('staffed-cancel').addEventListener('click', function() {
+  document.getElementById('staffed-confirm').classList.remove('open');
+  pendingStaffEvtId = null;
+  pendingStaffVenue = null;
+});
+
+document.getElementById('staffed-confirm-btn').addEventListener('click', function() {
+  var name = document.getElementById('staffed-name-input').value.trim();
+  if (!name) { showToast('Please enter your name.', 'red'); return; }
+  if (!pendingStaffEvtId) return;
+  var btn = this;
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+  var nowStr = new Date().toISOString();
+  var hdrs = apiHeadersJson();
+  hdrs['Prefer'] = 'resolution=merge-duplicates,return=minimal';
+  fetch(SB_URL + '/rest/v1/event_staffing_status', {
+    method: 'POST',
+    headers: hdrs,
+    body: JSON.stringify({
+      event_id: pendingStaffEvtId,
+      venue: pendingStaffVenue,
+      is_confirmed: true,
+      confirmed_by: name,
+      confirmed_at: nowStr
+    })
+  }).then(function(r) {
+    if (!r.ok) return r.text().then(function(t) { throw new Error(t); });
+    pcStaffingStatus[pendingStaffEvtId + '||' + pendingStaffVenue] = {
+      event_id: pendingStaffEvtId,
+      venue: pendingStaffVenue,
+      is_confirmed: true,
+      confirmed_by: name,
+      confirmed_at: nowStr
+    };
+    var savedId = pendingStaffEvtId;
+    document.getElementById('staffed-confirm').classList.remove('open');
+    pendingStaffEvtId = null;
+    pendingStaffVenue = null;
+    btn.disabled = false;
+    btn.textContent = 'Mark as staffed';
+    showToast('Staffing confirmed.', 'green');
+    rerenderEvent(savedId);
+  }).catch(function(e) {
+    console.error(e);
+    showToast('Error saving. Please try again.', 'red');
+    btn.disabled = false;
+    btn.textContent = 'Mark as staffed';
+  });
+});
+
+function reverseStaffed(evt) {
+  var hdrs = apiHeadersJson();
+  hdrs['Prefer'] = 'return=minimal';
+  fetch(SB_URL + '/rest/v1/event_staffing_status?event_id=eq.' + evt.id + '&venue=eq.' + encodeURIComponent(evt.venue), {
+    method: 'PATCH',
+    headers: hdrs,
+    body: JSON.stringify({is_confirmed: false, confirmed_by: null, confirmed_at: null})
+  }).then(function(r) {
+    if (!r.ok) return r.text().then(function(t) { throw new Error(t); });
+    if (pcStaffingStatus[evt.id + '||' + evt.venue]) {
+      pcStaffingStatus[evt.id + '||' + evt.venue].is_confirmed = false;
+      pcStaffingStatus[evt.id + '||' + evt.venue].confirmed_by = null;
+      pcStaffingStatus[evt.id + '||' + evt.venue].confirmed_at = null;
+    }
+    showToast('Staffing confirmation reversed.', 'green');
+    rerenderEvent(evt.id);
+  }).catch(function(e) {
+    console.error(e);
+    showToast('Error reversing. Please try again.', 'red');
+  });
+}
+
+function rerenderEvent(evtId) {
+  // Re-render the entire day group containing this event since totals/warnings can change
+  render();
+}
+
+// ============ SOFT-DELETE / RESTORE SIGNUP ============
+
+function openRemoveConfirm(av) {
+  pendingRemoveAvailId = av.id;
+  pendingRemoveName = av.staff_name;
+  document.getElementById('remove-name').textContent = av.staff_name;
+  document.getElementById('remove-confirm').classList.add('open');
+}
+
+document.getElementById('remove-cancel').addEventListener('click', function() {
+  pendingRemoveAvailId = null;
+  pendingRemoveName = null;
+  document.getElementById('remove-confirm').classList.remove('open');
+});
+
+document.getElementById('remove-confirm-btn').addEventListener('click', function() {
+  if (!pendingRemoveAvailId) return;
+  var btn = this;
+  btn.disabled = true;
+  btn.textContent = 'Removing...';
+  var u = pcAuth.getUser();
+  var who = (u && u.display_name) ? u.display_name : 'unknown';
+  var nowStr = new Date().toISOString();
+  var hdrs = apiHeadersJson();
+  hdrs['Prefer'] = 'return=minimal';
+  fetch(SB_URL + '/rest/v1/availability?id=eq.' + pendingRemoveAvailId, {
+    method: 'PATCH',
+    headers: hdrs,
+    body: JSON.stringify({removed_at: nowStr, removed_by: who})
+  }).then(function(r) {
+    if (!r.ok) return r.text().then(function(t) { throw new Error(t); });
+    // Move the row from active to removed in our state
+    var movedFromEvtId = null;
+    Object.keys(pcAvailability).forEach(function(eid) {
+      pcAvailability[eid] = pcAvailability[eid].filter(function(row) {
+        if (row.id === pendingRemoveAvailId) {
+          row.removed_at = nowStr;
+          row.removed_by = who;
+          if (!pcRemovedAvailability[eid]) pcRemovedAvailability[eid] = [];
+          pcRemovedAvailability[eid].push(row);
+          movedFromEvtId = eid;
+          return false;
+        }
+        return true;
+      });
+    });
+    pendingRemoveAvailId = null;
+    pendingRemoveName = null;
+    document.getElementById('remove-confirm').classList.remove('open');
+    btn.disabled = false;
+    btn.textContent = 'Yes, remove them';
+    showToast('Signup removed.', 'green');
+    render();
+  }).catch(function(e) {
+    console.error(e);
+    showToast('Error removing signup.', 'red');
+    btn.disabled = false;
+    btn.textContent = 'Yes, remove them';
+  });
+});
+
+function restoreSignup(av) {
+  var hdrs = apiHeadersJson();
+  hdrs['Prefer'] = 'return=minimal';
+  fetch(SB_URL + '/rest/v1/availability?id=eq.' + av.id, {
+    method: 'PATCH',
+    headers: hdrs,
+    body: JSON.stringify({removed_at: null, removed_by: null})
+  }).then(function(r) {
+    if (!r.ok) return r.text().then(function(t) { throw new Error(t); });
+    // Move from removed back to active
+    Object.keys(pcRemovedAvailability).forEach(function(eid) {
+      pcRemovedAvailability[eid] = pcRemovedAvailability[eid].filter(function(row) {
+        if (row.id === av.id) {
+          row.removed_at = null;
+          row.removed_by = null;
+          if (!pcAvailability[eid]) pcAvailability[eid] = [];
+          pcAvailability[eid].push(row);
+          return false;
+        }
+        return true;
+      });
+    });
+    showToast('Signup restored.', 'green');
+    render();
+  }).catch(function(e) {
+    console.error(e);
+    showToast('Error restoring signup.', 'red');
+  });
+}
+
+// ============ ASSIGN MODAL ============
+
+function openAssignModal(staffName, currentEvt) {
+  var nameMap = getDayMultiSignups(currentEvt.event_date);
+  var evtIds = nameMap[staffName] || [];
+  if (evtIds.length === 0) return;
+  var assignedTo = getAssignment(staffName, currentEvt.event_date);
+
+  document.getElementById('assign-title').textContent = 'Assign ' + staffName;
+  var dateObj = new Date(currentEvt.event_date + 'T12:00:00');
+  var dayLabel = DAYS[dateObj.getDay()] + ', ' + MONTHS[dateObj.getMonth()] + ' ' + dateObj.getDate();
+  document.getElementById('assign-sub').textContent = dayLabel + ' \u2014 signed up for ' + evtIds.length + ' events. Pick which to schedule them for. Others will strike through and counts will adjust.';
+
+  var body = document.getElementById('assign-body');
+  body.innerHTML = '';
+
+  evtIds.forEach(function(eid) {
+    var evt = findEventById(eid);
+    if (!evt) return;
+    var isCurrent = assignedTo === eid;
+    var row = document.createElement('div');
+    row.className = 'assign-row' + (isCurrent ? ' is-current' : '');
+    row.innerHTML = '<div class="assign-row-info"><div class="assign-row-evt">' + escapeHtml(evt.event_name) + '</div>' +
+      '<div class="assign-row-meta">' + escapeHtml(VENUE_LABELS[evt.venue] || evt.venue) + ' \u00B7 ' + formatShiftRange(evt) + '</div></div>' +
+      (isCurrent ? '<span class="assign-row-current">Current</span>' : '');
+    row.addEventListener('click', function() {
+      saveAssignment(staffName, currentEvt.event_date, eid);
+    });
+    body.appendChild(row);
+  });
+
+  if (assignedTo) {
+    var clearBtn = document.createElement('button');
+    clearBtn.className = 'assign-clear-btn';
+    clearBtn.textContent = 'Clear assignment (mark all as unresolved again)';
+    clearBtn.addEventListener('click', function() { clearAssignment(staffName, currentEvt.event_date); });
+    body.appendChild(clearBtn);
+  }
+
+  document.getElementById('assign-modal').classList.add('open');
+}
+
+function saveAssignment(staffName, dateStr, evtId) {
+  var u = pcAuth.getUser();
+  var who = (u && u.display_name) ? u.display_name : 'unknown';
+  var existing = pcAssignments[staffName + '||' + dateStr];
+  var nowStr = new Date().toISOString();
+  var hdrs = apiHeadersJson();
+  hdrs['Prefer'] = 'return=representation';
+
+  var promise;
+  if (existing && existing.id) {
+    promise = fetch(SB_URL + '/rest/v1/availability_assignments?id=eq.' + existing.id, {
+      method: 'PATCH',
+      headers: hdrs,
+      body: JSON.stringify({assigned_event_id: evtId, assigned_by: who, assigned_at: nowStr})
+    });
+  } else {
+    promise = fetch(SB_URL + '/rest/v1/availability_assignments', {
+      method: 'POST',
+      headers: hdrs,
+      body: JSON.stringify({staff_name: staffName, event_date: dateStr, assigned_event_id: evtId, assigned_by: who, assigned_at: nowStr})
+    });
+  }
+
+  promise.then(function(r) {
+    if (!r.ok) return r.text().then(function(t) { throw new Error(t); });
+    return r.json();
+  }).then(function(rows) {
+    var saved = (rows && rows.length > 0) ? rows[0] : {staff_name: staffName, event_date: dateStr, assigned_event_id: evtId, assigned_by: who, assigned_at: nowStr};
+    pcAssignments[staffName + '||' + dateStr] = saved;
+    closeModal('assign-modal');
+    showToast(staffName + ' assigned.', 'green');
+    render();
+  }).catch(function(e) {
+    console.error(e);
+    showToast('Error saving assignment.', 'red');
+  });
+}
+
+function clearAssignment(staffName, dateStr) {
+  var existing = pcAssignments[staffName + '||' + dateStr];
+  if (!existing || !existing.id) {
+    delete pcAssignments[staffName + '||' + dateStr];
+    closeModal('assign-modal');
+    render();
+    return;
+  }
+  var hdrs = apiHeadersJson();
+  hdrs['Prefer'] = 'return=minimal';
+  fetch(SB_URL + '/rest/v1/availability_assignments?id=eq.' + existing.id, {
+    method: 'DELETE',
+    headers: hdrs
+  }).then(function(r) {
+    if (!r.ok) return r.text().then(function(t) { throw new Error(t); });
+    delete pcAssignments[staffName + '||' + dateStr];
+    closeModal('assign-modal');
+    showToast('Assignment cleared.', 'green');
+    render();
+  }).catch(function(e) {
+    console.error(e);
+    showToast('Error clearing assignment.', 'red');
+  });
+}
+
+// ============ SCORECARD MODAL ============
+
+function openScorecardModal(evt, role) {
+  var rows = pcStaffingRequests[evt.id + '||' + evt.venue];
+  var tier = evt.staffing_tier || 'full';
+  var stands = VENUE_STANDS[evt.venue] || [];
+  var totalCount = 0;
+  var standsWithRole = [];
+
+  if (rows && rows.length > 0) {
+    rows.forEach(function(r) {
+      if (r.role !== role) return;
+      if (!r.headcount) return;
+      if (shouldExcludeFromTotal(r.venue, r.stand, r.role, tier)) return;
+      standsWithRole.push({stand: r.stand, count: r.headcount, note: r.staff_notes || '', isPar: false});
+      totalCount += r.headcount;
+    });
+  } else {
+    stands.forEach(function(st) {
+      var roles = getRolesForStand(st);
+      if (roles.indexOf(role) === -1) return;
+      var k = evt.venue + '||' + st + '||' + role + '||' + tier;
+      var ct = pcParLevels[k] || 0;
+      if (ct === 0) return;
+      if (shouldExcludeFromTotal(evt.venue, st, role, tier)) return;
+      standsWithRole.push({stand: st, count: ct, note: '', isPar: true});
+      totalCount += ct;
+    });
+  }
+
+  document.getElementById('scorecard-title').textContent = role + ' \u2014 ' + (VENUE_LABELS[evt.venue] || evt.venue);
+  var dateObj = new Date(evt.event_date + 'T12:00:00');
+  var dateLabel = DAYS_SHORT[dateObj.getDay()] + ' ' + MONTHS[dateObj.getMonth()] + ' ' + dateObj.getDate();
+  var prefix = (rows && rows.length > 0) ? '' : '~';
+  document.getElementById('scorecard-sub').textContent = evt.event_name + ' \u00B7 ' + dateLabel + ' \u00B7 ' + prefix + totalCount + ' ' + role + (totalCount !== 1 ? 's' : '') + ' across ' + standsWithRole.length + ' stand' + (standsWithRole.length !== 1 ? 's' : '');
+
+  var body = document.getElementById('scorecard-body');
+  body.innerHTML = '';
+  if (standsWithRole.length === 0) {
+    var em = document.createElement('div');
+    em.className = 'no-signups-msg';
+    em.textContent = 'No stands need this role.';
+    body.appendChild(em);
+  } else {
+    standsWithRole.forEach(function(s) {
+      var row = document.createElement('div');
+      row.className = 'stand-row';
+      var info = document.createElement('div');
+      info.className = 'stand-info';
+      var standName = document.createElement('div');
+      standName.className = 'stand-name';
+      standName.innerHTML = escapeHtml(s.stand) + (s.isPar ? '<span class="stand-name-meta">par level</span>' : '');
+      info.appendChild(standName);
+      if (s.note) {
+        var noteEl = document.createElement('div');
+        noteEl.className = 'stand-note';
+        noteEl.textContent = s.note;
+        info.appendChild(noteEl);
+      }
+      row.appendChild(info);
+      var cnt = document.createElement('div');
+      cnt.className = 'stand-count' + (s.isPar ? ' par' : '');
+      cnt.textContent = (s.isPar ? '~' : '') + s.count;
+      row.appendChild(cnt);
+      body.appendChild(row);
+    });
+  }
+
+  document.getElementById('scorecard-modal').classList.add('open');
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+
+// ============ UTILITIES ============
+
+function formatShiftRange(evt) {
+  if (evt.gates_open) {
+    var gates = fmtTime(evt.gates_open);
+    var end = evt.estimated_end_time ? fmtTime(evt.estimated_end_time) : null;
+    if (end) return 'Gates ' + gates + ' \u2013 ' + end;
+    return 'Gates ' + gates;
+  }
+  if (evt.show_time) return 'Show ' + fmtTime(evt.show_time);
+  if (evt.report_time) return fmtTime(evt.report_time);
+  return '';
+}
+
+function fmtTime(t) {
+  if (!t) return '--';
+  var parts = t.split(':');
+  var h = parseInt(parts[0]);
+  return (h % 12 || 12) + ':' + parts[1] + ' ' + (h >= 12 ? 'PM' : 'AM');
+}
+
+function pad(n) { return n <= 9 ? '0' + n : '' + n; }
+
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function showToast(msg, kind) {
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast' + (kind ? ' ' + kind : '');
+  t.classList.add('show');
+  setTimeout(function() { t.classList.remove('show'); }, 3500);
+}
+
+// ============ AUTH GATE ============
+
+pcAuth.require({
+  pageSlug: 'schedule-assistant',
+  onReady: function(user) {
+    var el = document.getElementById('header-right');
+    if (el && user) {
+      el.innerHTML = '<span class="header-user">' + escapeHtml(user.display_name || user.email) + '</span>' +
+        '<button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
+    }
+    init();
+  }
+});
+
+})();
+</script>
+</body>
+</html>
