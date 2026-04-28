@@ -289,9 +289,82 @@ function pcHireRoleChanged(){document.querySelectorAll('#hire-roles-group .ms-pi
 function updatePayLookup(){var venues=getHireChecked('hvenue_',VENUE_CODES);var roles=[];for(var i=0;i<pcRoles.length;i++){var el=document.getElementById('hrole_'+i);if(el&&el.checked)roles.push(pcRoles[i]);}var el=document.getElementById('hire-pay-lookup');if(!el)return;if(venues.length===0||roles.length===0){el.classList.remove('visible');return;}var sv={};for(var v=0;v<venues.length;v++){var st=VENUE_STATE[venues[v]];if(st)sv[st]=true;}var states=Object.keys(sv).sort();var html='';for(var s=0;s<states.length;s++){var state=states[s];html+='<div style="'+(s>0?'margin-top:8px;padding-top:8px;border-top:1px solid #b8dfc8;':'')+'"><div style="font-weight:600;font-size:12px;color:#1e6b2e;margin-bottom:4px;">'+state+' rates</div>';for(var r=0;r<roles.length;r++){var role=roles[r];var rate=getPayRateByState(state,role);if(rate!==null&&rate>0)html+='<div style="font-size:13px;padding:2px 0;">'+role+': <strong>$'+parseFloat(rate).toFixed(2)+' / hr</strong></div>';else if(rate!==null&&rate===0)html+='<div style="font-size:13px;padding:2px 0;">'+role+': <em>commission-based</em></div>';else html+='<div style="font-size:13px;padding:2px 0;color:#888;">'+role+': <em>no rate set</em></div>';}html+='</div>';}el.innerHTML=html;el.classList.add('visible');}
 function pcPipeConfirmHire(){if(!pcSelected)return;var venues=getHireChecked('hvenue_',VENUE_CODES);var roles=[];for(var i=0;i<pcRoles.length;i++){var el=document.getElementById('hrole_'+i);if(el&&el.checked)roles.push(pcRoles[i]);}var hiredBy=document.getElementById('hire-by-name').value.trim();var errEl=document.getElementById('hire-err');if(venues.length===0){errEl.innerHTML='Please select at least one venue.';return;}if(roles.length===0){errEl.innerHTML='Please select at least one role.';return;}if(!hiredBy){errEl.innerHTML='Please enter your name.';return;}var punch=getPunchId(pcSelected.phone);var sv={};for(var v=0;v<venues.length;v++){var st=VENUE_STATE[venues[v]];if(st)sv[st]=true;}var states=Object.keys(sv);var rateObj={};for(var r=0;r<roles.length;r++){var role=roles[r];var rr={};for(var s=0;s<states.length;s++){var rt=getPayRateByState(states[s],role);if(rt!==null)rr[states[s]]=rt;}rateObj[role]=rr;}var cu={pipeline_stage:'onboarding',hired:true,hired_at:new Date().toISOString(),hired_by:hiredBy,punch_id:punch,assigned_venues:venues,assigned_roles:roles,starting_pay_rate:JSON.stringify(rateObj),stage_updated_at:new Date().toISOString(),updated_at:new Date().toISOString()};var er={first_name:pcSelected.first_name,last_name:pcSelected.last_name,punch_id:punch,is_active:true,phone:pcSelected.phone};cancelBookingForCandidate(pcSelected.id);sbFetch('/rest/v1/candidates?id=eq.'+pcSelected.id,{method:'PATCH',prefer:'return=minimal',body:cu}).then(function(){return sbFetch('/rest/v1/employees',{method:'POST',prefer:'return=minimal',body:er});}).then(function(){pcPipeCloseModal(null);loadAll();}).catch(function(err){var e=document.getElementById('hire-err');if(e)e.innerHTML='Error saving. Please try again.';console.error(err);});}
 function pcPipeToggleChecklist(field,tsField,checked){if(!pcSelected)return;var u={};u[field]=checked;u[tsField]=checked?new Date().toISOString():null;u['updated_at']=new Date().toISOString();sbFetch('/rest/v1/candidates?id=eq.'+pcSelected.id,{method:'PATCH',prefer:'return=minimal',body:u}).then(function(){pcSelected[field]=checked;pcSelected[tsField]=checked?new Date().toISOString():null;render();});}
-function pcPipeUploadW4Doc(input){if(!input.files||!input.files[0]||!pcSelected)return;var file=input.files[0];var ext=file.name.split('.').pop();var path=pcSelected.id+'/w4_url.'+ext;var h=apiHeaders();h['Content-Type']=file.type||'application/octet-stream';h['x-upsert']='true';fetch(SUPABASE_URL+'/storage/v1/object/candidate-files/'+path,{method:'POST',headers:h,body:file}).then(function(){var url=SUPABASE_URL+'/storage/v1/object/candidate-files/'+path;var now=new Date().toISOString();return sbFetch('/rest/v1/candidates?id=eq.'+pcSelected.id,{method:'PATCH',prefer:'return=minimal',body:{w4_url:url,w4_complete:true,w4_completed_at:now,direct_deposit_complete:true,direct_deposit_completed_at:now,updated_at:now}}).then(function(){pcSelected.w4_url=url;pcSelected.w4_complete=true;pcSelected.direct_deposit_complete=true;render();});}).catch(function(err){console.error('Upload failed',err);});}
-function pcPipeUploadI9Doc(input){if(!input.files||!input.files[0]||!pcSelected)return;var file=input.files[0];var ext=file.name.split('.').pop();var path=pcSelected.id+'/i9_url.'+ext;var h=apiHeaders();h['Content-Type']=file.type||'application/octet-stream';h['x-upsert']='true';fetch(SUPABASE_URL+'/storage/v1/object/candidate-files/'+path,{method:'POST',headers:h,body:file}).then(function(){var url=SUPABASE_URL+'/storage/v1/object/candidate-files/'+path;var now=new Date().toISOString();return sbFetch('/rest/v1/candidates?id=eq.'+pcSelected.id,{method:'PATCH',prefer:'return=minimal',body:{i9_url:url,i9_submitted:true,i9_submitted_at:now,updated_at:now}}).then(function(){pcSelected.i9_url=url;pcSelected.i9_submitted=true;render();});}).catch(function(err){console.error('Upload failed',err);});}
-function pcPipeUploadWorkingPapers(input){if(!input.files||!input.files[0]||!pcSelected)return;var file=input.files[0];var ext=file.name.split('.').pop();var path=pcSelected.id+'/working-papers.'+ext;var h=apiHeaders();h['Content-Type']=file.type||'application/octet-stream';h['x-upsert']='true';fetch(SUPABASE_URL+'/storage/v1/object/candidate-files/'+path,{method:'POST',headers:h,body:file}).then(function(){var url=SUPABASE_URL+'/storage/v1/object/candidate-files/'+path;return sbFetch('/rest/v1/candidates?id=eq.'+pcSelected.id,{method:'PATCH',prefer:'return=minimal',body:{working_papers_url:url,updated_at:new Date().toISOString()}}).then(function(){pcSelected.working_papers_url=url;render();});}).catch(function(err){console.error('Upload failed',err);});}
+
+/* ── File Upload Functions (with proper error handling) ── */
+function pcPipeUploadW4Doc(input){
+  if(!input.files||!input.files[0]||!pcSelected)return;
+  var file=input.files[0];
+  var ext=file.name.split('.').pop().toLowerCase();
+  var path=pcSelected.id+'/w4_url.'+ext;
+  var h=apiHeaders();
+  h['Content-Type']=file.type||'application/octet-stream';
+  h['x-upsert']='true';
+  fetch(SUPABASE_URL+'/storage/v1/object/candidate-files/'+path,{method:'POST',headers:h,body:file}).then(function(r){
+    if(!r.ok){
+      return r.text().then(function(t){throw new Error('Upload failed ('+r.status+'): '+t);});
+    }
+    var url=SUPABASE_URL+'/storage/v1/object/candidate-files/'+path;
+    var now=new Date().toISOString();
+    return sbFetch('/rest/v1/candidates?id=eq.'+pcSelected.id,{method:'PATCH',prefer:'return=minimal',body:{w4_url:url,w4_complete:true,w4_completed_at:now,direct_deposit_complete:true,direct_deposit_completed_at:now,updated_at:now}}).then(function(){
+      pcSelected.w4_url=url;
+      pcSelected.w4_complete=true;
+      pcSelected.direct_deposit_complete=true;
+      render();
+    });
+  }).catch(function(err){
+    console.error('W-4 upload failed:',err);
+    alert('Upload failed. Please try again.\n\n'+err.message);
+  });
+}
+
+function pcPipeUploadI9Doc(input){
+  if(!input.files||!input.files[0]||!pcSelected)return;
+  var file=input.files[0];
+  var ext=file.name.split('.').pop().toLowerCase();
+  var path=pcSelected.id+'/i9_url.'+ext;
+  var h=apiHeaders();
+  h['Content-Type']=file.type||'application/octet-stream';
+  h['x-upsert']='true';
+  fetch(SUPABASE_URL+'/storage/v1/object/candidate-files/'+path,{method:'POST',headers:h,body:file}).then(function(r){
+    if(!r.ok){
+      return r.text().then(function(t){throw new Error('Upload failed ('+r.status+'): '+t);});
+    }
+    var url=SUPABASE_URL+'/storage/v1/object/candidate-files/'+path;
+    var now=new Date().toISOString();
+    return sbFetch('/rest/v1/candidates?id=eq.'+pcSelected.id,{method:'PATCH',prefer:'return=minimal',body:{i9_url:url,i9_submitted:true,i9_submitted_at:now,updated_at:now}}).then(function(){
+      pcSelected.i9_url=url;
+      pcSelected.i9_submitted=true;
+      render();
+    });
+  }).catch(function(err){
+    console.error('I-9 upload failed:',err);
+    alert('Upload failed. Please try again.\n\n'+err.message);
+  });
+}
+
+function pcPipeUploadWorkingPapers(input){
+  if(!input.files||!input.files[0]||!pcSelected)return;
+  var file=input.files[0];
+  var ext=file.name.split('.').pop().toLowerCase();
+  var path=pcSelected.id+'/working-papers.'+ext;
+  var h=apiHeaders();
+  h['Content-Type']=file.type||'application/octet-stream';
+  h['x-upsert']='true';
+  fetch(SUPABASE_URL+'/storage/v1/object/candidate-files/'+path,{method:'POST',headers:h,body:file}).then(function(r){
+    if(!r.ok){
+      return r.text().then(function(t){throw new Error('Upload failed ('+r.status+'): '+t);});
+    }
+    var url=SUPABASE_URL+'/storage/v1/object/candidate-files/'+path;
+    return sbFetch('/rest/v1/candidates?id=eq.'+pcSelected.id,{method:'PATCH',prefer:'return=minimal',body:{working_papers_url:url,updated_at:new Date().toISOString()}}).then(function(){
+      pcSelected.working_papers_url=url;
+      render();
+    });
+  }).catch(function(err){
+    console.error('Working papers upload failed:',err);
+    alert('Upload failed. Please try again.\n\n'+err.message);
+  });
+}
+
 function pcPipeShowPayRates(){
   if(!pcAuth.isAdmin()){
     alert('Admin access required. Sign in as admin from the Toolkit.');
@@ -304,8 +377,40 @@ function pcPipeSavePayRates(){var inputs=document.querySelectorAll('#pcpipe-moda
 function pcPipeDeactivate(){if(!pcSelected)return;var re=document.getElementById('deactivate-reason');var reason=re?re.value.trim():'';var now=new Date().toISOString();sbFetch('/rest/v1/candidates?id=eq.'+pcSelected.id,{method:'PATCH',prefer:'return=minimal',body:{pipeline_stage:'inactive',deactivation_reason:reason||null,stage_updated_at:now,updated_at:now}}).then(function(){if(!pcSelected.punch_id){loadAll();return;}return sbFetch('/rest/v1/employees?punch_id=eq.'+pcSelected.punch_id,{method:'PATCH',prefer:'return=minimal',body:{is_active:false,updated_at:now}});}).then(function(){loadAll();}).catch(function(err){console.error('Deactivate failed',err);});}
 function pcPipeReactivate(){if(!pcSelected)return;var now=new Date().toISOString();sbFetch('/rest/v1/candidates?id=eq.'+pcSelected.id,{method:'PATCH',prefer:'return=minimal',body:{pipeline_stage:'active',deactivation_reason:null,stage_updated_at:now,updated_at:now}}).then(function(){if(!pcSelected.punch_id){loadAll();return;}return sbFetch('/rest/v1/employees?punch_id=eq.'+pcSelected.punch_id,{method:'PATCH',prefer:'return=minimal',body:{is_active:true,updated_at:now}});}).then(function(){loadAll();}).catch(function(err){console.error('Reactivate failed',err);});}
 function pcPipeCloseModal(e){if(e?e.target===e.currentTarget:true)document.getElementById('pcpipe-modal').innerHTML='';}
-function getSignedUrl(storagePath,callback){var h=apiHeadersJson();fetch(SUPABASE_URL+'/storage/v1/object/sign/candidate-files/'+storagePath,{method:'POST',headers:h,body:JSON.stringify({expiresIn:3600})}).then(function(r){return r.json();}).then(function(data){if(data.signedURL)callback(SUPABASE_URL+data.signedURL);else callback(null);}).catch(function(){callback(null);});}
+
+/* ── Signed URL fix: handles both signedURL/signedUrl response keys
+   and ensures /storage/v1 prefix is present in the returned path ── */
+function getSignedUrl(storagePath,callback){
+  var h=apiHeadersJson();
+  fetch(SUPABASE_URL+'/storage/v1/object/sign/candidate-files/'+storagePath,{
+    method:'POST',
+    headers:h,
+    body:JSON.stringify({expiresIn:3600})
+  }).then(function(r){
+    if(!r.ok){
+      return r.text().then(function(t){throw new Error('Sign failed ('+r.status+'): '+t);});
+    }
+    return r.json();
+  }).then(function(data){
+    var signedPath=data.signedURL||data.signedUrl;
+    if(signedPath){
+      // Supabase returns the path without /storage/v1 prefix; add it if missing
+      if(signedPath.indexOf('/storage/v1')!==0){
+        signedPath='/storage/v1'+signedPath;
+      }
+      callback(SUPABASE_URL+signedPath);
+    } else {
+      console.error('Signing returned no URL:',data);
+      callback(null);
+    }
+  }).catch(function(err){
+    console.error('Signed URL error:',err);
+    callback(null);
+  });
+}
+
 function pcPipeTriggerDocUpload(cid,fk){var el=document.getElementById('doc-input-'+fk);if(el)el.click();}
+
 function pcPipeOpenFile(cid,fk){
   var c=null;
   for(var i=0;i<pcCandidates.length;i++){if(pcCandidates[i].id===cid){c=pcCandidates[i];break;}}
