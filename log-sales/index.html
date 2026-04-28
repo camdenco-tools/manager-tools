@@ -128,14 +128,14 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
           <input type="number" id="amount" placeholder="0.00" step="0.01" min="0">
         </div>
         <div class="field">
-          <label>Tips collected ($) <span style="font-weight:400;color:#bbb;">(optional)</span></label>
+          <label>Tips collected ($)</label>
           <input type="number" id="tip-amount" placeholder="0.00" step="0.01" min="0">
-          <div class="field-note" style="font-size:11px;color:#aaa;margin-top:4px;">Total tips for this stand tonight</div>
+          <div class="field-note" style="font-size:11px;color:#aaa;margin-top:4px;">Enter 0 if no tips were collected</div>
         </div>
         <div class="field">
-          <label>Staff working this stand <span style="font-weight:400;color:#bbb;">(optional)</span></label>
-          <input type="number" id="staff-count" placeholder="e.g. 3" min="0" step="1">
-          <div class="field-note" style="font-size:11px;color:#aaa;margin-top:4px;">Number of people staffed at this stand tonight</div>
+          <label>Staff working this stand</label>
+          <input type="number" id="staff-count" placeholder="e.g. 3" min="1" step="1">
+          <div class="field-note" style="font-size:11px;color:#aaa;margin-top:4px;">At least 1 required — include everyone who worked this stand</div>
         </div>
         <label style="margin-bottom:8px;display:block;">Photos</label>
         <div class="upload-row">
@@ -149,8 +149,8 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
           </div>
         </div>
         <div class="upload-note">Attach register photo when possible -- units sold is a bonus</div>
-        <input type="file" id="file-register" accept="image/jpeg,image/png,image/webp,image/gif" onchange="handleFile(this,'register')" style="display:none;">
-        <input type="file" id="file-units" accept="image/jpeg,image/png,image/webp,image/gif" onchange="handleFile(this,'units')" style="display:none;">
+        <input type="file" id="file-register" accept="image/jpeg,image/png" onchange="handleFile(this,'register')" style="display:none;">
+        <input type="file" id="file-units" accept="image/jpeg,image/png" onchange="handleFile(this,'units')" style="display:none;">
         <div class="error-msg" id="error-msg"></div>
         <button class="submit-btn" id="submit-btn" onclick="submitSale()">Submit Sale</button>
       </div>
@@ -365,15 +365,28 @@ async function submitSale() {
   var venue = document.getElementById('venue-sel').value;
   var stand = document.getElementById('stand-sel').value;
   var amount = parseFloat(document.getElementById('amount').value);
+  var staffCount = parseInt(document.getElementById('staff-count').value);
+  var tipAmountRaw = document.getElementById('tip-amount').value;
+  var tipAmount = tipAmountRaw === '' ? null : parseFloat(tipAmountRaw);
   var errEl = document.getElementById('error-msg');
   errEl.style.display = 'none';
+
   if (!date || !venue || !stand || !amount || isNaN(amount)) {
-    errEl.textContent = 'Please fill in date, venue, stand, and amount.';
+    errEl.textContent = 'Please fill in date, venue, stand, and sales total.';
     errEl.style.display = 'block';
     return;
   }
-  var staffCount = parseInt(document.getElementById('staff-count').value) || null;
-  var tipAmount = parseFloat(document.getElementById('tip-amount').value) || null;
+  if (tipAmount === null || isNaN(tipAmount)) {
+    errEl.textContent = 'Tips are required — enter 0 if none were collected.';
+    errEl.style.display = 'block';
+    return;
+  }
+  if (!staffCount || staffCount < 1) {
+    errEl.textContent = 'Staff count is required — enter at least 1.';
+    errEl.style.display = 'block';
+    return;
+  }
+
   var btn = document.getElementById('submit-btn');
   btn.disabled = true;
   btn.textContent = 'Saving...';
@@ -396,7 +409,8 @@ async function submitSale() {
       body: JSON.stringify({
         id: saleId, event_date: date, event_name: evtName || null,
         venue: venue, stand: stand, amount: amount, tip_amount: tipAmount,
-        staff_count: staffCount || null, photo_url: photoUrl, units_photo_url: unitsUrl
+        staff_count: staffCount, photo_url: photoUrl, units_photo_url: unitsUrl,
+        submitted_by: pcAuth.user() ? pcAuth.user().display_name : null
       })
     });
     if (!res.ok) throw new Error(await res.text());
