@@ -358,7 +358,19 @@ function apiHeadersJson() { return Object.assign({}, pcAuth.headers(), {'Content
 
 function sbFetch(path) {
   return fetch(SB_URL + '/rest/v1/' + path, {headers: apiHeaders()}).then(function(r) {
-    if (!r.ok) return r.text().then(function(t) { throw new Error(t); });
+    if (r.status === 401) {
+      var err = new Error('Unauthorized');
+      err.authFailed = true;
+      throw err;
+    }
+    if (!r.ok) return r.text().then(function(t) {
+      if (t && t.indexOf('JWT expired') !== -1) {
+        var err = new Error('JWT expired');
+        err.authFailed = true;
+        throw err;
+      }
+      throw new Error(t);
+    });
     return r.json();
   });
 }
@@ -393,7 +405,6 @@ function init() {
         pcAvailability[r.event_id].push(r);
       }
     });
-
     pcStaffingRequests = {};
     (res[2] || []).forEach(function(r) {
       var k = r.event_id + '||' + r.venue;
@@ -427,6 +438,10 @@ function init() {
     render();
   }).catch(function(e) {
     console.error('Load error:', e);
+    if (e && e.authFailed) {
+      handleAuthFailure();
+      return;
+    }
     document.getElementById('events-container').innerHTML = '<div class="loading-msg">Error loading data. Please refresh.</div>';
   });
 }
@@ -1001,7 +1016,7 @@ document.getElementById('staffed-confirm-btn').addEventListener('click', functio
   var nowStr = new Date().toISOString();
   var hdrs = apiHeadersJson();
   hdrs['Prefer'] = 'resolution=merge-duplicates,return=minimal';
-  fetch(SB_URL + '/rest/v1/event_staffing_status', {
+  authFetch(SB_URL + '/rest/v1/event_staffing_status', {
     method: 'POST',
     headers: hdrs,
     body: JSON.stringify({
@@ -1011,8 +1026,7 @@ document.getElementById('staffed-confirm-btn').addEventListener('click', functio
       confirmed_by: name,
       confirmed_at: nowStr
     })
-  }).then(function(r) {
-    if (!r.ok) return r.text().then(function(t) { throw new Error(t); });
+  }).then(function() {
     pcStaffingStatus[pendingStaffEvtId + '||' + pendingStaffVenue] = {
       event_id: pendingStaffEvtId,
       venue: pendingStaffVenue,
@@ -1029,22 +1043,22 @@ document.getElementById('staffed-confirm-btn').addEventListener('click', functio
     showToast('Staffing confirmed.', 'green');
     rerenderEvent(savedId);
   }).catch(function(e) {
-    console.error(e);
-    showToast('Error saving. Please try again.', 'red');
+    console.error('mark staffed error:', e);
     btn.disabled = false;
     btn.textContent = 'Mark as staffed';
+    if (e.authFailed) { handleAuthFailure(); return; }
+    showToast('Error saving. Please try again.', 'red');
   });
 });
 
 function reverseStaffed(evt) {
   var hdrs = apiHeadersJson();
   hdrs['Prefer'] = 'return=minimal';
-  fetch(SB_URL + '/rest/v1/event_staffing_status?event_id=eq.' + evt.id + '&venue=eq.' + encodeURIComponent(evt.venue), {
+  authFetch(SB_URL + '/rest/v1/event_staffing_status?event_id=eq.' + evt.id + '&venue=eq.' + encodeURIComponent(evt.venue), {
     method: 'PATCH',
     headers: hdrs,
     body: JSON.stringify({is_confirmed: false, confirmed_by: null, confirmed_at: null})
-  }).then(function(r) {
-    if (!r.ok) return r.text().then(function(t) { throw new Error(t); });
+  }).then(function() {
     if (pcStaffingStatus[evt.id + '||' + evt.venue]) {
       pcStaffingStatus[evt.id + '||' + evt.venue].is_confirmed = false;
       pcStaffingStatus[evt.id + '||' + evt.venue].confirmed_by = null;
@@ -1053,7 +1067,8 @@ function reverseStaffed(evt) {
     showToast('Staffing confirmation reversed.', 'green');
     rerenderEvent(evt.id);
   }).catch(function(e) {
-    console.error(e);
+    console.error('reverseStaffed error:', e);
+    if (e.authFailed) { handleAuthFailure(); return; }
     showToast('Error reversing. Please try again.', 'red');
   });
 }
@@ -1088,14 +1103,12 @@ document.getElementById('remove-confirm-btn').addEventListener('click', function
   var nowStr = new Date().toISOString();
   var hdrs = apiHeadersJson();
   hdrs['Prefer'] = 'return=minimal';
-  fetch(SB_URL + '/rest/v1/availability?id=eq.' + pendingRemoveAvailId, {
+  authFetch(SB_URL + '/rest/v1/availability?id=eq.' + pendingRemoveAvailId, {
     method: 'PATCH',
     headers: hdrs,
     body: JSON.stringify({removed_at: nowStr, removed_by: who})
-  }).then(function(r) {
-    if (!r.ok) return r.text().then(function(t) { throw new Error(t); });
+  }).then(function() {
     // Move the row from active to removed in our state
-    var movedFromEvtId = null;
     Object.keys(pcAvailability).forEach(function(eid) {
       pcAvailability[eid] = pcAvailability[eid].filter(function(row) {
         if (row.id === pendingRemoveAvailId) {
@@ -1103,7 +1116,6 @@ document.getElementById('remove-confirm-btn').addEventListener('click', function
           row.removed_by = who;
           if (!pcRemovedAvailability[eid]) pcRemovedAvailability[eid] = [];
           pcRemovedAvailability[eid].push(row);
-          movedFromEvtId = eid;
           return false;
         }
         return true;
@@ -1117,22 +1129,22 @@ document.getElementById('remove-confirm-btn').addEventListener('click', function
     showToast('Signup removed.', 'green');
     render();
   }).catch(function(e) {
-    console.error(e);
-    showToast('Error removing signup.', 'red');
+    console.error('remove signup error:', e);
     btn.disabled = false;
     btn.textContent = 'Yes, remove them';
+    if (e.authFailed) { handleAuthFailure(); return; }
+    showToast('Error removing signup.', 'red');
   });
 });
 
 function restoreSignup(av) {
   var hdrs = apiHeadersJson();
   hdrs['Prefer'] = 'return=minimal';
-  fetch(SB_URL + '/rest/v1/availability?id=eq.' + av.id, {
+  authFetch(SB_URL + '/rest/v1/availability?id=eq.' + av.id, {
     method: 'PATCH',
     headers: hdrs,
     body: JSON.stringify({removed_at: null, removed_by: null})
-  }).then(function(r) {
-    if (!r.ok) return r.text().then(function(t) { throw new Error(t); });
+  }).then(function() {
     // Move from removed back to active
     Object.keys(pcRemovedAvailability).forEach(function(eid) {
       pcRemovedAvailability[eid] = pcRemovedAvailability[eid].filter(function(row) {
@@ -1149,7 +1161,8 @@ function restoreSignup(av) {
     showToast('Signup restored.', 'green');
     render();
   }).catch(function(e) {
-    console.error(e);
+    console.error('restoreSignup error:', e);
+    if (e.authFailed) { handleAuthFailure(); return; }
     showToast('Error restoring signup.', 'red');
   });
 }
@@ -1196,6 +1209,49 @@ function openAssignModal(staffName, currentEvt) {
   document.getElementById('assign-modal').classList.add('open');
 }
 
+// ============ AUTH RECOVERY HELPER ============
+
+// If a write returns 401 / JWT expired, we drop the user back to login cleanly.
+// pcAuth.require on reload will detect missing/invalid token and re-prompt.
+function handleAuthFailure() {
+  // Clear stored tokens so reload definitely shows login
+  try {
+    localStorage.removeItem('sb_access_token');
+    localStorage.removeItem('sb_refresh_token');
+  } catch(e) {}
+  showToast('Session expired. Reloading to sign in again...', 'red');
+  setTimeout(function() { window.location.reload(); }, 1800);
+}
+
+// Wraps fetch and detects auth failures. Returns a promise that resolves to the
+// parsed JSON (or [] if the body was empty), or rejects with an Error whose
+// .authFailed property is set when the failure is auth-related.
+function authFetch(url, options) {
+  return fetch(url, options).then(function(r) {
+    if (r.status === 401) {
+      var err = new Error('Unauthorized');
+      err.authFailed = true;
+      throw err;
+    }
+    if (!r.ok) {
+      return r.text().then(function(t) {
+        // Some Supabase 403s also return JWT expired messages; treat as auth fail
+        if (t && t.indexOf('JWT expired') !== -1) {
+          var err = new Error('JWT expired');
+          err.authFailed = true;
+          throw err;
+        }
+        throw new Error(t || ('HTTP ' + r.status));
+      });
+    }
+    // Some PATCH/DELETE responses are empty; tolerate that
+    return r.text().then(function(t) {
+      if (!t) return [];
+      try { return JSON.parse(t); } catch(e) { return []; }
+    });
+  });
+}
+
 function saveAssignment(staffName, dateStr, evtId) {
   var u = pcAuth.getUser();
   var who = (u && u.display_name) ? u.display_name : 'unknown';
@@ -1206,30 +1262,37 @@ function saveAssignment(staffName, dateStr, evtId) {
 
   var promise;
   if (existing && existing.id) {
-    promise = fetch(SB_URL + '/rest/v1/availability_assignments?id=eq.' + existing.id, {
+    promise = authFetch(SB_URL + '/rest/v1/availability_assignments?id=eq.' + existing.id, {
       method: 'PATCH',
       headers: hdrs,
       body: JSON.stringify({assigned_event_id: evtId, assigned_by: who, assigned_at: nowStr})
     });
   } else {
-    promise = fetch(SB_URL + '/rest/v1/availability_assignments', {
+    promise = authFetch(SB_URL + '/rest/v1/availability_assignments', {
       method: 'POST',
       headers: hdrs,
       body: JSON.stringify({staff_name: staffName, event_date: dateStr, assigned_event_id: evtId, assigned_by: who, assigned_at: nowStr})
     });
   }
 
-  promise.then(function(r) {
-    if (!r.ok) return r.text().then(function(t) { throw new Error(t); });
-    return r.json();
-  }).then(function(rows) {
-    var saved = (rows && rows.length > 0) ? rows[0] : {staff_name: staffName, event_date: dateStr, assigned_event_id: evtId, assigned_by: who, assigned_at: nowStr};
+  promise.then(function(rows) {
+    // Server confirmed write succeeded. Build canonical local record.
+    var serverRow = (rows && rows.length > 0) ? rows[0] : null;
+    var saved = {
+      id: (serverRow && serverRow.id) || (existing && existing.id) || null,
+      staff_name: staffName,
+      event_date: dateStr,
+      assigned_event_id: evtId,
+      assigned_by: who,
+      assigned_at: nowStr
+    };
     pcAssignments[staffName + '||' + dateStr] = saved;
     closeModal('assign-modal');
     showToast(staffName + ' assigned.', 'green');
     render();
   }).catch(function(e) {
-    console.error(e);
+    console.error('saveAssignment error:', e);
+    if (e.authFailed) { handleAuthFailure(); return; }
     showToast('Error saving assignment.', 'red');
   });
 }
@@ -1244,17 +1307,17 @@ function clearAssignment(staffName, dateStr) {
   }
   var hdrs = apiHeadersJson();
   hdrs['Prefer'] = 'return=minimal';
-  fetch(SB_URL + '/rest/v1/availability_assignments?id=eq.' + existing.id, {
+  authFetch(SB_URL + '/rest/v1/availability_assignments?id=eq.' + existing.id, {
     method: 'DELETE',
     headers: hdrs
-  }).then(function(r) {
-    if (!r.ok) return r.text().then(function(t) { throw new Error(t); });
+  }).then(function() {
     delete pcAssignments[staffName + '||' + dateStr];
     closeModal('assign-modal');
     showToast('Assignment cleared.', 'green');
     render();
   }).catch(function(e) {
-    console.error(e);
+    console.error('clearAssignment error:', e);
+    if (e.authFailed) { handleAuthFailure(); return; }
     showToast('Error clearing assignment.', 'red');
   });
 }
