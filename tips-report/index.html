@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Popcorn Chez — Tips Report</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f0ec; min-height: 100vh; }
+
+header { background: #fff; border-bottom: 1px solid #e8e8e4; padding: 0 32px; display: flex; align-items: center; justify-content: space-between; height: 64px; position: sticky; top: 0; z-index: 100; }
+.header-left { display: flex; align-items: center; gap: 16px; }
+.back-link { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #999; text-decoration: none; display: flex; align-items: center; gap: 6px; }
+.back-link:hover { color: #1a1a1a; }
+.hdivider { width: 1px; height: 20px; background: #e8e8e4; }
+.header-title { font-size: 15px; font-weight: 700; }
+.header-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: #1a1a1a; color: white; padding: 3px 8px; border-radius: 20px; }
+.header-right { display: flex; align-items: center; gap: 12px; }
+.header-user { font-size: 12px; color: #999; font-weight: 600; }
+.sign-out-btn { font-size: 11px; font-weight: 700; color: #999; background: none; border: 1px solid #e8e8e4; padding: 5px 12px; border-radius: 8px; cursor: pointer; font-family: inherit; }
+.sign-out-btn:hover { color: #1a1a1a; border-color: #1a1a1a; }
+
+.page-body { padding: 20px 16px 60px; }
+.container { max-width: 1100px; margin: 0 auto; }
+
+/* Top controls */
+.top-controls { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+.top-controls-left { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.venue-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+.venue-pill { font-size: 12px; font-weight: 600; padding: 5px 14px; border-radius: 20px; cursor: pointer; border: 1px solid #ddd; background: white; color: #888; transition: all 0.15s; }
+.venue-pill.active { background: #1a1a1a; color: white; border-color: #1a1a1a; }
+.venue-pill:hover:not(.active) { border-color: #888; color: #1a1a1a; }
+.event-select { font-size: 13px; padding: 7px 12px; border-radius: 10px; border: 1px solid #ddd; background: white; color: #1a1a1a; font-family: inherit; cursor: pointer; }
+.print-btn { font-size: 12px; font-weight: 600; padding: 7px 16px; border-radius: 10px; border: 1px solid #ddd; background: white; color: #555; cursor: pointer; font-family: inherit; }
+.print-btn:hover { border-color: #1a1a1a; color: #1a1a1a; }
+
+/* Summary strip */
+.summary-strip { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 14px; }
+.s-box { background: white; border-radius: 12px; padding: 12px 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+.s-box.highlight { background: #f0faf5; border: 1px solid #97C459; }
+.s-box.alert { background: #FAEEDA; border: 1px solid #FAC775; }
+.s-lbl { font-size: 10px; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 5px; }
+.s-val { font-size: 20px; font-weight: 700; color: #1a1a1a; }
+.s-val.green { color: #27500A; }
+.s-val.amber { color: #633806; }
+.s-sub { font-size: 11px; color: #999; margin-top: 3px; }
+.s-sub.amber { color: #633806; }
+.s-sub.red { color: #791F1F; }
+.s-pct { font-size: 11px; font-weight: 600; margin-top: 4px; padding: 2px 7px; border-radius: 20px; display: inline-block; }
+.pct-normal { background: #f0f0f0; color: #888; }
+.pct-warn { background: #FAEEDA; color: #633806; }
+.pct-alert { background: #FCEBEB; color: #791F1F; }
+
+/* FMP pool notice */
+.pool-notice { background: #EEEDFE; border: 1px solid #AFA9EC; border-radius: 10px; padding: 9px 14px; font-size: 12px; color: #3C3489; margin-bottom: 14px; }
+
+/* Confirm all bar */
+.confirm-bar { background: white; border-radius: 12px; padding: 12px 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; gap: 12px; flex-wrap: wrap; }
+.confirm-bar-text { font-size: 13px; color: #555; }
+.confirm-bar-text strong { color: #1a1a1a; }
+.confirm-bar-btn { font-size: 12px; font-weight: 700; padding: 7px 18px; background: #1a1a1a; color: white; border: none; border-radius: 10px; cursor: pointer; font-family: inherit; white-space: nowrap; }
+.confirm-bar-btn:disabled { background: #ccc; cursor: not-allowed; }
+
+/* Stands grid */
+.stands-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; }
+
+/* Stand card */
+.stand-card { background: white; border-radius: 14px; padding: 14px 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); border: 1px solid transparent; }
+.stand-card.needs-review { border-color: #FAC775; }
+.stand-card.verified { border-color: #97C459; }
+.stand-card.not-submitted { border: 1px dashed #ddd; opacity: 0.6; }
+.stand-card.flagged { border-color: #F09595; }
+
+.sc-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2px; }
+.sc-name { font-size: 14px; font-weight: 700; color: #1a1a1a; }
+.sc-badge { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 20px; margin-left: 6px; vertical-align: middle; }
+.badge-unverified { background: #FAEEDA; color: #633806; }
+.badge-verified { background: #EAF3DE; color: #27500A; }
+.badge-flagged { background: #FCEBEB; color: #791F1F; }
+
+.sc-amt-block { text-align: right; flex-shrink: 0; }
+.sc-amt { font-size: 14px; font-weight: 700; color: #1a1a1a; }
+.sc-pct { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 20px; display: inline-block; margin-top: 2px; }
+
+.sc-meta { font-size: 11px; color: #aaa; margin-bottom: 6px; }
+
+.sc-staffing { margin-bottom: 6px; }
+.staff-tag { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 20px; display: inline-block; }
+.staff-ok { background: #EAF3DE; color: #27500A; }
+.staff-short { background: #FAEEDA; color: #633806; }
+.staff-unknown { background: #f0f0f0; color: #888; border: 1px solid #eee; }
+
+.sc-pills { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 10px; }
+.sc-pill { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 20px; cursor: pointer; transition: opacity 0.15s; }
+.sc-pill:hover { opacity: 0.8; }
+.pill-reg { background: #EAF3DE; color: #27500A; }
+.pill-units { background: #E6F1FB; color: #0C447C; }
+.pill-signin { background: #EEEDFE; color: #3C3489; }
+.pill-missing { background: #f0f0f0; color: #999; border: 1px solid #eee; cursor: default; }
+
+.tip-bar { display: flex; justify-content: space-between; align-items: center; border-radius: 8px; padding: 7px 10px; margin-bottom: 10px; }
+.tip-bar.normal { background: #f0faf5; }
+.tip-bar.flagged { background: #FCEBEB; }
+.tip-bar-label { font-size: 11px; color: #27500A; }
+.tip-bar-label.flagged { color: #791F1F; }
+.tip-bar-val { font-size: 13px; font-weight: 700; color: #27500A; }
+.tip-bar-val.flagged { color: #791F1F; }
+
+/* Names section */
+.names-section { border-top: 1px solid #f0f0f0; padding-top: 10px; }
+.names-label { font-size: 10px; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+.name-row { display: flex; align-items: center; gap: 7px; padding: 4px 0; border-bottom: 1px solid #f8f8f8; }
+.name-row:last-of-type { border-bottom: none; }
+.name-row.removed { opacity: 0.4; }
+.nd { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.dot-g { background: #1D9E75; }
+.dot-a { background: #EF9F27; }
+.dot-r { background: #E24B4A; }
+.dot-m { background: #7F77DD; }
+.dot-gray { background: #ccc; }
+.name-text { font-size: 12px; color: #1a1a1a; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.name-text.struck { text-decoration: line-through; color: #aaa; }
+.name-text.unreadable { color: #aaa; font-style: italic; }
+.name-conf { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 20px; flex-shrink: 0; }
+.conf-h { background: #EAF3DE; color: #27500A; }
+.conf-m { background: #FAEEDA; color: #633806; }
+.conf-l { background: #FCEBEB; color: #791F1F; }
+.conf-manual { background: #EEEDFE; color: #3C3489; }
+.name-tip { font-size: 11px; color: #888; white-space: nowrap; flex-shrink: 0; }
+.name-tip.struck { text-decoration: line-through; }
+.row-btns { display: flex; gap: 3px; flex-shrink: 0; }
+.row-btn { width: 22px; height: 22px; border-radius: 6px; border: 1px solid #eee; background: #fafafa; color: #aaa; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-family: inherit; }
+.row-btn:hover { border-color: #888; color: #1a1a1a; }
+.row-btn.danger:hover { background: #FCEBEB; color: #791F1F; border-color: #F09595; }
+.row-btn.undo { background: #FAEEDA; color: #633806; border-color: #FAC775; }
+.row-btn.undo:hover { background: #FAC775; }
+
+/* Edit panel */
+.edit-panel { background: #fafafa; border: 1px solid #eee; border-radius: 8px; padding: 10px 12px; margin: 4px 0 6px; }
+.ep-label { font-size: 11px; color: #888; margin-bottom: 6px; }
+.ep-input { width: 100%; padding: 7px 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 13px; color: #1a1a1a; font-family: inherit; background: white; outline: none; }
+.ep-input:focus { border-color: #1a1a1a; }
+.ac-list { background: white; border: 1px solid #ddd; border-radius: 8px; margin-top: 3px; overflow: hidden; }
+.ac-item { padding: 8px 10px; font-size: 12px; color: #1a1a1a; cursor: pointer; border-bottom: 1px solid #f5f5f5; }
+.ac-item:last-child { border-bottom: none; }
+.ac-item:hover { background: #fafafa; }
+.ac-item-sub { font-size: 10px; color: #aaa; margin-top: 1px; }
+.ac-free { padding: 8px 10px; font-size: 12px; color: #185FA5; cursor: pointer; font-style: italic; }
+.ac-free:hover { background: #E6F1FB; }
+.ep-actions { display: flex; gap: 6px; margin-top: 8px; }
+.ep-save { flex: 1; padding: 6px; background: #1a1a1a; color: white; border: none; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.ep-save:disabled { background: #ccc; cursor: not-allowed; }
+.ep-cancel { padding: 6px 12px; background: #f5f5f5; color: #555; border: 1px solid #ddd; border-radius: 8px; font-size: 12px; cursor: pointer; font-family: inherit; }
+
+/* Add person row */
+.add-row { display: flex; align-items: center; gap: 7px; padding: 5px 0; font-size: 12px; color: #185FA5; cursor: pointer; border-top: 1px solid #f0f0f0; margin-top: 4px; }
+.add-row:hover { color: #042C53; }
+.add-icon { width: 18px; height: 18px; border-radius: 50%; background: #E6F1FB; border: 1px solid #B5D4F4; display: flex; align-items: center; justify-content: center; font-size: 13px; color: #185FA5; flex-shrink: 0; line-height: 1; }
+
+/* Confirm button */
+.confirm-row { margin-top: 10px; }
+.confirm-names-btn { width: 100%; padding: 7px; background: #1a1a1a; color: white; border: none; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.confirm-names-btn.done { background: #EAF3DE; color: #27500A; border: 1px solid #97C459; cursor: default; }
+
+.no-signin-msg { font-size: 12px; color: #aaa; font-style: italic; padding: 6px 0; }
+.not-sub-msg { font-size: 13px; color: #aaa; font-style: italic; text-align: center; padding: 12px 0; }
+
+/* Staff count mismatch badge */
+.count-mismatch { font-size: 10px; background: #EEEDFE; color: #3C3489; padding: 2px 7px; border-radius: 20px; display: inline-block; margin-top: 4px; }
+
+/* Lightbox */
+.lightbox { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.88); z-index: 9999; align-items: center; justify-content: center; }
+.lightbox.open { display: flex; }
+.lightbox-inner { position: relative; max-width: 90vw; max-height: 90vh; }
+.lightbox-inner img { max-width: 90vw; max-height: 85vh; border-radius: 8px; display: block; object-fit: contain; }
+.lightbox-close { position: absolute; top: -14px; right: -14px; width: 32px; height: 32px; border-radius: 50%; background: white; border: none; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #1a1a1a; line-height: 1; font-family: inherit; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+.lightbox-close:hover { background: #f0f0f0; }
+.lightbox-caption { text-align: center; color: #aaa; font-size: 12px; margin-top: 10px; }
+
+/* Loading / empty */
+.loading-card { background: white; border-radius: 14px; padding: 32px; text-align: center; color: #aaa; font-size: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+.empty-venues { text-align: center; padding: 60px 20px; color: #aaa; font-size: 14px; }
+
+/* Print styles */
+@media print {
+  header, .top-controls, .pool-notice, .confirm-bar, .row-btns, .add-row, .confirm-row, .edit-panel { display: none !important; }
+  body { background: white; }
+  .page-body { padding: 0; }
+  .container { max-width: 100%; }
+  .summary-strip { grid-template-columns: repeat(6, 1fr); }
+  .stands-grid { grid-template-columns: repeat(2, 1fr); }
+  .stand-card { break-inside: avoid; box-shadow: none; border: 1px solid #ddd; }
+  .print-header { display: block !important; }
+}
+.print-header { display: none; font-size: 13px; color: #555; margin-bottom: 16px; text-align: center; border-bottom: 1px solid #ddd; padding-bottom: 10px; }
+.print-footer { display: none; }
+@media print {
+  .print-footer { display: block; text-align: center; font-size: 11px; color: #aaa; margin-top: 24px; border-top: 1px solid #eee; padding-top: 10px; }
+  .print-sig { display: flex; gap: 60px; justify-content: center; margin-top: 20px; font-size: 12px; color: #555; }
+  .print-sig-line { border-top: 1px solid #555; width: 180px; padding-top: 4px; text-align: center; }
+}
+
+@media (max-width: 700px) {
+  header { padding: 0 16px; height: auto; flex-wrap: wrap; padding: 12px 16px; gap: 8px; }
+  .summary-strip { grid-template-columns: repeat(3, 1fr); }
+  .stands-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <div class="lightbox-inner" onclick="event.stopPropagation()">
+    <button class="lightbox-close" onclick="closeLightbox()">&#215;</button>
+    <img id="lightbox-img" src="" alt="">
+    <div class="lightbox-caption" id="lightbox-caption"></div>
+  </div>
+</div>
+
+<header>
+  <div class="header-left">
+    <a href="/" class="back-link">&#8592; Toolkit</a>
+    <div class="hdivider"></div>
+    <span class="header-title">Tips Report</span>
+    <span class="header-badge">Payroll</span>
+  </div>
+  <div class="header-right" id="header-right"></div>
+</header>
+
+<div class="page-body">
+  <div class="container">
+
+    <div class="print-header" id="print-header"></div>
+
+    <div class="top-controls">
+      <div class="top-controls-left">
+        <div class="venue-pills" id="venue-pills"></div>
+        <select class="event-select" id="event-select" onchange="loadEvent()">
+          <option value="">Select event...</option>
+        </select>
+      </div>
+      <button class="print-btn" onclick="window.print()">&#128438; Print report</button>
+    </div>
+
+    <div class="summary-strip" id="summary-strip" style="display:none;">
+      <div class="s-box">
+        <div class="s-lbl">Total sales</div>
+        <div class="s-val" id="sum-sales">—</div>
+      </div>
+      <div class="s-box">
+        <div class="s-lbl">Total tips</div>
+        <div class="s-val" id="sum-tips">—</div>
+        <div class="s-pct pct-normal" id="sum-tips-pct"></div>
+      </div>
+      <div class="s-box highlight">
+        <div class="s-lbl">Tip per person</div>
+        <div class="s-val green" id="sum-per-person">—</div>
+        <div class="s-sub" id="sum-per-person-sub"></div>
+      </div>
+      <div class="s-box" id="sum-staff-box">
+        <div class="s-lbl">Staff signed in</div>
+        <div class="s-val" id="sum-staff">—</div>
+        <div class="s-sub" id="sum-staff-sub"></div>
+      </div>
+      <div class="s-box">
+        <div class="s-lbl">Stands reported</div>
+        <div class="s-val" id="sum-stands">—</div>
+        <div class="s-sub" id="sum-stands-sub"></div>
+      </div>
+      <div class="s-box">
+        <div class="s-lbl">Names verified</div>
+        <div class="s-val" id="sum-verified">—</div>
+        <div class="s-sub" id="sum-verified-sub"></div>
+      </div>
+    </div>
+
+    <div class="pool-notice" id="pool-notice" style="display:none;"></div>
+
+    <div class="confirm-bar" id="confirm-bar" style="display:none;">
+      <div class="confirm-bar-text" id="confirm-bar-text"></div>
+      <button class="confirm-bar-btn" id="confirm-bar-btn" onclick="confirmAll()">Confirm all &amp; save</button>
+    </div>
+
+    <div id="main-content">
+      <div class="empty-venues">Select a venue and event to load the tips report.</div>
+    </div>
+
+    <div class="print-footer" id="print-footer"></div>
+
+  </div>
+</div>
+
+<script src="/pc-auth.js"></script>
+<script>
+var SUPA_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
+var POOL_VENUES = ['FMP'];
+
+var VENUE_LABELS = {
+  'Mann':'Mann Music Center','FMP':'FMP','ACCC':'ACCC','BWH':'Boardwalk Hall',
+  'Cure':'Cure Insurance Arena','DE':'DE Chase Field House','Subaru':'Subaru Park',
+  'Villanova':'Villanova','Montage':'Montage','SATB':'Sports at the Beach','Kirkwood':'Kirkwood'
+};
+
+var VENUE_STANDS = {
+  'Mann':['Support Staff','Hawking','Upper Concession','Upper Popcorn','Lower Popcorn','Upper Pizza','Lower Pizza','Farm & Fry Truck','Crescendo','Lawn Portable','Stage Left Bar','Upper Linear Bar','Skyline Popcorn','Skyline Pizza','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4','Mobile Cart 5','Mobile Cart 6','Mobile Cart 7','Mobile Cart 8','Mobile Cart 9','Mobile Cart 10','Client Staffing Needs'],
+  'FMP':['Support Staff','Hawking','Stand 782','783','SC1','LM1','LM2','WWI','UD1','Ben Kettle','Walt Kettle','IC1','BWI','Ziggys Walt','Ziggys Ben','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4','Mobile Cart 5','Client Staffing Needs'],
+  'ACCC':['Support Staff','Hawking','Stand 1','Stand 2','Client Staffing Needs'],
+  'BWH':['Support Staff','Hawking','North Stand','South Stand','Popcorn 1','Popcorn 2','Client Staffing Needs'],
+  'Cure':['Support Staff','Hawking','Popcorn','Candy','Cotton Candy','Client Staffing Needs'],
+  'DE':['Support Staff','Hawking','VIP Bar','Cafe','Popcorn','Bar','Farm & Fry','Client Staffing Needs'],
+  'Subaru':['Support Staff','Hawking','Popcorn','VIP','Client Staffing Needs'],
+  'Villanova':['Support Staff','Hawking','Stand 1','Client Staffing Needs'],
+  'Montage':['Support Staff','Hawking','BW Pizza','Midway Pizza','Midway Popcorn','Boardwalk Popcorn','Festival Foods','Potato Stand','Boardwalk New Food','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4','Client Staffing Needs'],
+  'SATB':['Support Staff','Hawking','Stand 1','Ice Cream 1','Stand 2','Stand 3','Catering','Client Staffing Needs'],
+  'Kirkwood':['Support Staff','Hawking','Stand 1','Client Staffing Needs']
+};
+
+// State
+var currentVenue = null;
+var currentEventId = null;
+var currentEventDate = null;
+var currentEventName = null;
+var salesData = [];
+var photosData = {};
+var assignmentsData = {};
+var staffingRequested = {};
+var roster = [];
+var editingRowId = null;
+var pendingEdits = {};
+var removedRows = {};
+var addingForSaleId = null;
+var addPending = null;
+
+function apiHeaders() { return pcAuth.headers(); }
+
+function fmt(n) { return '$' + Math.round(n).toLocaleString(); }
+function fmtD(n) { return '$' + parseFloat(n).toFixed(2); }
+
+function tipPct(tipAmount, saleAmount) {
+  if (!saleAmount || saleAmount === 0) return null;
+  return (tipAmount / saleAmount * 100);
+}
+
+function pctClass(pct) {
+  if (pct === null) return 'pct-normal';
+  if (pct > 20) return 'pct-alert';
+  if (pct > 14) return 'pct-warn';
+  return 'pct-normal';
+}
+
+function isPoolVenue(venue) { return POOL_VENUES.indexOf(venue) !== -1; }
+
+// ── Auth & init ───────────────────────────────────────────────────────────────
+pcAuth.require({
+  pageSlug: 'tips-report',
+  onReady: function(user) {
+    var el = document.getElementById('header-right');
+    if (el && user) {
+      el.innerHTML = '<span class="header-user">' + (user.display_name || user.email) + '</span>' +
+        '<button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
+    }
+    loadVenues();
+    fetchRoster();
+  }
+});
+
+// ── Roster ────────────────────────────────────────────────────────────────────
+async function fetchRoster() {
+  try {
+    var res = await fetch(SUPA_URL + '/rest/v1/employees?is_active=eq.true&select=id,first_name,last_name&order=last_name.asc', { headers: apiHeaders() });
+    var rows = await res.json();
+    if (Array.isArray(rows)) roster = rows;
+  } catch(e) {}
+}
+
+// ── Venue pills ───────────────────────────────────────────────────────────────
+async function loadVenues() {
+  try {
+    var res = await fetch(SUPA_URL + '/rest/v1/sales?select=venue&order=venue.asc', { headers: apiHeaders() });
+    var rows = await res.json();
+    var seen = {};
+    var venues = [];
+    if (Array.isArray(rows)) rows.forEach(function(r) { if (!seen[r.venue]) { seen[r.venue] = true; venues.push(r.venue); } });
+    var pillsEl = document.getElementById('venue-pills');
+    if (!venues.length) { pillsEl.innerHTML = '<span style="font-size:12px;color:#aaa;">No sales logged yet</span>'; return; }
+    pillsEl.innerHTML = '';
+    venues.forEach(function(v, i) {
+      var btn = document.createElement('button');
+      btn.className = 'venue-pill' + (i === 0 ? ' active' : '');
+      btn.textContent = VENUE_LABELS[v] || v;
+      btn.onclick = function() { selectVenue(v); };
+      btn.id = 'vpill-' + v;
+      pillsEl.appendChild(btn);
+    });
+    selectVenue(venues[0]);
+  } catch(e) {}
+}
+
+async function selectVenue(venue) {
+  currentVenue = venue;
+  document.querySelectorAll('.venue-pill').forEach(function(p) { p.classList.remove('active'); });
+  var pill = document.getElementById('vpill-' + venue);
+  if (pill) pill.classList.add('active');
+  await loadEventsForVenue(venue);
+}
+
+async function loadEventsForVenue(venue) {
+  var sel = document.getElementById('event-select');
+  sel.innerHTML = '<option value="">Loading...</option>';
+  try {
+    var res = await fetch(
+      SUPA_URL + '/rest/v1/sales?venue=eq.' + encodeURIComponent(venue) + '&select=event_date,event_name&order=event_date.desc',
+      { headers: apiHeaders() }
+    );
+    var rows = await res.json();
+    var seen = {};
+    var events = [];
+    if (Array.isArray(rows)) {
+      rows.forEach(function(r) {
+        var key = r.event_date + '||' + (r.event_name || '');
+        if (!seen[key]) { seen[key] = true; events.push({ date: r.event_date, name: r.event_name }); }
+      });
+    }
+    sel.innerHTML = '<option value="">Select event...</option>';
+    events.forEach(function(e) {
+      var o = document.createElement('option');
+      var parts = e.date.split('-');
+      var dateStr = parts[1] + '/' + parts[2] + '/' + parts[0];
+      o.value = e.date + '||' + (e.name || '');
+      o.textContent = (e.name || 'Unknown event') + ' — ' + dateStr;
+      sel.appendChild(o);
+    });
+    if (events.length > 0) {
+      sel.selectedIndex = 1;
+      loadEvent();
+    } else {
+      document.getElementById('main-content').innerHTML = '<div class="loading-card">No events found for this venue.</div>';
+    }
+  } catch(e) {
+    sel.innerHTML = '<option value="">Error loading events</option>';
+  }
+}
+
+async function loadEvent() {
+  var sel = document.getElementById('event-select');
+  var val = sel.value;
+  if (!val) return;
+  var parts = val.split('||');
+  currentEventDate = parts[0];
+  currentEventName = parts[1] || null;
+  editingRowId = null; pendingEdits = {}; removedRows = {}; addingForSaleId = null; addPending = null;
+  document.getElementById('main-content').innerHTML = '<div class="loading-card">Loading...</div>';
+  document.getElementById('summary-strip').style.display = 'none';
+  document.getElementById('pool-notice').style.display = 'none';
+  document.getElementById('confirm-bar').style.display = 'none';
+
+  try {
+    // Sales
+    var sRes = await fetch(
+      SUPA_URL + '/rest/v1/sales?venue=eq.' + encodeURIComponent(currentVenue) +
+      '&event_date=eq.' + currentEventDate +
+      (currentEventName ? '&event_name=eq.' + encodeURIComponent(currentEventName) : '') +
+      '&select=*&order=stand.asc',
+      { headers: apiHeaders() }
+    );
+    salesData = await sRes.json();
+    if (!Array.isArray(salesData)) salesData = [];
+
+    var saleIds = salesData.map(function(r) { return r.id; });
+
+    // Photos
+    photosData = {};
+    if (saleIds.length) {
+      var pRes = await fetch(
+        SUPA_URL + '/rest/v1/sale_photos?sale_id=in.(' + saleIds.join(',') + ')&select=*&order=sort_order.asc',
+        { headers: apiHeaders() }
+      );
+      var pRows = await pRes.json();
+      if (Array.isArray(pRows)) {
+        pRows.forEach(function(p) {
+          if (!photosData[p.sale_id]) photosData[p.sale_id] = { register:[], units:[], signin:[] };
+          if (photosData[p.sale_id][p.photo_type]) photosData[p.sale_id][p.photo_type].push(p);
+        });
+      }
+    }
+
+    // Assignments
+    assignmentsData = {};
+    if (saleIds.length) {
+      var aRes = await fetch(
+        SUPA_URL + '/rest/v1/sale_staff_assignments?sale_id=in.(' + saleIds.join(',') + ')&select=*&order=created_at.asc',
+        { headers: apiHeaders() }
+      );
+      var aRows = await aRes.json();
+      if (Array.isArray(aRows)) {
+        aRows.forEach(function(a) {
+          if (!assignmentsData[a.sale_id]) assignmentsData[a.sale_id] = [];
+          assignmentsData[a.sale_id].push(a);
+        });
+      }
+    }
+
+    // Staffing requests
+    staffingRequested = {};
+    try {
+      var evRes = await fetch(
+        SUPA_URL + '/rest/v1/events?venue=eq.' + encodeURIComponent(currentVenue) + '&event_date=eq.' + currentEventDate + '&select=id&limit=1',
+        { headers: apiHeaders() }
+      );
+      var evRows = await evRes.json();
+      if (Array.isArray(evRows) && evRows.length) {
+        var eventId = evRows[0].id;
+        var srRes = await fetch(
+          SUPA_URL + '/rest/v1/staffing_requests?event_id=eq.' + eventId + '&venue=eq.' + encodeURIComponent(currentVenue) + '&select=stand,headcount',
+          { headers: apiHeaders() }
+        );
+        var srRows = await srRes.json();
+        if (Array.isArray(srRows)) {
+          srRows.forEach(function(r) {
+            staffingRequested[r.stand] = (staffingRequested[r.stand] || 0) + r.headcount;
+          });
+        }
+      }
+    } catch(e) {}
+
+    renderPage();
+  } catch(e) {
+    document.getElementById('main-content').innerHTML = '<div class="loading-card">Error loading data. Check your connection.</div>';
+  }
+}
+
+function renderPage() {
+  var venue = currentVenue;
+  var isPool = isPoolVenue(venue);
+  var stands = VENUE_STANDS[venue] || [];
+  var salesByStand = {};
+  salesData.forEach(function(r) { salesByStand[r.stand] = r; });
+
+  // Calculate pool tip share if FMP
+  var totalTips = 0, totalSales = 0, totalStaff = 0, totalVerified = 0, totalAssigned = 0;
+  salesData.forEach(function(r) {
+    totalSales += parseFloat(r.amount) || 0;
+    totalTips += parseFloat(r.tip_amount) || 0;
+  });
+
+  // Count staff — use verified assignments where available, fall back to staff_count
+  var allAssignments = [];
+  salesData.forEach(function(r) {
+    var assigns = assignmentsData[r.id] || [];
+    var active = assigns.filter(function(a) { return !removedRows[a.id]; });
+    if (active.length > 0) {
+      totalStaff += active.length;
+      active.forEach(function(a) { allAssignments.push(a); if (a.verified) totalVerified++; totalAssigned++; });
+    } else {
+      totalStaff += parseInt(r.staff_count) || 0;
+    }
+  });
+
+  var poolTipPerPerson = isPool && totalStaff > 0 ? totalTips / totalStaff : null;
+
+  // Summary strip
+  var overallPct = totalSales > 0 ? (totalTips / totalSales * 100) : 0;
+  document.getElementById('sum-sales').textContent = fmt(totalSales);
+  document.getElementById('sum-tips').textContent = fmt(totalTips);
+  var pctEl = document.getElementById('sum-tips-pct');
+  pctEl.textContent = overallPct.toFixed(1) + '% of sales';
+  pctEl.className = 's-pct ' + pctClass(overallPct);
+  document.getElementById('sum-per-person').textContent = poolTipPerPerson !== null ? fmtD(poolTipPerPerson) : (totalStaff > 0 ? 'per stand' : '—');
+  document.getElementById('sum-per-person-sub').textContent = isPool ? 'building-wide pool' : 'calculated per stand';
+  document.getElementById('sum-staff').textContent = totalStaff;
+  var reqTotal = Object.values(staffingRequested).reduce(function(s,v){return s+v;},0);
+  var staffSubEl = document.getElementById('sum-staff-sub');
+  if (reqTotal > 0) {
+    staffSubEl.textContent = reqTotal + ' requested';
+    staffSubEl.className = 's-sub ' + (totalStaff < reqTotal ? 'amber' : '');
+  } else { staffSubEl.textContent = ''; }
+  document.getElementById('sum-stands').textContent = salesData.length + ' of ' + stands.filter(function(s){ return s !== 'Support Staff' && s !== 'Client Staffing Needs'; }).length;
+  document.getElementById('sum-stands-sub').textContent = (stands.length - salesData.length) + ' not submitted';
+  document.getElementById('sum-verified').textContent = totalVerified + ' of ' + totalAssigned;
+  var verSubEl = document.getElementById('sum-verified-sub');
+  var unverified = totalAssigned - totalVerified;
+  verSubEl.textContent = unverified > 0 ? unverified + ' need review' : 'all confirmed';
+  verSubEl.className = 's-sub ' + (unverified > 0 ? 'amber' : '');
+  document.getElementById('summary-strip').style.display = 'grid';
+
+  // Pool notice
+  var poolEl = document.getElementById('pool-notice');
+  if (isPool) {
+    poolEl.textContent = 'FMP uses a building-wide tip pool — all tips are combined and split equally across ' + totalStaff + ' staff. Each person earns ' + (poolTipPerPerson !== null ? fmtD(poolTipPerPerson) : '—') + ' regardless of stand.';
+    poolEl.style.display = 'block';
+  } else { poolEl.style.display = 'none'; }
+
+  // Confirm bar
+  var unverifiedStands = salesData.filter(function(r) {
+    var assigns = (assignmentsData[r.id] || []).filter(function(a) { return !removedRows[a.id]; });
+    return assigns.length > 0 && assigns.some(function(a) { return !a.verified; });
+  });
+  var confirmBar = document.getElementById('confirm-bar');
+  var confirmText = document.getElementById('confirm-bar-text');
+  if (unverifiedStands.length > 0) {
+    confirmBar.style.display = 'flex';
+    confirmText.innerHTML = '<strong>' + unverifiedStands.length + ' stand' + (unverifiedStands.length > 1 ? 's' : '') + '</strong> with unverified names — review before printing';
+    document.getElementById('confirm-bar-btn').disabled = false;
+  } else if (salesData.length > 0) {
+    confirmBar.style.display = 'flex';
+    confirmText.innerHTML = 'All names verified — report is ready to print';
+    document.getElementById('confirm-bar-btn').disabled = true;
+  } else { confirmBar.style.display = 'none'; }
+
+  // Print header/footer
+  var dateStr = currentEventDate ? (function() { var p = currentEventDate.split('-'); return p[1]+'/'+p[2]+'/'+p[0]; })() : '';
+  document.getElementById('print-header').innerHTML = '<strong>Popcorn Chez</strong> &nbsp;&middot;&nbsp; ' + (VENUE_LABELS[venue]||venue) + ' &nbsp;&middot;&nbsp; ' + (currentEventName||'') + ' &nbsp;&middot;&nbsp; ' + dateStr;
+  document.getElementById('print-footer').innerHTML = '<div class="print-sig"><div class="print-sig-line">Manager signature</div><div class="print-sig-line">Date</div></div><div style="margin-top:12px;">Popcorn Chez &middot; ' + (VENUE_LABELS[venue]||venue) + ' &middot; ' + (currentEventName||'') + ' &middot; ' + dateStr + '</div>';
+
+  // Render stand cards
+  var html = '<div class="stands-grid">';
+  stands.forEach(function(stand) {
+    if (stand === 'Support Staff' || stand === 'Client Staffing Needs') return;
+    var sale = salesByStand[stand];
+    if (!sale) {
+      var requested = staffingRequested[stand] || 0;
+      html += '<div class="stand-card not-submitted">';
+      html += '<div class="sc-head"><div class="sc-name">' + stand + '</div></div>';
+      if (requested > 0) html += '<div class="sc-staffing"><span class="staff-tag staff-unknown">' + requested + ' requested &middot; not submitted</span></div>';
+      html += '<div class="not-sub-msg">Not submitted</div></div>';
+      return;
+    }
+    html += renderStandCard(sale, isPool, poolTipPerPerson);
+  });
+  html += '</div>';
+  document.getElementById('main-content').innerHTML = html;
+}
+
+function renderStandCard(sale, isPool, poolTipPerPerson) {
+  var assigns = (assignmentsData[sale.id] || []).slice();
+  var activeAssigns = assigns.filter(function(a) { return !removedRows[a.id]; });
+  var hasAssigns = activeAssigns.length > 0;
+  var allVerified = hasAssigns && activeAssigns.every(function(a) { return a.verified; });
+  var hasUnverified = hasAssigns && activeAssigns.some(function(a) { return !a.verified; });
+  var photos = photosData[sale.id] || { register:[], units:[], signin:[] };
+  var hasSignin = photos.signin.length > 0 || (sale.photo_url && photos.register.length === 0);
+  var amount = parseFloat(sale.amount) || 0;
+  var tipAmt = parseFloat(sale.tip_amount) || 0;
+  var pct = tipPct(tipAmt, amount);
+  var isFlagged = pct !== null && pct > 20;
+
+  // Staff count
+  var signedIn = hasAssigns ? activeAssigns.length : (parseInt(sale.staff_count) || 0);
+  var requested = staffingRequested[sale.stand] || 0;
+
+  // Per-stand tip share (non-pool venues)
+  var standTipPerPerson = !isPool && signedIn > 0 ? tipAmt / signedIn : null;
+
+  // Card class
+  var cardClass = 'stand-card';
+  if (isFlagged) cardClass += ' flagged';
+  else if (allVerified) cardClass += ' verified';
+  else if (hasUnverified) cardClass += ' needs-review';
+
+  var html = '<div class="' + cardClass + '" id="card-' + sale.id + '">';
+
+  // Header
+  var badgeHtml = '';
+  if (isFlagged) badgeHtml = '<span class="sc-badge badge-flagged">&#9888; high tips</span>';
+  else if (allVerified && hasAssigns) badgeHtml = '<span class="sc-badge badge-verified">&#10003; verified</span>';
+  else if (hasUnverified) badgeHtml = '<span class="sc-badge badge-unverified">' + activeAssigns.filter(function(a){return !a.verified;}).length + ' unverified</span>';
+
+  var pctHtml = pct !== null ? '<div class="sc-pct ' + pctClass(pct) + '">' + pct.toFixed(1) + '% tips</div>' : '';
+
+  html += '<div class="sc-head">';
+  html += '<div><div class="sc-name">' + sale.stand + badgeHtml + '</div></div>';
+  html += '<div class="sc-amt-block"><div class="sc-amt">' + fmt(amount) + '</div>' + pctHtml + '</div>';
+  html += '</div>';
+
+  // Meta
+  var dateStr = sale.event_date ? (function(){ var p=sale.event_date.split('-'); return p[1]+'/'+p[2]+'/'+p[0]; })() : '';
+  html += '<div class="sc-meta">by ' + (sale.submitted_by || 'unknown') + ' &middot; ' + dateStr + '</div>';
+
+  // Staffing
+  if (requested > 0) {
+    var staffClass = signedIn >= requested ? 'staff-ok' : 'staff-short';
+    html += '<div class="sc-staffing"><span class="staff-tag ' + staffClass + '">' + signedIn + ' signed in &middot; ' + requested + ' requested</span></div>';
+  } else if (signedIn > 0) {
+    html += '<div class="sc-staffing"><span class="staff-tag staff-unknown">' + signedIn + ' staff</span></div>';
+  }
+
+  // Photo pills
+  html += '<div class="sc-pills">';
+  var regAll = photos.register.length ? photos.register : (sale.photo_url ? [{photo_url: sale.photo_url, photo_type:'register'}] : []);
+  var unitsAll = photos.units.length ? photos.units : (sale.units_photo_url ? [{photo_url: sale.units_photo_url, photo_type:'units'}] : []);
+  if (regAll.length) html += '<span class="sc-pill pill-reg" onclick="openPhoto(\'' + regAll[0].photo_url.replace(/'/g,"\\'") + '\',\'Register photo\')">reg &times;' + regAll.length + '</span>';
+  if (unitsAll.length) html += '<span class="sc-pill pill-units" onclick="openPhoto(\'' + unitsAll[0].photo_url.replace(/'/g,"\\'") + '\',\'Units sold photo\')">units &times;' + unitsAll.length + '</span>';
+  if (photos.signin.length) {
+    html += '<span class="sc-pill pill-signin" onclick="openPhoto(\'' + photos.signin[0].photo_url.replace(/'/g,"\\'") + '\',\'Sign-in sheet\')">sign-in &times;' + photos.signin.length + '</span>';
+  } else {
+    html += '<span class="sc-pill pill-missing">no sign-in</span>';
+  }
+  html += '</div>';
+
+  // Tip share bar
+  var tipBarClass = isFlagged ? 'tip-bar flagged' : 'tip-bar normal';
+  var tipLabelClass = isFlagged ? 'tip-bar-label flagged' : 'tip-bar-label';
+  var tipValClass = isFlagged ? 'tip-bar-val flagged' : 'tip-bar-val';
+  var tipBarRight = isPool
+    ? (poolTipPerPerson !== null ? fmtD(poolTipPerPerson) + '/person (pool)' : '—')
+    : (standTipPerPerson !== null ? fmtD(standTipPerPerson) + '/person' : '—');
+  html += '<div class="' + tipBarClass + '">';
+  html += '<div class="' + tipLabelClass + '">Tips logged: ' + fmt(tipAmt) + '</div>';
+  html += '<div class="' + tipValClass + '">' + tipBarRight + '</div>';
+  html += '</div>';
+
+  // Names section
+  html += '<div class="names-section">';
+  if (!hasAssigns) {
+    if (photos.signin.length > 0) {
+      html += '<div class="no-signin-msg">Sign-in sheet uploaded — AI read pending or no names detected.</div>';
+    } else {
+      html += '<div class="no-signin-msg">No sign-in sheet — ' + signedIn + ' staff counted in ' + (isPool ? 'pool' : 'tip share') + ' by number only.</div>';
+    }
+  } else {
+    // Mismatch check
+    var enteredCount = parseInt(sale.staff_count) || 0;
+    if (enteredCount > 0 && activeAssigns.length !== enteredCount) {
+      html += '<div class="count-mismatch">Staff count entered: ' + enteredCount + ' &middot; Names on sheet: ' + activeAssigns.length + '</div>';
+    }
+    html += '<div class="names-label">Sign-in sheet &mdash; ' + activeAssigns.length + ' name' + (activeAssigns.length !== 1 ? 's' : '') + '</div>';
+    assigns.forEach(function(a) {
+      html += renderNameRow(a, sale.id, isPool, poolTipPerPerson, standTipPerPerson, activeAssigns.length);
+    });
+    // Add person
+    if (addingForSaleId === sale.id) {
+      html += renderAddPanel(sale.id);
+    } else {
+      html += '<div class="add-row" onclick="startAdd(\'' + sale.id + '\')"><div class="add-icon">+</div>Add person</div>';
+    }
+    // Confirm button
+    if (!allVerified) {
+      html += '<div class="confirm-row"><button class="confirm-names-btn" onclick="confirmStand(\'' + sale.id + '\')">Confirm names &amp; save</button></div>';
+    } else {
+      html += '<div class="confirm-row"><button class="confirm-names-btn done" disabled>&#10003; Names confirmed</button></div>';
+    }
+  }
+  html += '</div>';
+  html += '</div>';
+  return html;
+}
+
+function renderNameRow(a, saleId, isPool, poolTipPerPerson, standTipPerPerson, activeCount) {
+  var isRemoved = !!removedRows[a.id];
+  var dotClass = isRemoved ? 'dot-gray' : a.manual ? 'dot-m' : a.confidence === 'high' ? 'dot-g' : a.confidence === 'medium' ? 'dot-a' : 'dot-r';
+  var confClass = isRemoved ? '' : a.manual ? 'conf-manual' : a.confidence === 'high' ? 'conf-h' : a.confidence === 'medium' ? 'conf-m' : 'conf-l';
+  var confText = isRemoved ? '' : (a.manual ? 'manual' : a.verified ? 'verified' : a.confidence);
+  var isUnreadable = a.raw_name_text === 'Unreadable';
+  var tipShare = isPool ? poolTipPerPerson : standTipPerPerson;
+  var isEditing = editingRowId === a.id && !isRemoved;
+
+  var html = '<div class="name-row' + (isRemoved ? ' removed' : '') + '" id="nr-' + a.id + '">';
+  html += '<div class="nd ' + dotClass + '"></div>';
+  html += '<div class="name-text' + (isRemoved ? ' struck' : '') + (isUnreadable && !isRemoved ? ' unreadable' : '') + '">' + (a.raw_name_text || 'Unreadable') + '</div>';
+  if (!isRemoved) html += '<span class="name-conf ' + confClass + '">' + confText + '</span>';
+  html += '<div class="name-tip' + (isRemoved ? ' struck' : '') + '">' + (isRemoved ? '—' : (tipShare !== null ? fmtD(tipShare) : '—')) + '</div>';
+  html += '<div class="row-btns">';
+  if (!isRemoved) {
+    html += '<button class="row-btn" onclick="startEdit(\'' + a.id + '\',\'' + saleId + '\')" title="Edit">&#9998;</button>';
+    html += '<button class="row-btn danger" onclick="toggleRemove(\'' + a.id + '\',\'' + saleId + '\')" title="Remove">&#215;</button>';
+  } else {
+    html += '<button class="row-btn undo" onclick="toggleRemove(\'' + a.id + '\',\'' + saleId + '\')" title="Undo">&#8635;</button>';
+  }
+  html += '</div></div>';
+  if (isEditing) html += renderEditPanel(a, saleId);
+  return html;
+}
+
+function renderEditPanel(a, saleId) {
+  var pending = pendingEdits[a.id] || {};
+  var html = '<div class="edit-panel" id="ep-' + a.id + '">';
+  html += '<div class="ep-label">Search roster or type any name</div>';
+  html += '<input class="ep-input" id="epi-' + a.id + '" placeholder="Start typing..." oninput="onEditInput(\'' + a.id + '\',this.value)" autocomplete="off" value="' + (pending.text || '').replace(/"/g, '&quot;') + '">';
+  html += '<div class="ac-list" id="eac-' + a.id + '" style="display:none;"></div>';
+  html += '<div class="ep-actions">';
+  html += '<button class="ep-cancel" onclick="cancelEdit()">Cancel</button>';
+  html += '<button class="ep-save" id="eps-' + a.id + '" onclick="saveEdit(\'' + a.id + '\',\'' + saleId + '\')"' + (pending.text ? '' : ' disabled') + '>Save</button>';
+  html += '</div></div>';
+  return html;
+}
+
+function renderAddPanel(saleId) {
+  var html = '<div class="edit-panel">';
+  html += '<div class="ep-label">Search roster or type any name</div>';
+  html += '<input class="ep-input" id="add-input" placeholder="Start typing..." oninput="onAddInput(this.value)" autocomplete="off">';
+  html += '<div class="ac-list" id="add-ac" style="display:none;"></div>';
+  html += '<div class="ep-actions">';
+  html += '<button class="ep-cancel" onclick="cancelAdd()">Cancel</button>';
+  html += '<button class="ep-save" id="add-save" onclick="saveAdd(\'' + saleId + '\')" disabled>Add person</button>';
+  html += '</div></div>';
+  return html;
+}
+
+// ── Name editing ──────────────────────────────────────────────────────────────
+function startEdit(assignId, saleId) {
+  editingRowId = editingRowId === assignId ? null : assignId;
+  addingForSaleId = null;
+  renderPage();
+  if (editingRowId) setTimeout(function() { var inp = document.getElementById('epi-' + assignId); if (inp) { inp.focus(); } }, 30);
+}
+
+function cancelEdit() { editingRowId = null; renderPage(); }
+
+function onEditInput(id, val) {
+  if (!pendingEdits[id]) pendingEdits[id] = {};
+  pendingEdits[id].text = val; pendingEdits[id].empId = null;
+  var btn = document.getElementById('eps-' + id);
+  if (btn) btn.disabled = !val.trim();
+  showAc('eac-' + id, val, function(empId, empName) { selectEdit(id, empId, empName); }, function(v) { selectEditFree(id, v); });
+}
+
+function selectEdit(id, empId, empName) {
+  if (!pendingEdits[id]) pendingEdits[id] = {};
+  pendingEdits[id].text = empName; pendingEdits[id].empId = empId;
+  var inp = document.getElementById('epi-' + id); if (inp) inp.value = empName;
+  var ac = document.getElementById('eac-' + id); if (ac) ac.style.display = 'none';
+  var btn = document.getElementById('eps-' + id); if (btn) btn.disabled = false;
+}
+
+function selectEditFree(id, val) {
+  if (!pendingEdits[id]) pendingEdits[id] = {};
+  pendingEdits[id].text = val; pendingEdits[id].empId = null;
+  var inp = document.getElementById('epi-' + id); if (inp) inp.value = val;
+  var ac = document.getElementById('eac-' + id); if (ac) ac.style.display = 'none';
+  var btn = document.getElementById('eps-' + id); if (btn) btn.disabled = false;
+}
+
+async function saveEdit(assignId, saleId) {
+  var pending = pendingEdits[assignId];
+  if (!pending || !pending.text) return;
+  var assigns = assignmentsData[saleId] || [];
+  var a = assigns.find(function(x) { return x.id === assignId; });
+  if (!a) return;
+  a.raw_name_text = pending.text;
+  a.employee_id = pending.empId || null;
+  a.confidence = pending.empId ? 'high' : 'medium';
+  a.manual = true;
+  a.verified = true;
+  delete pendingEdits[assignId];
+  editingRowId = null;
+  // Write to DB
+  try {
+    var hdrs = apiHeaders(); hdrs['Content-Type'] = 'application/json'; hdrs['Prefer'] = 'return=minimal';
+    await fetch(SUPA_URL + '/rest/v1/sale_staff_assignments?id=eq.' + assignId, {
+      method: 'PATCH', headers: hdrs,
+      body: JSON.stringify({ raw_name_text: a.raw_name_text, employee_id: a.employee_id, confidence: a.confidence, verified: true, verified_by: pcAuth.user() ? pcAuth.user().display_name : null, verified_at: new Date().toISOString() })
+    });
+  } catch(e) {}
+  renderPage();
+}
+
+function toggleRemove(assignId, saleId) {
+  removedRows[assignId] = !removedRows[assignId];
+  if (editingRowId === assignId) editingRowId = null;
+  renderPage();
+}
+
+// ── Add person ────────────────────────────────────────────────────────────────
+function startAdd(saleId) {
+  addingForSaleId = saleId; editingRowId = null; addPending = null;
+  renderPage();
+  setTimeout(function() { var inp = document.getElementById('add-input'); if (inp) inp.focus(); }, 30);
+}
+
+function cancelAdd() { addingForSaleId = null; addPending = null; renderPage(); }
+
+function onAddInput(val) {
+  addPending = { text: val, empId: null };
+  var btn = document.getElementById('add-save'); if (btn) btn.disabled = !val.trim();
+  showAc('add-ac', val, function(empId, empName) {
+    addPending = { text: empName, empId: empId };
+    var inp = document.getElementById('add-input'); if (inp) inp.value = empName;
+    var ac = document.getElementById('add-ac'); if (ac) ac.style.display = 'none';
+    var btn = document.getElementById('add-save'); if (btn) btn.disabled = false;
+  }, function(v) {
+    addPending = { text: v, empId: null };
+    var inp = document.getElementById('add-input'); if (inp) inp.value = v;
+    var ac = document.getElementById('add-ac'); if (ac) ac.style.display = 'none';
+    var btn = document.getElementById('add-save'); if (btn) btn.disabled = false;
+  });
+}
+
+async function saveAdd(saleId) {
+  if (!addPending || !addPending.text.trim()) return;
+  var newId = 'local-' + Date.now();
+  var newRow = { id: newId, sale_id: saleId, raw_name_text: addPending.text, employee_id: addPending.empId || null, confidence: addPending.empId ? 'high' : 'medium', verified: true, manual: true, tip_share: null };
+  if (!assignmentsData[saleId]) assignmentsData[saleId] = [];
+  assignmentsData[saleId].push(newRow);
+  // Write to DB
+  try {
+    var hdrs = apiHeaders(); hdrs['Content-Type'] = 'application/json'; hdrs['Prefer'] = 'return=representation';
+    var res = await fetch(SUPA_URL + '/rest/v1/sale_staff_assignments', {
+      method: 'POST', headers: hdrs,
+      body: JSON.stringify({ sale_id: saleId, raw_name_text: newRow.raw_name_text, employee_id: newRow.employee_id, confidence: newRow.confidence, verified: true, verified_by: pcAuth.user() ? pcAuth.user().display_name : null, verified_at: new Date().toISOString() })
+    });
+    var created = await res.json();
+    if (Array.isArray(created) && created[0]) { newRow.id = created[0].id; }
+  } catch(e) {}
+  addingForSaleId = null; addPending = null;
+  renderPage();
+}
+
+// ── Confirm stand ─────────────────────────────────────────────────────────────
+async function confirmStand(saleId) {
+  var assigns = (assignmentsData[saleId] || []).filter(function(a) { return !removedRows[a.id]; });
+  var hdrs = apiHeaders(); hdrs['Content-Type'] = 'application/json'; hdrs['Prefer'] = 'return=minimal';
+  var verifiedBy = pcAuth.user() ? pcAuth.user().display_name : null;
+  var now = new Date().toISOString();
+  for (var i = 0; i < assigns.length; i++) {
+    assigns[i].verified = true;
+    try {
+      if (!assigns[i].id.startsWith('local-')) {
+        await fetch(SUPA_URL + '/rest/v1/sale_staff_assignments?id=eq.' + assigns[i].id, {
+          method: 'PATCH', headers: Object.assign({}, hdrs),
+          body: JSON.stringify({ verified: true, verified_by: verifiedBy, verified_at: now })
+        });
+      }
+    } catch(e) {}
+  }
+  renderPage();
+}
+
+// ── Confirm all ───────────────────────────────────────────────────────────────
+async function confirmAll() {
+  var hdrs = apiHeaders(); hdrs['Content-Type'] = 'application/json'; hdrs['Prefer'] = 'return=minimal';
+  var verifiedBy = pcAuth.user() ? pcAuth.user().display_name : null;
+  var now = new Date().toISOString();
+  for (var saleId in assignmentsData) {
+    var assigns = assignmentsData[saleId].filter(function(a) { return !removedRows[a.id] && !a.verified; });
+    for (var i = 0; i < assigns.length; i++) {
+      assigns[i].verified = true;
+      try {
+        if (!assigns[i].id.startsWith('local-')) {
+          await fetch(SUPA_URL + '/rest/v1/sale_staff_assignments?id=eq.' + assigns[i].id, {
+            method: 'PATCH', headers: Object.assign({}, hdrs),
+            body: JSON.stringify({ verified: true, verified_by: verifiedBy, verified_at: now })
+          });
+        }
+      } catch(e) {}
+    }
+  }
+  renderPage();
+}
+
+// ── Autocomplete helper ───────────────────────────────────────────────────────
+function showAc(acId, val, onSelect, onFree) {
+  var ac = document.getElementById(acId);
+  if (!ac) return;
+  if (!val.trim()) { ac.style.display = 'none'; return; }
+  var matches = roster.filter(function(r) {
+    return (r.first_name + ' ' + r.last_name).toLowerCase().indexOf(val.toLowerCase()) !== -1;
+  }).slice(0, 6);
+  var html = '';
+  matches.forEach(function(r) {
+    var name = r.first_name + ' ' + r.last_name;
+    html += '<div class="ac-item" onclick="(function(){var f=window[\'' + acId + '_sel\'];if(f)f(\'' + r.id + '\',\'' + name.replace(/'/g,"\\'") + '\');})()"><div>' + name + '</div></div>';
+  });
+  if (val.length > 1) {
+    html += '<div class="ac-free" onclick="(function(){var f=window[\'' + acId + '_free\'];if(f)f(\'' + val.replace(/'/g,"\\'").replace(/"/g,'&quot;') + '\');})()">Save as &ldquo;' + val + '&rdquo; &mdash; not on roster</div>';
+  }
+  window[acId + '_sel'] = onSelect;
+  window[acId + '_free'] = onFree;
+  ac.innerHTML = html;
+  ac.style.display = 'block';
+}
+
+// ── Lightbox ──────────────────────────────────────────────────────────────────
+function openPhoto(url, caption) {
+  document.getElementById('lightbox-img').src = url;
+  document.getElementById('lightbox-caption').textContent = caption || '';
+  document.getElementById('lightbox').classList.add('open');
+}
+
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('open');
+  document.getElementById('lightbox-img').src = '';
+}
+
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
+</script>
+</body>
+</html>
