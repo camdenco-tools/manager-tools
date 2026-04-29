@@ -31,6 +31,35 @@ header {
 .card { background: white; border-radius: 16px; padding: 20px; margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); }
 .card-title { font-size: 10px; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 14px; }
 
+/* Resume banner — shown above upload card when pending charges exist */
+.resume-banner {
+  background: #FAEEDA;
+  border: 1px solid #EF9F27;
+  border-radius: 14px;
+  padding: 14px 18px;
+  margin-bottom: 14px;
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.resume-banner.visible { display: flex; }
+.resume-banner-text { font-size: 13px; color: #633806; flex: 1; min-width: 200px; }
+.resume-banner-text strong { color: #1a1a1a; font-weight: 700; }
+.resume-banner-btn {
+  padding: 8px 18px;
+  background: #BA7517;
+  color: white;
+  border: none;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.resume-banner-btn:hover { background: #A06614; }
+
 /* Upload area */
 .upload-zone { border: 2px dashed #ddd; border-radius: 14px; padding: 32px; text-align: center; cursor: pointer; transition: all 0.2s; }
 .upload-zone:hover, .upload-zone.dragover { border-color: #999; background: #fafafa; }
@@ -78,6 +107,22 @@ header {
 .section-action { font-size: 11px; font-weight: 600; }
 .section-body { margin-top: 12px; display: none; }
 .section-body.open { display: block; }
+
+/* Master "select all" checkbox row */
+.select-all-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #fafafa;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #555;
+}
+.select-all-bar.amber-bar { background: #FFF7E8; color: #854F0B; }
+.select-all-bar input { width: 16px; height: 16px; cursor: pointer; flex-shrink: 0; }
 
 /* Matched section */
 .matched-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 12px; border-bottom: 1px solid rgba(0,0,0,0.04); }
@@ -163,6 +208,14 @@ header {
 
 <div class="page-body" id="app" style="display:none;">
 
+  <!-- Resume review banner (shown when pending charges exist from previous session) -->
+  <div class="resume-banner" id="resume-banner">
+    <div class="resume-banner-text">
+      <strong id="resume-count">0</strong> charges from a previous upload still need review.
+    </div>
+    <button class="resume-banner-btn" onclick="scrollToReview()">Jump to review</button>
+  </div>
+
   <!-- Upload card -->
   <div class="card" id="upload-card">
     <div class="card-title">Upload bank statement</div>
@@ -208,6 +261,19 @@ header {
       <div class="section-body" id="matched-body"></div>
     </div>
 
+    <!-- Food section (moved above Expense per feedback #6) -->
+    <div class="section-card" id="food-section" style="display:none;">
+      <div class="section-header" onclick="toggleSection('food')">
+        <div class="section-title-area">
+          <span class="section-dot" style="background:#EF9F27;"></span>
+          <span class="section-title" style="color:#633806;">Unmatched food purchases -- need venue assignment</span>
+          <span class="section-meta" style="color:#854F0B;" id="food-meta"></span>
+        </div>
+        <span class="section-action" style="color:#BA7517;">&#9660;</span>
+      </div>
+      <div class="section-body" id="food-body"></div>
+    </div>
+
     <!-- Expense section -->
     <div class="section-card" id="expense-section" style="display:none;">
       <div class="section-header" onclick="toggleSection('expense')">
@@ -219,19 +285,6 @@ header {
         <span class="section-action" style="color:#534AB7;">&#9660;</span>
       </div>
       <div class="section-body" id="expense-body"></div>
-    </div>
-
-    <!-- Food section -->
-    <div class="section-card" id="food-section" style="display:none;">
-      <div class="section-header" onclick="toggleSection('food')">
-        <div class="section-title-area">
-          <span class="section-dot" style="background:#EF9F27;"></span>
-          <span class="section-title" style="color:#633806;">Unmatched food purchases -- need venue assignment</span>
-          <span class="section-meta" style="color:#854F0B;" id="food-meta"></span>
-        </div>
-        <span class="section-action" style="color:#BA7517;">&#9660;</span>
-      </div>
-      <div class="section-body" id="food-body"></div>
     </div>
 
     <!-- Returned section -->
@@ -280,6 +333,13 @@ function fmtMoneyRound(n) { return Math.round(Math.abs(n)).toLocaleString(); }
 function thisMonth() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); }
 
 function hdrs() { return pcAuth.headers(); }
+
+function scrollToReview() {
+  var el = document.getElementById('review-section');
+  if (el && el.style.display !== 'none') {
+    el.scrollIntoView({behavior: 'smooth', block: 'start'});
+  }
+}
 
 // ── Load reference data ──
 async function loadReferenceData() {
@@ -330,6 +390,7 @@ async function processFile(file) {
   var batchMonth = document.getElementById('batch-month').value;
   if (!batchMonth) { alert('Please select a statement month first.'); return; }
 
+  // Hide upload card during active processing only -- it'll come back after
   document.getElementById('upload-card').style.display = 'none';
   document.getElementById('processing-card').style.display = 'block';
   document.getElementById('processing-step').textContent = 'Reading file...';
@@ -359,9 +420,9 @@ async function processFile(file) {
     }
 
     if (!lines.length) {
-      alert('No transactions found in this file. Please check the format and try again.');
       document.getElementById('upload-card').style.display = 'block';
       document.getElementById('processing-card').style.display = 'none';
+      alert('No transactions found in this file. Please check the format and try again.');
       return;
     }
 
@@ -372,9 +433,9 @@ async function processFile(file) {
 
   } catch(e) {
     console.error(e);
-    alert('Error processing file: ' + (e.message || 'Unknown error'));
     document.getElementById('upload-card').style.display = 'block';
     document.getElementById('processing-card').style.display = 'none';
+    alert('Error processing file: ' + (e.message || 'Unknown error'));
   }
 }
 
@@ -575,8 +636,11 @@ function guessVendor(rawDesc) {
   return name || 'Unknown';
 }
 
-function guessCategory(vendorName, rawDesc) {
-  var combined = (vendorName + ' ' + rawDesc).toLowerCase();
+// Categorize using cleaned vendor name only -- NOT raw description.
+// Bank descriptions contain noise (TRRSDL, location codes, terminal IDs, BAR/TIRE etc.)
+// that triggers false matches across categories. Same vendor should always get same category.
+function guessCategory(vendorName) {
+  var combined = (vendorName || '').toLowerCase();
 
   // ── Computer / Software / SaaS ──
   if (/claude\.ai|anthropic|supabase|siteground|hosting|netlify|vercel|github|aws|amazon web|digitalocean|cloudflare|godaddy|namecheap|google cloud|microsoft azure|heroku|squarespace|wix|shopify|wordpress|domain|ssl cert/i.test(combined)) {
@@ -743,9 +807,9 @@ async function matchCharges(lines, batchMonth, fileName, fileType) {
   }
 
   if (!lines.length) {
-    alert('All transactions were deposits or transfers -- nothing to reconcile.');
     document.getElementById('upload-card').style.display = 'block';
-    document.getElementById('review-section').style.display = 'none';
+    document.getElementById('processing-card').style.display = 'none';
+    alert('All transactions were deposits or transfers -- nothing to reconcile.');
     return;
   }
 
@@ -780,7 +844,7 @@ async function matchCharges(lines, batchMonth, fileName, fileType) {
   for (var i = 0; i < lines.length; i++) {
     var line = lines[i];
     var vendorName = guessVendor(line.description);
-    var category = guessCategory(vendorName, line.description);
+    var category = guessCategory(vendorName);
     var isFood = !category || isFoodCategory(category);
 
     // Try to match against existing purchases
@@ -844,7 +908,9 @@ async function matchCharges(lines, batchMonth, fileName, fileType) {
     });
   }
 
-  currentCharges = charges;
+  // Append new charges to existing pending charges so we don't lose old work
+  // (per feedback #9 -- new uploads commingle with old pending charges)
+  var newCharges = charges;
 
   // ── STEP 3: Check for duplicates against existing bank_charges ──
   document.getElementById('processing-step').textContent = 'Checking for duplicates...';
@@ -856,9 +922,9 @@ async function matchCharges(lines, batchMonth, fileName, fileType) {
   } catch(e) {}
 
   var dupCount = 0;
-  var newCharges = [];
-  for (var dc = 0; dc < currentCharges.length; dc++) {
-    var ch = currentCharges[dc];
+  var deduped = [];
+  for (var dc = 0; dc < newCharges.length; dc++) {
+    var ch = newCharges[dc];
     var isDup = false;
     for (var ec = 0; ec < existingBankCharges.length; ec++) {
       var ex = existingBankCharges[ec];
@@ -875,28 +941,28 @@ async function matchCharges(lines, batchMonth, fileName, fileType) {
         }
       }
     }
-    if (!isDup) newCharges.push(ch);
+    if (!isDup) deduped.push(ch);
   }
 
   if (dupCount > 0) {
     console.log('Skipped ' + dupCount + ' duplicate charges');
   }
 
-  currentCharges = newCharges;
-
-  if (!currentCharges.length) {
-    alert('All charges in this file were already uploaded previously (' + dupCount + ' duplicates found).');
+  if (!deduped.length) {
+    // Hide processing card BEFORE alert so the spinner doesn't peek through the modal
     document.getElementById('upload-card').style.display = 'block';
     document.getElementById('processing-card').style.display = 'none';
-    document.getElementById('review-section').style.display = 'none';
+    // Re-load any existing pending charges so user sees what's still in the queue
+    await loadPendingCharges();
+    alert('All charges in this file were already uploaded previously (' + dupCount + ' duplicates found).');
     return;
   }
 
-  // ── STEP 4: Write all charges to database immediately ──
-  document.getElementById('processing-step').textContent = 'Saving ' + currentCharges.length + ' charges...';
+  // ── STEP 4: Write all NEW charges to database immediately ──
+  document.getElementById('processing-step').textContent = 'Saving ' + deduped.length + ' charges...';
   var writeErrors = 0;
-  for (var w = 0; w < currentCharges.length; w++) {
-    var wc = currentCharges[w];
+  for (var w = 0; w < deduped.length; w++) {
+    var wc = deduped[w];
     try {
       await fetch(SUPA_URL + '/rest/v1/bank_charges', {
         method: 'POST',
@@ -915,9 +981,9 @@ async function matchCharges(lines, batchMonth, fileName, fileType) {
 
   // Save batch record
   try {
-    var matchedCount = currentCharges.filter(function(c) { return c.status === 'matched'; }).length;
-    var expCount = currentCharges.filter(function(c) { return c.status === 'expense_pending'; }).length;
-    var foodCount = currentCharges.filter(function(c) { return c.status === 'food_pending'; }).length;
+    var matchedCount = deduped.filter(function(c) { return c.status === 'matched'; }).length;
+    var expCount = deduped.filter(function(c) { return c.status === 'expense_pending'; }).length;
+    var foodCount = deduped.filter(function(c) { return c.status === 'food_pending'; }).length;
     await fetch(SUPA_URL + '/rest/v1/bank_upload_batches', {
       method: 'POST',
       headers: Object.assign({}, hdrs(), {'Content-Type': 'application/json', 'Prefer': 'return=minimal'}),
@@ -926,8 +992,8 @@ async function matchCharges(lines, batchMonth, fileName, fileType) {
         file_name: fileName,
         file_type: fileType,
         batch_month: batchMonth,
-        total_charges: currentCharges.length,
-        total_amount: currentCharges.reduce(function(s,c) { return s + c.amount; }, 0),
+        total_charges: deduped.length,
+        total_amount: deduped.reduce(function(s,c) { return s + c.amount; }, 0),
         matched_count: matchedCount,
         expense_count: expCount,
         pending_count: foodCount,
@@ -940,22 +1006,10 @@ async function matchCharges(lines, batchMonth, fileName, fileType) {
   if (writeErrors) console.log(writeErrors + ' charges failed to save');
   if (dupCount > 0) alert(dupCount + ' duplicate charge(s) were skipped (already uploaded previously).');
 
-  // Initialize expense checkboxes (all checked by default)
-  expenseChecked = {};
-  currentCharges.forEach(function(c) {
-    if (c.status === 'expense_pending') expenseChecked[c.id] = true;
-  });
-
-  // Initialize food checkboxes (all checked by default)
-  foodChecked = {};
-  currentCharges.forEach(function(c) {
-    if (c.status === 'food_pending') foodChecked[c.id] = true;
-  });
-
+  // After upload, reload everything from DB so the new charges commingle with any old pending ones
   document.getElementById('processing-card').style.display = 'none';
-  document.getElementById('review-section').style.display = 'block';
-
-  renderReview();
+  document.getElementById('upload-card').style.display = 'block';
+  await loadPendingCharges();
   loadHistory();
 }
 
@@ -974,14 +1028,14 @@ function renderReview() {
   document.getElementById('stats-strip').innerHTML =
     '<div class="stat-box"><div class="stat-label gray">Total</div><div class="stat-val">$' + fmtMoneyRound(grandTotal) + '</div><div class="stat-sub">' + currentCharges.length + ' charges</div></div>' +
     '<div class="stat-box green"><div class="stat-label green">Matched</div><div class="stat-val" style="color:#3B6D11;">$' + fmtMoneyRound(matchedTotal) + '</div><div class="stat-sub">' + matched.length + ' charges</div></div>' +
-    '<div class="stat-box purple"><div class="stat-label purple">Expenses</div><div class="stat-val" style="color:#534AB7;">$' + fmtMoneyRound(expenseTotal) + '</div><div class="stat-sub">' + expenses.length + ' charges</div></div>' +
     '<div class="stat-box amber"><div class="stat-label amber">To managers</div><div class="stat-val" style="color:#BA7517;">$' + fmtMoneyRound(foodTotal) + '</div><div class="stat-sub">' + food.length + ' charges</div></div>' +
+    '<div class="stat-box purple"><div class="stat-label purple">Expenses</div><div class="stat-val" style="color:#534AB7;">$' + fmtMoneyRound(expenseTotal) + '</div><div class="stat-sub">' + expenses.length + ' charges</div></div>' +
     '<div class="stat-box lavender"><div class="stat-label lavender">Returned</div><div class="stat-val" style="color:#3C3489;">$0</div><div class="stat-sub">0 charges</div></div>';
 
-  // Matched section
+  // Render sections
   renderMatched(matched);
-  renderExpenses(expenses);
   renderFood(food);
+  renderExpenses(expenses);
   loadReturned();
 }
 
@@ -1012,7 +1066,17 @@ function renderExpenses(items) {
   sec.style.display = 'block';
   document.getElementById('expense-meta').textContent = items.length + ' charges -- $' + fmtMoneyRound(items.reduce(function(s,c) { return s + Math.abs(c.amount); }, 0));
 
-  var html = '<div class="expense-list">';
+  var allChecked = items.every(function(c) { return expenseChecked[c.id]; });
+  var someChecked = items.some(function(c) { return expenseChecked[c.id]; });
+
+  var html = '';
+  // Master "select all" checkbox bar
+  html += '<div class="select-all-bar">';
+  html += '<input type="checkbox" id="expense-select-all" ' + (allChecked ? 'checked' : '') + ' onchange="toggleAllExpenses(this.checked)">';
+  html += '<label for="expense-select-all" style="cursor:pointer;">Select all (' + items.length + ')</label>';
+  html += '</div>';
+
+  html += '<div class="expense-list">';
   for (var i = 0; i < items.length; i++) {
     var c = items[i];
     var ds = c.charge_date.slice(5,7) + '/' + c.charge_date.slice(8,10);
@@ -1050,7 +1114,16 @@ function renderFood(items) {
   sec.style.display = 'block';
   document.getElementById('food-meta').textContent = items.length + ' charges -- $' + fmtMoneyRound(items.reduce(function(s,c) { return s + Math.abs(c.amount); }, 0));
 
-  var html = '<div class="food-list">';
+  var allChecked = items.every(function(c) { return foodChecked[c.id]; });
+
+  var html = '';
+  // Master "select all" checkbox bar (amber tint)
+  html += '<div class="select-all-bar amber-bar">';
+  html += '<input type="checkbox" id="food-select-all" ' + (allChecked ? 'checked' : '') + ' onchange="toggleAllFood(this.checked)" style="accent-color:#BA7517;">';
+  html += '<label for="food-select-all" style="cursor:pointer;">Select all (' + items.length + ')</label>';
+  html += '</div>';
+
+  html += '<div class="food-list">';
   for (var i = 0; i < items.length; i++) {
     var c = items[i];
     var ds = c.charge_date.slice(5,7) + '/' + c.charge_date.slice(8,10);
@@ -1076,6 +1149,19 @@ function renderFood(items) {
 
   document.getElementById('food-body').innerHTML = html;
   document.getElementById('food-body').classList.add('open');
+}
+
+// Master toggle handlers
+function toggleAllExpenses(checked) {
+  var expenses = currentCharges.filter(function(c) { return c.status === 'expense_pending'; });
+  expenses.forEach(function(c) { expenseChecked[c.id] = checked; });
+  renderExpenses(expenses);
+}
+
+function toggleAllFood(checked) {
+  var food = currentCharges.filter(function(c) { return c.status === 'food_pending'; });
+  food.forEach(function(c) { foodChecked[c.id] = checked; });
+  renderFood(food);
 }
 
 function toggleFoodCheck(id, checked) {
@@ -1166,6 +1252,7 @@ function moveToFood(id) {
         currentCharges[i].category_gl = foodCat.gl_group;
       }
       delete expenseChecked[id];
+      foodChecked[id] = true;
       break;
     }
   }
@@ -1177,6 +1264,7 @@ function moveToExpense(id) {
     if (currentCharges[i].id === id) {
       currentCharges[i].status = 'expense_pending';
       expenseChecked[id] = true;
+      delete foodChecked[id];
       break;
     }
   }
@@ -1225,6 +1313,7 @@ async function saveExpenses() {
 
   currentCharges = currentCharges.filter(function(c) { return c.status !== 'saved_expense'; });
   renderReview();
+  updateResumeBanner();
 }
 
 // ── Send food charges to managers ──
@@ -1264,13 +1353,13 @@ async function sendToManagers() {
   currentCharges = currentCharges.filter(function(c) { return c.status !== 'sent_to_managers'; });
 
   if (currentCharges.filter(function(c) { return c.status === 'food_pending' || c.status === 'expense_pending'; }).length === 0) {
-    // All done -- show upload card
+    // All done with this batch
     document.getElementById('review-section').style.display = 'none';
-    document.getElementById('upload-card').style.display = 'block';
     alert('Done! ' + toSend.length + ' charge(s) sent to the Purchases page for venue assignment.');
   } else {
     renderReview();
   }
+  updateResumeBanner();
   loadHistory();
 }
 
@@ -1319,6 +1408,20 @@ async function saveReturned() {
   } catch(e) {}
 }
 
+// ── Resume banner ──
+function updateResumeBanner() {
+  var pendingCount = currentCharges.filter(function(c) {
+    return c.status === 'food_pending' || c.status === 'expense_pending';
+  }).length;
+  var banner = document.getElementById('resume-banner');
+  if (pendingCount > 0) {
+    document.getElementById('resume-count').textContent = pendingCount;
+    banner.classList.add('visible');
+  } else {
+    banner.classList.remove('visible');
+  }
+}
+
 // ── Upload history ──
 async function loadHistory() {
   try {
@@ -1348,11 +1451,17 @@ async function loadHistory() {
 }
 
 // ── Load pending charges from database (restore unfinished sessions) ──
+// Per feedback #9: don't hide upload card -- show resume banner instead so admin can always upload
 async function loadPendingCharges() {
   try {
     var res = await fetch(SUPA_URL + '/rest/v1/bank_charges?status=in.(expense_pending,food_pending,matched)&select=id,batch_id,charge_date,raw_description,amount,vendor_name,category_id,status,matched_purchase_id,batch_month,uploaded_by&order=charge_date.asc', { headers: hdrs() });
     var rows = await res.json();
-    if (!Array.isArray(rows) || !rows.length) return;
+    if (!Array.isArray(rows) || !rows.length) {
+      currentCharges = [];
+      document.getElementById('review-section').style.display = 'none';
+      updateResumeBanner();
+      return;
+    }
 
     // Look up category names
     currentCharges = rows.map(function(r) {
@@ -1378,9 +1487,11 @@ async function loadPendingCharges() {
       };
     });
 
-    currentBatchId = currentCharges[0].batch_id;
+    if (currentCharges.length > 0) {
+      currentBatchId = currentCharges[0].batch_id;
+    }
 
-    // Initialize checkboxes
+    // Initialize checkboxes (default all checked)
     expenseChecked = {};
     foodChecked = {};
     currentCharges.forEach(function(c) {
@@ -1388,9 +1499,11 @@ async function loadPendingCharges() {
       if (c.status === 'food_pending') foodChecked[c.id] = true;
     });
 
-    document.getElementById('upload-card').style.display = 'none';
+    // KEY CHANGE for #9: don't hide upload card -- keep it visible
+    // The review section appears below the upload card, not instead of it
     document.getElementById('review-section').style.display = 'block';
     renderReview();
+    updateResumeBanner();
   } catch(e) {}
 }
 
