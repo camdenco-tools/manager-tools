@@ -136,11 +136,26 @@ header {
 .day-group {
   border-top: 3px solid var(--primary);
   padding: 14px 4px 8px;
-  display: flex; align-items: center; justify-content: space-between;
+  display: flex; align-items: center; gap: 14px;
   margin-top: 6px;
+  flex-wrap: wrap;
 }
-.day-group h2 { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
-.day-pills { display: flex; gap: 6px; align-items: center; }
+.day-group h2 {
+  font-size: 16px; font-weight: 800; letter-spacing: -0.01em;
+}
+/* Primary pill — sits right next to the date, bigger and bolder */
+.day-pill-primary {
+  font-size: 14px; font-weight: 800;
+  padding: 6px 14px; border-radius: 8px;
+  letter-spacing: -0.01em;
+  border: 1.5px solid;
+}
+.day-pill-primary.green { background: var(--green-light); color: var(--green-dark); border-color: var(--green-mid); }
+.day-pill-primary.amber { background: var(--amber-light); color: var(--amber-dark); border-color: var(--amber-border); }
+.day-pill-primary.red { background: var(--red-light); color: var(--red); border-color: var(--red-border); }
+.day-spacer { flex: 1; min-width: 8px; }
+/* Secondary pills — multi-signup warnings sit in the gutter on the right */
+.day-pills-secondary { display: flex; gap: 6px; align-items: center; }
 .day-pill { font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; }
 .day-pill.green { background: var(--green-light); color: var(--green-dark); }
 .day-pill.amber { background: var(--amber-light); color: var(--amber-dark); }
@@ -192,20 +207,34 @@ header {
   background: var(--slate-light); padding: 3px 8px; border-radius: 4px;
 }
 .event-spacer { flex: 1; min-width: 12px; }
-.coverage-block { text-align: right; min-width: 130px; }
-.coverage-line {
-  display: flex; align-items: baseline; gap: 6px; justify-content: flex-end;
+
+/* Dual coverage: signups on the left, filled on the right */
+.coverage-dual {
+  display: flex; gap: 14px; align-items: stretch;
 }
-.coverage-count { font-size: 14px; font-weight: 800; color: var(--primary); }
-.coverage-sub { font-size: 11px; color: var(--label); font-weight: 600; }
+.coverage-block {
+  text-align: right; min-width: 110px;
+  display: flex; flex-direction: column; justify-content: center;
+}
+.coverage-block.signups .coverage-count { color: var(--blue-dark); }
+.coverage-block.signups.short .coverage-count { color: var(--red); }
+.coverage-line {
+  display: flex; align-items: baseline; gap: 5px; justify-content: flex-end;
+}
+.coverage-count { font-size: 15px; font-weight: 800; color: var(--primary); }
+.coverage-sub {
+  font-size: 9px; color: var(--label); font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
 .coverage-bar {
   height: 4px; background: var(--slate-light); border-radius: 2px;
-  overflow: hidden; margin-top: 4px; width: 110px; margin-left: auto;
+  overflow: hidden; margin-top: 4px; width: 100px; margin-left: auto;
 }
 .coverage-fill { height: 100%; border-radius: 2px; }
 .coverage-fill.green { background: var(--green); }
 .coverage-fill.amber { background: var(--amber); }
 .coverage-fill.red { background: var(--red); }
+.coverage-fill.blue { background: var(--blue); }
 
 .btn {
   font-family: inherit; font-size: 12px; font-weight: 700;
@@ -570,6 +599,42 @@ header {
 .log-entry .log-action.locked, .log-entry .log-action.unlocked { color: var(--purple-dark); }
 .log-entry .log-time { color: var(--label); font-family: monospace; }
 .log-entry .log-actor { color: var(--label); }
+
+/* ===== Multi-signup assign modal ===== */
+.assign-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 11px 13px;
+  border: 1.5px solid var(--border); border-radius: 10px;
+  cursor: pointer; margin-bottom: 7px;
+  transition: all 0.12s; background: white;
+}
+.assign-row:hover { border-color: var(--blue); background: var(--blue-light); }
+.assign-row.is-current { border-color: var(--green); background: var(--green-light); }
+.assign-row-info { flex: 1; }
+.assign-row-evt { font-size: 13px; font-weight: 700; }
+.assign-row-meta { font-size: 11px; color: var(--label); margin-top: 2px; }
+.assign-row-current {
+  font-size: 10px; font-weight: 700; color: var(--green-dark);
+  letter-spacing: 0.06em; text-transform: uppercase;
+}
+.assign-row-placed {
+  font-size: 10px; font-weight: 700; color: var(--blue-dark);
+  letter-spacing: 0.06em; text-transform: uppercase;
+}
+.assign-clear-btn {
+  width: 100%; padding: 9px;
+  background: var(--slate-light); border: 1.5px solid var(--border);
+  border-radius: 10px; cursor: pointer;
+  font-size: 12px; font-weight: 700; color: var(--label);
+  font-family: inherit; margin-top: 4px;
+}
+.assign-clear-btn:hover { color: var(--primary); }
+
+/* Make the multi-signup indicators visually clickable */
+.signup-multi { cursor: pointer; }
+.signup-multi:hover { background: #b35a00; }
+.conflict-icon { cursor: pointer; }
+.conflict-icon:hover { opacity: 0.7; }
 </style>
 </head>
 <body>
@@ -639,6 +704,19 @@ header {
       <button class="modal-close" data-close-modal="audit-modal">✕</button>
     </div>
     <div class="modal-body" id="audit-body"></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="assign-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="assign-title">Multi-event signup</h3>
+      <button class="modal-close" data-close-modal="assign-modal">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="assign-sub" style="font-size: 12px; color: var(--label); margin-bottom: 12px; line-height: 1.5;"></div>
+      <div id="assign-body"></div>
+    </div>
   </div>
 </div>
 
@@ -995,23 +1073,43 @@ function render() {
   dates.forEach(date => {
     const events = grouped[date];
     const totalNeed = events.reduce((s, e) => s + Math.max(eventTotalNeeded(e.id), 0), 0);
+
+    // Count distinct unique humans available across the day, multi-signup people only count once.
+    // Same logic as effectiveSignupCount but at day level: every signup name on that date,
+    // deduped — that's the actual headcount available across all events combined.
+    const uniqueNames = new Set();
+    events.forEach(e => {
+      const sigs = state.availability.filter(a => a.event_id === e.id);
+      sigs.forEach(s => uniqueNames.add(s.staff_name));
+    });
+    const availableHumans = uniqueNames.size;
+
+    // Color the day pill based on coverage: green if we have enough humans for all positions,
+    // amber if we're a little short, red if we're significantly short.
     let pillCls = 'green';
-    if (totalNeed >= 60) pillCls = 'red';
-    else if (totalNeed >= 30) pillCls = 'amber';
+    if (totalNeed > 0) {
+      const ratio = availableHumans / totalNeed;
+      if (ratio < 0.7) pillCls = 'red';
+      else if (ratio < 1.0) pillCls = 'amber';
+    }
+
     let unresolved = 0;
     events.forEach(e => {
       const sigs = state.availability.filter(a => a.event_id === e.id);
       sigs.forEach(s => {
         if ((state.multiSignupCounts[date + '|' + s.staff_name] || 0) > 1) {
-          // Count if NOT assigned to this event
           const assigned = (state.assignments[date] || {})[s.staff_name];
           if (!assigned) unresolved++;
         }
       });
     });
 
-    html += '<div class="day-group"><h2>' + fmtDayHeader(date) + '</h2><div class="day-pills">';
-    html += '<span class="day-pill ' + pillCls + '">Need ~' + totalNeed + ' people</span>';
+    html += '<div class="day-group">';
+    html += '<h2>' + fmtDayHeader(date) + '</h2>';
+    html += '<span class="day-pill-primary ' + pillCls + '">' +
+      availableHumans + ' / ' + totalNeed + ' people available</span>';
+    html += '<span class="day-spacer"></span>';
+    html += '<div class="day-pills-secondary">';
     if (unresolved > 0) html += '<span class="day-pill warn">⚠ ' + unresolved + ' unresolved multi-signup' + (unresolved === 1 ? '' : 's') + '</span>';
     html += '</div></div>';
 
@@ -1051,12 +1149,29 @@ function renderEventRow(ev) {
   html += '<span class="status-tag ' + status.cls + '">' + status.tag + '</span>';
   if (locked) html += '<span class="lock-tag">🔒 Locked</span>';
   html += '<span class="event-spacer"></span>';
-  if (needed > 0 || filled > 0) {
+
+  // Dual coverage meter: signed-up + filled side by side
+  const signedUp = effectiveSignupCount(ev);
+  const sigPct = needed > 0 ? Math.min(100, Math.round((signedUp / needed) * 100)) : 0;
+  const sigShort = needed > 0 && signedUp < needed;
+  let sigBarCls = 'blue';
+  if (needed > 0 && signedUp < needed) sigBarCls = 'red';
+
+  if (needed > 0 || filled > 0 || signedUp > 0) {
+    html += '<div class="coverage-dual">';
+    // Signups (left)
+    html += '<div class="coverage-block signups' + (sigShort ? ' short' : '') + '">';
+    html += '<div class="coverage-line"><span class="coverage-count">' + signedUp + ' / ' + (needed || '?') + '</span><span class="coverage-sub">signed up</span></div>';
+    html += '<div class="coverage-bar"><div class="coverage-fill ' + sigBarCls + '" style="width:' + sigPct + '%"></div></div>';
+    html += '</div>';
+    // Filled (right)
     html += '<div class="coverage-block">';
     html += '<div class="coverage-line"><span class="coverage-count">' + filled + ' / ' + (needed || '?') + '</span><span class="coverage-sub">filled</span></div>';
     html += '<div class="coverage-bar"><div class="coverage-fill ' + fillCls + '" style="width:' + pct + '%"></div></div>';
     html += '</div>';
+    html += '</div>';
   }
+
   html += '<button class="btn btn-print" data-print-event="' + ev.id + '">🖨 Print</button>';
   html += '<button class="chevron">▼</button>';
   html += '</div>';
@@ -1162,7 +1277,7 @@ function renderAvailablePanel(ev) {
     html += '<div class="' + cls + '" draggable="' + (isPlaced ? 'false' : 'true') +
       '" data-staff-name="' + escapeAttr(s.staff_name) + '" data-source="signup" data-event-id="' + ev.id + '">';
     html += '<span class="person-name">' + escapeHtml(s.staff_name) + '</span>';
-    if (isMulti && !isPlaced) html += '<span class="signup-multi">' + multiCount + 'x</span>';
+    if (isMulti && !isPlaced) html += '<span class="signup-multi" data-assign-staff="' + escapeAttr(s.staff_name) + '" data-assign-event="' + ev.id + '" title="Click to see all events">' + multiCount + 'x</span>';
     html += '</div>';
   });
   html += '</div>';
@@ -1233,7 +1348,7 @@ function renderFilledSlot(ev, p, locked) {
   if (multiCount > 1) cls += ' conflict';
 
   let html = '<div class="' + cls + '" draggable="' + (locked ? 'false' : 'true') + '" data-position-id="' + p.id + '" data-staff-name="' + escapeAttr(p.staff_name) + '" data-source="' + p.source + '">';
-  if (multiCount > 1) html += '<span class="conflict-icon" title="Signed up for ' + multiCount + ' events today">⚠</span>';
+  if (multiCount > 1) html += '<span class="conflict-icon" data-assign-staff="' + escapeAttr(p.staff_name) + '" data-assign-event="' + ev.id + '" title="Click to see all events this person signed up for">⚠</span>';
   html += '<span class="person-name">' + escapeHtml(p.staff_name) + '</span>';
   if (p.source === 'manual') html += '<span class="manual-tag">TYPED</span>';
   if (p.source === 'placeholder') html += '<span class="placeholder-tag">PLACEHOLDER</span>';
@@ -1382,6 +1497,20 @@ function attachEventHandlers() {
       };
       e.dataTransfer.effectAllowed = 'move';
     });
+  });
+
+  // Click handlers for multi-signup badges and conflict icons → open assign modal
+  document.querySelectorAll('[data-assign-staff]').forEach(el => {
+    el.addEventListener('click', e => {
+      e.stopPropagation();
+      e.preventDefault();
+      const staffName = el.getAttribute('data-assign-staff');
+      const eventId = el.getAttribute('data-assign-event');
+      const ev = state.events.find(x => x.id === eventId);
+      if (ev) openAssignModal(staffName, ev);
+    });
+    // Block drag from starting when clicking the badge
+    el.addEventListener('mousedown', e => e.stopPropagation());
   });
 
   // Drop targets: empty slots + role-stacks
@@ -1703,6 +1832,133 @@ function logAction(eventId, positionId, action, details) {
     })
   }).catch(err => {
     console.warn('Log write failed (non-blocking):', err);
+  });
+}
+
+// ---------- Multi-signup Assign Modal ----------
+function openAssignModal(staffName, currentEvent) {
+  const date = currentEvent.event_date;
+  const evtIds = (state.multiSignupByDate[date] || {})[staffName] || [];
+  if (evtIds.length === 0) return;
+
+  const assignedTo = (state.assignments[date] || {})[staffName];
+
+  document.getElementById('assign-title').textContent = staffName;
+
+  const dateLabel = fmtDayHeader(date);
+  document.getElementById('assign-sub').innerHTML =
+    '<strong>' + dateLabel + '</strong> &mdash; signed up for ' + evtIds.length + ' events. ' +
+    'Pick which one to schedule them for. Others will strike through and counts will adjust.';
+
+  const body = document.getElementById('assign-body');
+  body.innerHTML = '';
+
+  evtIds.forEach(eid => {
+    const evt = state.events.find(e => e.id === eid);
+    if (!evt) return;
+    const isCurrent = assignedTo === eid;
+
+    // Check if they're actually placed at this event (in position_assignments)
+    const placedHere = state.positions.find(p => p.event_id === eid && p.staff_name === staffName);
+
+    const row = document.createElement('div');
+    row.className = 'assign-row' + (isCurrent ? ' is-current' : '');
+
+    const time = evt.gates_open ? 'Gates ' + fmtTime(evt.gates_open) : '';
+    let rightTag = '';
+    if (placedHere) {
+      rightTag = '<span class="assign-row-placed">✓ Placed at ' + escapeHtml(placedHere.stand) + '</span>';
+    } else if (isCurrent) {
+      rightTag = '<span class="assign-row-current">Current</span>';
+    }
+
+    row.innerHTML =
+      '<div class="assign-row-info">' +
+        '<div class="assign-row-evt">' + escapeHtml(evt.event_name || '') + '</div>' +
+        '<div class="assign-row-meta">' + escapeHtml(evt.venue) + ' · ' + time + '</div>' +
+      '</div>' +
+      rightTag;
+
+    row.addEventListener('click', () => saveAssignment(staffName, date, eid));
+    body.appendChild(row);
+  });
+
+  if (assignedTo) {
+    const clearBtn = document.createElement('button');
+    clearBtn.className = 'assign-clear-btn';
+    clearBtn.textContent = 'Clear assignment (mark all as unresolved again)';
+    clearBtn.addEventListener('click', () => clearAssignment(staffName, date));
+    body.appendChild(clearBtn);
+  }
+
+  document.getElementById('assign-modal').classList.add('show');
+}
+
+function saveAssignment(staffName, date, eventId) {
+  const actor = (state.user && state.user.display_name) || 'unknown';
+
+  const existing = (state.assignments[date] || {})[staffName];
+
+  // Look up if there's already a row for this person/date
+  authFetch(SUPABASE_URL + '/rest/v1/availability_assignments?staff_name=eq.' + encodeURIComponent(staffName) + '&event_date=eq.' + date,
+    { headers: apiHeaders() }
+  ).then(rows => {
+    if (rows && rows.length) {
+      return authFetch(SUPABASE_URL + '/rest/v1/availability_assignments?id=eq.' + rows[0].id, {
+        method: 'PATCH', headers: apiHeadersJson(),
+        body: JSON.stringify({
+          assigned_event_id: eventId,
+          assigned_by: actor,
+          assigned_at: new Date().toISOString()
+        })
+      });
+    }
+    return authFetch(SUPABASE_URL + '/rest/v1/availability_assignments', {
+      method: 'POST', headers: apiHeadersJson(),
+      body: JSON.stringify({
+        staff_name: staffName,
+        event_date: date,
+        assigned_event_id: eventId,
+        assigned_by: actor
+      })
+    });
+  }).then(() => {
+    if (!state.assignments[date]) state.assignments[date] = {};
+    state.assignments[date][staffName] = eventId;
+    document.getElementById('assign-modal').classList.remove('show');
+    showToast(staffName + ' assigned', 'success');
+    render();
+  }).catch(err => {
+    if (err.authFailed) { handleAuthFailure(); return; }
+    console.error(err);
+    showToast('Could not save assignment: ' + (err.message || ''), 'error');
+  });
+}
+
+function clearAssignment(staffName, date) {
+  // Look up the row id, then delete
+  authFetch(SUPABASE_URL + '/rest/v1/availability_assignments?staff_name=eq.' + encodeURIComponent(staffName) + '&event_date=eq.' + date,
+    { headers: apiHeaders() }
+  ).then(rows => {
+    if (!rows || !rows.length) {
+      // Nothing to clear
+      if (state.assignments[date]) delete state.assignments[date][staffName];
+      document.getElementById('assign-modal').classList.remove('show');
+      render();
+      return;
+    }
+    return authFetch(SUPABASE_URL + '/rest/v1/availability_assignments?id=eq.' + rows[0].id, {
+      method: 'DELETE', headers: apiHeaders()
+    }).then(() => {
+      if (state.assignments[date]) delete state.assignments[date][staffName];
+      document.getElementById('assign-modal').classList.remove('show');
+      showToast('Assignment cleared');
+      render();
+    });
+  }).catch(err => {
+    if (err.authFailed) { handleAuthFailure(); return; }
+    console.error(err);
+    showToast('Could not clear: ' + (err.message || ''), 'error');
   });
 }
 
