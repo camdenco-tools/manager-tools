@@ -201,6 +201,15 @@ header {
 .status-tag.staffed { background: var(--green); color: white; }
 .status-tag.submitted { background: var(--amber); color: white; }
 .status-tag.not-submitted { background: var(--red); color: white; }
+.unresolved-tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10px; font-weight: 700;
+  padding: 3px 8px; border-radius: 4px;
+  background: var(--amber-light); color: var(--amber-dark);
+  border: 1px solid var(--amber-border);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
 .lock-tag {
   display: inline-flex; align-items: center; gap: 4px;
   font-size: 11px; font-weight: 700; color: var(--slate);
@@ -307,14 +316,33 @@ header {
 }
 .person-pill[draggable=true]:hover { transform: translateX(2px); border-color: var(--blue); }
 .person-pill.placed {
-  background: white; border-color: var(--border);
-  color: #b0b0b0; cursor: default;
+  background: var(--green-light); border-color: var(--green-mid);
+  color: var(--green-dark); cursor: default;
 }
 .person-pill.placed:hover { transform: none; }
-.person-pill.placed .person-name { text-decoration: line-through; }
+.person-pill.assigned-away {
+  background: var(--slate-light); border-color: var(--border-strong);
+  color: #888; cursor: default;
+}
+.person-pill.assigned-away:hover { transform: none; }
+.person-pill.assigned-away .person-name {
+  text-decoration: line-through; text-decoration-thickness: 1.5px;
+}
 .person-pill.multi {
   background: #fff3e0; border-color: var(--amber-border); color: var(--amber-dark);
 }
+.placed-here-tag {
+  font-size: 9px; font-weight: 800;
+  color: var(--green-dark); margin-left: auto;
+  letter-spacing: 0.04em; text-transform: uppercase;
+}
+.assigned-away-tag {
+  font-size: 10px; font-weight: 700; color: var(--slate);
+  background: white; border: 1px solid var(--border-strong);
+  padding: 1px 6px; border-radius: 8px; margin-left: auto;
+  cursor: pointer;
+}
+.assigned-away-tag:hover { background: var(--bg); border-color: var(--label); }
 .signup-multi {
   font-size: 9px; font-weight: 800;
   background: var(--amber); color: white;
@@ -610,6 +638,11 @@ header {
 }
 .assign-row:hover { border-color: var(--blue); background: var(--blue-light); }
 .assign-row.is-current { border-color: var(--green); background: var(--green-light); }
+.assign-row.is-locked {
+  cursor: not-allowed; opacity: 0.7;
+}
+.assign-row.is-locked:hover { border-color: var(--border); background: white; }
+.assign-row.is-locked.is-current { background: var(--green-light); border-color: var(--green); opacity: 1; }
 .assign-row-info { flex: 1; }
 .assign-row-evt { font-size: 13px; font-weight: 700; }
 .assign-row-meta { font-size: 11px; color: var(--label); margin-top: 2px; }
@@ -1060,6 +1093,21 @@ function effectiveSignupCount(event) {
   }).length;
 }
 
+// Number of people signed up for THIS event who are also signed up for another event
+// the same day AND have not yet been assigned anywhere. These are the "needs-decision"
+// folks for this specific event.
+function unresolvedForEvent(event) {
+  const date = event.event_date;
+  const assigned = state.assignments[date] || {};
+  const sigs = state.availability.filter(a => a.event_id === event.id);
+  let count = 0;
+  sigs.forEach(s => {
+    const multiCount = state.multiSignupCounts[date + '|' + s.staff_name] || 0;
+    if (multiCount > 1 && !assigned[s.staff_name]) count++;
+  });
+  return count;
+}
+
 // ---------- Rendering ----------
 function render() {
   const root = document.getElementById('content');
@@ -1093,16 +1141,21 @@ function render() {
       else if (ratio < 1.0) pillCls = 'amber';
     }
 
-    let unresolved = 0;
+    // Day-level unresolved = distinct people who signed up for >1 event today and have no assignment.
+    // Per-event unresolved (rendered on each row) counts each event's view of the same set, so
+    // per-event sums will naturally be larger than this distinct-person total. Both are correct
+    // for what they measure.
+    const unresolvedNames = new Set();
     events.forEach(e => {
       const sigs = state.availability.filter(a => a.event_id === e.id);
       sigs.forEach(s => {
         if ((state.multiSignupCounts[date + '|' + s.staff_name] || 0) > 1) {
           const assigned = (state.assignments[date] || {})[s.staff_name];
-          if (!assigned) unresolved++;
+          if (!assigned) unresolvedNames.add(s.staff_name);
         }
       });
     });
+    const unresolved = unresolvedNames.size;
 
     html += '<div class="day-group">';
     html += '<h2>' + fmtDayHeader(date) + '</h2>';
@@ -1147,6 +1200,10 @@ function renderEventRow(ev) {
   html += '<span class="event-name">' + escapeHtml(ev.event_name || '') + '</span>';
   if (time) html += '<span class="event-time">' + time + '</span>';
   html += '<span class="status-tag ' + status.cls + '">' + status.tag + '</span>';
+  const evUnresolved = unresolvedForEvent(ev);
+  if (evUnresolved > 0) {
+    html += '<span class="unresolved-tag">⚠ ' + evUnresolved + ' unresolved</span>';
+  }
   if (locked) html += '<span class="lock-tag">🔒 Locked</span>';
   html += '<span class="event-spacer"></span>';
 
@@ -1246,9 +1303,23 @@ function renderSummaryBar(ev) {
 
 function renderAvailablePanel(ev) {
   const sigs = state.availability.filter(a => a.event_id === ev.id);
-  const placedNames = new Set(positionsForEvent(ev.id).map(p => p.staff_name));
-  const placedCount = sigs.filter(s => placedNames.has(s.staff_name)).length;
-  const unplaced = sigs.length - placedCount;
+  const placedNamesHere = new Set(positionsForEvent(ev.id).map(p => p.staff_name));
+  const dayAssignments = state.assignments[ev.event_date] || {};
+
+  // Determine state for each signup:
+  //   PLACED_HERE  - has a position_assignments row at this event
+  //   ASSIGNED_AWAY - has availability_assignments row pointing at a different event
+  //   AVAILABLE     - signed up here, neither placed nor assigned-away (may or may not be multi-signup)
+  function pillState(staffName) {
+    if (placedNamesHere.has(staffName)) return 'PLACED_HERE';
+    const assigned = dayAssignments[staffName];
+    if (assigned && assigned !== ev.id) return 'ASSIGNED_AWAY';
+    return 'AVAILABLE';
+  }
+
+  const placedCount = sigs.filter(s => pillState(s.staff_name) === 'PLACED_HERE').length;
+  const awayCount = sigs.filter(s => pillState(s.staff_name) === 'ASSIGNED_AWAY').length;
+  const unplaced = sigs.length - placedCount - awayCount;
 
   let html = '<aside class="available-panel">';
   html += '<div class="panel-head">';
@@ -1260,26 +1331,54 @@ function renderAvailablePanel(ev) {
     html += '<div class="unplaced-strip">⚠ Unplaced names will be reported after lock</div>';
   }
   html += '<div class="people-list">';
-  // Sort: unplaced first (alpha), placed at bottom (alpha)
+
+  // Sort order: AVAILABLE first (alpha), then PLACED_HERE (alpha), then ASSIGNED_AWAY (alpha)
+  const stateRank = { AVAILABLE: 0, PLACED_HERE: 1, ASSIGNED_AWAY: 2 };
   const sorted = sigs.slice().sort((a, b) => {
-    const ap = placedNames.has(a.staff_name) ? 1 : 0;
-    const bp = placedNames.has(b.staff_name) ? 1 : 0;
-    if (ap !== bp) return ap - bp;
+    const sa = stateRank[pillState(a.staff_name)];
+    const sb = stateRank[pillState(b.staff_name)];
+    if (sa !== sb) return sa - sb;
     return a.staff_name.localeCompare(b.staff_name);
   });
+
   sorted.forEach(s => {
-    const isPlaced = placedNames.has(s.staff_name);
+    const ps = pillState(s.staff_name);
     const multiCount = state.multiSignupCounts[ev.event_date + '|' + s.staff_name] || 1;
     const isMulti = multiCount > 1;
+
     let cls = 'person-pill';
-    if (isPlaced) cls += ' placed';
-    if (isMulti && !isPlaced) cls += ' multi';
-    html += '<div class="' + cls + '" draggable="' + (isPlaced ? 'false' : 'true') +
+    let draggable = 'true';
+
+    if (ps === 'PLACED_HERE') {
+      cls += ' placed';
+      draggable = 'false';
+    } else if (ps === 'ASSIGNED_AWAY') {
+      cls += ' assigned-away';
+      draggable = 'false';
+    } else if (isMulti) {
+      cls += ' multi';
+    }
+
+    html += '<div class="' + cls + '" draggable="' + draggable +
       '" data-staff-name="' + escapeAttr(s.staff_name) + '" data-source="signup" data-event-id="' + ev.id + '">';
     html += '<span class="person-name">' + escapeHtml(s.staff_name) + '</span>';
-    if (isMulti && !isPlaced) html += '<span class="signup-multi" data-assign-staff="' + escapeAttr(s.staff_name) + '" data-assign-event="' + ev.id + '" title="Click to see all events">' + multiCount + 'x</span>';
+
+    if (ps === 'PLACED_HERE') {
+      html += '<span class="placed-here-tag">✓ here</span>';
+    } else if (ps === 'ASSIGNED_AWAY') {
+      const otherEvId = dayAssignments[s.staff_name];
+      const otherEv = state.events.find(x => x.id === otherEvId);
+      const otherLabel = otherEv ? otherEv.venue : '?';
+      html += '<span class="assigned-away-tag" data-assign-staff="' + escapeAttr(s.staff_name) +
+        '" data-assign-event="' + ev.id + '" title="Click to see all events">↗ ' + escapeHtml(otherLabel) + '</span>';
+    } else if (isMulti) {
+      html += '<span class="signup-multi" data-assign-staff="' + escapeAttr(s.staff_name) +
+        '" data-assign-event="' + ev.id + '" title="Click to see all events">' + multiCount + 'x</span>';
+    }
+
     html += '</div>';
   });
+
   html += '</div>';
   html += '</aside>';
   return html;
@@ -1750,6 +1849,8 @@ function removePosition(positionId) {
   const pos = state.positions.find(p => p.id === positionId);
   if (!pos) return;
   const actor = (state.user && state.user.display_name) || (state.user && state.user.email) || 'unknown';
+  const ev = state.events.find(e => e.id === pos.event_id);
+  const eventDate = ev ? ev.event_date : null;
 
   authFetch(SUPABASE_URL + '/rest/v1/position_assignments?id=eq.' + positionId, {
     method: 'PATCH', headers: apiHeadersJson(),
@@ -1760,7 +1861,27 @@ function removePosition(positionId) {
       stand: pos.stand, role: pos.role, staff_name: pos.staff_name
     });
   }).then(() => {
-    showToast('Removed ' + pos.staff_name);
+    // Also release any availability_assignments row for this person on this date.
+    // This is the "full release" behavior — ✕ on a placed pill returns the person
+    // to the unresolved pool across ALL events they signed up for that day.
+    if (!eventDate) return;
+    return authFetch(
+      SUPABASE_URL + '/rest/v1/availability_assignments?staff_name=eq.' +
+        encodeURIComponent(pos.staff_name) + '&event_date=eq.' + eventDate,
+      { headers: apiHeaders() }
+    ).then(rows => {
+      if (!rows || !rows.length) return;
+      return authFetch(
+        SUPABASE_URL + '/rest/v1/availability_assignments?id=eq.' + rows[0].id,
+        { method: 'DELETE', headers: apiHeaders() }
+      ).then(() => {
+        if (state.assignments[eventDate]) {
+          delete state.assignments[eventDate][pos.staff_name];
+        }
+      });
+    });
+  }).then(() => {
+    showToast('Released ' + pos.staff_name);
     render();
   }).catch(err => {
     if (err.authFailed) { handleAuthFailure(); return; }
@@ -1843,12 +1964,25 @@ function openAssignModal(staffName, currentEvent) {
 
   const assignedTo = (state.assignments[date] || {})[staffName];
 
+  // Find any current placement for this person across all events that day
+  const placedAt = state.positions.find(p =>
+    p.staff_name === staffName &&
+    evtIds.indexOf(p.event_id) !== -1
+  );
+
   document.getElementById('assign-title').textContent = staffName;
 
   const dateLabel = fmtDayHeader(date);
-  document.getElementById('assign-sub').innerHTML =
-    '<strong>' + dateLabel + '</strong> &mdash; signed up for ' + evtIds.length + ' events. ' +
-    'Pick which one to schedule them for. Others will strike through and counts will adjust.';
+  let subHtml = '<strong>' + dateLabel + '</strong> &mdash; signed up for ' + evtIds.length + ' events. ';
+  if (placedAt) {
+    const placedEv = state.events.find(e => e.id === placedAt.event_id);
+    const placedVenue = placedEv ? placedEv.venue : '';
+    subHtml += 'Currently <strong>placed at ' + escapeHtml(placedVenue) + ' / ' + escapeHtml(placedAt.stand) + ' / ' + escapeHtml(placedAt.role) + '</strong>. ' +
+      'To reassign, click the ✕ on their placed pill first to release them, then choose a different event here.';
+  } else {
+    subHtml += 'Pick which event to schedule them for. The others will strike through and their counts will adjust.';
+  }
+  document.getElementById('assign-sub').innerHTML = subHtml;
 
   const body = document.getElementById('assign-body');
   body.innerHTML = '';
@@ -1857,17 +1991,18 @@ function openAssignModal(staffName, currentEvent) {
     const evt = state.events.find(e => e.id === eid);
     if (!evt) return;
     const isCurrent = assignedTo === eid;
-
-    // Check if they're actually placed at this event (in position_assignments)
-    const placedHere = state.positions.find(p => p.event_id === eid && p.staff_name === staffName);
+    const isPlacedHere = placedAt && placedAt.event_id === eid;
+    const isLocked = !!placedAt;  // any placement anywhere locks all rows
 
     const row = document.createElement('div');
-    row.className = 'assign-row' + (isCurrent ? ' is-current' : '');
+    row.className = 'assign-row';
+    if (isPlacedHere) row.classList.add('is-current');
+    if (isLocked) row.classList.add('is-locked');
 
     const time = evt.gates_open ? 'Gates ' + fmtTime(evt.gates_open) : '';
     let rightTag = '';
-    if (placedHere) {
-      rightTag = '<span class="assign-row-placed">✓ Placed at ' + escapeHtml(placedHere.stand) + '</span>';
+    if (isPlacedHere) {
+      rightTag = '<span class="assign-row-placed">✓ Placed at ' + escapeHtml(placedAt.stand) + '</span>';
     } else if (isCurrent) {
       rightTag = '<span class="assign-row-current">Current</span>';
     }
@@ -1879,11 +2014,15 @@ function openAssignModal(staffName, currentEvent) {
       '</div>' +
       rightTag;
 
-    row.addEventListener('click', () => saveAssignment(staffName, date, eid));
+    if (!isLocked) {
+      row.addEventListener('click', () => saveAssignment(staffName, date, eid));
+    }
     body.appendChild(row);
   });
 
-  if (assignedTo) {
+  // Clear button only shown when person has an assignment but is NOT placed
+  // (placed people are released via the ✕ on the pill, which is the single source of truth)
+  if (assignedTo && !placedAt) {
     const clearBtn = document.createElement('button');
     clearBtn.className = 'assign-clear-btn';
     clearBtn.textContent = 'Clear assignment (mark all as unresolved again)';
