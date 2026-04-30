@@ -1,0 +1,1873 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Schedule Assistant (Beta) — Position Board</title>
+<script src="/pc-auth.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #f0f0ec;
+  --card: #ffffff;
+  --primary: #1a1a1a;
+  --label: #666;
+  --border: #e8e8e4;
+  --border-strong: #d8d8d4;
+
+  --green: #1D9E75;
+  --green-light: #e8f7f2;
+  --green-mid: #d0ecdf;
+  --green-dark: #0F6E56;
+
+  --red: #c0392b;
+  --red-light: #fdecea;
+  --red-border: #f0c8c4;
+
+  --amber: #d97706;
+  --amber-light: #fffbeb;
+  --amber-border: #fcd34d;
+  --amber-dark: #92400e;
+
+  --blue: #378ADD;
+  --blue-light: #E6F1FB;
+  --blue-mid: #cfe1f4;
+  --blue-dark: #0C447C;
+
+  --purple: #7c3aed;
+  --purple-light: #f3edff;
+  --purple-mid: #e0d4fb;
+  --purple-border: #d4c1fa;
+  --purple-dark: #5b21b6;
+
+  --slate: #475569;
+  --slate-light: #f1f5f9;
+
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 2px 8px rgba(0,0,0,0.06);
+  --shadow-lg: 0 4px 16px rgba(0,0,0,0.08);
+}
+
+body {
+  background: var(--bg);
+  font-family: var(--font);
+  color: var(--primary);
+  font-size: 14px;
+  line-height: 1.5;
+  padding: 16px;
+}
+.shell { max-width: 1400px; margin: 0 auto; }
+
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 4px 16px; flex-wrap: wrap; gap: 12px;
+}
+.title-block h1 {
+  font-size: 20px; font-weight: 700; letter-spacing: -0.01em;
+  display: inline-flex; align-items: center; gap: 10px;
+}
+.beta-tag {
+  font-size: 9px; font-weight: 800;
+  background: var(--primary); color: white;
+  padding: 2px 7px; border-radius: 4px;
+  letter-spacing: 0.06em;
+}
+.title-block .sub { font-size: 12px; color: var(--label); margin-top: 2px; }
+.header-right { display: flex; align-items: center; gap: 12px; }
+.header-user { font-size: 12px; color: #999; font-weight: 500; }
+.sign-out-btn {
+  font-size: 11px; color: var(--red); background: none;
+  border: 1px solid var(--red-border); padding: 4px 10px;
+  border-radius: 6px; cursor: pointer; font-weight: 600;
+}
+
+.view-toggle {
+  display: inline-flex; background: var(--card);
+  border: 1px solid var(--border); border-radius: 10px;
+  padding: 3px; box-shadow: var(--shadow-sm); margin-bottom: 16px;
+}
+.view-toggle button, .view-toggle a {
+  background: transparent; border: none;
+  padding: 7px 14px; font-size: 13px; font-weight: 600;
+  color: var(--label); border-radius: 7px; cursor: pointer;
+  font-family: inherit; display: inline-flex; align-items: center;
+  gap: 6px; transition: all 0.15s ease; text-decoration: none;
+}
+.view-toggle button:hover, .view-toggle a:hover { color: var(--primary); }
+.view-toggle button.active { background: var(--primary); color: white; }
+.view-toggle .pip {
+  display: inline-block; width: 6px; height: 6px;
+  border-radius: 50%; background: currentColor; opacity: 0.6;
+}
+.view-toggle .new-tag {
+  font-size: 9px; font-weight: 800; padding: 1px 5px;
+  border-radius: 3px; background: var(--purple); color: white;
+  letter-spacing: 0.05em; margin-left: 2px;
+}
+
+.filter-strip {
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px 14px; margin-bottom: 16px;
+  box-shadow: var(--shadow-sm);
+}
+.filter-strip .label {
+  font-size: 11px; color: var(--label); font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.filter-strip select, .filter-strip input[type=date] {
+  font-family: inherit; font-size: 13px; border: 1px solid var(--border);
+  border-radius: 7px; padding: 5px 9px; background: white; color: var(--primary);
+}
+.filter-strip .spacer { flex: 1; }
+.role-toggle {
+  display: inline-flex; background: var(--slate-light); border-radius: 6px;
+  padding: 2px; font-size: 11px; font-weight: 700;
+}
+.role-toggle button {
+  background: transparent; border: none; padding: 4px 10px;
+  border-radius: 5px; cursor: pointer; color: var(--label); font-family: inherit;
+}
+.role-toggle button.active { background: var(--primary); color: white; }
+.custom-range { display: none; gap: 6px; align-items: center; }
+.custom-range.show { display: inline-flex; }
+
+.day-group {
+  border-top: 3px solid var(--primary);
+  padding: 14px 4px 8px;
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 6px;
+}
+.day-group h2 { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+.day-pills { display: flex; gap: 6px; align-items: center; }
+.day-pill { font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; }
+.day-pill.green { background: var(--green-light); color: var(--green-dark); }
+.day-pill.amber { background: var(--amber-light); color: var(--amber-dark); }
+.day-pill.red { background: var(--red-light); color: var(--red); }
+.day-pill.warn {
+  background: #fff3e0; color: var(--amber-dark);
+  border: 1px dashed var(--amber-border);
+}
+
+.event-row {
+  background: var(--card); border: 1px solid var(--border);
+  border-left-width: 3px; border-radius: 10px;
+  margin-bottom: 8px; overflow: hidden; box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.15s ease;
+}
+.event-row:hover { box-shadow: var(--shadow-md); }
+.event-row.staffed { background: var(--green-light); border-left-color: var(--green); }
+.event-row.submitted { background: var(--amber-light); border-left-color: var(--amber); }
+.event-row.not-submitted { background: var(--red-light); border-left-color: var(--red); }
+.event-row.expanded { box-shadow: var(--shadow-md); }
+
+.event-head {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; cursor: pointer; flex-wrap: wrap;
+}
+.venue-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 44px; height: 24px; padding: 0 8px; border-radius: 5px;
+  background: white; border: 1px solid var(--border-strong);
+  font-size: 10px; font-weight: 800; letter-spacing: 0.04em;
+  color: var(--slate); flex-shrink: 0;
+}
+.event-name { font-weight: 700; font-size: 14px; color: var(--primary); }
+.event-row.staffed .event-name {
+  text-decoration: line-through; text-decoration-thickness: 1px; color: #6a8b7e;
+}
+.event-time { font-size: 12px; color: var(--label); }
+.status-tag {
+  display: inline-block; font-size: 10px; font-weight: 800;
+  letter-spacing: 0.05em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 4px;
+}
+.status-tag.staffed { background: var(--green); color: white; }
+.status-tag.submitted { background: var(--amber); color: white; }
+.status-tag.not-submitted { background: var(--red); color: white; }
+.lock-tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 700; color: var(--slate);
+  background: var(--slate-light); padding: 3px 8px; border-radius: 4px;
+}
+.event-spacer { flex: 1; min-width: 12px; }
+.coverage-block { text-align: right; min-width: 130px; }
+.coverage-line {
+  display: flex; align-items: baseline; gap: 6px; justify-content: flex-end;
+}
+.coverage-count { font-size: 14px; font-weight: 800; color: var(--primary); }
+.coverage-sub { font-size: 11px; color: var(--label); font-weight: 600; }
+.coverage-bar {
+  height: 4px; background: var(--slate-light); border-radius: 2px;
+  overflow: hidden; margin-top: 4px; width: 110px; margin-left: auto;
+}
+.coverage-fill { height: 100%; border-radius: 2px; }
+.coverage-fill.green { background: var(--green); }
+.coverage-fill.amber { background: var(--amber); }
+.coverage-fill.red { background: var(--red); }
+
+.btn {
+  font-family: inherit; font-size: 12px; font-weight: 700;
+  padding: 6px 12px; border-radius: 6px; cursor: pointer;
+  border: 1px solid; white-space: nowrap;
+}
+.btn-print {
+  background: white; border-color: var(--border-strong); color: var(--primary);
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.btn-print:hover { background: #fafaf8; }
+.chevron {
+  background: none; border: none; cursor: pointer; padding: 4px;
+  color: var(--label); font-size: 14px; transition: transform 0.2s ease;
+}
+.event-row.expanded .chevron { transform: rotate(180deg); }
+
+.event-body {
+  border-top: 1px solid var(--border);
+  background: rgba(255,255,255,0.6); padding: 14px;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 14px;
+  align-items: start;
+}
+@media (max-width: 800px) { .workspace { grid-template-columns: 1fr; } }
+
+.available-panel {
+  background: white; border: 1px solid var(--border);
+  border-radius: 8px; padding: 12px;
+  display: flex; flex-direction: column;
+  position: sticky; top: 16px;
+}
+.panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
+}
+.panel-title {
+  font-size: 11px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--label);
+}
+.panel-count {
+  font-size: 11px; font-weight: 700; color: var(--slate);
+  background: var(--slate-light); padding: 2px 7px; border-radius: 10px;
+}
+.panel-search {
+  width: 100%; border: 1px solid var(--border); border-radius: 6px;
+  padding: 5px 9px; font-size: 12px; font-family: inherit; margin-bottom: 8px;
+}
+.unplaced-strip {
+  background: var(--amber-light); border: 1px solid var(--amber-border);
+  border-radius: 6px; padding: 6px 9px;
+  font-size: 11px; font-weight: 700; color: var(--amber-dark);
+  margin-bottom: 8px;
+}
+.people-list {
+  display: flex; flex-direction: column; gap: 4px;
+  max-height: 600px; overflow-y: auto; padding-right: 2px;
+}
+.person-pill {
+  display: flex; align-items: center; gap: 7px;
+  padding: 6px 10px; background: var(--blue-light);
+  border: 1px solid var(--blue-mid); border-radius: 16px;
+  cursor: grab; font-size: 12px; transition: all 0.1s ease;
+  color: var(--blue-dark); font-weight: 600;
+  user-select: none;
+}
+.person-pill[draggable=true]:hover { transform: translateX(2px); border-color: var(--blue); }
+.person-pill.placed {
+  background: white; border-color: var(--border);
+  color: #b0b0b0; cursor: default;
+}
+.person-pill.placed:hover { transform: none; }
+.person-pill.placed .person-name { text-decoration: line-through; }
+.person-pill.multi {
+  background: #fff3e0; border-color: var(--amber-border); color: var(--amber-dark);
+}
+.signup-multi {
+  font-size: 9px; font-weight: 800;
+  background: var(--amber); color: white;
+  padding: 1px 5px; border-radius: 8px; margin-left: auto;
+}
+.person-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.summary-bar {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 10px 14px; margin-bottom: 12px;
+  background: white; border: 1px solid var(--border); border-radius: 8px;
+}
+.summary-bar .sb-label {
+  font-size: 11px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--label);
+}
+.summary-chip {
+  display: inline-flex; align-items: baseline; gap: 5px;
+  font-size: 12px; font-weight: 700;
+}
+.summary-chip .num { font-size: 14px; font-weight: 800; }
+.summary-chip.warn .num { color: var(--amber-dark); }
+.summary-chip.ok .num { color: var(--green-dark); }
+.summary-chip.neutral .num { color: var(--primary); }
+.summary-chip .denom { color: var(--label); font-weight: 600; }
+.summary-chip-label { font-size: 11px; color: var(--label); font-weight: 600; }
+.audit-link {
+  font-size: 11px; font-weight: 700;
+  color: var(--blue-dark); text-decoration: underline; cursor: pointer;
+  background: none; border: none; font-family: inherit;
+}
+
+.stands-grid {
+  display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+
+.stand-card {
+  background: white; border: 1px solid var(--border);
+  border-radius: 8px; padding: 12px;
+  display: flex; flex-direction: column;
+}
+.stand-card.drag-over { background: var(--blue-light); border-color: var(--blue); }
+.stand-card-head { padding-bottom: 8px; margin-bottom: 8px; border-bottom: 2px solid var(--primary); }
+.stand-card-name {
+  font-weight: 800; font-size: 13px; letter-spacing: -0.01em; color: var(--primary);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.stand-fill-tag {
+  font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 8px;
+}
+.stand-fill-tag.full { background: var(--green-light); color: var(--green-dark); }
+.stand-fill-tag.partial { background: var(--amber-light); color: var(--amber-dark); }
+.stand-fill-tag.empty { background: var(--red-light); color: var(--red); }
+.stand-mini-bar {
+  height: 3px; background: var(--slate-light); border-radius: 2px;
+  margin-top: 5px; overflow: hidden;
+}
+.stand-mini-fill { height: 100%; }
+.stand-mini-fill.full { background: var(--green); }
+.stand-mini-fill.partial { background: var(--amber); }
+.stand-mini-fill.empty { background: var(--red); }
+
+.role-section { margin-bottom: 10px; }
+.role-section:last-child { margin-bottom: 0; }
+.role-header {
+  font-size: 10px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--label);
+  margin-bottom: 5px; display: flex;
+  align-items: center; justify-content: space-between;
+}
+.role-section.role-lead .role-header { color: var(--purple-dark); }
+.role-header .role-count { color: var(--slate); font-weight: 700; }
+.role-stack {
+  display: flex; flex-direction: column; gap: 4px;
+  min-height: 30px;
+}
+.role-stack.drag-over .slot-empty {
+  border-color: var(--blue); background: var(--blue-light); color: var(--blue-dark);
+}
+.slot-filled {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 10px;
+  background: var(--green-light); border: 1px solid var(--green-mid);
+  border-radius: 6px; font-size: 12px; font-weight: 600;
+  color: var(--green-dark); cursor: grab;
+  user-select: none;
+}
+.slot-filled:hover { background: #d8f0e6; }
+.slot-filled .x {
+  background: none; border: none; color: inherit;
+  cursor: pointer; padding: 0; font-size: 11px;
+  opacity: 0.4; margin-left: auto;
+}
+.slot-filled .x:hover { opacity: 1; }
+.slot-filled.manager-typed {
+  background: var(--purple-light); border-color: var(--purple-mid);
+  color: var(--purple-dark);
+}
+.manual-tag {
+  font-size: 8px; font-weight: 800; letter-spacing: 0.04em;
+  background: var(--purple); color: white;
+  padding: 1px 4px; border-radius: 3px;
+}
+.slot-filled.placeholder {
+  background: #fff3e0; border-color: var(--amber-border);
+  color: var(--amber-dark); border-style: dashed;
+}
+.placeholder-tag {
+  font-size: 8px; font-weight: 800; letter-spacing: 0.04em;
+  background: var(--amber); color: white;
+  padding: 1px 4px; border-radius: 3px;
+}
+.slot-filled.conflict {
+  background: #fff3e0; border-color: var(--amber-border);
+  color: var(--amber-dark);
+}
+.conflict-icon { color: var(--amber); font-weight: 800; }
+
+.slot-empty {
+  display: flex; align-items: center; justify-content: center;
+  padding: 5px 10px; min-height: 30px;
+  border: 1.5px dashed var(--red-border); background: #fefcfc;
+  border-radius: 6px;
+  font-size: 11px; font-weight: 600; color: #c08580;
+  cursor: pointer;
+}
+.slot-empty:hover {
+  border-color: var(--blue); background: var(--blue-light); color: var(--blue-dark);
+}
+
+.slot-typing-wrap { position: relative; }
+.slot-input {
+  border: 1.5px solid var(--blue); background: white;
+  border-radius: 6px; padding: 5px 10px; font-size: 12px;
+  font-family: inherit; width: 100%; outline: none;
+}
+.typeahead-list {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+  background: white; border: 1px solid var(--border-strong);
+  border-radius: 6px; box-shadow: var(--shadow-md);
+  max-height: 180px; overflow-y: auto;
+  z-index: 30; padding: 4px;
+}
+.typeahead-item {
+  padding: 5px 8px; font-size: 12px; border-radius: 4px;
+  cursor: pointer; display: flex; align-items: center; gap: 8px;
+}
+.typeahead-item:hover, .typeahead-item.focused {
+  background: var(--blue-light); color: var(--blue-dark);
+}
+.typeahead-item .ta-name { font-weight: 600; flex: 1; }
+.typeahead-item .ta-meta {
+  font-size: 9px; color: var(--label); font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.typeahead-item.signup-tag .ta-meta { color: var(--green-dark); }
+.typeahead-no-match {
+  padding: 8px; font-size: 11px; color: var(--amber-dark);
+  background: var(--amber-light); border-radius: 5px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.typeahead-no-match .add-placeholder {
+  font-size: 11px; font-weight: 700; padding: 4px 8px;
+  background: white; border: 1px solid var(--amber-border);
+  color: var(--amber-dark); border-radius: 4px;
+  cursor: pointer; text-align: left; font-family: inherit;
+}
+.typeahead-no-match .add-placeholder:hover { background: var(--amber-light); }
+
+/* Support Staff section — distinct from stand cards */
+.support-section {
+  margin-top: 16px; padding: 14px;
+  background: var(--slate-light);
+  border: 1px solid var(--border-strong); border-radius: 8px;
+}
+.support-section-head {
+  font-size: 12px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--slate);
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 10px;
+}
+.support-section-head .support-progress {
+  font-size: 11px; font-weight: 700; color: var(--label);
+}
+.support-roles {
+  display: grid; gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+}
+.support-role-card {
+  background: white; border: 1px solid var(--border);
+  border-radius: 6px; padding: 10px;
+}
+
+.locked-overlay {
+  background: var(--slate-light);
+  border-radius: 8px; padding: 10px 14px;
+  font-size: 12px; color: var(--slate);
+  margin-bottom: 14px;
+  display: flex; align-items: center; gap: 10px;
+  border: 1px solid var(--border-strong);
+}
+.lock-icon { font-size: 14px; }
+.unlock-link {
+  margin-left: auto; font-size: 11px; font-weight: 700;
+  color: var(--blue-dark); cursor: pointer; background: white;
+  padding: 4px 10px; border-radius: 5px; border: 1px solid var(--blue-mid);
+  font-family: inherit;
+}
+.unlock-link.disabled {
+  color: #aaa; border-color: var(--border); cursor: not-allowed;
+}
+.slot-filled.locked { cursor: default; opacity: 0.85; }
+.slot-filled.locked .x { display: none; }
+
+.empty-state {
+  text-align: center; padding: 60px 20px;
+  color: var(--label); font-size: 13px;
+}
+.empty-state-title {
+  font-size: 15px; font-weight: 700; color: var(--primary); margin-bottom: 6px;
+}
+.no-stands-msg {
+  padding: 14px; text-align: center;
+  font-size: 12px; color: var(--label);
+  background: white; border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+}
+.loader {
+  display: flex; align-items: center; justify-content: center;
+  padding: 40px; color: var(--label); font-size: 13px;
+}
+.toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: var(--primary); color: white;
+  padding: 10px 18px; border-radius: 8px;
+  font-size: 13px; font-weight: 600;
+  box-shadow: var(--shadow-lg);
+  z-index: 100;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+.toast.show { opacity: 1; }
+.toast.error { background: var(--red); }
+.toast.success { background: var(--green-dark); }
+
+/* Audit log modal */
+.modal-backdrop {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.4); z-index: 200;
+  align-items: center; justify-content: center; padding: 20px;
+}
+.modal-backdrop.show { display: flex; }
+.modal {
+  background: white; border-radius: 10px; max-width: 720px; width: 100%;
+  max-height: 80vh; display: flex; flex-direction: column;
+  box-shadow: var(--shadow-lg);
+}
+.modal-head {
+  padding: 14px 18px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.modal-head h3 { font-size: 16px; font-weight: 700; }
+.modal-close {
+  background: none; border: none; cursor: pointer;
+  font-size: 18px; color: var(--label); padding: 4px 8px;
+}
+.modal-body { padding: 14px 18px; overflow-y: auto; }
+.log-entry {
+  padding: 8px 10px; border-bottom: 1px solid var(--border);
+  font-size: 12px; display: grid;
+  grid-template-columns: 100px 80px 1fr 120px;
+  gap: 10px; align-items: baseline;
+}
+.log-entry .log-action {
+  font-weight: 800; font-size: 10px; text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.log-entry .log-action.placed { color: var(--green-dark); }
+.log-entry .log-action.removed { color: var(--red); }
+.log-entry .log-action.moved { color: var(--blue-dark); }
+.log-entry .log-action.locked, .log-entry .log-action.unlocked { color: var(--purple-dark); }
+.log-entry .log-time { color: var(--label); font-family: monospace; }
+.log-entry .log-actor { color: var(--label); }
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <header>
+    <div class="title-block">
+      <h1>Schedule Assistant <span class="beta-tag">BETA</span></h1>
+      <div class="sub">Position Board · drag people into stand &amp; role positions · midnight day-of lock</div>
+    </div>
+    <div class="header-right" id="header-right"></div>
+  </header>
+
+  <div class="view-toggle">
+    <button class="active"><span class="pip"></span>Position Board <span class="new-tag">BETA</span></button>
+    <a href="/schedule-assistant/"><span class="pip"></span>List view</a>
+    <a href="/staffing-requirements/"><span class="pip"></span>Calendar view</a>
+  </div>
+
+  <div class="filter-strip">
+    <span class="label">Venue</span>
+    <select id="venue-filter">
+      <option value="">All venues</option>
+    </select>
+
+    <span class="label">Date Range</span>
+    <select id="range-filter">
+      <option value="today">Today only</option>
+      <option value="this-week">This week</option>
+      <option value="next-7">Next 7 days</option>
+      <option value="next-14" selected>Next 14 days</option>
+      <option value="next-30">Next 30 days</option>
+      <option value="next-60">Next 60 days</option>
+      <option value="this-month">This month</option>
+      <option value="all-upcoming">All upcoming</option>
+      <option value="custom">Custom range…</option>
+    </select>
+
+    <span class="custom-range" id="custom-range">
+      <input type="date" id="custom-from">
+      <span style="color:var(--label);font-size:11px">to</span>
+      <input type="date" id="custom-to">
+    </span>
+
+    <span class="spacer"></span>
+
+    <span class="label">Stands</span>
+    <span class="role-toggle">
+      <button class="active" data-stands="active">Active only</button>
+      <button data-stands="all">Show all</button>
+    </span>
+
+    <button class="btn btn-print" id="refresh-btn" title="Refresh data">↻ Refresh</button>
+  </div>
+
+  <div id="content"><div class="loader">Loading…</div></div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="modal-backdrop" id="audit-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="audit-title">Audit Log</h3>
+      <button class="modal-close" data-close-modal="audit-modal">✕</button>
+    </div>
+    <div class="modal-body" id="audit-body"></div>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+ * SCHEDULE ASSISTANT BETA — Position Board
+ * Reads: events, staffing_requests, availability, availability_assignments,
+ *        employees, position_assignments, position_assignment_log
+ * Writes: position_assignments, position_assignment_log, availability_assignments
+ * ===================================================================== */
+
+const SUPABASE_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
+
+const SUPPORT_STAND = 'Support Staff';
+const HAWKING_STAND = 'Hawking';
+const CLIENT_STAND = 'Client Staffing Needs';
+const NONEVENT_STAND = 'Non-Event Labor';
+
+// Stands hidden from Position Board entirely
+const HIDDEN_STANDS = [CLIENT_STAND, NONEVENT_STAND];
+
+// Role display order — Lead always first
+const ROLE_ORDER = [
+  'Concessions Lead', 'Pizza Lead', 'Supervisor', 'Venue Manager',
+  'Bartender', 'Beer Tender',
+  'Concessions Cashier', 'Pizza Cashier',
+  'Pizza Maker',
+  'Concessions Cook', 'Prep Cook',
+  'Hawker',
+  'Barback',
+  'Cleaning Crew', 'Warehouse/Runner'
+];
+
+function roleSortKey(role) {
+  const i = ROLE_ORDER.indexOf(role);
+  return i === -1 ? 999 : i;
+}
+
+// ---------- Auth helpers ----------
+function apiHeaders() { return pcAuth.headers(); }
+function apiHeadersJson() {
+  return Object.assign({}, apiHeaders(), {
+    'Content-Type': 'application/json',
+    'Prefer': 'return=representation'
+  });
+}
+
+function handleAuthFailure() {
+  try {
+    localStorage.removeItem('sb_access_token');
+    localStorage.removeItem('sb_refresh_token');
+  } catch(e) {}
+  showToast('Session expired. Reloading to sign in again...', 'error');
+  setTimeout(() => window.location.reload(), 1800);
+}
+
+function authFetch(url, options) {
+  return fetch(url, options).then(r => {
+    if (r.status === 401) {
+      const err = new Error('Unauthorized'); err.authFailed = true; throw err;
+    }
+    if (!r.ok) {
+      return r.text().then(t => {
+        if (t && t.indexOf('JWT expired') !== -1) {
+          const err = new Error('JWT expired'); err.authFailed = true; throw err;
+        }
+        throw new Error(t || ('HTTP ' + r.status));
+      });
+    }
+    return r.text().then(t => {
+      if (!t) return [];
+      try { return JSON.parse(t); } catch(e) { return []; }
+    });
+  });
+}
+
+// ---------- Toast ----------
+let toastTimer = null;
+function showToast(msg, kind) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show' + (kind ? ' ' + kind : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.className = 'toast'; }, 2400);
+}
+
+// ---------- Date helpers ----------
+function todayIsoLocal() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function isoFromOffset(daysFromToday) {
+  const d = new Date();
+  d.setDate(d.getDate() + daysFromToday);
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function endOfMonthIso() {
+  const d = new Date();
+  const last = new Date(d.getFullYear(), d.getMonth()+1, 0);
+  return last.getFullYear() + '-' + String(last.getMonth()+1).padStart(2,'0') + '-' + String(last.getDate()).padStart(2,'0');
+}
+function endOfWeekIso() {
+  // Sunday-end week
+  const d = new Date();
+  const day = d.getDay(); // 0 Sun .. 6 Sat
+  const offset = (7 - day) % 7;
+  d.setDate(d.getDate() + offset);
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function getDateRange(rangeKey) {
+  const today = todayIsoLocal();
+  switch(rangeKey) {
+    case 'today': return { from: today, to: today };
+    case 'this-week': return { from: today, to: endOfWeekIso() };
+    case 'next-7': return { from: today, to: isoFromOffset(7) };
+    case 'next-14': return { from: today, to: isoFromOffset(14) };
+    case 'next-30': return { from: today, to: isoFromOffset(30) };
+    case 'next-60': return { from: today, to: isoFromOffset(60) };
+    case 'this-month': return { from: today, to: endOfMonthIso() };
+    case 'all-upcoming': return { from: today, to: '2099-12-31' };
+    case 'custom': {
+      const from = document.getElementById('custom-from').value || today;
+      const to = document.getElementById('custom-to').value || isoFromOffset(14);
+      return { from, to };
+    }
+    default: return { from: today, to: isoFromOffset(14) };
+  }
+}
+
+function fmtDayHeader(iso) {
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+}
+function fmtTime(t) {
+  if (!t) return '';
+  const [h, m] = t.split(':');
+  const hh = parseInt(h, 10);
+  const ap = hh >= 12 ? 'PM' : 'AM';
+  const h12 = hh % 12 || 12;
+  return h12 + ':' + m + ' ' + ap;
+}
+function fmtDateTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+// Lock = midnight of event_date (i.e. start of event_date in local time)
+function isLocked(eventDateIso) {
+  const lockTime = new Date(eventDateIso + 'T00:00:00');
+  return new Date() >= lockTime;
+}
+
+// Initials from name
+function initials(name) {
+  if (!name) return '?';
+  return name.split(/\s+/).map(p => p[0]).filter(Boolean).slice(0,2).join('').toUpperCase();
+}
+
+// ---------- State ----------
+const state = {
+  user: null,
+  events: [],          // [{id, venue, event_name, event_date, gates_open, show_time, estimated_end_time, expected_attendance, staffing_tier}]
+  staffingRequests: [],// [{id, event_id, venue, stand, role, headcount, staff_notes}]
+  availability: [],    // [{id, staff_name, event_id}]  (filtered to active)
+  multiSignupCounts: {}, // {staff_name: count of events same date}
+  multiSignupByDate: {},  // {date: {staff_name: [event_id, ...]}}
+  assignments: {},     // {event_date: {staff_name: assigned_event_id}}
+  positions: [],       // [{id, event_id, venue, stand, role, staff_name, source, assigned_by, assigned_at}]
+  employees: [],       // [{first_name, last_name}]
+  filters: {
+    venue: '',
+    range: 'next-14',
+    standsMode: 'active'
+  },
+  expandedEvents: new Set(),
+  unlockedEvents: new Set(),
+  drag: null,         // { staffName, source, fromPositionId? }
+  typing: null        // { eventId, venue, stand, role, value, focusedIndex }
+};
+
+// ---------- Data loaders ----------
+function loadAll() {
+  const range = getDateRange(state.filters.range);
+  const eventsUrl = SUPABASE_URL + '/rest/v1/events?event_type=neq.adhoc'
+    + '&event_date=gte.' + range.from
+    + '&event_date=lte.' + range.to
+    + '&order=event_date.asc,gates_open.asc';
+
+  document.getElementById('content').innerHTML = '<div class="loader">Loading…</div>';
+
+  return Promise.all([
+    authFetch(eventsUrl, { headers: apiHeaders() }),
+    authFetch(SUPABASE_URL + '/rest/v1/employees?select=first_name,last_name,is_active&is_active=eq.true&order=last_name.asc',
+      { headers: apiHeaders() })
+  ]).then(([events, employees]) => {
+    state.events = events || [];
+    state.employees = employees || [];
+
+    if (!state.events.length) {
+      state.staffingRequests = [];
+      state.availability = [];
+      state.multiSignupCounts = {};
+      state.assignments = {};
+      state.positions = [];
+      return;
+    }
+
+    const eventIds = state.events.map(e => e.id);
+    const inList = '(' + eventIds.map(id => '"' + id + '"').join(',') + ')';
+    const eventDates = Array.from(new Set(state.events.map(e => e.event_date)));
+    const dateInList = '(' + eventDates.map(d => '"' + d + '"').join(',') + ')';
+
+    return Promise.all([
+      authFetch(SUPABASE_URL + '/rest/v1/staffing_requests?event_id=in.' + inList + '&headcount=gt.0',
+        { headers: apiHeaders() }),
+      authFetch(SUPABASE_URL + '/rest/v1/availability?event_id=in.' + inList + '&removed_at=is.null',
+        { headers: apiHeaders() }),
+      authFetch(SUPABASE_URL + '/rest/v1/availability_assignments?event_date=in.' + dateInList,
+        { headers: apiHeaders() }),
+      authFetch(SUPABASE_URL + '/rest/v1/position_assignments?event_id=in.' + inList + '&removed_at=is.null',
+        { headers: apiHeaders() })
+    ]).then(([reqs, avail, assigns, positions]) => {
+      state.staffingRequests = reqs || [];
+      state.availability = avail || [];
+      state.positions = positions || [];
+
+      // Build multi-signup index: count signups per (date, person)
+      const eventById = {};
+      state.events.forEach(e => { eventById[e.id] = e; });
+      const byDate = {};
+      state.availability.forEach(a => {
+        const ev = eventById[a.event_id];
+        if (!ev) return;
+        const d = ev.event_date;
+        if (!byDate[d]) byDate[d] = {};
+        if (!byDate[d][a.staff_name]) byDate[d][a.staff_name] = [];
+        byDate[d][a.staff_name].push(a.event_id);
+      });
+      state.multiSignupByDate = byDate;
+      state.multiSignupCounts = {};
+      Object.keys(byDate).forEach(d => {
+        Object.keys(byDate[d]).forEach(name => {
+          state.multiSignupCounts[d + '|' + name] = byDate[d][name].length;
+        });
+      });
+
+      // Build assignment index
+      state.assignments = {};
+      (assigns || []).forEach(a => {
+        if (!state.assignments[a.event_date]) state.assignments[a.event_date] = {};
+        state.assignments[a.event_date][a.staff_name] = a.assigned_event_id;
+      });
+    });
+  }).then(() => {
+    populateVenueFilter();
+    render();
+  }).catch(err => {
+    if (err.authFailed) { handleAuthFailure(); return; }
+    console.error(err);
+    document.getElementById('content').innerHTML =
+      '<div class="empty-state"><div class="empty-state-title">Could not load data</div>' + (err.message || '') + '</div>';
+  });
+}
+
+function populateVenueFilter() {
+  const sel = document.getElementById('venue-filter');
+  const current = sel.value || state.filters.venue;
+  const venues = Array.from(new Set(state.events.map(e => e.venue))).sort();
+  sel.innerHTML = '<option value="">All venues</option>' +
+    venues.map(v => '<option value="' + v + '"' + (v === current ? ' selected' : '') + '>' + v + '</option>').join('');
+  state.filters.venue = current;
+}
+
+// ---------- Filtering & grouping ----------
+function visibleEvents() {
+  return state.events.filter(e => !state.filters.venue || e.venue === state.filters.venue);
+}
+
+function eventsGroupedByDate() {
+  const out = {};
+  visibleEvents().forEach(e => {
+    if (!out[e.event_date]) out[e.event_date] = [];
+    out[e.event_date].push(e);
+  });
+  return out;
+}
+
+// Stand requests for an event (only those with headcount > 0)
+function standsForEvent(eventId, venue) {
+  const reqs = state.staffingRequests.filter(r => r.event_id === eventId);
+  // Group by stand
+  const byStand = {};
+  reqs.forEach(r => {
+    if (HIDDEN_STANDS.indexOf(r.stand) !== -1) return;
+    if (!byStand[r.stand]) byStand[r.stand] = [];
+    byStand[r.stand].push(r);
+  });
+  // Return list sorted: revenue stands first (alpha), Hawking second-to-last, Support last
+  const standNames = Object.keys(byStand);
+  const order = (s) => {
+    if (s === SUPPORT_STAND) return 99;
+    if (s === HAWKING_STAND) return 90;
+    return 1;
+  };
+  standNames.sort((a, b) => {
+    const oa = order(a), ob = order(b);
+    if (oa !== ob) return oa - ob;
+    return a.localeCompare(b);
+  });
+  return standNames.map(s => ({
+    stand: s,
+    requests: byStand[s].sort((a, b) => roleSortKey(a.role) - roleSortKey(b.role))
+  }));
+}
+
+// ---------- Position helpers ----------
+function positionsFor(eventId, stand, role) {
+  return state.positions.filter(p =>
+    p.event_id === eventId && p.stand === stand && p.role === role);
+}
+function positionsForEvent(eventId) {
+  return state.positions.filter(p => p.event_id === eventId);
+}
+function eventTotalNeeded(eventId) {
+  const reqs = state.staffingRequests.filter(r => r.event_id === eventId);
+  return reqs.reduce((s, r) => s + (r.headcount || 0), 0);
+}
+function eventTotalFilled(eventId) {
+  return positionsForEvent(eventId).length;
+}
+
+// Effective signed-up count for an event (people minus those assigned elsewhere same date)
+function effectiveSignupCount(event) {
+  const date = event.event_date;
+  const assignedToOther = state.assignments[date] || {};
+  const sigs = state.availability.filter(a => a.event_id === event.id);
+  return sigs.filter(a => {
+    const assigned = assignedToOther[a.staff_name];
+    return !assigned || assigned === event.id;
+  }).length;
+}
+
+// ---------- Rendering ----------
+function render() {
+  const root = document.getElementById('content');
+  const grouped = eventsGroupedByDate();
+  const dates = Object.keys(grouped).sort();
+  if (!dates.length) {
+    root.innerHTML = '<div class="empty-state"><div class="empty-state-title">No events in this range</div>Try a wider date range or a different venue.</div>';
+    return;
+  }
+  let html = '';
+  dates.forEach(date => {
+    const events = grouped[date];
+    const totalNeed = events.reduce((s, e) => s + Math.max(eventTotalNeeded(e.id), 0), 0);
+    let pillCls = 'green';
+    if (totalNeed >= 60) pillCls = 'red';
+    else if (totalNeed >= 30) pillCls = 'amber';
+    let unresolved = 0;
+    events.forEach(e => {
+      const sigs = state.availability.filter(a => a.event_id === e.id);
+      sigs.forEach(s => {
+        if ((state.multiSignupCounts[date + '|' + s.staff_name] || 0) > 1) {
+          // Count if NOT assigned to this event
+          const assigned = (state.assignments[date] || {})[s.staff_name];
+          if (!assigned) unresolved++;
+        }
+      });
+    });
+
+    html += '<div class="day-group"><h2>' + fmtDayHeader(date) + '</h2><div class="day-pills">';
+    html += '<span class="day-pill ' + pillCls + '">Need ~' + totalNeed + ' people</span>';
+    if (unresolved > 0) html += '<span class="day-pill warn">⚠ ' + unresolved + ' unresolved multi-signup' + (unresolved === 1 ? '' : 's') + '</span>';
+    html += '</div></div>';
+
+    events.forEach(ev => { html += renderEventRow(ev); });
+  });
+  root.innerHTML = html;
+  attachEventHandlers();
+}
+
+function eventStatusClass(ev) {
+  const needed = eventTotalNeeded(ev.id);
+  const filled = eventTotalFilled(ev.id);
+  if (needed === 0) return { cls: 'not-submitted', tag: 'Not Submitted' };
+  if (filled >= needed) return { cls: 'staffed', tag: '✓ Staffed' };
+  return { cls: 'submitted', tag: 'Submitted' };
+}
+
+function renderEventRow(ev) {
+  const isExpanded = state.expandedEvents.has(ev.id);
+  const status = eventStatusClass(ev);
+  const needed = eventTotalNeeded(ev.id);
+  const filled = eventTotalFilled(ev.id);
+  const pct = needed > 0 ? Math.min(100, Math.round((filled / needed) * 100)) : 0;
+  let fillCls = 'red';
+  if (pct >= 100) fillCls = 'green';
+  else if (pct >= 50) fillCls = 'amber';
+  const locked = isLocked(ev.event_date) && !state.unlockedEvents.has(ev.id);
+
+  const time = ev.gates_open ? 'Gates ' + fmtTime(ev.gates_open) +
+    (ev.estimated_end_time ? ' – ' + fmtTime(ev.estimated_end_time) : '') : '';
+
+  let html = '<div class="event-row ' + status.cls + (isExpanded ? ' expanded' : '') + '" data-event-id="' + ev.id + '">';
+  html += '<div class="event-head">';
+  html += '<span class="venue-badge">' + ev.venue + '</span>';
+  html += '<span class="event-name">' + escapeHtml(ev.event_name || '') + '</span>';
+  if (time) html += '<span class="event-time">' + time + '</span>';
+  html += '<span class="status-tag ' + status.cls + '">' + status.tag + '</span>';
+  if (locked) html += '<span class="lock-tag">🔒 Locked</span>';
+  html += '<span class="event-spacer"></span>';
+  if (needed > 0 || filled > 0) {
+    html += '<div class="coverage-block">';
+    html += '<div class="coverage-line"><span class="coverage-count">' + filled + ' / ' + (needed || '?') + '</span><span class="coverage-sub">filled</span></div>';
+    html += '<div class="coverage-bar"><div class="coverage-fill ' + fillCls + '" style="width:' + pct + '%"></div></div>';
+    html += '</div>';
+  }
+  html += '<button class="btn btn-print" data-print-event="' + ev.id + '">🖨 Print</button>';
+  html += '<button class="chevron">▼</button>';
+  html += '</div>';
+
+  if (isExpanded) html += renderExpanded(ev, locked);
+  html += '</div>';
+  return html;
+}
+
+function renderExpanded(ev, locked) {
+  const standGroups = standsForEvent(ev.id, ev.venue);
+  const supportGroup = standGroups.find(g => g.stand === SUPPORT_STAND);
+  const nonSupportGroups = standGroups.filter(g => g.stand !== SUPPORT_STAND);
+  let html = '<div class="event-body">';
+
+  if (locked) {
+    const isScheduler = pcAuth.isAdmin();
+    html += '<div class="locked-overlay">';
+    html += '<span class="lock-icon">🔒</span>';
+    html += '<span><strong>This event is locked.</strong> Position changes after midnight day-of require a scheduler. Empty slots can still be filled.</span>';
+    html += '<button class="unlock-link' + (isScheduler ? '' : ' disabled') + '" data-unlock-event="' + ev.id + '">' + (isScheduler ? 'Unlock' : 'Unlock (admin only)') + '</button>';
+    html += '</div>';
+  }
+
+  html += '<div class="workspace">';
+  html += renderAvailablePanel(ev);
+  html += '<div>';
+  html += renderSummaryBar(ev);
+
+  if (!standGroups.length) {
+    html += '<div class="no-stands-msg">No staffing requests submitted for this event yet. <a href="/event-planning/">Open Event Planning →</a></div>';
+  } else {
+    if (nonSupportGroups.length) {
+      html += '<div class="stands-grid">';
+      nonSupportGroups.forEach(g => { html += renderStandCard(ev, g, locked); });
+      html += '</div>';
+    }
+    if (supportGroup) {
+      html += renderSupportSection(ev, supportGroup, locked);
+    }
+  }
+
+  html += '</div></div></div>';
+  return html;
+}
+
+function renderSummaryBar(ev) {
+  const standGroups = standsForEvent(ev.id, ev.venue);
+  const totalNeed = eventTotalNeeded(ev.id);
+  const totalFilled = eventTotalFilled(ev.id);
+  let standsReady = 0;
+  standGroups.forEach(g => {
+    let need = 0, fill = 0;
+    g.requests.forEach(r => {
+      need += r.headcount;
+      fill += positionsFor(ev.id, g.stand, r.role).length;
+    });
+    if (fill >= need && need > 0) standsReady++;
+  });
+  const fillCls = totalFilled >= totalNeed ? 'ok' : 'warn';
+
+  let html = '<div class="summary-bar">';
+  html += '<span class="sb-label">Summary</span>';
+  html += '<span class="summary-chip ' + fillCls + '"><span class="summary-chip-label">Filled</span><span class="num">' + totalFilled + '</span><span class="denom">/ ' + totalNeed + '</span></span>';
+  html += '<span class="summary-chip neutral"><span class="summary-chip-label">Stands ready</span><span class="num">' + standsReady + '</span><span class="denom">/ ' + standGroups.length + '</span></span>';
+  html += '<span class="summary-chip neutral"><span class="summary-chip-label">Locks</span><span class="num">12:01 AM</span><span class="denom">' + fmtDayHeader(ev.event_date).split(',')[0] + '</span></span>';
+  html += '<span class="event-spacer"></span>';
+  html += '<button class="audit-link" data-audit-event="' + ev.id + '">Open audit log</button>';
+  html += '</div>';
+  return html;
+}
+
+function renderAvailablePanel(ev) {
+  const sigs = state.availability.filter(a => a.event_id === ev.id);
+  const placedNames = new Set(positionsForEvent(ev.id).map(p => p.staff_name));
+  const placedCount = sigs.filter(s => placedNames.has(s.staff_name)).length;
+  const unplaced = sigs.length - placedCount;
+
+  let html = '<aside class="available-panel">';
+  html += '<div class="panel-head">';
+  html += '<span class="panel-title">Available</span>';
+  html += '<span class="panel-count">' + unplaced + ' left · ' + sigs.length + ' signed up</span>';
+  html += '</div>';
+  html += '<input class="panel-search" placeholder="Search…" data-event-id="' + ev.id + '">';
+  if (unplaced > 0) {
+    html += '<div class="unplaced-strip">⚠ Unplaced names will be reported after lock</div>';
+  }
+  html += '<div class="people-list">';
+  // Sort: unplaced first (alpha), placed at bottom (alpha)
+  const sorted = sigs.slice().sort((a, b) => {
+    const ap = placedNames.has(a.staff_name) ? 1 : 0;
+    const bp = placedNames.has(b.staff_name) ? 1 : 0;
+    if (ap !== bp) return ap - bp;
+    return a.staff_name.localeCompare(b.staff_name);
+  });
+  sorted.forEach(s => {
+    const isPlaced = placedNames.has(s.staff_name);
+    const multiCount = state.multiSignupCounts[ev.event_date + '|' + s.staff_name] || 1;
+    const isMulti = multiCount > 1;
+    let cls = 'person-pill';
+    if (isPlaced) cls += ' placed';
+    if (isMulti && !isPlaced) cls += ' multi';
+    html += '<div class="' + cls + '" draggable="' + (isPlaced ? 'false' : 'true') +
+      '" data-staff-name="' + escapeAttr(s.staff_name) + '" data-source="signup" data-event-id="' + ev.id + '">';
+    html += '<span class="person-name">' + escapeHtml(s.staff_name) + '</span>';
+    if (isMulti && !isPlaced) html += '<span class="signup-multi">' + multiCount + 'x</span>';
+    html += '</div>';
+  });
+  html += '</div>';
+  html += '</aside>';
+  return html;
+}
+
+function renderStandCard(ev, group, locked) {
+  let need = 0, fill = 0;
+  group.requests.forEach(r => {
+    need += r.headcount;
+    fill += positionsFor(ev.id, group.stand, r.role).length;
+  });
+  let tagCls = 'empty', barCls = 'empty';
+  const pct = need > 0 ? Math.min(100, Math.round((fill / need) * 100)) : 0;
+  if (fill >= need && need > 0) { tagCls = 'full'; barCls = 'full'; }
+  else if (fill > 0) { tagCls = 'partial'; barCls = 'partial'; }
+
+  let html = '<div class="stand-card" data-stand="' + escapeAttr(group.stand) + '">';
+  html += '<div class="stand-card-head"><div class="stand-card-name">';
+  html += escapeHtml(group.stand);
+  html += '<span class="stand-fill-tag ' + tagCls + '">' + fill + ' / ' + need + '</span>';
+  html += '</div><div class="stand-mini-bar"><div class="stand-mini-fill ' + barCls + '" style="width:' + pct + '%"></div></div></div>';
+
+  group.requests.forEach(req => {
+    html += renderRoleSection(ev, group.stand, req, locked);
+  });
+  html += '</div>';
+  return html;
+}
+
+function renderRoleSection(ev, stand, req, locked) {
+  const isLeadRole = /Lead|Supervisor|Manager/i.test(req.role);
+  const filled = positionsFor(ev.id, stand, req.role);
+  const slotsToShow = req.headcount;
+  let html = '<div class="role-section' + (isLeadRole ? ' role-lead' : '') + '">';
+  html += '<div class="role-header">' + escapeHtml(req.role) + ' <span class="role-count">' + req.headcount + '</span></div>';
+  html += '<div class="role-stack" data-event-id="' + ev.id + '" data-stand="' + escapeAttr(stand) + '" data-role="' + escapeAttr(req.role) + '">';
+
+  filled.forEach(p => { html += renderFilledSlot(ev, p, locked); });
+
+  const empties = Math.max(0, slotsToShow - filled.length);
+  for (let i = 0; i < empties; i++) {
+    const isTyping = state.typing &&
+      state.typing.eventId === ev.id &&
+      state.typing.stand === stand &&
+      state.typing.role === req.role &&
+      state.typing.slotIndex === i;
+    if (isTyping) {
+      html += renderTypingSlot();
+    } else {
+      html += '<div class="slot-empty' + (locked ? ' locked' : '') + '" data-event-id="' + ev.id +
+        '" data-stand="' + escapeAttr(stand) + '" data-role="' + escapeAttr(req.role) + '" data-slot-index="' + i + '">drop here / click to type</div>';
+    }
+  }
+  html += '</div></div>';
+  return html;
+}
+
+function renderFilledSlot(ev, p, locked) {
+  let cls = 'slot-filled';
+  if (p.source === 'manual') cls += ' manager-typed';
+  if (p.source === 'placeholder') cls += ' placeholder';
+  if (locked) cls += ' locked';
+
+  // Conflict check
+  const multiCount = state.multiSignupCounts[ev.event_date + '|' + p.staff_name] || 1;
+  if (multiCount > 1) cls += ' conflict';
+
+  let html = '<div class="' + cls + '" draggable="' + (locked ? 'false' : 'true') + '" data-position-id="' + p.id + '" data-staff-name="' + escapeAttr(p.staff_name) + '" data-source="' + p.source + '">';
+  if (multiCount > 1) html += '<span class="conflict-icon" title="Signed up for ' + multiCount + ' events today">⚠</span>';
+  html += '<span class="person-name">' + escapeHtml(p.staff_name) + '</span>';
+  if (p.source === 'manual') html += '<span class="manual-tag">TYPED</span>';
+  if (p.source === 'placeholder') html += '<span class="placeholder-tag">PLACEHOLDER</span>';
+  if (!locked) html += '<button class="x" data-remove-position="' + p.id + '" title="Remove">✕</button>';
+  html += '</div>';
+  return html;
+}
+
+function renderTypingSlot() {
+  const t = state.typing;
+  let html = '<div class="slot-typing-wrap">';
+  html += '<input class="slot-input" type="text" id="slot-input-active" value="' + escapeAttr(t.value) + '" placeholder="Type a name…">';
+  html += '<div class="typeahead-list">' + renderTypeahead() + '</div>';
+  html += '</div>';
+  return html;
+}
+
+function renderTypeahead() {
+  const t = state.typing;
+  if (!t || !t.value || t.value.length < 1) {
+    return '<div style="padding:6px;font-size:11px;color:var(--label)">Start typing…</div>';
+  }
+  const q = t.value.toLowerCase().trim();
+  const ev = state.events.find(e => e.id === t.eventId);
+  const dateSignups = ev ? Array.from(new Set(
+    state.availability.filter(a => a.event_id === t.eventId).map(a => a.staff_name)
+  )) : [];
+  const matches = state.employees
+    .map(e => ({ name: (e.first_name + ' ' + e.last_name).trim() }))
+    .filter(e => e.name.toLowerCase().indexOf(q) !== -1)
+    .slice(0, 8);
+  if (!matches.length) {
+    let html = '<div class="typeahead-no-match">';
+    html += '<span>⚠ No employee matches "' + escapeHtml(t.value) + '"</span>';
+    html += '<button class="add-placeholder" data-add-placeholder="' + escapeAttr(t.value) + '">+ Add as placeholder (will be flagged)</button>';
+    html += '</div>';
+    return html;
+  }
+  return matches.map((m, i) => {
+    const isSignedUp = dateSignups.indexOf(m.name) !== -1;
+    const cls = 'typeahead-item' + (i === t.focusedIndex ? ' focused' : '') + (isSignedUp ? ' signup-tag' : '');
+    return '<div class="' + cls + '" data-pick-name="' + escapeAttr(m.name) + '">' +
+      '<span class="ta-name">' + escapeHtml(m.name) + '</span>' +
+      '<span class="ta-meta">' + (isSignedUp ? 'Employee · signed up today' : 'Employee') + '</span>' +
+      '</div>';
+  }).join('');
+}
+
+function renderSupportSection(ev, group, locked) {
+  let need = 0, fill = 0;
+  group.requests.forEach(r => {
+    need += r.headcount;
+    fill += positionsFor(ev.id, group.stand, r.role).length;
+  });
+  let html = '<div class="support-section">';
+  html += '<div class="support-section-head"><span>Support Staff</span><span class="support-progress">' + fill + ' / ' + need + ' filled</span></div>';
+  html += '<div class="support-roles">';
+  group.requests.forEach(req => {
+    const isLeadRole = /Manager|Supervisor/i.test(req.role);
+    const filled = positionsFor(ev.id, group.stand, req.role);
+    html += '<div class="support-role-card">';
+    html += '<div class="role-section' + (isLeadRole ? ' role-lead' : '') + '" style="margin:0">';
+    html += '<div class="role-header">' + escapeHtml(req.role) + ' <span class="role-count">' + req.headcount + '</span></div>';
+    html += '<div class="role-stack" data-event-id="' + ev.id + '" data-stand="' + escapeAttr(group.stand) + '" data-role="' + escapeAttr(req.role) + '">';
+    filled.forEach(p => { html += renderFilledSlot(ev, p, locked); });
+    const empties = Math.max(0, req.headcount - filled.length);
+    for (let i = 0; i < empties; i++) {
+      const isTyping = state.typing && state.typing.eventId === ev.id && state.typing.stand === group.stand && state.typing.role === req.role && state.typing.slotIndex === i;
+      if (isTyping) html += renderTypingSlot();
+      else html += '<div class="slot-empty' + (locked ? ' locked' : '') + '" data-event-id="' + ev.id + '" data-stand="' + escapeAttr(group.stand) + '" data-role="' + escapeAttr(req.role) + '" data-slot-index="' + i + '">drop here / click to type</div>';
+    }
+    html += '</div></div></div>';
+  });
+  html += '</div></div>';
+  return html;
+}
+
+// ---------- Escape helpers ----------
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+function escapeAttr(s) { return escapeHtml(s); }
+
+// ---------- Event handlers ----------
+function attachEventHandlers() {
+  document.querySelectorAll('.event-head').forEach(head => {
+    head.addEventListener('click', e => {
+      if (e.target.closest('.btn') || e.target.closest('.audit-link')) return;
+      const row = head.closest('.event-row');
+      const id = row.getAttribute('data-event-id');
+      if (state.expandedEvents.has(id)) state.expandedEvents.delete(id);
+      else state.expandedEvents.add(id);
+      render();
+    });
+  });
+
+  document.querySelectorAll('[data-print-event]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const id = btn.getAttribute('data-print-event');
+      printEvent(id);
+    });
+  });
+
+  document.querySelectorAll('[data-audit-event]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      openAuditLog(btn.getAttribute('data-audit-event'));
+    });
+  });
+
+  document.querySelectorAll('[data-unlock-event]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      if (btn.classList.contains('disabled')) return;
+      const id = btn.getAttribute('data-unlock-event');
+      state.unlockedEvents.add(id);
+      logAction(id, null, 'unlocked', { reason: 'manual unlock' });
+      render();
+      showToast('Event unlocked');
+    });
+  });
+
+  // Drag start on person pills (left panel)
+  document.querySelectorAll('.person-pill[draggable="true"]').forEach(pill => {
+    pill.addEventListener('dragstart', e => {
+      state.drag = {
+        staffName: pill.getAttribute('data-staff-name'),
+        source: pill.getAttribute('data-source'),
+        eventId: pill.getAttribute('data-event-id')
+      };
+      e.dataTransfer.effectAllowed = 'move';
+    });
+  });
+
+  // Drag start on filled slots (move within grid)
+  document.querySelectorAll('.slot-filled[draggable="true"]').forEach(pill => {
+    pill.addEventListener('dragstart', e => {
+      e.stopPropagation();
+      state.drag = {
+        positionId: pill.getAttribute('data-position-id'),
+        staffName: pill.getAttribute('data-staff-name'),
+        source: pill.getAttribute('data-source')
+      };
+      e.dataTransfer.effectAllowed = 'move';
+    });
+  });
+
+  // Drop targets: empty slots + role-stacks
+  document.querySelectorAll('.role-stack').forEach(stack => {
+    stack.addEventListener('dragover', e => {
+      e.preventDefault();
+      stack.classList.add('drag-over');
+    });
+    stack.addEventListener('dragleave', () => stack.classList.remove('drag-over'));
+    stack.addEventListener('drop', e => {
+      e.preventDefault();
+      stack.classList.remove('drag-over');
+      handleDrop(stack);
+    });
+  });
+
+  // Click on empty slot → start typing
+  document.querySelectorAll('.slot-empty:not(.locked)').forEach(slot => {
+    slot.addEventListener('click', () => {
+      state.typing = {
+        eventId: slot.getAttribute('data-event-id'),
+        stand: slot.getAttribute('data-stand'),
+        role: slot.getAttribute('data-role'),
+        slotIndex: parseInt(slot.getAttribute('data-slot-index'), 10),
+        value: '',
+        focusedIndex: 0
+      };
+      render();
+      const input = document.getElementById('slot-input-active');
+      if (input) input.focus();
+    });
+  });
+
+  // Active typing input
+  const activeInput = document.getElementById('slot-input-active');
+  if (activeInput) {
+    activeInput.addEventListener('input', () => {
+      state.typing.value = activeInput.value;
+      state.typing.focusedIndex = 0;
+      // Re-render only the dropdown
+      const list = activeInput.parentElement.querySelector('.typeahead-list');
+      if (list) list.innerHTML = renderTypeahead();
+      attachTypeaheadHandlers();
+    });
+    activeInput.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { state.typing = null; render(); return; }
+      if (e.key === 'Enter') {
+        const focused = document.querySelector('.typeahead-item.focused');
+        if (focused) {
+          pickName(focused.getAttribute('data-pick-name'));
+          return;
+        }
+        const placeholder = document.querySelector('[data-add-placeholder]');
+        if (placeholder) {
+          addPlaceholder(placeholder.getAttribute('data-add-placeholder'));
+        }
+        return;
+      }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const items = document.querySelectorAll('.typeahead-item');
+        if (!items.length) return;
+        let idx = state.typing.focusedIndex || 0;
+        idx += (e.key === 'ArrowDown' ? 1 : -1);
+        if (idx < 0) idx = items.length - 1;
+        if (idx >= items.length) idx = 0;
+        state.typing.focusedIndex = idx;
+        items.forEach((it, i) => {
+          if (i === idx) it.classList.add('focused');
+          else it.classList.remove('focused');
+        });
+      }
+    });
+    // Close on outside click
+    setTimeout(() => {
+      document.addEventListener('click', outsideTypingClick, { once: true });
+    }, 0);
+  }
+
+  attachTypeaheadHandlers();
+
+  // Remove buttons
+  document.querySelectorAll('[data-remove-position]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      removePosition(btn.getAttribute('data-remove-position'));
+    });
+  });
+
+  // Search filter on available panel
+  document.querySelectorAll('.panel-search').forEach(input => {
+    input.addEventListener('input', () => {
+      const q = input.value.toLowerCase();
+      const list = input.parentElement.querySelector('.people-list');
+      list.querySelectorAll('.person-pill').forEach(pill => {
+        const name = pill.getAttribute('data-staff-name').toLowerCase();
+        pill.style.display = name.indexOf(q) !== -1 ? '' : 'none';
+      });
+    });
+  });
+}
+
+function attachTypeaheadHandlers() {
+  document.querySelectorAll('[data-pick-name]').forEach(item => {
+    item.addEventListener('click', e => {
+      e.stopPropagation();
+      pickName(item.getAttribute('data-pick-name'));
+    });
+  });
+  document.querySelectorAll('[data-add-placeholder]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      addPlaceholder(btn.getAttribute('data-add-placeholder'));
+    });
+  });
+}
+
+function outsideTypingClick(e) {
+  if (!state.typing) return;
+  if (e.target.closest('.slot-typing-wrap')) {
+    setTimeout(() => {
+      document.addEventListener('click', outsideTypingClick, { once: true });
+    }, 0);
+    return;
+  }
+  state.typing = null;
+  render();
+}
+
+// ---------- Mutations ----------
+function handleDrop(stack) {
+  if (!state.drag) return;
+  const eventId = stack.getAttribute('data-event-id');
+  const stand = stack.getAttribute('data-stand');
+  const role = stack.getAttribute('data-role');
+
+  // If moving from existing position, treat as move
+  if (state.drag.positionId) {
+    movePosition(state.drag.positionId, eventId, stand, role);
+  } else {
+    // Place a new pill
+    placePosition(eventId, stand, role, state.drag.staffName, state.drag.source || 'signup');
+  }
+  state.drag = null;
+}
+
+function placePosition(eventId, stand, role, staffName, source) {
+  // Check capacity (don't overfill)
+  const reqs = state.staffingRequests.filter(r => r.event_id === eventId && r.stand === stand && r.role === role);
+  const need = reqs.reduce((s, r) => s + r.headcount, 0);
+  const have = positionsFor(eventId, stand, role).length;
+  if (have >= need) {
+    showToast('That role is already full', 'error');
+    return;
+  }
+
+  // Don't allow same person twice in same event
+  const dup = positionsForEvent(eventId).find(p => p.staff_name === staffName);
+  if (dup) {
+    showToast(staffName + ' is already placed at this event', 'error');
+    return;
+  }
+
+  const ev = state.events.find(e => e.id === eventId);
+  const actor = (state.user && state.user.display_name) || (state.user && state.user.email) || 'unknown';
+  const body = {
+    event_id: eventId,
+    venue: ev.venue,
+    stand: stand,
+    role: role,
+    staff_name: staffName,
+    source: source,
+    assigned_by: actor
+  };
+
+  authFetch(SUPABASE_URL + '/rest/v1/position_assignments', {
+    method: 'POST', headers: apiHeadersJson(), body: JSON.stringify(body)
+  }).then(rows => {
+    const inserted = rows[0];
+    state.positions.push(inserted);
+    return logAction(eventId, inserted.id, 'placed', { stand, role, staff_name: staffName, source });
+  }).then(() => {
+    // Auto-resolve multi-signup
+    return autoResolveMultiSignup(staffName, ev.event_date, eventId);
+  }).then(() => {
+    showToast('Placed ' + staffName, 'success');
+    render();
+  }).catch(err => {
+    if (err.authFailed) { handleAuthFailure(); return; }
+    console.error(err);
+    showToast('Could not save: ' + (err.message || ''), 'error');
+  });
+}
+
+function movePosition(positionId, newEventId, newStand, newRole) {
+  const pos = state.positions.find(p => p.id === positionId);
+  if (!pos) return;
+
+  // Check capacity at destination
+  if (pos.event_id === newEventId && pos.stand === newStand && pos.role === newRole) {
+    return; // no-op
+  }
+  const reqs = state.staffingRequests.filter(r => r.event_id === newEventId && r.stand === newStand && r.role === newRole);
+  const need = reqs.reduce((s, r) => s + r.headcount, 0);
+  const have = positionsFor(newEventId, newStand, newRole).length;
+  if (have >= need) {
+    showToast('That role is already full', 'error');
+    return;
+  }
+
+  const actor = (state.user && state.user.display_name) || (state.user && state.user.email) || 'unknown';
+  const oldStand = pos.stand, oldRole = pos.role;
+
+  authFetch(SUPABASE_URL + '/rest/v1/position_assignments?id=eq.' + positionId, {
+    method: 'PATCH', headers: apiHeadersJson(),
+    body: JSON.stringify({ event_id: newEventId, stand: newStand, role: newRole, assigned_by: actor })
+  }).then(rows => {
+    const updated = rows[0] || pos;
+    const idx = state.positions.findIndex(p => p.id === positionId);
+    if (idx !== -1) state.positions[idx] = Object.assign({}, pos, updated);
+    return logAction(newEventId, positionId, 'moved', {
+      from: { stand: oldStand, role: oldRole },
+      to: { stand: newStand, role: newRole },
+      staff_name: pos.staff_name
+    });
+  }).then(() => {
+    showToast('Moved to ' + newStand + ' / ' + newRole, 'success');
+    render();
+  }).catch(err => {
+    if (err.authFailed) { handleAuthFailure(); return; }
+    console.error(err);
+    showToast('Could not move: ' + (err.message || ''), 'error');
+  });
+}
+
+function removePosition(positionId) {
+  const pos = state.positions.find(p => p.id === positionId);
+  if (!pos) return;
+  const actor = (state.user && state.user.display_name) || (state.user && state.user.email) || 'unknown';
+
+  authFetch(SUPABASE_URL + '/rest/v1/position_assignments?id=eq.' + positionId, {
+    method: 'PATCH', headers: apiHeadersJson(),
+    body: JSON.stringify({ removed_at: new Date().toISOString(), removed_by: actor })
+  }).then(() => {
+    state.positions = state.positions.filter(p => p.id !== positionId);
+    return logAction(pos.event_id, positionId, 'removed', {
+      stand: pos.stand, role: pos.role, staff_name: pos.staff_name
+    });
+  }).then(() => {
+    showToast('Removed ' + pos.staff_name);
+    render();
+  }).catch(err => {
+    if (err.authFailed) { handleAuthFailure(); return; }
+    console.error(err);
+    showToast('Could not remove: ' + (err.message || ''), 'error');
+  });
+}
+
+function pickName(name) {
+  if (!state.typing) return;
+  const t = state.typing;
+  state.typing = null;
+  // Determine source: if name is in availability for this event/date → signup, else manual
+  const dateSignups = state.availability.filter(a => a.event_id === t.eventId).map(a => a.staff_name);
+  const source = dateSignups.indexOf(name) !== -1 ? 'signup' : 'manual';
+  placePosition(t.eventId, t.stand, t.role, name, source);
+}
+
+function addPlaceholder(name) {
+  if (!state.typing) return;
+  const t = state.typing;
+  state.typing = null;
+  placePosition(t.eventId, t.stand, t.role, name, 'placeholder');
+}
+
+function autoResolveMultiSignup(staffName, date, eventId) {
+  // Only act if person has multi-signups that day
+  const count = state.multiSignupCounts[date + '|' + staffName] || 0;
+  if (count <= 1) return Promise.resolve();
+  const existing = (state.assignments[date] || {})[staffName];
+  if (existing === eventId) return Promise.resolve();
+
+  const actor = (state.user && state.user.display_name) || 'unknown';
+  // UPSERT into availability_assignments
+  return authFetch(SUPABASE_URL + '/rest/v1/availability_assignments?staff_name=eq.' + encodeURIComponent(staffName) + '&event_date=eq.' + date, {
+    method: 'GET', headers: apiHeaders()
+  }).then(rows => {
+    if (rows && rows.length) {
+      return authFetch(SUPABASE_URL + '/rest/v1/availability_assignments?id=eq.' + rows[0].id, {
+        method: 'PATCH', headers: apiHeadersJson(),
+        body: JSON.stringify({ assigned_event_id: eventId, assigned_by: actor, assigned_at: new Date().toISOString() })
+      });
+    }
+    return authFetch(SUPABASE_URL + '/rest/v1/availability_assignments', {
+      method: 'POST', headers: apiHeadersJson(),
+      body: JSON.stringify({
+        staff_name: staffName, event_date: date,
+        assigned_event_id: eventId, assigned_by: actor
+      })
+    });
+  }).then(() => {
+    if (!state.assignments[date]) state.assignments[date] = {};
+    state.assignments[date][staffName] = eventId;
+  }).catch(err => {
+    console.warn('Auto-resolve failed (non-blocking):', err);
+  });
+}
+
+function logAction(eventId, positionId, action, details) {
+  const actor = (state.user && state.user.display_name) || (state.user && state.user.email) || 'unknown';
+  return authFetch(SUPABASE_URL + '/rest/v1/position_assignment_log', {
+    method: 'POST', headers: apiHeadersJson(),
+    body: JSON.stringify({
+      event_id: eventId,
+      position_assignment_id: positionId,
+      action: action,
+      details: details || {},
+      actor: actor
+    })
+  }).catch(err => {
+    console.warn('Log write failed (non-blocking):', err);
+  });
+}
+
+// ---------- Audit log modal ----------
+function openAuditLog(eventId) {
+  const ev = state.events.find(e => e.id === eventId);
+  document.getElementById('audit-title').textContent = 'Audit Log — ' + (ev ? ev.event_name : eventId);
+  document.getElementById('audit-body').innerHTML = '<div class="loader">Loading…</div>';
+  document.getElementById('audit-modal').classList.add('show');
+
+  authFetch(SUPABASE_URL + '/rest/v1/position_assignment_log?event_id=eq.' + eventId + '&order=actor_at.desc&limit=200',
+    { headers: apiHeaders() })
+  .then(rows => {
+    if (!rows || !rows.length) {
+      document.getElementById('audit-body').innerHTML = '<div class="empty-state">No log entries yet.</div>';
+      return;
+    }
+    let html = '';
+    rows.forEach(r => {
+      const d = r.details || {};
+      let desc = '';
+      if (r.action === 'placed') desc = (d.staff_name || '?') + ' → ' + (d.stand || '?') + ' / ' + (d.role || '?') + (d.source ? ' (' + d.source + ')' : '');
+      else if (r.action === 'removed') desc = (d.staff_name || '?') + ' from ' + (d.stand || '?') + ' / ' + (d.role || '?');
+      else if (r.action === 'moved') desc = (d.staff_name || '?') + ': ' + (d.from && d.from.stand) + ' / ' + (d.from && d.from.role) + ' → ' + (d.to && d.to.stand) + ' / ' + (d.to && d.to.role);
+      else if (r.action === 'unlocked') desc = 'Manually unlocked';
+      else desc = JSON.stringify(d);
+      html += '<div class="log-entry">';
+      html += '<span class="log-time">' + fmtDateTime(r.actor_at) + '</span>';
+      html += '<span class="log-action ' + r.action + '">' + r.action + '</span>';
+      html += '<span>' + escapeHtml(desc) + '</span>';
+      html += '<span class="log-actor">' + escapeHtml(r.actor || '') + '</span>';
+      html += '</div>';
+    });
+    document.getElementById('audit-body').innerHTML = html;
+  })
+  .catch(err => {
+    if (err.authFailed) { handleAuthFailure(); return; }
+    document.getElementById('audit-body').innerHTML = '<div class="empty-state">Could not load log: ' + (err.message || '') + '</div>';
+  });
+}
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-close-modal]');
+  if (t) {
+    document.getElementById(t.getAttribute('data-close-modal')).classList.remove('show');
+  }
+});
+document.querySelectorAll('.modal-backdrop').forEach(b => {
+  b.addEventListener('click', e => {
+    if (e.target === b) b.classList.remove('show');
+  });
+});
+
+// ---------- Print ----------
+function printEvent(eventId) {
+  const ev = state.events.find(e => e.id === eventId);
+  if (!ev) return;
+  const standGroups = standsForEvent(ev.id, ev.venue);
+  if (!standGroups.length) {
+    showToast('Nothing to print yet — no staffing requests for this event', 'error');
+    return;
+  }
+
+  const w = window.open('', '_blank');
+  let html = `<!DOCTYPE html><html><head><title>${escapeHtml(ev.event_name)} — Print</title>
+  <style>
+    @page { size: landscape; margin: 0.5in; }
+    body { font-family: Georgia, "Times New Roman", serif; color: black; padding: 0; margin: 0; }
+    .ph { border-bottom: 2px solid black; padding-bottom: 8px; margin-bottom: 14px; display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+    .ph-event { font-size: 22px; font-weight: 700; }
+    .ph-venue { font-size: 13px; font-weight: 700; border: 1.5px solid black; padding: 2px 8px; border-radius: 3px; }
+    .ph-meta { font-size: 12px; color: #333; }
+    .ph-summary { margin-left: auto; font-size: 13px; font-weight: 700; }
+    .pgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .pstand { border: 1px solid black; padding: 8px 10px; break-inside: avoid; }
+    .pstand-name { font-size: 13px; font-weight: 700; border-bottom: 1px solid black; padding-bottom: 4px; margin-bottom: 6px; display: flex; justify-content: space-between; }
+    .pstand-fill { font-size: 10px; font-weight: 600; color: #555; }
+    .prole { margin-bottom: 8px; }
+    .prole-h { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #555; margin-bottom: 3px; font-family: -apple-system, sans-serif; }
+    .prole.lead .prole-h { color: black; font-weight: 800; }
+    .pname { font-size: 12px; padding: 2px 0; }
+    .pname.empty { border-bottom: 1px solid black; height: 18px; }
+    .pmark { font-size: 9px; color: #777; font-family: -apple-system, sans-serif; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700; }
+    .pfooter { margin-top: 14px; padding-top: 8px; border-top: 1px solid #999; font-size: 10px; color: #555; display: flex; justify-content: space-between; }
+  </style></head><body>`;
+  html += '<div class="ph">';
+  html += '<span class="ph-event">' + escapeHtml(ev.event_name) + '</span>';
+  html += '<span class="ph-venue">' + escapeHtml(ev.venue) + '</span>';
+  html += '<span class="ph-meta">' + fmtDayHeader(ev.event_date) + ', ' + new Date(ev.event_date+'T00:00:00').getFullYear() + ' · Gates ' + fmtTime(ev.gates_open || '') + '</span>';
+  html += '<span class="ph-summary">' + eventTotalFilled(ev.id) + ' of ' + eventTotalNeeded(ev.id) + ' positions filled</span>';
+  html += '</div>';
+  html += '<div class="pgrid">';
+  standGroups.forEach(g => {
+    let need = 0, fill = 0;
+    g.requests.forEach(r => { need += r.headcount; fill += positionsFor(ev.id, g.stand, r.role).length; });
+    html += '<div class="pstand">';
+    html += '<div class="pstand-name">' + escapeHtml(g.stand) + ' <span class="pstand-fill">' + fill + ' / ' + need + '</span></div>';
+    g.requests.forEach(req => {
+      const isLead = /Lead|Supervisor|Manager/i.test(req.role);
+      html += '<div class="prole' + (isLead ? ' lead' : '') + '">';
+      html += '<div class="prole-h">' + escapeHtml(req.role) + '</div>';
+      const filled = positionsFor(ev.id, g.stand, req.role);
+      filled.forEach(p => {
+        let mark = '';
+        if (p.source === 'manual') mark = '<span class="pmark">typed</span>';
+        else if (p.source === 'placeholder') mark = '<span class="pmark">⚠ placeholder</span>';
+        const multi = state.multiSignupCounts[ev.event_date + '|' + p.staff_name] || 1;
+        if (multi > 1) mark = '<span class="pmark">⚠ also signed up ' + multi + 'x</span>';
+        html += '<div class="pname">' + escapeHtml(p.staff_name) + ' ' + mark + '</div>';
+      });
+      const empties = Math.max(0, req.headcount - filled.length);
+      for (let i = 0; i < empties; i++) html += '<div class="pname empty"></div>';
+      html += '</div>';
+    });
+    html += '</div>';
+  });
+  html += '</div>';
+  const actor = (state.user && state.user.display_name) || 'manager';
+  html += '<div class="pfooter"><span>Printed by ' + escapeHtml(actor) + ' · ' + new Date().toLocaleString() + '</span><span>Empty lines for hand-write at venue · TYPED = manager-added · ⚠ = needs follow-up</span></div>';
+  html += '</body></html>';
+  w.document.write(html);
+  w.document.close();
+  setTimeout(() => { try { w.print(); } catch(e) {} }, 300);
+}
+
+// ---------- Filter handlers ----------
+document.getElementById('venue-filter').addEventListener('change', e => {
+  state.filters.venue = e.target.value;
+  render();
+});
+document.getElementById('range-filter').addEventListener('change', e => {
+  state.filters.range = e.target.value;
+  document.getElementById('custom-range').classList.toggle('show', e.target.value === 'custom');
+  if (e.target.value !== 'custom') loadAll();
+});
+document.getElementById('custom-from').addEventListener('change', () => loadAll());
+document.getElementById('custom-to').addEventListener('change', () => loadAll());
+document.querySelectorAll('[data-stands]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-stands]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.filters.standsMode = btn.getAttribute('data-stands');
+    render();
+  });
+});
+document.getElementById('refresh-btn').addEventListener('click', () => loadAll());
+
+// ---------- Init ----------
+function startApp(user) {
+  state.user = user;
+  const el = document.getElementById('header-right');
+  if (el && user) {
+    el.innerHTML = '<span class="header-user">' + escapeHtml(user.display_name || user.email) + '</span>' +
+      '<button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
+  }
+  // Default custom range inputs
+  document.getElementById('custom-from').value = todayIsoLocal();
+  document.getElementById('custom-to').value = isoFromOffset(14);
+  loadAll();
+}
+
+pcAuth.require({
+  pageSlug: 'schedule-assistant',
+  onReady: function(user) { startApp(user); }
+});
+</script>
+</body>
+</html>
