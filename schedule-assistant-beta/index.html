@@ -406,6 +406,20 @@ header {
 .stand-fill-tag.full { background: var(--green-light); color: var(--green-dark); }
 .stand-fill-tag.partial { background: var(--amber-light); color: var(--amber-dark); }
 .stand-fill-tag.empty { background: var(--red-light); color: var(--red); }
+.stand-fill-tag.over { background: var(--red-light); color: var(--red); border: 1px solid var(--red-border); }
+
+/* Over-staffing badge on the role header — shown when a manager reduces
+   headcount in event planning after people were already placed. */
+.role-over-tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 9px; font-weight: 800; letter-spacing: 0.04em;
+  background: var(--red); color: white;
+  padding: 1px 6px; border-radius: 3px;
+  margin-left: 6px;
+  cursor: help;
+}
+.role-section.over .role-header { color: var(--red); }
+.role-stack.over { background: #fff3f1; border-radius: 6px; padding: 4px; }
 .stand-mini-bar {
   height: 3px; background: var(--slate-light); border-radius: 2px;
   margin-top: 5px; overflow: hidden;
@@ -677,6 +691,27 @@ header {
 .signup-multi:hover { background: #b35a00; }
 .conflict-icon { cursor: pointer; }
 .conflict-icon:hover { opacity: 0.7; }
+
+/* ===== Available-to-call list ===== */
+.call-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 9px 4px; border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.call-row:last-child { border-bottom: none; }
+.call-row.conflict { background: var(--amber-light); border-radius: 6px; padding: 9px 10px; margin-bottom: 2px; border: 1px solid var(--amber-border); border-bottom-color: var(--amber-border); }
+.call-rank { font-size: 11px; font-weight: 700; color: var(--label); min-width: 22px; text-align: right; }
+.call-name { font-weight: 700; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.call-conflict-tag { font-size: 9px; font-weight: 800; color: var(--amber-dark); background: white; border: 1px solid var(--amber-border); padding: 1px 6px; border-radius: 3px; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; }
+.call-phone { font-size: 12px; color: var(--slate); font-family: monospace; white-space: nowrap; }
+.call-history { font-size: 10px; font-weight: 700; color: var(--label); background: var(--slate-light); border: 1px solid var(--border); padding: 1px 7px; border-radius: 10px; white-space: nowrap; }
+.call-history.zero { opacity: 0.5; }
+.call-empty { padding: 20px; text-align: center; font-size: 13px; color: var(--label); font-style: italic; }
+.call-section-head {
+  font-size: 10px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--label); margin: 14px 0 6px; padding-top: 10px; border-top: 1px solid var(--border);
+}
+.call-section-head:first-child { margin-top: 0; padding-top: 0; border-top: none; }
 </style>
 </head>
 <body>
@@ -762,6 +797,22 @@ header {
     <div class="modal-body">
       <div id="assign-sub" style="font-size: 12px; color: var(--label); margin-bottom: 12px; line-height: 1.5;"></div>
       <div id="assign-body"></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="callable-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="callable-title">Available to call</h3>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="btn btn-print" id="callable-print-btn">🖨 Print</button>
+        <button class="modal-close" data-close-modal="callable-modal">✕</button>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div id="callable-sub" style="font-size: 12px; color: var(--label); margin-bottom: 12px; line-height: 1.5;"></div>
+      <div id="callable-body"></div>
     </div>
   </div>
 </div>
@@ -904,6 +955,20 @@ function fmtTime(t) {
   const h12 = hh % 12 || 12;
   return h12 + ':' + m + ' ' + ap;
 }
+
+// Report time = explicit report_time if set, else gates_open minus 1 hour.
+// Same logic the legacy schedule-assistant uses, so the two views agree on
+// what time managers should communicate to staff.
+function getReportTime(ev) {
+  if (ev.report_time) return ev.report_time;
+  if (ev.gates_open) {
+    const parts = ev.gates_open.split(':');
+    let h = parseInt(parts[0], 10) - 1;
+    if (h < 0) h = 0;
+    return String(h).padStart(2, '0') + ':' + parts[1] + ':' + (parts[2] || '00');
+  }
+  return null;
+}
 function fmtDateTime(iso) {
   if (!iso) return '';
   const d = new Date(iso);
@@ -932,7 +997,8 @@ const state = {
   multiSignupByDate: {},  // {date: {staff_name: [event_id, ...]}}
   assignments: {},     // {event_date: {staff_name: assigned_event_id}}
   positions: [],       // [{id, event_id, venue, stand, role, staff_name, source, assigned_by, assigned_at}]
-  employees: [],       // [{first_name, last_name}]
+  employees: [],       // [{first_name, last_name, phone}]
+  historyCounts: {},   // {staff_name: total historical availability rows} — for reliability sort
   filters: {
     venue: '',
     range: 'next-14',
@@ -956,11 +1022,23 @@ function loadAll() {
 
   return Promise.all([
     authFetch(eventsUrl, { headers: apiHeaders() }),
-    authFetch(SUPABASE_URL + '/rest/v1/employees?select=first_name,last_name,is_active&is_active=eq.true&order=last_name.asc',
+    authFetch(SUPABASE_URL + '/rest/v1/employees?select=first_name,last_name,phone,is_active&is_active=eq.true&order=last_name.asc',
+      { headers: apiHeaders() }),
+    // Historical availability counts for "reliability" sort on the Available-to-call list.
+    // We fetch ALL availability rows (including soft-deleted) just to count past activity.
+    // Lightweight: only staff_name, no joins.
+    authFetch(SUPABASE_URL + '/rest/v1/availability?select=staff_name',
       { headers: apiHeaders() })
-  ]).then(([events, employees]) => {
+  ]).then(([events, employees, allAvail]) => {
     state.events = events || [];
     state.employees = employees || [];
+
+    // Build historical signup counts per staff_name. Used to sort the
+    // Available-to-call list — most-reliable employees first.
+    state.historyCounts = {};
+    (allAvail || []).forEach(r => {
+      state.historyCounts[r.staff_name] = (state.historyCounts[r.staff_name] || 0) + 1;
+    });
 
     if (!state.events.length) {
       state.staffingRequests = [];
@@ -1204,7 +1282,10 @@ function renderEventRow(ev) {
   else if (pct >= 50) fillCls = 'amber';
   const locked = isLocked(ev.event_date) && !state.unlockedEvents.has(ev.id);
 
-  const time = ev.gates_open ? 'Gates ' + fmtTime(ev.gates_open) +
+  // Display Report time (gates - 1 hour, or explicit report_time) instead of
+  // gates time. This is the time staff are actually told to arrive.
+  const reportT = getReportTime(ev);
+  const time = reportT ? 'Report ' + fmtTime(reportT) +
     (ev.estimated_end_time ? ' – ' + fmtTime(ev.estimated_end_time) : '') : '';
 
   let html = '<div class="event-row ' + status.cls + (isExpanded ? ' expanded' : '') + '" data-event-id="' + ev.id + '">';
@@ -1309,6 +1390,7 @@ function renderSummaryBar(ev) {
   html += '<span class="summary-chip neutral"><span class="summary-chip-label">Stands ready</span><span class="num">' + standsReady + '</span><span class="denom">/ ' + standGroups.length + '</span></span>';
   html += '<span class="summary-chip neutral"><span class="summary-chip-label">Locks</span><span class="num">12:01 AM</span><span class="denom">' + fmtDayHeader(ev.event_date).split(',')[0] + '</span></span>';
   html += '<span class="event-spacer"></span>';
+  html += '<button class="audit-link" data-callable-event="' + ev.id + '" style="margin-right:14px;">📞 Available to call</button>';
   html += '<button class="audit-link" data-audit-event="' + ev.id + '">Open audit log</button>';
   html += '</div>';
   return html;
@@ -1405,13 +1487,20 @@ function renderStandCard(ev, group, locked) {
   });
   let tagCls = 'empty', barCls = 'empty';
   const pct = need > 0 ? Math.min(100, Math.round((fill / need) * 100)) : 0;
-  if (fill >= need && need > 0) { tagCls = 'full'; barCls = 'full'; }
+  // Over-staffed: more people placed than the current requirement. Happens when
+  // a manager reduces headcount in event planning after pills were placed here.
+  // Data is preserved — we just flag it so the manager can release the extras.
+  const isOver = need > 0 && fill > need;
+  if (isOver) { tagCls = 'over'; barCls = 'full'; }
+  else if (fill >= need && need > 0) { tagCls = 'full'; barCls = 'full'; }
   else if (fill > 0) { tagCls = 'partial'; barCls = 'partial'; }
 
   let html = '<div class="stand-card" data-stand="' + escapeAttr(group.stand) + '">';
   html += '<div class="stand-card-head"><div class="stand-card-name">';
   html += escapeHtml(group.stand);
-  html += '<span class="stand-fill-tag ' + tagCls + '">' + fill + ' / ' + need + '</span>';
+  html += '<span class="stand-fill-tag ' + tagCls + '"' +
+    (isOver ? ' title="Over-staffed by ' + (fill - need) + '. Headcount was reduced after people were placed. Use ✕ to release the extras."' : '') +
+    '>' + fill + ' / ' + need + '</span>';
   html += '</div><div class="stand-mini-bar"><div class="stand-mini-fill ' + barCls + '" style="width:' + pct + '%"></div></div></div>';
 
   group.requests.forEach(req => {
@@ -1425,9 +1514,21 @@ function renderRoleSection(ev, stand, req, locked) {
   const isLeadRole = /Lead|Supervisor|Manager/i.test(req.role);
   const filled = positionsFor(ev.id, stand, req.role);
   const slotsToShow = req.headcount;
-  let html = '<div class="role-section' + (isLeadRole ? ' role-lead' : '') + '">';
-  html += '<div class="role-header">' + escapeHtml(req.role) + ' <span class="role-count">' + req.headcount + '</span></div>';
-  html += '<div class="role-stack" data-event-id="' + ev.id + '" data-stand="' + escapeAttr(stand) + '" data-role="' + escapeAttr(req.role) + '">';
+  // Over-fill at role level: more pills than requested. Same cause as stand-level
+  // over-fill — manager reduced headcount after placement. Render all pills (we
+  // never auto-remove anyone), and add a visible warning so the manager knows
+  // to release the extras with ✕.
+  const isOver = filled.length > slotsToShow;
+  const overBy = filled.length - slotsToShow;
+  let html = '<div class="role-section' + (isLeadRole ? ' role-lead' : '') + (isOver ? ' over' : '') + '">';
+  html += '<div class="role-header">' + escapeHtml(req.role) + ' <span class="role-count">' + req.headcount + '</span>';
+  if (isOver) {
+    html += '<span class="role-over-tag" title="Headcount was reduced from ' + filled.length +
+      ' to ' + slotsToShow + ' after people were placed. Use ✕ to release ' + overBy +
+      ' person' + (overBy === 1 ? '' : 's') + ' back to the available pool.">⚠ over by ' + overBy + '</span>';
+  }
+  html += '</div>';
+  html += '<div class="role-stack' + (isOver ? ' over' : '') + '" data-event-id="' + ev.id + '" data-stand="' + escapeAttr(stand) + '" data-role="' + escapeAttr(req.role) + '">';
 
   filled.forEach(p => { html += renderFilledSlot(ev, p, locked); });
 
@@ -1584,6 +1685,13 @@ function attachEventHandlers() {
     btn.addEventListener('click', e => {
       e.stopPropagation();
       openAuditLog(btn.getAttribute('data-audit-event'));
+    });
+  });
+
+  document.querySelectorAll('[data-callable-event]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      openCallableModal(btn.getAttribute('data-callable-event'));
     });
   });
 
@@ -2043,7 +2151,8 @@ function openAssignModal(staffName, currentEvent) {
     if (isPlacedHere) row.classList.add('is-current');
     if (isLocked) row.classList.add('is-locked');
 
-    const time = evt.gates_open ? 'Gates ' + fmtTime(evt.gates_open) : '';
+    const _rt = getReportTime(evt);
+    const time = _rt ? 'Report ' + fmtTime(_rt) : '';
     let rightTag = '';
     if (isPlacedHere) {
       rightTag = '<span class="assign-row-placed">✓ Placed at ' + escapeHtml(placedAt.stand) + '</span>';
@@ -2145,6 +2254,205 @@ function clearAssignment(staffName, date) {
   });
 }
 
+// ---------- Available to call ----------
+// Returns list of {emp, status, conflictEvent} where:
+//   status: 'free'  - employee has no signups today, callable cleanly
+//           'flagged' - employee signed up elsewhere on this date but isn't
+//                       assigned anywhere yet (potential poach — show flagged)
+// Excludes anyone with an active assignment to another event (committed).
+// Excludes anyone signed up for THIS event (they're already in the Available panel).
+// Sorted by reliability (historyCounts desc), then alpha.
+function getCallableEmployees(ev) {
+  const date = ev.event_date;
+  const dayAssignments = state.assignments[date] || {};
+  // Names with an ACTIVE signup on this date (any event)
+  const signupsToday = state.multiSignupByDate[date] || {}; // {name: [eventIds]}
+  // Names already signed up for THIS event — skip them, they're in the Available panel
+  const signedUpHere = new Set(
+    state.availability.filter(a => a.event_id === ev.id).map(a => a.staff_name)
+  );
+
+  const results = [];
+  state.employees.forEach(e => {
+    const fullName = ((e.first_name || '') + ' ' + (e.last_name || '')).trim();
+    if (!fullName) return;
+    if (signedUpHere.has(fullName)) return;
+
+    const signupsHere = signupsToday[fullName] || [];
+    const assignedTo = dayAssignments[fullName];
+
+    // Committed elsewhere — exclude entirely
+    if (assignedTo && assignedTo !== ev.id) return;
+
+    // Has signups elsewhere today, no assignment yet — show but flag
+    if (signupsHere.length > 0) {
+      // signupsHere is the list of event_ids they signed up for on this date.
+      // Pick the first one that isn't this event for the flag label.
+      const otherEvId = signupsHere.find(eid => eid !== ev.id);
+      const otherEv = otherEvId ? state.events.find(x => x.id === otherEvId) : null;
+      results.push({
+        emp: e,
+        fullName: fullName,
+        phone: e.phone || '',
+        history: state.historyCounts[fullName] || 0,
+        status: 'flagged',
+        conflictLabel: otherEv ? otherEv.venue : 'another event'
+      });
+      return;
+    }
+
+    // No signups anywhere today — clean candidate
+    results.push({
+      emp: e,
+      fullName: fullName,
+      phone: e.phone || '',
+      history: state.historyCounts[fullName] || 0,
+      status: 'free',
+      conflictLabel: null
+    });
+  });
+
+  // Sort by reliability (history desc), then alpha
+  results.sort((a, b) => {
+    if (b.history !== a.history) return b.history - a.history;
+    return a.fullName.localeCompare(b.fullName);
+  });
+
+  return results;
+}
+
+let _callableCurrentEventId = null;
+
+function openCallableModal(eventId) {
+  _callableCurrentEventId = eventId;
+  const ev = state.events.find(e => e.id === eventId);
+  if (!ev) return;
+  const list = getCallableEmployees(ev);
+
+  document.getElementById('callable-title').textContent = 'Available to call — ' + (ev.event_name || ev.venue);
+
+  const sub = document.getElementById('callable-sub');
+  const reportT = getReportTime(ev);
+  const timeStr = reportT ? 'Report ' + fmtTime(reportT) : (ev.gates_open ? 'Gates ' + fmtTime(ev.gates_open) : '');
+  sub.innerHTML = '<strong>' + fmtDayHeader(ev.event_date) + '</strong>' +
+    (timeStr ? ' · ' + escapeHtml(timeStr) : '') +
+    ' · ' + list.length + ' employee' + (list.length === 1 ? '' : 's') + ' callable.<br>' +
+    '<span style="font-size:11px;">Sorted by past activity (most reliable first). ' +
+    '<span style="background:var(--amber-light);border:1px solid var(--amber-border);padding:1px 5px;border-radius:3px;font-weight:700;">flagged</span> = signed up at another event today but unassigned — calling them may pull them away.</span>';
+
+  const body = document.getElementById('callable-body');
+  body.innerHTML = '';
+
+  if (list.length === 0) {
+    body.innerHTML = '<div class="call-empty">No callable employees — everyone is either signed up here, assigned elsewhere, or inactive.</div>';
+  } else {
+    // Split into clean vs flagged for visual grouping
+    const free = list.filter(r => r.status === 'free');
+    const flagged = list.filter(r => r.status === 'flagged');
+
+    let html = '';
+    if (free.length) {
+      html += '<div class="call-section-head">Uncommitted (' + free.length + ')</div>';
+      free.forEach((r, i) => { html += renderCallRow(r, i + 1); });
+    }
+    if (flagged.length) {
+      html += '<div class="call-section-head">Signed up elsewhere — unassigned (' + flagged.length + ')</div>';
+      flagged.forEach((r, i) => { html += renderCallRow(r, i + 1); });
+    }
+    body.innerHTML = html;
+  }
+
+  document.getElementById('callable-modal').classList.add('show');
+}
+
+function renderCallRow(r, rank) {
+  let html = '<div class="call-row' + (r.status === 'flagged' ? ' conflict' : '') + '">';
+  html += '<span class="call-rank">' + rank + '</span>';
+  html += '<span class="call-name">' + escapeHtml(r.fullName) + '</span>';
+  if (r.status === 'flagged' && r.conflictLabel) {
+    html += '<span class="call-conflict-tag" title="Signed up here but not yet assigned. Calling them may pull them off another event.">↑ ' + escapeHtml(r.conflictLabel) + '</span>';
+  }
+  html += '<span class="call-phone">' + escapeHtml(r.phone || '—') + '</span>';
+  html += '<span class="call-history' + (r.history === 0 ? ' zero' : '') + '">' + r.history + ' past</span>';
+  html += '</div>';
+  return html;
+}
+
+function printCallableList() {
+  if (!_callableCurrentEventId) return;
+  const ev = state.events.find(e => e.id === _callableCurrentEventId);
+  if (!ev) return;
+  const list = getCallableEmployees(ev);
+  const reportT = getReportTime(ev);
+  const timeStr = reportT
+    ? 'Report ' + fmtTime(reportT) + (ev.gates_open ? ' (Gates ' + fmtTime(ev.gates_open) + ')' : '')
+    : (ev.gates_open ? 'Gates ' + fmtTime(ev.gates_open) : '');
+
+  const w = window.open('', '_blank');
+  let html = `<!DOCTYPE html><html><head><title>${escapeHtml(ev.event_name || 'Event')} — Available to call</title>
+  <style>
+    @page { size: portrait; margin: 0.5in; }
+    body { font-family: Georgia, "Times New Roman", serif; color: black; padding: 0; margin: 0; }
+    .ph { border-bottom: 2px solid black; padding-bottom: 8px; margin-bottom: 14px; }
+    .ph-title { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #555; margin-bottom: 4px; font-family: -apple-system, sans-serif; }
+    .ph-event { font-size: 20px; font-weight: 800; }
+    .ph-meta { font-size: 12px; color: #333; margin-top: 3px; }
+    .ph-sub { font-size: 11px; color: #666; margin-top: 4px; font-style: italic; }
+    .section-head { font-size: 10px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: #555; margin: 16px 0 4px; padding-bottom: 3px; border-bottom: 1px solid #999; font-family: -apple-system, sans-serif; }
+    .row { display: flex; align-items: center; gap: 12px; padding: 5px 0; border-bottom: 1px solid #eee; font-size: 13px; }
+    .row.flagged { background: #fffbeb; padding-left: 6px; padding-right: 6px; border-bottom-color: #fcd34d; }
+    .rank { font-size: 11px; color: #999; min-width: 22px; text-align: right; font-family: -apple-system, sans-serif; }
+    .name { flex: 1; font-weight: 600; }
+    .flag { font-size: 9px; font-weight: 800; color: #92400e; background: white; border: 1px solid #fcd34d; padding: 1px 5px; border-radius: 3px; letter-spacing: 0.04em; text-transform: uppercase; font-family: -apple-system, sans-serif; }
+    .phone { font-family: monospace; font-size: 13px; color: #444; }
+    .hist { font-size: 10px; color: #888; min-width: 60px; text-align: right; font-family: -apple-system, sans-serif; }
+    .empty { font-style: italic; color: #888; padding: 10px 0; }
+    .footer { margin-top: 22px; padding-top: 8px; border-top: 1px solid #999; font-size: 10px; color: #555; font-family: -apple-system, sans-serif; }
+  </style></head><body>`;
+  html += '<div class="ph">';
+  html += '<div class="ph-title">Available to call</div>';
+  html += '<div class="ph-event">' + escapeHtml(ev.event_name || ev.venue) + '</div>';
+  html += '<div class="ph-meta">' + escapeHtml(ev.venue) + ' · ' + escapeHtml(fmtDayHeader(ev.event_date)) + (timeStr ? ' · ' + escapeHtml(timeStr) : '') + '</div>';
+  html += '<div class="ph-sub">Sorted by past activity. Flagged = signed up elsewhere today but unassigned.</div>';
+  html += '</div>';
+
+  if (list.length === 0) {
+    html += '<div class="empty">No callable employees.</div>';
+  } else {
+    const free = list.filter(r => r.status === 'free');
+    const flagged = list.filter(r => r.status === 'flagged');
+    if (free.length) {
+      html += '<div class="section-head">Uncommitted (' + free.length + ')</div>';
+      free.forEach((r, i) => {
+        html += '<div class="row"><span class="rank">' + (i + 1) + '</span>' +
+          '<span class="name">' + escapeHtml(r.fullName) + '</span>' +
+          '<span class="phone">' + escapeHtml(r.phone || '—') + '</span>' +
+          '<span class="hist">' + r.history + ' past</span></div>';
+      });
+    }
+    if (flagged.length) {
+      html += '<div class="section-head">Flagged: signed up elsewhere unassigned (' + flagged.length + ')</div>';
+      flagged.forEach((r, i) => {
+        html += '<div class="row flagged"><span class="rank">' + (i + 1) + '</span>' +
+          '<span class="name">' + escapeHtml(r.fullName) + '</span>' +
+          (r.conflictLabel ? '<span class="flag">↑ ' + escapeHtml(r.conflictLabel) + '</span>' : '') +
+          '<span class="phone">' + escapeHtml(r.phone || '—') + '</span>' +
+          '<span class="hist">' + r.history + ' past</span></div>';
+      });
+    }
+  }
+
+  const actor = (state.user && state.user.display_name) || 'manager';
+  html += '<div class="footer">Printed by ' + escapeHtml(actor) + ' · ' + new Date().toLocaleString() + '</div>';
+  html += '</body></html>';
+  w.document.write(html);
+  w.document.close();
+  setTimeout(() => { try { w.print(); } catch(e) {} }, 300);
+}
+
+// Wire up print button (one-time listener; modal is reused)
+document.getElementById('callable-print-btn').addEventListener('click', printCallableList);
+
 // ---------- Audit log modal ----------
 function openAuditLog(eventId) {
   const ev = state.events.find(e => e.id === eventId);
@@ -2230,7 +2538,14 @@ function printEvent(eventId) {
   html += '<div class="ph">';
   html += '<span class="ph-event">' + escapeHtml(ev.event_name) + '</span>';
   html += '<span class="ph-venue">' + escapeHtml(ev.venue) + '</span>';
-  html += '<span class="ph-meta">' + fmtDayHeader(ev.event_date) + ', ' + new Date(ev.event_date+'T00:00:00').getFullYear() + ' · Gates ' + fmtTime(ev.gates_open || '') + '</span>';
+  // Print header: lead with Report time (what staff are told to arrive at)
+  // and keep Gates as a secondary reference for floor managers cross-checking
+  // tickets / venue ops.
+  const _printReportT = getReportTime(ev);
+  const _printTimeStr = _printReportT
+    ? 'Report ' + fmtTime(_printReportT) + (ev.gates_open ? ' (Gates ' + fmtTime(ev.gates_open) + ')' : '')
+    : (ev.gates_open ? 'Gates ' + fmtTime(ev.gates_open) : '');
+  html += '<span class="ph-meta">' + fmtDayHeader(ev.event_date) + ', ' + new Date(ev.event_date+'T00:00:00').getFullYear() + ' · ' + _printTimeStr + '</span>';
   html += '<span class="ph-summary">' + eventTotalFilled(ev.id) + ' of ' + eventTotalNeeded(ev.id) + ' positions filled</span>';
   html += '</div>';
   html += '<div class="pgrid">';
