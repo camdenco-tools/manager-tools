@@ -63,6 +63,15 @@ header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 8px 4px 16px; flex-wrap: wrap; gap: 12px;
 }
+.title-block { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.back-link {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--label);
+  text-decoration: none; transition: color 0.15s;
+}
+.back-link:hover { color: var(--primary); }
+.hdivider { width: 1px; height: 20px; background: var(--border); }
+.title-text-wrap { display: flex; flex-direction: column; }
 .title-block h1 {
   font-size: 20px; font-weight: 700; letter-spacing: -0.01em;
   display: inline-flex; align-items: center; gap: 10px;
@@ -676,8 +685,12 @@ header {
 
   <header>
     <div class="title-block">
-      <h1>Schedule Assistant <span class="beta-tag">BETA</span></h1>
-      <div class="sub">Position Board · drag people into stand &amp; role positions · midnight day-of lock</div>
+      <a href="/" class="back-link">&#8592; Toolkit</a>
+      <div class="hdivider"></div>
+      <div class="title-text-wrap">
+        <h1>Schedule Assistant <span class="beta-tag">BETA</span></h1>
+        <div class="sub">Position Board · drag people into stand &amp; role positions · midnight day-of lock</div>
+      </div>
     </div>
     <div class="header-right" id="header-right"></div>
   </header>
@@ -1533,6 +1546,19 @@ function escapeHtml(s) {
 }
 function escapeAttr(s) { return escapeHtml(s); }
 
+// ---------- Helper: clear typing state cleanly ----------
+// Centralized so every code path that ends a typing session removes
+// the document-level outsideTypingClick listener. Without this, a stale
+// listener can survive across saves (because the typeahead-item click
+// uses stopPropagation, leaving a {once:true} listener queued) and then
+// fire on a subsequent slot click — wiping out the freshly-set typing
+// state right after it's set, which is what caused the "second name in
+// a different slot won't open the input" bug.
+function clearTypingState() {
+  document.removeEventListener('click', outsideTypingClick);
+  state.typing = null;
+}
+
 // ---------- Event handlers ----------
 function attachEventHandlers() {
   document.querySelectorAll('.event-head').forEach(head => {
@@ -1626,9 +1652,12 @@ function attachEventHandlers() {
     });
   });
 
-  // Click on empty slot → start typing
+  // Click on empty slot → start typing.
+  // Defensive: any prior typing-state listener is cleared at this point so
+  // it can't fire later in the same click cycle and wipe the new state.
   document.querySelectorAll('.slot-empty:not(.locked)').forEach(slot => {
     slot.addEventListener('click', () => {
+      document.removeEventListener('click', outsideTypingClick);
       state.typing = {
         eventId: slot.getAttribute('data-event-id'),
         stand: slot.getAttribute('data-stand'),
@@ -1655,7 +1684,7 @@ function attachEventHandlers() {
       attachTypeaheadHandlers();
     });
     activeInput.addEventListener('keydown', e => {
-      if (e.key === 'Escape') { state.typing = null; render(); return; }
+      if (e.key === 'Escape') { clearTypingState(); render(); return; }
       if (e.key === 'Enter') {
         const focused = document.querySelector('.typeahead-item.focused');
         if (focused) {
@@ -1683,9 +1712,13 @@ function attachEventHandlers() {
         });
       }
     });
-    // Close on outside click
+    // Close on outside click. Always remove any existing listener first
+    // before re-adding — defensive against stale listeners that survived
+    // a save (typeahead clicks stopPropagation, so the previous {once:true}
+    // listener could remain queued and fire on the next slot click).
+    document.removeEventListener('click', outsideTypingClick);
     setTimeout(() => {
-      document.addEventListener('click', outsideTypingClick, { once: true });
+      document.addEventListener('click', outsideTypingClick);
     }, 0);
   }
 
@@ -1727,15 +1760,23 @@ function attachTypeaheadHandlers() {
   });
 }
 
+// Listener fires when the user clicks anywhere outside the active typing input.
+// Bails harmlessly if there's no active typing session OR if the click landed
+// on another empty slot (that slot's own handler will set up the new typing
+// state — we should not interfere). Also self-removes whenever it actually
+// closes typing, so we never have orphan listeners.
 function outsideTypingClick(e) {
-  if (!state.typing) return;
-  if (e.target.closest('.slot-typing-wrap')) {
-    setTimeout(() => {
-      document.addEventListener('click', outsideTypingClick, { once: true });
-    }, 0);
+  if (!state.typing) {
+    document.removeEventListener('click', outsideTypingClick);
     return;
   }
-  state.typing = null;
+  if (e.target.closest('.slot-typing-wrap')) return;
+  // If user clicked a different empty slot, let the slot's own click handler
+  // take over. That handler will clear our listener and set up new typing.
+  if (e.target.closest('.slot-empty')) return;
+  // If user clicked a typeahead item or placeholder button, those use
+  // stopPropagation in their handlers and we won't see the event. Safe.
+  clearTypingState();
   render();
 }
 
@@ -1893,7 +1934,10 @@ function removePosition(positionId) {
 function pickName(name) {
   if (!state.typing) return;
   const t = state.typing;
-  state.typing = null;
+  // Use centralized clear so the document listener is always removed.
+  // Otherwise the {once:true}-style listener can survive (typeahead click
+  // stopPropagation prevents it firing) and break the next slot click.
+  clearTypingState();
   // Determine source: if name is in availability for this event/date → signup, else manual
   const dateSignups = state.availability.filter(a => a.event_id === t.eventId).map(a => a.staff_name);
   const source = dateSignups.indexOf(name) !== -1 ? 'signup' : 'manual';
@@ -1903,7 +1947,7 @@ function pickName(name) {
 function addPlaceholder(name) {
   if (!state.typing) return;
   const t = state.typing;
-  state.typing = null;
+  clearTypingState();
   placePosition(t.eventId, t.stand, t.role, name, 'placeholder');
 }
 
