@@ -426,6 +426,16 @@ header {
   background: var(--amber); color: white;
   padding: 1px 5px; border-radius: 8px; margin-left: auto;
 }
+/* NEW HIRE badge — signals a pipeline-hired employee with fewer than
+   NEW_HIRE_THRESHOLD prior placements at this venue (past events only).
+   Purple matches the existing TYPED tag's "system is telling you something
+   extra about this pill" visual vocabulary. Available panel only. */
+.new-hire-tag {
+  font-size: 9px; font-weight: 800; letter-spacing: 0.04em;
+  background: var(--purple); color: white;
+  padding: 1px 5px; border-radius: 3px;
+  cursor: help;
+}
 .person-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .summary-bar {
@@ -623,7 +633,11 @@ header {
 }
 .support-roles {
   display: grid; gap: 10px;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  /* max 280px on each card so a single Supervisor entry doesn't stretch
+     to fill the entire workspace width. With 1fr the inner grid would
+     expand each card to consume all available horizontal space, which
+     made the section visually overpowering when only one role was needed. */
+  grid-template-columns: repeat(auto-fill, minmax(200px, 280px));
 }
 .support-role-card {
   background: white; border: 1px solid var(--border);
@@ -885,7 +899,8 @@ header {
 /* =====================================================================
  * SCHEDULE ASSISTANT
  * Reads: events, staffing_requests, availability, availability_assignments,
- *        employees, position_assignments, position_assignment_log
+ *        employees, position_assignments, position_assignment_log,
+ *        candidates (phone-only, for NEW HIRE badge lineage detection)
  * Writes: position_assignments, position_assignment_log, availability_assignments
  * ===================================================================== */
 
@@ -898,6 +913,31 @@ const NONEVENT_STAND = 'Non-Event Labor';
 
 // Stands hidden from the Position Board grid entirely
 const HIDDEN_STANDS = [CLIENT_STAND, NONEVENT_STAND];
+
+// NEW HIRE badge config.
+// A person pill in the Available panel shows "NEW" if BOTH:
+//   (a) the employee is pipeline-hired — i.e. has a candidates row that
+//       phone-matches the employees row. This filters out legacy bulk
+//       imports from 7Shifts / SQL runs, who have been working events
+//       for months but only recently got an employees row.
+//   (b) the employee has fewer than NEW_HIRE_THRESHOLD prior placements
+//       at THIS specific venue, counted only on past events
+//       (event_date < today AND removed_at IS NULL on the placement).
+//       Future placements do NOT count — otherwise scheduling someone
+//       for 7 future events on Monday would drop the badge Tuesday.
+//
+// Known imperfection: position_assignments only started recording on
+// April 30, 2026. For the first ~60 days of usage some legacy-hired
+// pipeline employees (who worked many pre-April-30 shifts) will show
+// NEW longer than reality. The badge self-corrects as Brian places them
+// in the new system. Acceptable transient — no backfill planned.
+//
+// Tip-pool (sale_staff_assignments) was considered as the source of
+// truth and rejected: it depends on AI sign-in-sheet parsing which has
+// confidence variance and async lag. Placement-based count answers
+// Brian's actual question ("do I know this person at this venue?")
+// more directly.
+const NEW_HIRE_THRESHOLD = 6;
 
 // Role display order — Lead always first
 const ROLE_ORDER = [
@@ -1051,6 +1091,16 @@ function initials(name) {
   return name.split(/\s+/).map(p => p[0]).filter(Boolean).slice(0,2).join('').toUpperCase();
 }
 
+// Normalize a phone number for comparison. Strips everything except digits.
+// Used for matching employees.phone against candidates.phone — formatting
+// varies between data sources (one might be "(609) 555-1234", the other
+// "6095551234"). Last 10 digits avoids US country-code mismatches.
+function normalizePhone(p) {
+  if (!p) return '';
+  const digits = String(p).replace(/\D/g, '');
+  return digits.length > 10 ? digits.slice(-10) : digits;
+}
+
 // ---------- State ----------
 const state = {
   user: null,
@@ -1064,6 +1114,17 @@ const state = {
   positions: [],       // [{id, event_id, venue, stand, role, staff_name, source, assigned_by, assigned_at}]
   employees: [],       // [{first_name, last_name, phone}]
   historyCounts: {},   // {staff_name: total historical availability rows} — for reliability sort
+
+  // NEW HIRE badge support — see NEW_HIRE_THRESHOLD comment above for full logic.
+  // venueExperience: {"Full Name|VENUE_CODE": count_of_past_placements}
+  //   Built from position_assignments rows where event_date < today AND removed_at IS NULL.
+  //   Counted via a join through state.events for any rows we already have, plus a
+  //   dedicated query that fetches past placements regardless of current date filter.
+  venueExperience: {},
+  // pipelineNames: Set of "First Last" full names that are pipeline-hired.
+  //   Determined by phone-matching employees ↔ candidates (normalized digit-only).
+  pipelineNames: new Set(),
+
   filters: {
     venue: '',
     range: 'next-14',
@@ -1076,6 +1137,20 @@ const state = {
   typing: null        // { eventId, venue, stand, role, value, focusedIndex }
 };
 
+// Returns true if the person should display a NEW HIRE badge at this venue.
+// Pure read on already-loaded state — safe to call inside render loops.
+function isNewAtVenue(staffName, venue) {
+  if (!staffName || !venue) return false;
+  if (!state.pipelineNames.has(staffName)) return false;
+  const count = state.venueExperience[staffName + '|' + venue] || 0;
+  return count < NEW_HIRE_THRESHOLD;
+}
+
+// Returns the actual past-placement count at this venue, for the badge tooltip.
+function venuePlacementCount(staffName, venue) {
+  return state.venueExperience[staffName + '|' + venue] || 0;
+}
+
 // ---------- Data loaders ----------
 function loadAll() {
   const range = getDateRange(state.filters.range);
@@ -1083,6 +1158,25 @@ function loadAll() {
     + '&event_date=gte.' + range.from
     + '&event_date=lte.' + range.to
     + '&order=event_date.asc,gates_open.asc';
+
+  // Past placements query — used to compute venueExperience for the NEW HIRE badge.
+  // We fetch staff_name + venue for every position_assignments row that:
+  //   - has not been soft-deleted (removed_at IS NULL)
+  //   - is attached to an event whose date is strictly < today
+  // The event_date filter is achieved via the embedded events!inner join with
+  // a filter — PostgREST syntax is documented, this is the standard pattern.
+  // For simplicity and to dodge nested-filter quirks we do a separate fetch
+  // with no event_date filter and trim client-side. The position_assignments
+  // table only goes back to April 30, 2026 so this is bounded and small.
+  const today = todayIsoLocal();
+  const pastPlacementsUrl = SUPABASE_URL + '/rest/v1/position_assignments?select=staff_name,venue,event_id&removed_at=is.null';
+
+  // Candidate phones for pipeline-hire detection. We only need the phone
+  // column — we never read names or any sensitive candidate data here.
+  // Phones are compared against employees.phone after normalizePhone() on
+  // both sides. anon SELECT is allowed on candidates so this works whether
+  // the user is admin or not.
+  const candidatesUrl = SUPABASE_URL + '/rest/v1/candidates?select=phone';
 
   document.getElementById('content').innerHTML = '<div class="loader">Loading…</div>';
 
@@ -1094,8 +1188,13 @@ function loadAll() {
     // We fetch ALL availability rows (including soft-deleted) just to count past activity.
     // Lightweight: only staff_name, no joins.
     authFetch(SUPABASE_URL + '/rest/v1/availability?select=staff_name',
-      { headers: apiHeaders() })
-  ]).then(([events, employees, allAvail]) => {
+      { headers: apiHeaders() }),
+    // NEW HIRE badge — past placements (no date filter, trimmed client-side
+    // by joining against state.events / loaded events. See note above.)
+    authFetch(pastPlacementsUrl, { headers: apiHeaders() }),
+    // NEW HIRE badge — candidate phones for pipeline-hire detection
+    authFetch(candidatesUrl, { headers: apiHeaders() })
+  ]).then(([events, employees, allAvail, pastPlacements, candidatePhones]) => {
     state.events = events || [];
     state.employees = employees || [];
 
@@ -1105,6 +1204,58 @@ function loadAll() {
     (allAvail || []).forEach(r => {
       state.historyCounts[r.staff_name] = (state.historyCounts[r.staff_name] || 0) + 1;
     });
+
+    // ----- NEW HIRE badge state assembly -----
+
+    // Step 1: pipelineNames. Match employees ↔ candidates by normalized phone.
+    // An employee with a candidate row sharing the same digit-stripped phone
+    // is pipeline-hired. Bulk imports from 7Shifts / SQL runs won't have a
+    // matching candidates row (or will phone-match by accident, in which
+    // case we're no worse off than other heuristics).
+    const candidatePhoneSet = new Set();
+    (candidatePhones || []).forEach(c => {
+      const norm = normalizePhone(c.phone);
+      if (norm) candidatePhoneSet.add(norm);
+    });
+    state.pipelineNames = new Set();
+    state.employees.forEach(e => {
+      const empPhone = normalizePhone(e.phone);
+      if (empPhone && candidatePhoneSet.has(empPhone)) {
+        const fullName = ((e.first_name || '') + ' ' + (e.last_name || '')).trim();
+        if (fullName) state.pipelineNames.add(fullName);
+      }
+    });
+
+    // Step 2: venueExperience. For each past placement (event_date < today,
+    // removed_at IS NULL), increment counter for that (staff_name|venue).
+    // We need event_date to filter past-only, but pastPlacements only has
+    // event_id. So we build a quick eventDate lookup. CAVEAT: this lookup
+    // only covers events currently in state.events (the visible date range).
+    // For past placements at events outside the visible range, we don't have
+    // event_date — so we conservatively count them ALL as past (any placement
+    // not in today's-or-future visible window is assumed past). This is
+    // correct in practice because: (a) future events are always loaded since
+    // they're upcoming, (b) past events are NOT loaded so any unknown event_id
+    // is past. Result: matches intent without an extra event_date fetch.
+    const visibleEventIds = new Set(state.events.map(e => e.id));
+    const visibleEventDate = {};
+    state.events.forEach(e => { visibleEventDate[e.id] = e.event_date; });
+
+    state.venueExperience = {};
+    (pastPlacements || []).forEach(p => {
+      if (!p.staff_name || !p.venue) return;
+      // If the placement's event is in our visible set AND its date is in the
+      // future (or today), exclude it from "past placements".
+      if (visibleEventIds.has(p.event_id)) {
+        const ed = visibleEventDate[p.event_id];
+        if (ed && ed >= today) return; // future/today placement — skip
+      }
+      // Otherwise count it as a past placement.
+      const key = p.staff_name + '|' + p.venue;
+      state.venueExperience[key] = (state.venueExperience[key] || 0) + 1;
+    });
+
+    // ----- end NEW HIRE assembly -----
 
     if (!state.events.length) {
       state.staffingRequests = [];
@@ -1531,6 +1682,20 @@ function renderAvailablePanel(ev) {
       '" data-staff-name="' + escapeAttr(s.staff_name) + '" data-source="signup" data-event-id="' + ev.id +
       '" data-availability-id="' + escapeAttr(s.id || '') + '">';
     html += '<span class="person-name">' + escapeHtml(s.staff_name) + '</span>';
+
+    // NEW HIRE badge — render before the right-side state indicators so it
+    // sits visually next to the name. Only renders on AVAILABLE pills.
+    // Decision: not shown on PLACED_HERE or ASSIGNED_AWAY pills — once the
+    // person is committed somewhere the "is this person new at this venue"
+    // question is no longer the operative one for the manager looking at
+    // the available panel.
+    if (ps === 'AVAILABLE' && isNewAtVenue(s.staff_name, ev.venue)) {
+      const placementCount = venuePlacementCount(s.staff_name, ev.venue);
+      const tooltip = 'Pipeline-hired employee. ' + placementCount +
+        ' prior shift' + (placementCount === 1 ? '' : 's') +
+        ' at ' + ev.venue + ' (threshold ' + NEW_HIRE_THRESHOLD + ').';
+      html += '<span class="new-hire-tag" title="' + escapeAttr(tooltip) + '">NEW</span>';
+    }
 
     if (ps === 'PLACED_HERE') {
       html += '<span class="placed-here-tag">✓ here</span>';
@@ -2672,26 +2837,26 @@ function printCallableList() {
     : (ev.gates_open ? 'Gates ' + fmtTime(ev.gates_open) : '');
 
   const w = window.open('', '_blank');
-  let html = `<!DOCTYPE html><html><head><title>${escapeHtml(ev.event_name || 'Event')} — Available to call</title>
-  <style>
-    @page { size: portrait; margin: 0.5in; }
-    body { font-family: Georgia, "Times New Roman", serif; color: black; padding: 0; margin: 0; }
-    .ph { border-bottom: 2px solid black; padding-bottom: 8px; margin-bottom: 14px; }
-    .ph-title { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #555; margin-bottom: 4px; font-family: -apple-system, sans-serif; }
-    .ph-event { font-size: 20px; font-weight: 800; }
-    .ph-meta { font-size: 12px; color: #333; margin-top: 3px; }
-    .ph-sub { font-size: 11px; color: #666; margin-top: 4px; font-style: italic; }
-    .section-head { font-size: 10px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: #555; margin: 16px 0 4px; padding-bottom: 3px; border-bottom: 1px solid #999; font-family: -apple-system, sans-serif; }
-    .row { display: flex; align-items: center; gap: 12px; padding: 5px 0; border-bottom: 1px solid #eee; font-size: 13px; }
-    .row.flagged { background: #fffbeb; padding-left: 6px; padding-right: 6px; border-bottom-color: #fcd34d; }
-    .rank { font-size: 11px; color: #999; min-width: 22px; text-align: right; font-family: -apple-system, sans-serif; }
-    .name { flex: 1; font-weight: 600; }
-    .flag { font-size: 9px; font-weight: 800; color: #92400e; background: white; border: 1px solid #fcd34d; padding: 1px 5px; border-radius: 3px; letter-spacing: 0.04em; text-transform: uppercase; font-family: -apple-system, sans-serif; }
-    .phone { font-family: monospace; font-size: 13px; color: #444; }
-    .hist { font-size: 10px; color: #888; min-width: 60px; text-align: right; font-family: -apple-system, sans-serif; }
-    .empty { font-style: italic; color: #888; padding: 10px 0; }
-    .footer { margin-top: 22px; padding-top: 8px; border-top: 1px solid #999; font-size: 10px; color: #555; font-family: -apple-system, sans-serif; }
-  </style></head><body>`;
+  let html = '<!DOCTYPE html><html><head><title>' + escapeHtml(ev.event_name || 'Event') + ' — Available to call</title>' +
+  '<style>' +
+    '@page { size: portrait; margin: 0.5in; }' +
+    'body { font-family: Georgia, "Times New Roman", serif; color: black; padding: 0; margin: 0; }' +
+    '.ph { border-bottom: 2px solid black; padding-bottom: 8px; margin-bottom: 14px; }' +
+    '.ph-title { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #555; margin-bottom: 4px; font-family: -apple-system, sans-serif; }' +
+    '.ph-event { font-size: 20px; font-weight: 800; }' +
+    '.ph-meta { font-size: 12px; color: #333; margin-top: 3px; }' +
+    '.ph-sub { font-size: 11px; color: #666; margin-top: 4px; font-style: italic; }' +
+    '.section-head { font-size: 10px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: #555; margin: 16px 0 4px; padding-bottom: 3px; border-bottom: 1px solid #999; font-family: -apple-system, sans-serif; }' +
+    '.row { display: flex; align-items: center; gap: 12px; padding: 5px 0; border-bottom: 1px solid #eee; font-size: 13px; }' +
+    '.row.flagged { background: #fffbeb; padding-left: 6px; padding-right: 6px; border-bottom-color: #fcd34d; }' +
+    '.rank { font-size: 11px; color: #999; min-width: 22px; text-align: right; font-family: -apple-system, sans-serif; }' +
+    '.name { flex: 1; font-weight: 600; }' +
+    '.flag { font-size: 9px; font-weight: 800; color: #92400e; background: white; border: 1px solid #fcd34d; padding: 1px 5px; border-radius: 3px; letter-spacing: 0.04em; text-transform: uppercase; font-family: -apple-system, sans-serif; }' +
+    '.phone { font-family: monospace; font-size: 13px; color: #444; }' +
+    '.hist { font-size: 10px; color: #888; min-width: 60px; text-align: right; font-family: -apple-system, sans-serif; }' +
+    '.empty { font-style: italic; color: #888; padding: 10px 0; }' +
+    '.footer { margin-top: 22px; padding-top: 8px; border-top: 1px solid #999; font-size: 10px; color: #555; font-family: -apple-system, sans-serif; }' +
+  '</style></head><body>';
   html += '<div class="ph">';
   html += '<div class="ph-title">Available to call</div>';
   html += '<div class="ph-event">' + escapeHtml(ev.event_name || ev.venue) + '</div>';
@@ -2797,27 +2962,27 @@ function printEvent(eventId) {
   }
 
   const w = window.open('', '_blank');
-  let html = `<!DOCTYPE html><html><head><title>${escapeHtml(ev.event_name)} — Print</title>
-  <style>
-    @page { size: landscape; margin: 0.5in; }
-    body { font-family: Georgia, "Times New Roman", serif; color: black; padding: 0; margin: 0; }
-    .ph { border-bottom: 2px solid black; padding-bottom: 8px; margin-bottom: 14px; display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
-    .ph-event { font-size: 22px; font-weight: 700; }
-    .ph-venue { font-size: 13px; font-weight: 700; border: 1.5px solid black; padding: 2px 8px; border-radius: 3px; }
-    .ph-meta { font-size: 12px; color: #333; }
-    .ph-summary { margin-left: auto; font-size: 13px; font-weight: 700; }
-    .pgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-    .pstand { border: 1px solid black; padding: 8px 10px; break-inside: avoid; }
-    .pstand-name { font-size: 13px; font-weight: 700; border-bottom: 1px solid black; padding-bottom: 4px; margin-bottom: 6px; display: flex; justify-content: space-between; }
-    .pstand-fill { font-size: 10px; font-weight: 600; color: #555; }
-    .prole { margin-bottom: 8px; }
-    .prole-h { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #555; margin-bottom: 3px; font-family: -apple-system, sans-serif; }
-    .prole.lead .prole-h { color: black; font-weight: 800; }
-    .pname { font-size: 12px; padding: 2px 0; }
-    .pname.empty { border-bottom: 1px solid black; height: 18px; }
-    .pmark { font-size: 9px; color: #777; font-family: -apple-system, sans-serif; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700; }
-    .pfooter { margin-top: 14px; padding-top: 8px; border-top: 1px solid #999; font-size: 10px; color: #555; display: flex; justify-content: space-between; }
-  </style></head><body>`;
+  let html = '<!DOCTYPE html><html><head><title>' + escapeHtml(ev.event_name) + ' — Print</title>' +
+  '<style>' +
+    '@page { size: landscape; margin: 0.5in; }' +
+    'body { font-family: Georgia, "Times New Roman", serif; color: black; padding: 0; margin: 0; }' +
+    '.ph { border-bottom: 2px solid black; padding-bottom: 8px; margin-bottom: 14px; display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }' +
+    '.ph-event { font-size: 22px; font-weight: 700; }' +
+    '.ph-venue { font-size: 13px; font-weight: 700; border: 1.5px solid black; padding: 2px 8px; border-radius: 3px; }' +
+    '.ph-meta { font-size: 12px; color: #333; }' +
+    '.ph-summary { margin-left: auto; font-size: 13px; font-weight: 700; }' +
+    '.pgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }' +
+    '.pstand { border: 1px solid black; padding: 8px 10px; break-inside: avoid; }' +
+    '.pstand-name { font-size: 13px; font-weight: 700; border-bottom: 1px solid black; padding-bottom: 4px; margin-bottom: 6px; display: flex; justify-content: space-between; }' +
+    '.pstand-fill { font-size: 10px; font-weight: 600; color: #555; }' +
+    '.prole { margin-bottom: 8px; }' +
+    '.prole-h { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #555; margin-bottom: 3px; font-family: -apple-system, sans-serif; }' +
+    '.prole.lead .prole-h { color: black; font-weight: 800; }' +
+    '.pname { font-size: 12px; padding: 2px 0; }' +
+    '.pname.empty { border-bottom: 1px solid black; height: 18px; }' +
+    '.pmark { font-size: 9px; color: #777; font-family: -apple-system, sans-serif; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700; }' +
+    '.pfooter { margin-top: 14px; padding-top: 8px; border-top: 1px solid #999; font-size: 10px; color: #555; display: flex; justify-content: space-between; }' +
+  '</style></head><body>';
   html += '<div class="ph">';
   html += '<span class="ph-event">' + escapeHtml(ev.event_name) + '</span>';
   html += '<span class="ph-venue">' + escapeHtml(ev.venue) + '</span>';
