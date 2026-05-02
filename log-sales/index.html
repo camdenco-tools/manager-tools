@@ -84,6 +84,8 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
 .stand-row:hover { background: #fafafa; }
 .stand-row-top { display: flex; justify-content: space-between; align-items: center; }
 .stand-row-name { font-size: 13px; font-weight: 600; color: #1a1a1a; }
+.stand-row-meta { font-size: 11px; color: #888; margin-top: 2px; }
+.stand-row-submitter { font-size: 11px; color: #bbb; margin-top: 1px; }
 .stand-row-right { display: flex; align-items: center; gap: 6px; }
 .stand-row-amt { font-size: 13px; font-weight: 700; color: #1a1a1a; }
 
@@ -329,6 +331,8 @@ var eventsOnDate = [];
 var signinStatus = {};
 // finalizedVenues tracks which venues have been finalized
 var finalizedVenues = {};
+// roster cache for inline name autocomplete
+var roster = [];
 
 function apiHeaders() { return pcAuth.headers(); }
 
@@ -467,7 +471,7 @@ async function parseSigninSheet(saleId, signinUrl, venue, tipAmount, staffCount,
   updateSigninPill(saleId);
 
   try {
-    var roster = await fetchRoster();
+    var fetchedRoster = await fetchRoster();
     var availability = await fetchAvailability(eventDate, venue);
 
     var res = await fetch(EDGE_URL, {
@@ -479,7 +483,7 @@ async function parseSigninSheet(saleId, signinUrl, venue, tipAmount, staffCount,
         venue: venue,
         tip_amount: tipAmount,
         staff_count: staffCount,
-        roster: roster,
+        roster: fetchedRoster,
         availability: availability
       })
     });
@@ -758,6 +762,11 @@ async function loadStandDetail(saleId, hasSigning) {
     }
   }
 
+  // Ensure roster is loaded for autocomplete
+  if (!roster.length) {
+    roster = await fetchRoster();
+  }
+
   renderStandDetail(saleId);
 }
 
@@ -775,14 +784,6 @@ function renderStandDetail(saleId) {
       '</div><div class="stand-detail-action"><button class="sd-btn sd-btn-amber" onclick="event.stopPropagation()">Retake photo</button></div>';
     return;
   }
-
-  // Get sale data for staff count mismatch check
-  var saleRow = null;
-  try {
-    // find in current scoreboard data by iterating byVenue structure — just use assigns.length vs status.summary
-    var status = signinStatus[saleId];
-    var enteredCount = status && status.summary ? status.summary.total : null;
-  } catch(e) {}
 
   var html = '<div class="nr-list">';
 
@@ -1087,7 +1088,7 @@ async function loadScoreboard() {
   document.getElementById('scoreboard-label').textContent = sb.label;
   try {
     var res = await fetch(
-      SUPA_URL + '/rest/v1/sales?event_date=eq.' + sb.date + '&select=id,venue,stand,amount,tip_amount,event_name,photo_url,units_photo_url,staff_count',
+      SUPA_URL + '/rest/v1/sales?event_date=eq.' + sb.date + '&select=id,venue,stand,amount,tip_amount,event_name,photo_url,units_photo_url,staff_count,submitted_by',
       { headers: apiHeaders() }
     );
     var rows = await res.json();
@@ -1140,9 +1141,14 @@ async function loadScoreboard() {
       var total = stands.reduce(function(s,r) { return s+parseFloat(r.amount); }, 0);
       var venueTips = stands.reduce(function(s,r) { return s+(parseFloat(r.tip_amount)||0); }, 0);
       var label = VENUE_LABELS[venue] || venue;
+      var venueStaffTotal = stands.reduce(function(s,r) { return s + (parseInt(r.staff_count) || 0); }, 0);
+      var venueHasStaff = stands.some(function(r) { return r.staff_count && r.staff_count > 0; });
       var venueMeta = stands.length + ' stand' + (stands.length > 1 ? 's' : '');
-      if (venueTips > 0) venueMeta += ' — Tips: $' + Math.round(venueTips).toLocaleString();
-      if (finalizedVenues[venue] === 'done') venueMeta += ' — <span style="color:#1D9E75;font-weight:600;">Finalized</span>';
+      if (venueHasStaff && venueStaffTotal > 0) {
+        venueMeta += ' \u2014 ' + venueStaffTotal + ' staff \u2014 $' + Math.round(total / venueStaffTotal).toLocaleString() + '/person';
+      }
+      if (venueTips > 0) venueMeta += ' \u2014 Tips: $' + Math.round(venueTips).toLocaleString();
+      if (finalizedVenues[venue] === 'done') venueMeta += ' \u2014 <span style="color:#1D9E75;font-weight:600;">Finalized</span>';
 
       html += '<div class="venue-block">';
       html += '<div class="venue-block-header" onclick="toggleVenueBlock(\'' + venue + '\')">';
@@ -1154,13 +1160,21 @@ async function loadScoreboard() {
       stands.sort(function(a,b) { return parseFloat(b.amount)-parseFloat(a.amount); });
       stands.forEach(function(r) {
         var hasSigning = !!signinHas[r.id];
+        var staffCount = parseInt(r.staff_count) || 0;
+        var amt = parseFloat(r.amount) || 0;
+        var perPerson = staffCount > 0 ? '$' + Math.round(amt / staffCount).toLocaleString() + '/person' : '';
+        var staffLabel = staffCount > 0 ? staffCount + ' staff' + (perPerson ? ' \u2014 ' + perPerson : '') : '';
         html += '<div class="stand-row" onclick="toggleStandDetail(\'' + r.id + '\',' + hasSigning + ')">';
         html += '<div class="stand-row-top">';
+        html += '<div style="flex:1;min-width:0;">';
         html += '<div class="stand-row-name">' + r.stand + '</div>';
+        if (staffLabel) html += '<div class="stand-row-meta">' + staffLabel + '</div>';
+        if (r.submitted_by) html += '<div class="stand-row-submitter">by ' + r.submitted_by + '</div>';
+        html += '</div>';
         html += '<div class="stand-row-right">';
         html += siPillHtml(r.id, hasSigning);
         if ((parseFloat(r.tip_amount)||0) > 0) html += '<span class="photo-pill" style="background:#FFF3CD;color:#7A5C00;">tip $' + Math.round(parseFloat(r.tip_amount)).toLocaleString() + '</span>';
-        html += '<div class="stand-row-amt">$' + Math.round(parseFloat(r.amount)).toLocaleString() + '</div>';
+        html += '<div class="stand-row-amt">$' + Math.round(amt).toLocaleString() + '</div>';
         html += '</div></div>';
         html += '<div class="stand-detail" id="sd-' + r.id + '">' + standDetailHtml(r, hasSigning) + '</div>';
         html += '</div>';
