@@ -616,11 +616,17 @@ header {
 }
 .typeahead-no-match .add-placeholder:hover { background: var(--amber-light); }
 
-/* Support Staff section — distinct from stand cards */
+/* Support Staff section — distinct from stand cards.
+   width: fit-content so the gray container hugs the role cards inside it
+   instead of stretching to fill the entire workspace. min-width keeps the
+   "Support Staff … N / N filled" header readable when there's only one role. */
 .support-section {
   margin-top: 16px; padding: 14px;
   background: var(--slate-light);
   border: 1px solid var(--border-strong); border-radius: 8px;
+  width: fit-content;
+  min-width: 280px;
+  max-width: 100%;
 }
 .support-section-head {
   font-size: 12px; font-weight: 800; text-transform: uppercase;
@@ -1861,6 +1867,16 @@ function renderFilledSlot(ev, p, locked) {
   let html = '<div class="' + cls + '" draggable="' + (locked ? 'false' : 'true') + '" data-position-id="' + p.id + '" data-staff-name="' + escapeAttr(p.staff_name) + '" data-source="' + p.source + '">';
   if (multiCount > 1) html += '<span class="conflict-icon" data-assign-staff="' + escapeAttr(p.staff_name) + '" data-assign-event="' + ev.id + '" title="Click to see all events this person signed up for">⚠</span>';
   html += '<span class="person-name">' + escapeHtml(p.staff_name) + '</span>';
+  // NEW HIRE badge on the placed pill — same logic as the Available panel.
+  // Lets the manager see crew composition at a glance: 3 NEW pills clustered
+  // in one stand vs. evenly distributed across stands tells different stories.
+  if (isNewAtVenue(p.staff_name, ev.venue)) {
+    const placementCount = venuePlacementCount(p.staff_name, ev.venue);
+    const tooltip = 'Pipeline-hired employee. ' + placementCount +
+      ' prior shift' + (placementCount === 1 ? '' : 's') +
+      ' at ' + ev.venue + ' (threshold ' + NEW_HIRE_THRESHOLD + ').';
+    html += '<span class="new-hire-tag" title="' + escapeAttr(tooltip) + '">NEW</span>';
+  }
   if (p.source === 'manual') html += '<span class="manual-tag">TYPED</span>';
   if (p.source === 'placeholder') html += '<span class="placeholder-tag">PLACEHOLDER</span>';
   if (!locked) html += '<button class="x" data-remove-position="' + p.id + '" title="Remove">✕</button>';
