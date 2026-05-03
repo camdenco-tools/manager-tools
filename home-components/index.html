@@ -153,17 +153,6 @@ body {
   font-size: 13px; font-weight: 600;
   flex: 1; min-width: 0;
 }
-.emp-row.inactive .emp-name {
-  color: #aaa; font-style: italic;
-}
-.inactive-tag {
-  display: inline-block;
-  font-size: 8px; font-weight: 700; letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #999; background: #f0f0ec;
-  padding: 1px 6px; border-radius: 3px;
-  margin-left: 6px; vertical-align: 1px;
-}
 .dropdown-wrap { position: relative; flex-shrink: 0; }
 .venue-select {
   appearance: none;
@@ -183,6 +172,11 @@ body {
   border-color: var(--amber-400);
   background: white;
   font-weight: 700;
+}
+.emp-row.na .venue-select {
+  color: #888;
+  background: #f5f5f3;
+  font-weight: 600;
 }
 .dropdown-arrow {
   position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
@@ -393,6 +387,7 @@ body {
     var url = SUPABASE_URL +
       '/rest/v1/employees' +
       '?select=id,first_name,last_name,is_active,home_venue' +
+      '&is_active=eq.true' +
       '&order=last_name.asc,first_name.asc';
     return authFetch(url, {
       method: 'GET',
@@ -427,6 +422,7 @@ body {
 
   function buildOptions(currentValue) {
     var html = '<option value="">(none)</option>';
+    html += '<option value="NA"' + (currentValue === 'NA' ? ' selected' : '') + '>Doesn\'t apply</option>';
     for (var i = 0; i < VENUE_ORDER.length; i++) {
       var code = VENUE_ORDER[i];
       var label = VENUE_LABELS[code];
@@ -438,12 +434,14 @@ body {
 
   function renderRow(emp) {
     var unset = !emp.home_venue;
-    var classes = 'emp-row' + (unset ? ' unset' : '') + (emp.is_active === false ? ' inactive' : '');
+    var isNA = emp.home_venue === 'NA';
+    var classes = 'emp-row' +
+      (unset ? ' unset' : '') +
+      (isNA ? ' na' : '');
     var name = fullName(emp);
-    var inactiveTag = (emp.is_active === false) ? '<span class="inactive-tag">inactive</span>' : '';
     return '' +
       '<div class="' + classes + '" data-emp-id="' + emp.id + '">' +
-        '<div class="emp-name">' + escapeHtml(name) + inactiveTag + '</div>' +
+        '<div class="emp-name">' + escapeHtml(name) + '</div>' +
         '<div class="dropdown-wrap">' +
           '<select class="venue-select" data-emp-id="' + emp.id + '">' +
             buildOptions(emp.home_venue) +
@@ -506,11 +504,14 @@ body {
   function renderCounts() {
     var total = state.employees.length;
     var unset = state.employees.filter(function(e) { return !e.home_venue; }).length;
+    var na = state.employees.filter(function(e) { return e.home_venue === 'NA'; }).length;
     var el = document.getElementById('counts');
     if (total === 0) { el.textContent = ''; return; }
-    el.innerHTML =
-      '<span class="unset-num">' + unset + '</span> unset &middot; ' +
-      total + ' total';
+    var parts = [];
+    parts.push('<span class="unset-num">' + unset + '</span> unset');
+    if (na > 0) parts.push(na + ' n/a');
+    parts.push(total + ' total');
+    el.innerHTML = parts.join(' &middot; ');
   }
 
   // -------------------------------------------------------------
