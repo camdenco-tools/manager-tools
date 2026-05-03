@@ -436,6 +436,18 @@ header {
   padding: 1px 5px; border-radius: 3px;
   cursor: help;
 }
+/* Home-venue badge — shows each person's home component (primary venue).
+   Color comes from VENUE_COLORS (set inline because each venue has its
+   own brand color). Same size/shape as NEW HIRE so they sit cleanly
+   next to each other on a pill. Renders on every pill state — Available,
+   placed, assigned-away — because the question "should this person be
+   here at all?" is relevant in every context, not just at decision time. */
+.home-venue-tag {
+  font-size: 9px; font-weight: 800; letter-spacing: 0.04em;
+  color: white;
+  padding: 1px 5px; border-radius: 3px;
+  cursor: help;
+}
 .person-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .summary-bar {
@@ -782,6 +794,70 @@ header {
 .conflict-icon { cursor: pointer; }
 .conflict-icon:hover { opacity: 0.7; }
 
+/* ===== Home-venue override dialog =====
+   Fires when a manager places a non-home-venue person ahead of an unplaced
+   home-venue person. Forces a typed reason (>= 15 chars) before the
+   placement commits. Cancelling does not place. */
+.override-info {
+  background: var(--amber-light); border: 1px solid var(--amber-border);
+  padding: 10px 12px; border-radius: 8px;
+  font-size: 13px; line-height: 1.5; color: var(--amber-dark);
+  margin-bottom: 12px;
+}
+.override-info strong { color: var(--amber-dark); }
+.override-list {
+  list-style: none; padding: 0; margin: 6px 0 0 0;
+}
+.override-list li {
+  padding: 3px 0; font-size: 12px; font-weight: 600;
+}
+.override-list li::before {
+  content: '• '; color: var(--amber); font-weight: 800;
+}
+.override-question {
+  font-size: 13px; font-weight: 600; margin: 14px 0 8px; color: var(--primary);
+}
+.override-textarea {
+  width: 100%; min-height: 70px; padding: 8px 10px;
+  border: 1.5px solid var(--border); border-radius: 7px;
+  font-family: inherit; font-size: 13px; resize: vertical;
+  color: var(--primary); background: white;
+}
+.override-textarea:focus { outline: none; border-color: var(--blue); }
+.override-counter {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-top: 6px; font-size: 11px; color: var(--label);
+}
+.override-counter.met { color: var(--green-dark); font-weight: 700; }
+.override-actions {
+  display: flex; gap: 8px; justify-content: flex-end;
+  margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border);
+}
+.btn-cancel {
+  background: white; border: 1px solid var(--border-strong); color: var(--label);
+  font-family: inherit; font-size: 13px; font-weight: 700;
+  padding: 8px 16px; border-radius: 7px; cursor: pointer;
+}
+.btn-cancel:hover { background: var(--slate-light); color: var(--primary); }
+.btn-confirm {
+  background: var(--primary); border: 1px solid var(--primary); color: white;
+  font-family: inherit; font-size: 13px; font-weight: 700;
+  padding: 8px 16px; border-radius: 7px; cursor: pointer;
+}
+.btn-confirm:disabled {
+  background: #aaa; border-color: #aaa; cursor: not-allowed;
+}
+.btn-confirm:not(:disabled):hover { background: #000; }
+/* Audit log entry — second-line "reason" display for override placements.
+   The first line of a log row keeps its existing 4-column grid; the
+   reason wraps below in a muted italic block spanning all columns. */
+.log-entry .log-reason {
+  grid-column: 1 / -1;
+  font-size: 11px; font-style: italic; color: var(--amber-dark);
+  background: var(--amber-light); border-left: 3px solid var(--amber-border);
+  padding: 4px 8px; margin-top: 4px; border-radius: 0 4px 4px 0;
+}
+
 /* ===== Available-to-call list ===== */
 .call-row {
   display: flex; align-items: center; gap: 12px;
@@ -802,6 +878,100 @@ header {
   color: var(--label); margin: 14px 0 6px; padding-top: 10px; border-top: 1px solid var(--border);
 }
 .call-section-head:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+
+/* ===== Recent signups box =====
+   Sits at the top of the main content area, between the filter strip and
+   the day groups. Shows everything that signed up in the last ~36 hours,
+   broken into 12-hour buckets. Respects the venue filter; ignores the
+   date range filter. Default expand/collapse state is decided per-render
+   based on whether the most-recent bucket is empty. */
+.recent-signups {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 10px; box-shadow: var(--shadow-sm);
+  margin-bottom: 16px; overflow: hidden;
+}
+.recent-signups-empty {
+  padding: 8px 14px; font-size: 12px; color: var(--label);
+  font-style: italic;
+}
+.recent-signups-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; cursor: pointer; user-select: none;
+  font-weight: 700;
+}
+.recent-signups-head:hover { background: var(--bg); }
+.recent-signups-head .rs-chevron {
+  transition: transform 0.2s ease;
+  font-size: 11px; color: var(--label);
+}
+.recent-signups.expanded .rs-chevron { transform: rotate(180deg); }
+.recent-signups-title { font-size: 13px; }
+.recent-signups-count {
+  font-size: 11px; font-weight: 700;
+  background: var(--blue-light); color: var(--blue-dark);
+  padding: 2px 8px; border-radius: 10px;
+}
+.recent-signups-count.zero { background: var(--slate-light); color: var(--label); }
+.recent-signups-spacer { flex: 1; }
+.recent-signups-hint {
+  font-size: 11px; font-weight: 500; color: var(--label);
+}
+.recent-signups-body {
+  border-top: 1px solid var(--border);
+  padding: 6px 14px 12px;
+}
+.rs-bucket { padding-top: 10px; }
+.rs-bucket-head {
+  font-size: 10px; font-weight: 800; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--label);
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-lt, var(--border));
+}
+.rs-bucket-empty {
+  padding: 4px 0 2px; font-size: 11px; color: var(--label); font-style: italic;
+}
+.rs-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 5px 0; font-size: 13px;
+  border-bottom: 1px solid var(--bg);
+}
+.rs-row:last-child { border-bottom: none; }
+.rs-time {
+  font-size: 11px; font-family: monospace; color: var(--label);
+  min-width: 70px; flex-shrink: 0;
+}
+.rs-name {
+  font-weight: 600; min-width: 130px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.rs-row.removed .rs-name { text-decoration: line-through; color: var(--label); }
+/* Recent-signups badges share size/shape with pill badges but inline. */
+.rs-row .new-hire-tag,
+.rs-row .home-venue-tag {
+  flex-shrink: 0;
+}
+.rs-arrow {
+  color: var(--label); font-weight: 700; flex-shrink: 0;
+}
+.rs-event {
+  font-size: 12px; color: var(--slate);
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.rs-event-venue {
+  font-weight: 700; color: var(--primary);
+}
+.rs-mismatch {
+  font-size: 11px; font-weight: 800; color: var(--amber-dark);
+  background: var(--amber-light); border: 1px solid var(--amber-border);
+  padding: 1px 6px; border-radius: 3px;
+  flex-shrink: 0; cursor: help;
+}
+@media (max-width: 600px) {
+  .rs-row { flex-wrap: wrap; }
+  .rs-name { min-width: 0; flex: 1; }
+  .rs-event { flex-basis: 100%; padding-left: 80px; }
+}
 </style>
 </head>
 <body>
@@ -901,6 +1071,34 @@ header {
   </div>
 </div>
 
+<!-- Home-venue override dialog. Shown when placing a non-home-venue person
+     ahead of unplaced home-venue people for the event. Manager must type a
+     reason (>= 15 chars) before "Save and place" enables. Cancel = no
+     placement. The reason is appended to the position_assignment_log row's
+     details JSON under `override_reason` and is rendered on a second line
+     in the audit log for that event. -->
+<div class="modal-backdrop" id="override-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>Reason needed</h3>
+      <button class="modal-close" data-close-modal="override-modal">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="override-info" id="override-info"></div>
+      <div class="override-question">Why is this person being scheduled here over them?</div>
+      <textarea class="override-textarea" id="override-reason" placeholder="e.g. requested by venue manager / specific role need / etc."></textarea>
+      <div class="override-counter" id="override-counter">
+        <span id="override-counter-text">Min 15 characters</span>
+        <span id="override-counter-num">0 / 15</span>
+      </div>
+      <div class="override-actions">
+        <button class="btn-cancel" data-close-modal="override-modal">Cancel</button>
+        <button class="btn-confirm" id="override-confirm-btn" disabled>Save and place</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 /* =====================================================================
  * SCHEDULE ASSISTANT
@@ -944,6 +1142,31 @@ const HIDDEN_STANDS = [CLIENT_STAND, NONEVENT_STAND];
 // Brian's actual question ("do I know this person at this venue?")
 // more directly.
 const NEW_HIRE_THRESHOLD = 6;
+
+// Venue color palette — same hex codes as the Home Components admin page
+// and the staffing-requirements page. Used to background the home-venue
+// badge on each pill so the venue identity reads at a glance. Keep this
+// in sync with the constants on those pages.
+const VENUE_COLORS = {
+  FMP: '#c0392b',       // red
+  Mann: '#5a9e1a',      // green
+  Cure: '#2471a3',      // blue
+  Subaru: '#7d3fbf',    // purple
+  Villanova: '#1a237e', // navy
+  Montage: '#607d8b',   // slate
+  DE: '#00796b',        // teal
+  BWH: '#e67e22',       // orange
+  ACCC: '#c0620a',      // dark amber
+  SATB: '#888780',      // gray
+  Kirkwood: '#b71c1c'   // dark red
+};
+
+// The Home Components admin page uses 'NA' as a sentinel value meaning
+// "doesn't apply" (managers, floaters, anyone deliberately exempted from
+// home-venue priority logic). The badge does NOT render for 'NA' people,
+// and the override dialog never fires when an 'NA' person is involved
+// — they're treated identically to a NULL home_venue.
+const HOME_VENUE_NA = 'NA';
 
 // Role display order — Lead always first
 const ROLE_ORDER = [
@@ -1009,6 +1232,13 @@ function showToast(msg, kind) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { el.className = 'toast'; }, 2400);
 }
+
+// Recent signups box: tracks whether the user has explicitly toggled the
+// box this session. null = no manual toggle yet; rely on heuristic default
+// (expanded if current bucket has signups, collapsed otherwise). true/false
+// = user clicked, persist that choice for the rest of this page session.
+// Not persisted across reloads — design doc Item 6.
+let _recentSignupsManualState = null;
 
 // ---------- Date helpers ----------
 function todayIsoLocal() {
@@ -1131,6 +1361,16 @@ const state = {
   //   Determined by phone-matching employees ↔ candidates (normalized digit-only).
   pipelineNames: new Set(),
 
+  // Recent signups box state — see Item 6 of the home-component design doc.
+  // recentSignups: array of availability rows from the last 36 hours, ordered
+  //   by submitted_at DESC. Each row: {id, staff_name, event_id, submitted_at, removed_at}.
+  // recentSignupEvents: lookup of event_id → {event_name, venue, event_date} for
+  //   events that recent signups point at, INCLUDING events outside the current
+  //   visible date range (separately fetched). Merged with state.events so the
+  //   render can resolve every signup.
+  recentSignups: [],
+  recentSignupEvents: {},
+
   filters: {
     venue: '',
     range: 'next-14',
@@ -1155,6 +1395,24 @@ function isNewAtVenue(staffName, venue) {
 // Returns the actual past-placement count at this venue, for the badge tooltip.
 function venuePlacementCount(staffName, venue) {
   return state.venueExperience[staffName + '|' + venue] || 0;
+}
+
+// Returns the home venue code for a staff name, or null if unset / NA / unknown.
+// Both NULL and 'NA' (Doesn't apply) normalize to null here so the rest of the
+// codebase can treat "no home venue" as a single concept. The dropdown and
+// override-dialog logic both call this — they share the same semantics.
+// Empty/whitespace names also return null.
+function homeVenueOf(staffName) {
+  if (!staffName) return null;
+  const name = staffName.trim();
+  if (!name) return null;
+  const emp = state.employees.find(e =>
+    ((e.first_name || '') + ' ' + (e.last_name || '')).trim() === name
+  );
+  if (!emp) return null;
+  if (!emp.home_venue) return null;
+  if (emp.home_venue === HOME_VENUE_NA) return null;
+  return emp.home_venue;
 }
 
 // ---------- Data loaders ----------
@@ -1184,11 +1442,23 @@ function loadAll() {
   // the user is admin or not.
   const candidatesUrl = SUPABASE_URL + '/rest/v1/candidates?select=phone';
 
+  // Recent signups query — last 36 hours of availability rows for the
+  // recent-signups box at the top of the page. Independent of the page's
+  // date-range filter (which controls visible events). Lightweight: bounded
+  // by signup volume in a 36-hour window. We fetch removed_at too so the
+  // box can render struck-through entries for soft-deleted signups.
+  const recentSignupsSince = new Date(Date.now() - 36 * 60 * 60 * 1000).toISOString();
+  const recentSignupsUrl = SUPABASE_URL +
+    '/rest/v1/availability' +
+    '?select=id,staff_name,event_id,submitted_at,removed_at' +
+    '&submitted_at=gte.' + recentSignupsSince +
+    '&order=submitted_at.desc';
+
   document.getElementById('content').innerHTML = '<div class="loader">Loading…</div>';
 
   return Promise.all([
     authFetch(eventsUrl, { headers: apiHeaders() }),
-    authFetch(SUPABASE_URL + '/rest/v1/employees?select=first_name,last_name,phone,is_active&is_active=eq.true&order=last_name.asc',
+    authFetch(SUPABASE_URL + '/rest/v1/employees?select=first_name,last_name,phone,home_venue,is_active&is_active=eq.true&order=last_name.asc',
       { headers: apiHeaders() }),
     // Historical availability counts for "reliability" sort on the Available-to-call list.
     // We fetch ALL availability rows (including soft-deleted) just to count past activity.
@@ -1199,10 +1469,13 @@ function loadAll() {
     // by joining against state.events / loaded events. See note above.)
     authFetch(pastPlacementsUrl, { headers: apiHeaders() }),
     // NEW HIRE badge — candidate phones for pipeline-hire detection
-    authFetch(candidatesUrl, { headers: apiHeaders() })
-  ]).then(([events, employees, allAvail, pastPlacements, candidatePhones]) => {
+    authFetch(candidatesUrl, { headers: apiHeaders() }),
+    // Recent signups for the box at the top of the page
+    authFetch(recentSignupsUrl, { headers: apiHeaders() })
+  ]).then(([events, employees, allAvail, pastPlacements, candidatePhones, recentSignups]) => {
     state.events = events || [];
     state.employees = employees || [];
+    state.recentSignups = recentSignups || [];
 
     // Build historical signup counts per staff_name. Used to sort the
     // Available-to-call list — most-reliable employees first.
@@ -1263,6 +1536,42 @@ function loadAll() {
 
     // ----- end NEW HIRE assembly -----
 
+    // ----- Recent-signups event resolution -----
+    // Recent signups can reference events outside the current visible date
+    // range (e.g. a signup for next month while the user is viewing this
+    // week). We need event_name + venue + event_date for every referenced
+    // event. Build a lookup primed with state.events, then fetch any
+    // missing event_ids in a follow-up query. Volume is bounded — typically
+    // a handful of distinct events in a 36-hour window.
+    state.recentSignupEvents = {};
+    state.events.forEach(e => {
+      state.recentSignupEvents[e.id] = {
+        id: e.id, event_name: e.event_name, venue: e.venue, event_date: e.event_date
+      };
+    });
+    const missingEventIds = [];
+    state.recentSignups.forEach(r => {
+      if (r.event_id && !state.recentSignupEvents[r.event_id]) {
+        if (missingEventIds.indexOf(r.event_id) === -1) missingEventIds.push(r.event_id);
+      }
+    });
+    let resolveMissingEvents = Promise.resolve();
+    if (missingEventIds.length > 0) {
+      const missingInList = '(' + missingEventIds.map(id => '"' + id + '"').join(',') + ')';
+      resolveMissingEvents = authFetch(
+        SUPABASE_URL + '/rest/v1/events?select=id,event_name,venue,event_date&id=in.' + missingInList,
+        { headers: apiHeaders() }
+      ).then(rows => {
+        (rows || []).forEach(e => { state.recentSignupEvents[e.id] = e; });
+      }).catch(err => {
+        // Non-blocking — if this fetch fails, recent-signups rows for
+        // out-of-range events render with "(unknown event)" rather than
+        // breaking the whole page.
+        console.warn('Recent-signups missing-event lookup failed:', err);
+      });
+    }
+    // ----- end recent-signups resolution -----
+
     if (!state.events.length) {
       state.staffingRequests = [];
       state.availability = [];
@@ -1270,7 +1579,9 @@ function loadAll() {
       state.multiSignupCounts = {};
       state.assignments = {};
       state.positions = [];
-      return;
+      // Wait for the missing-event lookup to finish before resolving so
+      // the render call below sees the full lookup populated.
+      return resolveMissingEvents;
     }
 
     const eventIds = state.events.map(e => e.id);
@@ -1289,7 +1600,11 @@ function loadAll() {
       authFetch(SUPABASE_URL + '/rest/v1/availability_assignments?event_date=in.' + dateInList,
         { headers: apiHeaders() }),
       authFetch(SUPABASE_URL + '/rest/v1/position_assignments?event_id=in.' + inList + '&removed_at=is.null',
-        { headers: apiHeaders() })
+        { headers: apiHeaders() }),
+      // Resolve any recent-signup events that aren't in state.events. This
+      // doesn't return data into the destructured array — it populates
+      // state.recentSignupEvents as a side effect via the lookup primed above.
+      resolveMissingEvents
     ]).then(([reqs, availAll, assigns, positions]) => {
       state.staffingRequests = reqs || [];
       // Split availability into active (no removed_at) and removed.
@@ -1428,16 +1743,211 @@ function unresolvedForEvent(event) {
   return count;
 }
 
+// ---------- Recent signups box ----------
+//
+// Builds the "Recent signups" box at the top of the page. Buckets the last
+// 36 hours of signup activity into three 12-hour windows (current, prior,
+// prior-prior). The current bucket starts at the most recent 8:00 PM local
+// time. Respects the venue filter; ignores the date range filter — the box
+// is about signup activity, not event coverage.
+
+// Returns a Date set to the most recent 8:00 PM local time at-or-before now.
+function mostRecent8pm() {
+  const d = new Date();
+  if (d.getHours() < 20) {
+    // Before 8 PM today → the most recent 8 PM was yesterday at 8 PM.
+    d.setDate(d.getDate() - 1);
+  }
+  d.setHours(20, 0, 0, 0);
+  return d;
+}
+
+// Returns the three bucket windows as [{start, end, label}, ...] ordered
+// most-recent first. Each bucket spans 12 hours. The current bucket's end
+// is now (open-ended-ish, but we treat it as "everything since start").
+function recentSignupsBuckets() {
+  const now = new Date();
+  const cur8 = mostRecent8pm();           // boundary: current bucket starts here
+  const buckets = [];
+
+  // Current bucket: cur8 → now. Label: "Since 8:00 PM yesterday" or
+  // "Since 8:00 PM today" depending on whether cur8 is yesterday or today.
+  // (cur8 is yesterday when the local clock is between midnight and 8 PM;
+  // it's today when the clock is between 8 PM and midnight.)
+  let curLabel;
+  if (cur8.toDateString() === now.toDateString()) {
+    curLabel = 'Since 8:00 PM today';
+  } else {
+    curLabel = 'Since 8:00 PM yesterday';
+  }
+  buckets.push({ start: cur8, end: now, label: curLabel, isCurrent: true });
+
+  // Two prior 12-hour windows, walking backward in 12-hour steps from cur8.
+  for (let i = 1; i <= 2; i++) {
+    const end = new Date(cur8.getTime() - (i - 1) * 12 * 3600 * 1000);
+    const start = new Date(cur8.getTime() - i * 12 * 3600 * 1000);
+    // Label: "Wednesday 8:00 AM – Wednesday 8:00 PM" or similar.
+    // Boundaries alternate between 8 AM and 8 PM.
+    const labelOpts = { weekday: 'long' };
+    const startLabel = start.toLocaleDateString('en-US', labelOpts) + ' ' +
+      (start.getHours() === 20 ? '8:00 PM' : '8:00 AM');
+    const endLabel = end.toLocaleDateString('en-US', labelOpts) + ' ' +
+      (end.getHours() === 20 ? '8:00 PM' : '8:00 AM');
+    buckets.push({
+      start, end, label: startLabel + ' – ' + endLabel, isCurrent: false
+    });
+  }
+  return buckets;
+}
+
+// Returns true if a recent-signup row should be visible given the current
+// venue filter. Resolves the row's event via state.recentSignupEvents.
+function recentSignupVenueMatches(row) {
+  if (!state.filters.venue) return true;
+  const ev = state.recentSignupEvents[row.event_id];
+  if (!ev) return false;
+  return ev.venue === state.filters.venue;
+}
+
+function fmtSignupTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  let h = d.getHours();
+  const m = d.getMinutes();
+  const ap = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return h + ':' + String(m).padStart(2, '0') + ' ' + ap;
+}
+
+function renderRecentSignupsBox() {
+  // Filter to venue-matching rows once
+  const allFiltered = state.recentSignups.filter(recentSignupVenueMatches);
+  const buckets = recentSignupsBuckets();
+
+  // Distribute filtered rows into buckets. Anything earlier than the
+  // earliest bucket's start is dropped (older than 36 hours).
+  const earliest = buckets[buckets.length - 1].start;
+  const visible = allFiltered.filter(r => {
+    const t = new Date(r.submitted_at);
+    return t >= earliest;
+  });
+
+  // Total count for header
+  const totalCount = visible.length;
+
+  // Group visible rows into their bucket
+  const byBucket = buckets.map(() => []);
+  visible.forEach(r => {
+    const t = new Date(r.submitted_at);
+    for (let i = 0; i < buckets.length; i++) {
+      if (t >= buckets[i].start && t <= buckets[i].end) {
+        byBucket[i].push(r);
+        break;
+      }
+    }
+  });
+
+  // True empty: zero rows across all buckets. Render quiet single line.
+  if (totalCount === 0) {
+    return '<div class="recent-signups"><div class="recent-signups-empty">' +
+      'No new signups in the last 36 hours.' +
+      (state.filters.venue ? ' (Filtered to ' + escapeHtml(state.filters.venue) + ')' : '') +
+      '</div></div>';
+  }
+
+  // Decide expand/collapse default. If user has explicitly toggled this
+  // session, honor that. Otherwise: expanded if current bucket has signups.
+  let expanded;
+  if (_recentSignupsManualState === null) {
+    expanded = byBucket[0].length > 0;
+  } else {
+    expanded = _recentSignupsManualState;
+  }
+
+  let html = '<div class="recent-signups' + (expanded ? ' expanded' : '') + '" id="recent-signups">';
+  html += '<div class="recent-signups-head" data-toggle-recent-signups="1">';
+  html += '<span class="rs-chevron">▼</span>';
+  html += '<span class="recent-signups-title">Recent signups</span>';
+  html += '<span class="recent-signups-count' + (totalCount === 0 ? ' zero' : '') + '">' + totalCount + '</span>';
+  html += '<span class="recent-signups-spacer"></span>';
+  if (state.filters.venue) {
+    html += '<span class="recent-signups-hint">filtered to ' + escapeHtml(state.filters.venue) + '</span>';
+  } else {
+    html += '<span class="recent-signups-hint">last 36 hours</span>';
+  }
+  html += '</div>';
+
+  if (expanded) {
+    html += '<div class="recent-signups-body">';
+    buckets.forEach((b, i) => {
+      html += '<div class="rs-bucket">';
+      html += '<div class="rs-bucket-head">' + escapeHtml(b.label) + '</div>';
+      const rows = byBucket[i];
+      if (rows.length === 0) {
+        html += '<div class="rs-bucket-empty">(no signups)</div>';
+      } else {
+        rows.forEach(r => { html += renderRecentSignupRow(r); });
+      }
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+function renderRecentSignupRow(r) {
+  const ev = state.recentSignupEvents[r.event_id];
+  const venue = ev ? ev.venue : null;
+  const eventName = ev ? ev.event_name : '(unknown event)';
+  const isRemoved = !!r.removed_at;
+  const homeV = homeVenueOf(r.staff_name);
+  const isMismatch = venue && homeV && homeV !== venue;
+  const isNew = venue ? isNewAtVenue(r.staff_name, venue) : false;
+
+  let html = '<div class="rs-row' + (isRemoved ? ' removed' : '') + '">';
+  html += '<span class="rs-time">' + escapeHtml(fmtSignupTime(r.submitted_at)) + '</span>';
+  html += '<span class="rs-name">' + escapeHtml(r.staff_name) + '</span>';
+  if (isNew) {
+    const placementCount = venue ? venuePlacementCount(r.staff_name, venue) : 0;
+    const tooltip = 'Pipeline-hired employee. ' + placementCount +
+      ' prior shift' + (placementCount === 1 ? '' : 's') +
+      ' at ' + venue + ' (threshold ' + NEW_HIRE_THRESHOLD + ').';
+    html += '<span class="new-hire-tag" title="' + escapeAttr(tooltip) + '">NEW</span>';
+  }
+  if (homeV) {
+    const hvColor = VENUE_COLORS[homeV] || '#666';
+    const hvTip = 'Home component: ' + homeV + (venue && homeV === venue ? ' (matches event)' : ' (does not match event)');
+    html += '<span class="home-venue-tag" style="background:' + hvColor + ';" title="' + escapeAttr(hvTip) + '">' + escapeHtml(homeV) + '</span>';
+  }
+  html += '<span class="rs-arrow">→</span>';
+  html += '<span class="rs-event">' + escapeHtml(eventName);
+  if (venue) html += ' <span class="rs-event-venue">(' + escapeHtml(venue) + ')</span>';
+  html += '</span>';
+  if (isMismatch) {
+    html += '<span class="rs-mismatch" title="Home component (' + escapeHtml(homeV) + ') does not match event venue (' + escapeHtml(venue) + ')">⚠</span>';
+  }
+  html += '</div>';
+  return html;
+}
+
 // ---------- Rendering ----------
 function render() {
   const root = document.getElementById('content');
   const grouped = eventsGroupedByDate();
   const dates = Object.keys(grouped).sort();
+
+  // Recent signups box always renders first (when there's data) — it's
+  // independent of the event/date list and uses its own filter logic.
+  const recentSignupsHtml = renderRecentSignupsBox();
+
   if (!dates.length) {
-    root.innerHTML = '<div class="empty-state"><div class="empty-state-title">No events in this range</div>Try a wider date range or a different venue.</div>';
+    root.innerHTML = recentSignupsHtml +
+      '<div class="empty-state"><div class="empty-state-title">No events in this range</div>Try a wider date range or a different venue.</div>';
+    attachRecentSignupsHandlers();
     return;
   }
-  let html = '';
+  let html = recentSignupsHtml;
   dates.forEach(date => {
     const events = grouped[date];
     const totalNeed = events.reduce((s, e) => s + Math.max(eventTotalNeeded(e.id), 0), 0);
@@ -1490,6 +2000,7 @@ function render() {
   });
   root.innerHTML = html;
   attachEventHandlers();
+  attachRecentSignupsHandlers();
 }
 
 function eventStatusClass(ev) {
@@ -1703,6 +2214,18 @@ function renderAvailablePanel(ev) {
       html += '<span class="new-hire-tag" title="' + escapeAttr(tooltip) + '">NEW</span>';
     }
 
+    // Home-venue badge — renders on every pill state (AVAILABLE, PLACED_HERE,
+    // ASSIGNED_AWAY) because "should this person be here at all?" is relevant
+    // in every context, unlike NEW HIRE which is only meaningful at the
+    // pre-placement decision point. NULL and 'NA' both suppress (homeVenueOf
+    // normalizes both to null).
+    const _hv = homeVenueOf(s.staff_name);
+    if (_hv) {
+      const hvColor = VENUE_COLORS[_hv] || '#666';
+      const hvTip = 'Home component: ' + _hv + (_hv === ev.venue ? ' (matches this event)' : ' (does not match this event)');
+      html += '<span class="home-venue-tag" style="background:' + hvColor + ';" title="' + escapeAttr(hvTip) + '">' + escapeHtml(_hv) + '</span>';
+    }
+
     if (ps === 'PLACED_HERE') {
       html += '<span class="placed-here-tag">✓ here</span>';
     } else if (ps === 'ASSIGNED_AWAY') {
@@ -1877,6 +2400,15 @@ function renderFilledSlot(ev, p, locked) {
       ' at ' + ev.venue + ' (threshold ' + NEW_HIRE_THRESHOLD + ').';
     html += '<span class="new-hire-tag" title="' + escapeAttr(tooltip) + '">NEW</span>';
   }
+  // Home-venue badge on the placed pill — same logic as the Available panel.
+  // Renders on every placed pill so the manager can scan a stand and see
+  // home-venue composition at a glance.
+  const _hvPlaced = homeVenueOf(p.staff_name);
+  if (_hvPlaced) {
+    const hvColor = VENUE_COLORS[_hvPlaced] || '#666';
+    const hvTip = 'Home component: ' + _hvPlaced + (_hvPlaced === ev.venue ? ' (matches this event)' : ' (does not match this event)');
+    html += '<span class="home-venue-tag" style="background:' + hvColor + ';" title="' + escapeAttr(hvTip) + '">' + escapeHtml(_hvPlaced) + '</span>';
+  }
   if (p.source === 'manual') html += '<span class="manual-tag">TYPED</span>';
   if (p.source === 'placeholder') html += '<span class="placeholder-tag">PLACEHOLDER</span>';
   if (!locked) html += '<button class="x" data-remove-position="' + p.id + '" title="Remove">✕</button>';
@@ -1975,6 +2507,23 @@ function escapeAttr(s) { return escapeHtml(s); }
 function clearTypingState() {
   document.removeEventListener('click', outsideTypingClick);
   state.typing = null;
+}
+
+// Wire the Recent signups box click handler. The box is re-rendered on
+// every render() call (because the events list also re-renders), so the
+// handler is rebound here each time. Keeping it as a separate small
+// function isolates it from attachEventHandlers' larger surface.
+function attachRecentSignupsHandlers() {
+  const head = document.querySelector('[data-toggle-recent-signups]');
+  if (!head) return;
+  head.addEventListener('click', () => {
+    // Compute the next state by inverting the currently-effective state
+    // (whether driven by manual choice or the signup-volume heuristic).
+    const box = document.getElementById('recent-signups');
+    const wasExpanded = box && box.classList.contains('expanded');
+    _recentSignupsManualState = !wasExpanded;
+    render();
+  });
 }
 
 // ---------- Event handlers ----------
@@ -2290,7 +2839,147 @@ function handleDrop(stack) {
   placePosition(eventId, stand, role, drag.staffName, drag.source || 'signup');
 }
 
+// ===== Home-venue override dialog =====
+//
+// The dialog fires before a placement commits if all of the following are true:
+// 1) The person being placed has a home_venue set, AND it does not match the
+//    event's venue (i.e. they're being scheduled outside their home component).
+// 2) At least one OTHER signup at this event has home_venue == event.venue
+//    AND is currently unplaced (not in a position_assignments row, not
+//    assigned-away to a different event the same date).
+//
+// If both hold, the manager must type a reason (>= 15 chars) before the
+// placement commits. Cancel = no placement. Confirm = placement proceeds
+// and the reason is appended to the position_assignment_log.details under
+// `override_reason` for that specific placement, plus a top-level
+// `override = true` flag.
+//
+// People with home_venue == NULL or 'NA' are invisible to this logic — they
+// neither trigger the dialog when being placed, nor count as "home-venue
+// signups" for the purpose of triggering it on someone else's placement.
+
+// Returns array of unplaced home-venue signup names for this event, or [] if
+// no such people exist (in which case the dialog is unnecessary).
+function unplacedHomeVenueSignupsAt(eventId) {
+  const ev = state.events.find(e => e.id === eventId);
+  if (!ev) return [];
+  const sigs = state.availability.filter(a => a.event_id === eventId);
+  const placedNames = new Set(positionsForEvent(eventId).map(p => p.staff_name));
+  const dayAssign = state.assignments[ev.event_date] || {};
+  const out = [];
+  sigs.forEach(s => {
+    const hv = homeVenueOf(s.staff_name);
+    if (hv !== ev.venue) return;
+    if (placedNames.has(s.staff_name)) return; // already placed somewhere here
+    const assigned = dayAssign[s.staff_name];
+    if (assigned && assigned !== eventId) return; // assigned-away
+    out.push(s.staff_name);
+  });
+  return out;
+}
+
+// Decides whether a proposed placement should trigger the override dialog.
+// Returns the list of unplaced home-venue people if so, or null if the
+// placement can proceed normally.
+function checkOverrideRequired(eventId, staffName) {
+  const ev = state.events.find(e => e.id === eventId);
+  if (!ev) return null;
+  const personHome = homeVenueOf(staffName);
+  if (!personHome) return null; // no home venue (NULL or NA) — no dialog
+  if (personHome === ev.venue) return null; // matches event venue — no dialog
+  const unplacedHomeFolk = unplacedHomeVenueSignupsAt(eventId);
+  if (unplacedHomeFolk.length === 0) return null; // no one being bumped — no dialog
+  return unplacedHomeFolk;
+}
+
+// In-flight override state. While this is non-null the modal is open and
+// holding a queued placement — Confirm calls _commitPlacement(reason),
+// Cancel clears state.
+let _overrideContext = null;
+
+function openOverrideDialog(eventId, stand, role, staffName, source, unplacedHomeFolk) {
+  const ev = state.events.find(e => e.id === eventId);
+  const personHome = homeVenueOf(staffName);
+  const info = document.getElementById('override-info');
+  let html = "You're placing <strong>" + escapeHtml(staffName) + "</strong>";
+  if (personHome) html += ' (home: <strong>' + escapeHtml(personHome) + '</strong>)';
+  html += ' at a <strong>' + escapeHtml(ev.venue) + '</strong> event. ';
+  html += 'The following ' + escapeHtml(ev.venue) + '-home employee' +
+    (unplacedHomeFolk.length === 1 ? ' is' : 's are') + ' still unplaced for this event:';
+  html += '<ul class="override-list">';
+  unplacedHomeFolk.forEach(n => { html += '<li>' + escapeHtml(n) + '</li>'; });
+  html += '</ul>';
+  info.innerHTML = html;
+
+  const ta = document.getElementById('override-reason');
+  ta.value = '';
+  updateOverrideCounter();
+  document.getElementById('override-modal').classList.add('show');
+  setTimeout(() => { ta.focus(); }, 50);
+
+  _overrideContext = { eventId, stand, role, staffName, source };
+}
+
+function updateOverrideCounter() {
+  const ta = document.getElementById('override-reason');
+  const len = (ta.value || '').trim().length;
+  const num = document.getElementById('override-counter-num');
+  const text = document.getElementById('override-counter-text');
+  const counter = document.getElementById('override-counter');
+  const btn = document.getElementById('override-confirm-btn');
+  num.textContent = len + ' / 15';
+  if (len >= 15) {
+    counter.classList.add('met');
+    text.textContent = '✓ Reason logged';
+    btn.disabled = false;
+  } else {
+    counter.classList.remove('met');
+    text.textContent = 'Min 15 characters';
+    btn.disabled = true;
+  }
+}
+
+function confirmOverride() {
+  if (!_overrideContext) return;
+  const reason = (document.getElementById('override-reason').value || '').trim();
+  if (reason.length < 15) return;
+  const ctx = _overrideContext;
+  _overrideContext = null;
+  document.getElementById('override-modal').classList.remove('show');
+  _commitPlacement(ctx.eventId, ctx.stand, ctx.role, ctx.staffName, ctx.source, reason);
+}
+
+function cancelOverride() {
+  _overrideContext = null;
+  document.getElementById('override-modal').classList.remove('show');
+}
+
+// One-time wiring (modal is reused across placements)
+document.getElementById('override-confirm-btn').addEventListener('click', confirmOverride);
+document.getElementById('override-reason').addEventListener('input', updateOverrideCounter);
+document.querySelectorAll('#override-modal [data-close-modal]').forEach(b => {
+  b.addEventListener('click', cancelOverride);
+});
+
 function placePosition(eventId, stand, role, staffName, source) {
+  // Override-dialog guard. If this placement requires a typed reason
+  // (non-home-venue person bumping unplaced home-venue people), show the
+  // dialog and bail. The user's confirm-with-reason will re-enter via
+  // _commitPlacement which carries the reason through to the log.
+  const overrideUnplaced = checkOverrideRequired(eventId, staffName);
+  if (overrideUnplaced) {
+    openOverrideDialog(eventId, stand, role, staffName, source, overrideUnplaced);
+    return;
+  }
+  // Normal path: no override needed.
+  _commitPlacement(eventId, stand, role, staffName, source, null);
+}
+
+// The actual placement work, post-guard. Called either directly from
+// placePosition (no override needed) or from confirmOverride (after the
+// manager typed a reason). When a reason is supplied it's stored on the
+// log row's details.override_reason and details.override = true.
+function _commitPlacement(eventId, stand, role, staffName, source, overrideReason) {
   // Check capacity (don't overfill)
   const reqs = state.staffingRequests.filter(r => r.event_id === eventId && r.stand === stand && r.role === role);
   const need = reqs.reduce((s, r) => s + r.headcount, 0);
@@ -2324,7 +3013,15 @@ function placePosition(eventId, stand, role, staffName, source) {
   }).then(rows => {
     const inserted = rows[0];
     state.positions.push(inserted);
-    return logAction(eventId, inserted.id, 'placed', { stand, role, staff_name: staffName, source });
+    // Build the log details. If this placement came from the override
+    // dialog, attach `override:true` and the typed reason so the audit
+    // log can render them on a second line.
+    const logDetails = { stand, role, staff_name: staffName, source };
+    if (overrideReason) {
+      logDetails.override = true;
+      logDetails.override_reason = overrideReason;
+    }
+    return logAction(eventId, inserted.id, 'placed', logDetails);
   }).then(() => {
     // Auto-resolve multi-signup
     return autoResolveMultiSignup(staffName, ev.event_date, eventId);
@@ -2935,7 +3632,7 @@ function openAuditLog(eventId) {
     rows.forEach(r => {
       const d = r.details || {};
       let desc = '';
-      if (r.action === 'placed') desc = (d.staff_name || '?') + ' → ' + (d.stand || '?') + ' / ' + (d.role || '?') + (d.source ? ' (' + d.source + ')' : '');
+      if (r.action === 'placed') desc = (d.staff_name || '?') + ' → ' + (d.stand || '?') + ' / ' + (d.role || '?') + (d.source ? ' (' + d.source + ')' : '') + (d.override ? ' ⚠ OVERRIDE' : '');
       else if (r.action === 'removed') desc = (d.staff_name || '?') + ' from ' + (d.stand || '?') + ' / ' + (d.role || '?');
       else if (r.action === 'moved') desc = (d.staff_name || '?') + ': ' + (d.from && d.from.stand) + ' / ' + (d.from && d.from.role) + ' → ' + (d.to && d.to.stand) + ' / ' + (d.to && d.to.role);
       else if (r.action === 'unlocked') desc = 'Manually unlocked';
@@ -2945,6 +3642,11 @@ function openAuditLog(eventId) {
       html += '<span class="log-action ' + r.action + '">' + r.action + '</span>';
       html += '<span>' + escapeHtml(desc) + '</span>';
       html += '<span class="log-actor">' + escapeHtml(r.actor || '') + '</span>';
+      // Override reason shown on a second line in muted amber. Only
+      // present for placements that fired the home-venue override dialog.
+      if (d.override_reason) {
+        html += '<div class="log-reason">Reason: ' + escapeHtml(d.override_reason) + '</div>';
+      }
       html += '</div>';
     });
     document.getElementById('audit-body').innerHTML = html;
