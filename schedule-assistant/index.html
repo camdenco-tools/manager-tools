@@ -814,6 +814,13 @@ header {
 .override-list li::before {
   content: '• '; color: var(--amber); font-weight: 800;
 }
+.override-sublist-head {
+  font-size: 10px; font-weight: 800; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--amber-dark);
+  margin-top: 8px; padding-bottom: 2px;
+  border-bottom: 1px solid var(--amber-border);
+}
+.override-sublist-head + .override-list { margin-top: 2px; }
 .override-question {
   font-size: 13px; font-weight: 600; margin: 14px 0 8px; color: var(--primary);
 }
@@ -1855,11 +1862,12 @@ function renderRecentSignupsBox() {
       '</div></div>';
   }
 
-  // Decide expand/collapse default. If user has explicitly toggled this
-  // session, honor that. Otherwise: expanded if current bucket has signups.
+  // Decide expand/collapse default. If the user explicitly toggled this
+  // session, honor that. Otherwise: collapsed by default. The header
+  // count makes activity visible; the user can expand to drill in.
   let expanded;
   if (_recentSignupsManualState === null) {
-    expanded = byBucket[0].length > 0;
+    expanded = false;
   } else {
     expanded = _recentSignupsManualState;
   }
@@ -2858,38 +2866,73 @@ function handleDrop(stack) {
 // neither trigger the dialog when being placed, nor count as "home-venue
 // signups" for the purpose of triggering it on someone else's placement.
 
-// Returns array of unplaced home-venue signup names for this event, or [] if
-// no such people exist (in which case the dialog is unnecessary).
-function unplacedHomeVenueSignupsAt(eventId) {
+// Returns the unplaced "priority claimants" for this event — people who
+// the dialog should treat as having a stake in being placed here. Two
+// disjoint groups (no person appears in both):
+//
+//   1. home — signups whose home_venue == event.venue (the strongest claim)
+//   2. newPipeline — signups with NO home venue (NULL or 'NA') who ARE
+//      flagged NEW at this venue. The reasoning: a pipeline hire with
+//      few-or-zero placements at this venue was almost certainly hired
+//      *for* this venue, even if their home_venue hasn't been backfilled
+//      in the Home Components admin page yet. Once Keith assigns them a
+//      home venue, they slide into group 1 instead.
+//
+// Legacy NULL people who are NOT flagged NEW are intentionally excluded
+// — they sit in the "no recorded claim" bucket because the system has no
+// signal indicating they belong here. As home venues get backfilled over
+// time, this third group shrinks naturally.
+//
+// Returns null if both groups are empty (no dialog needed). Otherwise
+// returns { home: [name, ...], newPipeline: [name, ...] }.
+function unplacedPriorityClaimantsAt(eventId) {
   const ev = state.events.find(e => e.id === eventId);
-  if (!ev) return [];
+  if (!ev) return null;
   const sigs = state.availability.filter(a => a.event_id === eventId);
   const placedNames = new Set(positionsForEvent(eventId).map(p => p.staff_name));
   const dayAssign = state.assignments[ev.event_date] || {};
-  const out = [];
+  const home = [];
+  const newPipeline = [];
   sigs.forEach(s => {
-    const hv = homeVenueOf(s.staff_name);
-    if (hv !== ev.venue) return;
     if (placedNames.has(s.staff_name)) return; // already placed somewhere here
     const assigned = dayAssign[s.staff_name];
-    if (assigned && assigned !== eventId) return; // assigned-away
-    out.push(s.staff_name);
+    if (assigned && assigned !== eventId) return; // assigned-away to another event
+    const hv = homeVenueOf(s.staff_name);
+    if (hv === ev.venue) {
+      home.push(s.staff_name);
+      return;
+    }
+    if (hv) return; // home venue is set but doesn't match this event — no claim
+    // hv is null (NULL or 'NA' in DB). Check for NEW-at-this-venue signal.
+    if (isNewAtVenue(s.staff_name, ev.venue)) {
+      newPipeline.push(s.staff_name);
+    }
   });
-  return out;
+  if (home.length === 0 && newPipeline.length === 0) return null;
+  return { home, newPipeline };
 }
 
 // Decides whether a proposed placement should trigger the override dialog.
-// Returns the list of unplaced home-venue people if so, or null if the
-// placement can proceed normally.
+// Returns the priority-claimants object if so, or null if the placement can
+// proceed normally.
+//
+// Triggers when BOTH:
+//   1) The person being placed has a home_venue set AND it does not match
+//      the event's venue (i.e., they're being scheduled outside their home
+//      component). People with no home venue (NULL or 'NA') do not trigger
+//      this — we have no signal saying they belong elsewhere.
+//   2) There's at least one unplaced priority claimant for this event —
+//      either an event-home-venue person, or a NEW pipeline hire flagged
+//      at this venue without a home set yet (see unplacedPriorityClaimantsAt).
 function checkOverrideRequired(eventId, staffName) {
   const ev = state.events.find(e => e.id === eventId);
   if (!ev) return null;
   const personHome = homeVenueOf(staffName);
   if (!personHome) return null; // no home venue (NULL or NA) — no dialog
   if (personHome === ev.venue) return null; // matches event venue — no dialog
-  const unplacedHomeFolk = unplacedHomeVenueSignupsAt(eventId);
-  if (unplacedHomeFolk.length === 0) return null; // no one being bumped — no dialog
-  return unplacedHomeFolk;
+  const claimants = unplacedPriorityClaimantsAt(eventId);
+  if (!claimants) return null;
+  return claimants;
 }
 
 // In-flight override state. While this is non-null the modal is open and
@@ -2897,18 +2940,49 @@ function checkOverrideRequired(eventId, staffName) {
 // Cancel clears state.
 let _overrideContext = null;
 
-function openOverrideDialog(eventId, stand, role, staffName, source, unplacedHomeFolk) {
+function openOverrideDialog(eventId, stand, role, staffName, source, claimants) {
   const ev = state.events.find(e => e.id === eventId);
   const personHome = homeVenueOf(staffName);
   const info = document.getElementById('override-info');
+
+  // Lead line — name the placing person, their home, and the event venue.
   let html = "You're placing <strong>" + escapeHtml(staffName) + "</strong>";
   if (personHome) html += ' (home: <strong>' + escapeHtml(personHome) + '</strong>)';
   html += ' at a <strong>' + escapeHtml(ev.venue) + '</strong> event. ';
-  html += 'The following ' + escapeHtml(ev.venue) + '-home employee' +
-    (unplacedHomeFolk.length === 1 ? ' is' : 's are') + ' still unplaced for this event:';
-  html += '<ul class="override-list">';
-  unplacedHomeFolk.forEach(n => { html += '<li>' + escapeHtml(n) + '</li>'; });
-  html += '</ul>';
+
+  const totalClaimants = claimants.home.length + claimants.newPipeline.length;
+  html += 'The following ' + escapeHtml(ev.venue) + '-priority employee' +
+    (totalClaimants === 1 ? ' is' : 's are') + ' still unplaced for this event:';
+
+  // Two visible sub-lists so Brian can see why each person is on the list.
+  // Both are rendered the same way — bullets — but with a labeled header
+  // when both groups have entries. If only one group has entries, the
+  // header is suppressed so the dialog stays compact.
+  const showHeaders = claimants.home.length > 0 && claimants.newPipeline.length > 0;
+
+  if (claimants.home.length > 0) {
+    if (showHeaders) {
+      html += '<div class="override-sublist-head">' +
+        escapeHtml(ev.venue) + '-home (' + claimants.home.length + ')' +
+        '</div>';
+    }
+    html += '<ul class="override-list">';
+    claimants.home.forEach(n => { html += '<li>' + escapeHtml(n) + '</li>'; });
+    html += '</ul>';
+  }
+
+  if (claimants.newPipeline.length > 0) {
+    if (showHeaders) {
+      html += '<div class="override-sublist-head">' +
+        'New pipeline hires at ' + escapeHtml(ev.venue) +
+        ' (' + claimants.newPipeline.length + ')' +
+        '</div>';
+    }
+    html += '<ul class="override-list">';
+    claimants.newPipeline.forEach(n => { html += '<li>' + escapeHtml(n) + '</li>'; });
+    html += '</ul>';
+  }
+
   info.innerHTML = html;
 
   const ta = document.getElementById('override-reason');
@@ -2963,12 +3037,13 @@ document.querySelectorAll('#override-modal [data-close-modal]').forEach(b => {
 
 function placePosition(eventId, stand, role, staffName, source) {
   // Override-dialog guard. If this placement requires a typed reason
-  // (non-home-venue person bumping unplaced home-venue people), show the
+  // (non-home-venue person bumping unplaced priority claimants — either
+  // event-home people or new pipeline hires at this venue), show the
   // dialog and bail. The user's confirm-with-reason will re-enter via
   // _commitPlacement which carries the reason through to the log.
-  const overrideUnplaced = checkOverrideRequired(eventId, staffName);
-  if (overrideUnplaced) {
-    openOverrideDialog(eventId, stand, role, staffName, source, overrideUnplaced);
+  const claimants = checkOverrideRequired(eventId, staffName);
+  if (claimants) {
+    openOverrideDialog(eventId, stand, role, staffName, source, claimants);
     return;
   }
   // Normal path: no override needed.
