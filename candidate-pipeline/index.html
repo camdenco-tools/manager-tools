@@ -143,6 +143,9 @@ header { background: #fff; border-bottom: 1px solid #e8e8e4; padding: 0 32px; di
 .phone-edit-inline input[type=tel]:focus { outline: none; box-shadow: 0 0 0 2px rgba(45,125,210,0.2); }
 .phone-punch-preview { font-size: 11px; color: #666; margin-top: 4px; }
 .phone-punch-preview strong { color: #0c447c; font-family: monospace; letter-spacing: 0.1em; }
+.legacy-toggle { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: #666; cursor: pointer; margin-left: 6px; padding: 4px 8px; border: 1px dashed #ddd; border-radius: 20px; user-select: none; }
+.legacy-toggle.on { background: #fff8e1; border-color: #ffc107; color: #7a5c00; border-style: solid; }
+.legacy-toggle input[type=checkbox] { width: 12px; height: 12px; cursor: pointer; margin: 0; }
 </style>
 </head>
 <body>
@@ -175,7 +178,10 @@ var VENUE_LABELS={FMP:'Freedom Mortgage Pavilion',Mann:'Mann Music Center',BWH:'
 var VENUE_CODES=['FMP','Mann','BWH','ACCC','Cure','Subaru','DE','Montage','SATB','Villanova','Kirkwood'];
 var STAGE_LABELS={applied:'Applied',contacted:'Contacted',interview_scheduled:'Interview Scheduled',hired:'Hired',onboarding:'Onboarding',active:'Active',inactive:'Inactive',rejected:'Rejected'};
 var ARCHIVE_DAYS={applied:30,contacted:30,interview_scheduled:0,hired:7,onboarding:35,active:14,inactive:14,rejected:7};
-var pcCandidates=[],pcPayRates=[],pcRoles=[],pcBookings=[],pcSelected=null,pcFilter='all',pcSearch='',pcLoading=true;
+/* pcShowLegacy: when false (default), legacy_import rows are hidden from Active/Inactive/All
+   filters on the pipeline page. Those employees live on the home-components page. The
+   "Legacy" pill toggle lets a manager opt in to seeing them here for ad-hoc lookups. */
+var pcCandidates=[],pcPayRates=[],pcRoles=[],pcBookings=[],pcSelected=null,pcFilter='all',pcSearch='',pcLoading=true,pcShowLegacy=false;
 var pcEditingPhone=false;
 var pcEditingEmail=false;
 var pcEditingPunchId=false;
@@ -223,7 +229,34 @@ function formatDate(ts){if(!ts)return'--';var d=new Date(ts);return d.toLocaleDa
 function formatDateShort(ts){if(!ts)return'--';var d=new Date(ts);return d.toLocaleDateString('en-US',{month:'short',day:'numeric'});}
 function formatSlotDateTime(booking){if(!booking)return'--';var slot=booking.interview_slots;if(!slot)return booking.interview_slot_time||'--';var d=new Date(slot.slot_date+'T00:00:00');var dateStr=d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});var tp=slot.start_time.split(':');var h=parseInt(tp[0]);var m=tp[1];var ampm=h>=12?'PM':'AM';if(h>12)h=h-12;if(h===0)h=12;return dateStr+' at '+h+':'+m+' '+ampm;}
 function stageBadge(stage){var cls='badge-'+(stage?stage.replace(/_/g,'-'):'applied');return'<span class="badge '+cls+'">'+(STAGE_LABELS[stage]||stage)+'</span>';}
-function getFiltered(){var out=[];for(var i=0;i<pcCandidates.length;i++){var c=pcCandidates[i];var archived=isArchived(c);if(pcFilter==='archive'){if(!archived)continue;}else{if(archived)continue;var mf=pcFilter==='all'||c.pipeline_stage===pcFilter;if(!mf)continue;}var s=pcSearch.toLowerCase();var fn=(c.first_name+' '+c.last_name).toLowerCase();var ms=!pcSearch||fn.indexOf(s)>-1;if(ms)out.push(c);}return out;}
+
+/* getFiltered: returns the candidates that should be visible given the current filter pill,
+   search input, and pcShowLegacy toggle. Legacy-import rows (backfilled employees not hired
+   through the pipeline) are hidden from Active/Inactive/All views by default so the pipeline
+   page stays focused on actual in-progress candidates. They live on the home-components page.
+   Archive view always shows everything regardless of the legacy toggle. */
+function getFiltered(){
+  var out=[];
+  for(var i=0;i<pcCandidates.length;i++){
+    var c=pcCandidates[i];
+    var archived=isArchived(c);
+    var isLegacy=c.legacy_import===true;
+    if(pcFilter==='archive'){
+      if(!archived)continue;
+    }else{
+      if(archived)continue;
+      var mf=pcFilter==='all'||c.pipeline_stage===pcFilter;
+      if(!mf)continue;
+      if(isLegacy&&!pcShowLegacy)continue;
+    }
+    var s=pcSearch.toLowerCase();
+    var fn=(c.first_name+' '+c.last_name).toLowerCase();
+    var ms=!pcSearch||fn.indexOf(s)>-1;
+    if(ms)out.push(c);
+  }
+  return out;
+}
+
 function countStage(stage){var n=0;for(var i=0;i<pcCandidates.length;i++){if(pcCandidates[i].pipeline_stage===stage)n++;}return n;}
 function countHiredThisMonth(){var n=0,now=new Date();for(var i=0;i<pcCandidates.length;i++){var c=pcCandidates[i];if(!c.hired_at)continue;var d=new Date(c.hired_at);if(d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear())n++;}return n;}
 function getPunchId(phone){if(!phone)return'';var d=phone.replace(/\D/g,'');return d.length>=4?d.slice(-4):d;}
@@ -259,7 +292,27 @@ return html;}
 
 function updateStatCounts(){var el=document.getElementById('pcpipe-stats');if(!el)return;var nonArchived=0;for(var i=0;i<pcCandidates.length;i++){if(!isArchived(pcCandidates[i]))nonArchived++;}var archivedCount=pcCandidates.length-nonArchived;var inProgress=countStage('contacted')+countStage('interview_scheduled');el.innerHTML='<div class="stat-box"><div class="stat-num">'+nonArchived+'</div><div class="stat-lbl">Active pipeline</div></div><div class="stat-box"><div class="stat-num" style="color:#283593;">'+countStage('applied')+'</div><div class="stat-lbl">Pending review</div></div><div class="stat-box"><div class="stat-num" style="color:#d97706;">'+inProgress+'</div><div class="stat-lbl">In progress</div></div><div class="stat-box"><div class="stat-num" style="color:#1b5e20;">'+countStage('onboarding')+'</div><div class="stat-lbl">Onboarding</div></div><div class="stat-box"><div class="stat-num" style="color:#1D9E75;">'+countHiredThisMonth()+'</div><div class="stat-lbl">Hired this month</div></div><div class="stat-box"><div class="stat-num" style="color:#1D9E75;">'+countStage('active')+'</div><div class="stat-lbl">Active</div></div><div class="stat-box"><div class="stat-num" style="color:#5f5e5a;">'+countStage('inactive')+'</div><div class="stat-lbl">Inactive</div></div><div class="stat-box"><div class="stat-num" style="color:#888;">'+archivedCount+'</div><div class="stat-lbl">Archived</div></div>';}
 
-function updateFilterPills(){var el=document.getElementById('pcpipe-pills');if(!el)return;var stages=['all','applied','contacted','interview_scheduled','onboarding','active','inactive','rejected','archive'];var stageNames={all:'All',applied:'Applied',contacted:'Contacted',interview_scheduled:'Interview',onboarding:'Onboarding',active:'Active',inactive:'Inactive',rejected:'Rejected',archive:'Archive'};var html='';for(var si=0;si<stages.length;si++){html+='<span class="pill'+(pcFilter===stages[si]?' active':'')+'" onclick="pcPipeFilter(\''+stages[si]+'\')">'+stageNames[stages[si]]+'</span>';}el.innerHTML=html;}
+/* updateFilterPills: rebuilds the row of filter pills above the candidate list. The Legacy
+   toggle appears as a small dashed pill alongside the stage filters EXCEPT when viewing
+   Archive (legacy rows are always there) or Rejected (legacy people don't have a rejected
+   state, so the toggle would be a no-op). */
+function updateFilterPills(){
+  var el=document.getElementById('pcpipe-pills');
+  if(!el)return;
+  var stages=['all','applied','contacted','interview_scheduled','onboarding','active','inactive','rejected','archive'];
+  var stageNames={all:'All',applied:'Applied',contacted:'Contacted',interview_scheduled:'Interview',onboarding:'Onboarding',active:'Active',inactive:'Inactive',rejected:'Rejected',archive:'Archive'};
+  var html='';
+  for(var si=0;si<stages.length;si++){
+    html+='<span class="pill'+(pcFilter===stages[si]?' active':'')+'" onclick="pcPipeFilter(\''+stages[si]+'\')">'+stageNames[stages[si]]+'</span>';
+  }
+  if(pcFilter!=='archive'&&pcFilter!=='rejected'){
+    html+='<label class="legacy-toggle'+(pcShowLegacy?' on':'')+'" title="Show legacy-imported employees (people not hired through the pipeline)">'
+      +'<input type="checkbox" '+(pcShowLegacy?'checked':'')+' onchange="pcPipeToggleShowLegacy(this.checked)" />'
+      +'Legacy'
+    +'</label>';
+  }
+  el.innerHTML=html;
+}
 
 function countStageVisible(stage){var n=0;for(var i=0;i<pcCandidates.length;i++){if(pcCandidates[i].pipeline_stage===stage&&!isArchived(pcCandidates[i]))n++;}return n;}
 
@@ -366,6 +419,9 @@ function renderTags(arr){if(!arr||arr.length===0)return'<span style="font-size:1
 
 function pcPipeSelect(id){for(var i=0;i<pcCandidates.length;i++){if(pcCandidates[i].id===id){pcSelected=pcCandidates[i];break;}}pcEditingPhone=false;pcEditingEmail=false;pcEditingPunchId=false;render();var rp=document.getElementById('pcpipe-detail');if(rp)rp.scrollIntoView({behavior:'smooth',block:'start'});}
 function pcPipeFilter(f){pcFilter=f;render();}
+/* Toggle handler for the "Legacy" checkbox in the filter pills row. Flips pcShowLegacy
+   and re-renders so getFiltered picks up the new state. */
+function pcPipeToggleShowLegacy(checked){pcShowLegacy=checked;render();}
 function pcPipeSearch(v){pcSearch=v;var listEl=document.getElementById('pcpipe-list');if(listEl)listEl.innerHTML=renderList();updateStatCounts();}
 function pcPipeSaveNotes(){
   if(!pcSelected)return;
@@ -573,6 +629,8 @@ function pcPipeConfirmHire(){
 
 function doHireWrite(punch,venues,roles,hiredBy,homeVenue){
   // Build the candidates update + employees insert. Returns a promise.
+  // Note: home_venue is NOT written to candidates -- the column was dropped from candidates
+  // as part of Step 1.1 cleanup. home_venue lives only on employees.home_venue going forward.
   var sv={};
   for(var v=0;v<venues.length;v++){var st=VENUE_STATE[venues[v]];if(st)sv[st]=true;}
   var states=Object.keys(sv);
