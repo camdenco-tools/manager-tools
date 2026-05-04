@@ -147,6 +147,18 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: #1a1a1a
 .modal-cancel { padding: 11px 16px; background: #f5f5f5; color: #555; border: 1px solid #ddd; border-radius: 10px; font-size: 14px; cursor: pointer; }
 .modal-error { color: #c0392b; font-size: 12px; margin-top: 8px; display: none; }
 
+/* Return reason modal — radio chips */
+.reason-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 4px; }
+.reason-chip { display: flex; align-items: flex-start; gap: 10px; padding: 11px 12px; border: 1.5px solid #e0e0e0; border-radius: 10px; cursor: pointer; background: #fafafa; transition: all 0.12s; }
+.reason-chip:hover { border-color: #BA7517; background: #FFFCF4; }
+.reason-chip input { margin-top: 3px; flex-shrink: 0; accent-color: #BA7517; cursor: pointer; }
+.reason-chip.selected { border-color: #BA7517; background: #FAEEDA; }
+.reason-chip-label { font-size: 13px; font-weight: 600; color: #1a1a1a; }
+.reason-chip-hint { font-size: 11px; color: #888; margin-top: 2px; line-height: 1.4; }
+.reason-summary { background: #f8f8f8; border-radius: 8px; padding: 9px 12px; font-size: 12px; color: #555; margin-bottom: 14px; }
+.reason-summary strong { color: #1a1a1a; font-weight: 600; }
+.modal-save.amber { background: #BA7517; }
+
 /* ── Bank charge reconciliation bar (in right column) ── */
 .recon-bar { margin-bottom: 14px; }
 .recon-tray { background: #FAEEDA; border: 1px solid #EF9F27; border-top: 3px solid #EF9F27; border-radius: 16px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.07); }
@@ -162,7 +174,6 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: #1a1a1a
 .recon-body.open { display: block; }
 .recon-list { background: white; border-radius: 12px; overflow: hidden; }
 
-/* ── Recon row: checkbox-driven, bulk actions in footer ── */
 .recon-select-all-bar {
   display: flex;
   align-items: center;
@@ -299,6 +310,7 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: #1a1a1a
 </head>
 <body>
 
+<!-- Edit purchase modal -->
 <div class="modal-overlay" id="edit-modal">
   <div class="modal">
     <h2 id="edit-modal-title">Edit purchase</h2>
@@ -338,6 +350,59 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: #1a1a1a
     <div class="modal-actions">
       <button class="modal-cancel" onclick="closeEditModal()">Cancel</button>
       <button class="modal-save" onclick="saveEdit()">Save changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Return-charge reason modal -->
+<div class="modal-overlay" id="return-modal">
+  <div class="modal">
+    <h2>Send back to admin</h2>
+    <div class="reason-summary" id="return-summary"></div>
+
+    <div class="modal-field">
+      <label>Why are you sending these back? <span style="color:#c0392b;">*</span></label>
+      <div class="reason-list" id="return-reason-list">
+        <label class="reason-chip" data-reason="not_food">
+          <input type="radio" name="return-reason" value="not_food">
+          <div>
+            <div class="reason-chip-label">Not a food purchase</div>
+            <div class="reason-chip-hint">This is an expense (gas, supplies, etc.) — not something a venue should track as food.</div>
+          </div>
+        </label>
+        <label class="reason-chip" data-reason="duplicate">
+          <input type="radio" name="return-reason" value="duplicate">
+          <div>
+            <div class="reason-chip-label">Duplicate — already logged</div>
+            <div class="reason-chip-hint">This charge matches a receipt I already entered on the Purchases page.</div>
+          </div>
+        </label>
+        <label class="reason-chip" data-reason="unknown">
+          <input type="radio" name="return-reason" value="unknown">
+          <div>
+            <div class="reason-chip-label">I don't recognize this charge</div>
+            <div class="reason-chip-hint">Doesn't ring a bell — might be a personal charge, or a different venue.</div>
+          </div>
+        </label>
+        <label class="reason-chip" data-reason="other">
+          <input type="radio" name="return-reason" value="other">
+          <div>
+            <div class="reason-chip-label">Something else</div>
+            <div class="reason-chip-hint">Please add a note below so the admin knows what's going on.</div>
+          </div>
+        </label>
+      </div>
+    </div>
+
+    <div class="modal-field">
+      <label>Note for the admin <span style="color:#999;font-weight:400;">(optional, but very helpful)</span></label>
+      <textarea id="return-note" placeholder="e.g. 'These look like Brian's personal gas charges' or 'Already on receipt #1234'"></textarea>
+    </div>
+
+    <div class="modal-error" id="return-error"></div>
+    <div class="modal-actions">
+      <button class="modal-cancel" onclick="closeReturnModal()">Cancel</button>
+      <button class="modal-save amber" id="return-save-btn" onclick="confirmReturn()">Send back</button>
     </div>
   </div>
 </div>
@@ -438,7 +503,7 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: #1a1a1a
             <div class="recon-footer" id="recon-footer" style="display:none;">
               <span class="recon-footer-note" id="recon-footer-note"></span>
               <div class="recon-footer-actions">
-                <button class="recon-notfood-btn" id="recon-notfood-btn" onclick="markCheckedAsNotFood()" disabled>Mark as not food</button>
+                <button class="recon-notfood-btn" id="recon-notfood-btn" onclick="openReturnModal()" disabled>Send back to admin</button>
                 <button class="recon-save-btn" id="recon-save-btn" onclick="saveReconAssignments()" disabled>Save assignments</button>
               </div>
             </div>
@@ -1097,18 +1162,18 @@ function updateReconFooter() {
     saveBtn.textContent = 'Save assignments';
   }
 
-  // Not-food button: enabled if any rows are checked
+  // Send-back button: enabled if any rows are checked (label kept short for narrow widths)
   if (checkedIds.length > 0) {
     notFoodBtn.disabled = false;
-    notFoodBtn.textContent = 'Mark ' + checkedIds.length + ' as not food';
+    notFoodBtn.textContent = 'Send ' + checkedIds.length + ' back to admin';
   } else {
     notFoodBtn.disabled = true;
-    notFoodBtn.textContent = 'Mark as not food';
+    notFoodBtn.textContent = 'Send back to admin';
   }
 
   // Footer note
   if (checkedIds.length === 0) {
-    noteEl.textContent = 'Check rows to assign a venue or mark as not food';
+    noteEl.textContent = 'Check rows to assign a venue or send back';
   } else {
     var noteParts = [checkedIds.length + ' selected'];
     if (checkedWithVenue.length > 0 && checkedWithVenue.length < checkedIds.length) {
@@ -1142,15 +1207,84 @@ function reconVenueChanged(chargeId, selectEl) {
   renderReconList();
 }
 
-async function markCheckedAsNotFood() {
+// ── Return-charge modal ──
+// Replaces the silent "Mark as not food" call. Manager must pick a reason
+// and can attach an optional note. Both are stored on the bank_charges row
+// so the admin sees context in the Returned section on Bank Review.
+
+function openReturnModal() {
   var checkedIds = Object.keys(reconChecked).filter(function(k) { return reconChecked[k]; });
   if (!checkedIds.length) return;
 
-  var notFoodBtn = document.getElementById('recon-notfood-btn');
-  var saveBtn = document.getElementById('recon-save-btn');
-  notFoodBtn.disabled = true;
+  // Build a short summary so the manager sees what they're sending back
+  var total = 0;
+  var preview = [];
+  for (var i = 0; i < reconCharges.length; i++) {
+    if (!reconChecked[reconCharges[i].id]) continue;
+    var c = reconCharges[i];
+    total += Math.abs(parseFloat(c.amount));
+    if (preview.length < 3) preview.push((c.vendor_name || 'Unknown') + ' $' + fmtMoney(c.amount));
+  }
+  var summary = '<strong>' + checkedIds.length + ' charge' + (checkedIds.length !== 1 ? 's' : '') + '</strong> totaling <strong>$' + fmtMoneyRound(total) + '</strong>';
+  if (preview.length) {
+    summary += '<br><span style="color:#888;">' + preview.join(' &middot; ');
+    if (checkedIds.length > preview.length) summary += ' &middot; +' + (checkedIds.length - preview.length) + ' more';
+    summary += '</span>';
+  }
+  document.getElementById('return-summary').innerHTML = summary;
+
+  // Reset form
+  var radios = document.querySelectorAll('input[name="return-reason"]');
+  for (var r = 0; r < radios.length; r++) radios[r].checked = false;
+  document.querySelectorAll('.reason-chip').forEach(function(el) { el.classList.remove('selected'); });
+  document.getElementById('return-note').value = '';
+  document.getElementById('return-error').style.display = 'none';
+  document.getElementById('return-save-btn').disabled = false;
+  document.getElementById('return-save-btn').textContent = 'Send back';
+
+  document.getElementById('return-modal').classList.add('open');
+}
+
+function closeReturnModal() {
+  document.getElementById('return-modal').classList.remove('open');
+}
+
+// Highlight the chip when its radio is selected
+document.addEventListener('change', function(e) {
+  if (e.target && e.target.name === 'return-reason') {
+    document.querySelectorAll('.reason-chip').forEach(function(el) { el.classList.remove('selected'); });
+    var chip = e.target.closest('.reason-chip');
+    if (chip) chip.classList.add('selected');
+  }
+});
+
+async function confirmReturn() {
+  var reasonRadio = document.querySelector('input[name="return-reason"]:checked');
+  var errEl = document.getElementById('return-error');
+  errEl.style.display = 'none';
+
+  if (!reasonRadio) {
+    errEl.textContent = 'Please pick a reason so the admin knows what to do with these.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  var reason = reasonRadio.value;
+  var note = document.getElementById('return-note').value.trim();
+
+  // "Other" reason — note is required so admin has context
+  if (reason === 'other' && !note) {
+    errEl.textContent = 'Please add a note explaining why these are coming back.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  var checkedIds = Object.keys(reconChecked).filter(function(k) { return reconChecked[k]; });
+  if (!checkedIds.length) { closeReturnModal(); return; }
+
+  var saveBtn = document.getElementById('return-save-btn');
   saveBtn.disabled = true;
-  notFoodBtn.textContent = 'Saving...';
+  saveBtn.textContent = 'Sending...';
 
   var hdrs = apiHeaders();
   var userName = '';
@@ -1163,14 +1297,17 @@ async function markCheckedAsNotFood() {
   for (var i = 0; i < checkedIds.length; i++) {
     var chargeId = checkedIds[i];
     try {
+      var payload = {
+        status: 'returned',
+        returned_by: userName || 'unknown',
+        returned_at: new Date().toISOString(),
+        return_reason: reason,
+        return_note: note || null
+      };
       var res = await fetch(SUPA_URL + '/rest/v1/bank_charges?id=eq.' + chargeId, {
         method: 'PATCH',
         headers: Object.assign({}, hdrs, {'Content-Type': 'application/json', 'Prefer': 'return=minimal'}),
-        body: JSON.stringify({
-          status: 'returned',
-          returned_by: userName || 'unknown',
-          returned_at: new Date().toISOString()
-        })
+        body: JSON.stringify(payload)
       });
       if (!res.ok) throw new Error();
       // Remove from local arrays
@@ -1181,6 +1318,8 @@ async function markCheckedAsNotFood() {
       errors++;
     }
   }
+
+  closeReturnModal();
 
   if (errors) alert(errors + ' charge(s) failed to update. Refreshing list.');
 
