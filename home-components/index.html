@@ -26,6 +26,9 @@
   --amber-800: #633806;
   --red-50: #fef2f2;
   --red-600: #c0392b;
+  --blue-600: #185fa5;
+  --blue-50: #e6f1fb;
+  --blue-100: #b5d4f4;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -36,7 +39,9 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Top bar — matches landing page */
+/* Top bar — sticky. Houses the back link and brand on the left so the back
+   link is always reachable without scrolling up. (Moved here in Step 1.3
+   per user request — was previously in the page-head section below.) */
 .top-bar {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
@@ -49,6 +54,16 @@ body {
   top: 0;
   z-index: 100;
 }
+.top-bar .back-link {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; font-weight: 600; color: var(--muted);
+  text-decoration: none;
+  padding: 4px 8px;
+  border-radius: 6px;
+  margin-right: 4px;
+}
+.top-bar .back-link:hover { color: var(--text); background: var(--bg); }
+.top-bar .vdivider { width: 1px; height: 18px; background: var(--border); }
 .brand-name { font-size: 15px; font-weight: 700; letter-spacing: -0.02em; }
 .brand-badge {
   font-size: 9px; font-weight: 700; letter-spacing: 0.1em;
@@ -65,20 +80,51 @@ body {
 }
 .sign-out-btn:hover { background: #fdf0ee; }
 
-/* Page header */
+/* Page header — back link removed (lives in top bar now). */
 .page-head {
   max-width: 920px;
   margin: 0 auto;
   padding: 24px 20px 12px;
 }
-.back-link {
-  display: inline-flex; align-items: center; gap: 6px;
-  font-size: 12px; font-weight: 600; color: var(--muted);
-  text-decoration: none; margin-bottom: 14px;
-}
-.back-link:hover { color: var(--text); }
 .page-title { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 4px; }
 .page-sub { font-size: 13px; color: var(--muted); line-height: 1.5; }
+
+/* Active/Inactive tab toggle — sits between the page header and the scorecard */
+.status-tabs {
+  max-width: 920px;
+  margin: 0 auto 14px;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.status-tab-group {
+  display: inline-flex;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px;
+}
+.status-tab {
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  border-radius: 999px;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+}
+.status-tab.active {
+  background: var(--text);
+  color: var(--surface);
+}
+.status-tab-count {
+  font-size: 10px;
+  margin-left: 6px;
+  opacity: 0.7;
+}
 
 /* Main card */
 .canvas {
@@ -138,12 +184,13 @@ body {
 }
 .group-head.unset .grp-count { background: var(--amber-100); color: var(--amber-700); }
 
-/* Rows — tightened from original to fit ~30 rows on screen */
+/* Rows — gained a "Card" button between the name and the home-venue dropdown.
+   The card button opens the employee detail modal. */
 .emp-row {
   display: flex; align-items: center;
   padding: 6px 18px;
   border-bottom: 1px solid var(--border-lt);
-  gap: 12px;
+  gap: 10px;
 }
 .emp-row:last-child { border-bottom: none; }
 .emp-row.unset { background: var(--amber-50); }
@@ -153,6 +200,22 @@ body {
   font-size: 13px; font-weight: 600;
   flex: 1; min-width: 0;
 }
+.card-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 7px;
+  cursor: pointer;
+  color: var(--text);
+  font-family: inherit;
+  font-weight: 500;
+  flex-shrink: 0;
+  transition: border-color 0.12s, background 0.12s;
+}
+.card-btn:hover { border-color: var(--muted); background: var(--bg); }
+.card-btn svg { flex-shrink: 0; }
 .dropdown-wrap { position: relative; flex-shrink: 0; }
 .venue-select {
   appearance: none;
@@ -193,10 +256,7 @@ body {
 .row-status.saved { color: var(--green-600); }
 .row-status.error { color: var(--red-600); }
 
-/* Scorecard strip — three cards across the top.
-   Shows count of employees with this venue as their home component
-   AND that count as a percentage of the venue's full-tier par level.
-   Scorecard updates live as venues are assigned (no reload). */
+/* Scorecard strip — three cards across the top */
 .scorecard-strip {
   max-width: 920px;
   margin: 0 auto 16px;
@@ -255,15 +315,13 @@ body {
   margin-top: 2px;
 }
 
-/* Empty state */
+/* Empty / loading states */
 .empty {
   padding: 40px 20px;
   text-align: center;
   color: var(--muted);
   font-size: 13px;
 }
-
-/* Loading state */
 .loading {
   padding: 60px 20px;
   text-align: center;
@@ -293,13 +351,373 @@ body {
 .toast.success { background: var(--green-800); }
 .toast.error { background: var(--red-600); }
 
+/* ============================================================
+   CARD MODAL — opens when "Card" button is clicked on a row.
+   Mirrors the visual feel of the pipeline page card while
+   adapting to home-components conventions. Per-section edit
+   pattern: each section has an Edit button that flips it into
+   inputs; Save / Cancel buttons appear at the bottom of that
+   section. Other sections stay in display mode in the meantime.
+   ============================================================ */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.45);
+  display: flex; align-items: flex-start; justify-content: center;
+  z-index: 1000;
+  padding: 24px 16px;
+  overflow-y: auto;
+}
+.modal-box {
+  background: var(--surface);
+  border-radius: 14px;
+  width: 100%;
+  max-width: 560px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.modal-box.sm { max-width: 440px; }
+
+.card-header {
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border-lt);
+  display: flex; align-items: center; gap: 12px;
+}
+.avatar {
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  background: var(--blue-50);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 600; font-size: 14px;
+  color: var(--blue-600);
+  flex-shrink: 0;
+}
+.card-header-info { flex: 1; min-width: 0; }
+.card-header-name { font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }
+.card-header-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.card-header-close {
+  background: none; border: none; font-size: 22px; color: var(--muted);
+  cursor: pointer; padding: 4px 8px; line-height: 1;
+}
+.card-header-close:hover { color: var(--text); }
+
+.status-pill {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 3px 9px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+.status-pill.active { background: var(--green-50); color: var(--green-800); }
+.status-pill.inactive { background: var(--border-lt); color: var(--muted); }
+.status-pill.minor { background: #fff3cd; color: #856404; margin-left: 6px; }
+.status-pill.legacy { background: var(--blue-50); color: var(--blue-600); margin-left: 6px; }
+
+.card-section {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-lt);
+}
+.card-section:last-child { border-bottom: none; }
+
+.card-section-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 10px;
+  gap: 8px;
+}
+.section-title {
+  font-size: 11px; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.08em;
+}
+.section-edit-btn {
+  font-size: 11px;
+  background: none;
+  border: none;
+  color: var(--blue-600);
+  cursor: pointer;
+  padding: 2px 6px;
+  font-family: inherit;
+  font-weight: 600;
+  border-radius: 4px;
+}
+.section-edit-btn:hover { background: var(--blue-50); }
+
+.expand-chevron {
+  display: inline-flex; align-items: center;
+  font-size: 11px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 2px 6px;
+  font-family: inherit;
+  font-weight: 600;
+  gap: 4px;
+}
+.expand-chevron:hover { color: var(--text); }
+.expand-chevron svg { transition: transform 0.15s; }
+.expand-chevron.open svg { transform: rotate(90deg); }
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 14px;
+}
+@media (max-width: 480px) {
+  .detail-grid { grid-template-columns: 1fr; }
+}
+.detail-item .detail-label {
+  font-size: 11px; color: var(--muted); margin-bottom: 2px;
+}
+.detail-item .detail-value {
+  font-size: 13px; font-weight: 500; color: var(--text);
+  word-break: break-word;
+}
+.detail-value.empty { color: var(--light); font-style: italic; font-weight: 400; }
+.detail-value a { color: var(--blue-600); text-decoration: none; }
+.detail-value a:hover { text-decoration: underline; }
+.detail-input {
+  width: 100%;
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  background: var(--surface);
+  color: var(--text);
+}
+.detail-input:focus { outline: none; border-color: var(--blue-600); }
+.detail-checkbox-row {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 13px;
+}
+.detail-checkbox-row input[type=checkbox] {
+  width: 14px; height: 14px;
+  accent-color: var(--blue-600);
+}
+
+.section-action-row {
+  display: flex; gap: 8px; margin-top: 12px;
+}
+.btn {
+  font-size: 12px;
+  padding: 7px 14px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 500;
+}
+.btn:hover { background: var(--bg); }
+.btn-primary {
+  background: var(--text);
+  color: var(--surface);
+  border-color: var(--text);
+}
+.btn-primary:hover { background: #333; }
+.btn-primary:disabled { background: #aaa; border-color: #aaa; cursor: not-allowed; }
+.btn-danger {
+  background: var(--red-600);
+  color: white;
+  border-color: var(--red-600);
+}
+.btn-danger:hover { background: #a52e21; }
+.btn-green {
+  background: #1D9E75;
+  color: white;
+  border-color: #1D9E75;
+}
+.btn-green:hover { background: #167a5a; }
+
+.tag-list { display: flex; flex-wrap: wrap; gap: 4px; }
+.tag {
+  display: inline-block;
+  background: var(--bg);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 12px;
+  color: #555;
+}
+
+.notes-textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  min-height: 70px;
+  resize: vertical;
+  font-family: inherit;
+  color: var(--text);
+}
+.notes-textarea:focus { outline: none; border-color: var(--blue-600); }
+
+/* Multi-select pill picker — for editing assigned roles and venues */
+.ms-pill-group { display: flex; flex-wrap: wrap; gap: 6px; }
+.ms-pill {
+  display: flex; align-items: center; gap: 5px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 12px;
+  color: #444;
+  cursor: pointer;
+  background: var(--surface);
+  user-select: none;
+  font-weight: 500;
+}
+.ms-pill:hover { border-color: var(--muted); }
+.ms-pill.on {
+  background: var(--blue-50);
+  border-color: var(--blue-600);
+  color: var(--blue-600);
+  font-weight: 600;
+}
+.ms-pill.disabled-role {
+  opacity: 0.4; cursor: not-allowed; pointer-events: none;
+}
+.ms-pill input[type=checkbox] {
+  width: 12px; height: 12px;
+  accent-color: var(--blue-600);
+  margin: 0; cursor: pointer;
+}
+.pay-lookup {
+  background: var(--green-50);
+  border: 1px solid #7dc98a;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--green-800);
+}
+
+/* Onboarding history (collapsed by default) */
+.onboarding-list {
+  display: none;
+}
+.onboarding-list.open { display: block; margin-top: 6px; }
+.checklist-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border-lt);
+  gap: 8px;
+}
+.checklist-row:last-child { border-bottom: none; }
+.checklist-row .left { display: flex; align-items: center; gap: 8px; flex: 1; }
+.check-icon {
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: #1D9E75;
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.check-icon.empty { background: var(--border); }
+.check-icon svg { width: 9px; height: 9px; }
+.checklist-label { font-size: 13px; color: var(--text); }
+.checklist-label.done { color: var(--muted); text-decoration: line-through; }
+.checklist-status { font-size: 11px; color: var(--muted); }
+.checklist-status.done { color: var(--green-600); }
+
+/* Footer with Deactivate / Reactivate */
+.card-footer {
+  padding: 14px 18px;
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 12px;
+  background: #fafaf8;
+}
+
+/* Deactivate sub-modal */
+.deact-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex; align-items: flex-start; justify-content: center;
+  z-index: 1100;
+  padding: 32px 16px;
+  overflow-y: auto;
+}
+.deact-modal {
+  background: var(--surface);
+  border-radius: 14px;
+  width: 100%;
+  max-width: 460px;
+  padding: 22px;
+  border: 1px solid var(--border);
+}
+.deact-modal h3 {
+  font-size: 16px; font-weight: 700;
+  margin-bottom: 6px;
+  letter-spacing: -0.01em;
+}
+.deact-modal p {
+  font-size: 13px; color: var(--muted);
+  line-height: 1.5;
+  margin-bottom: 14px;
+}
+.deact-field { margin-bottom: 12px; }
+.deact-label {
+  font-size: 12px; font-weight: 600; color: var(--text);
+  display: block; margin-bottom: 5px;
+}
+.deact-label .req { color: var(--red-600); }
+.deact-radio-group {
+  display: flex; flex-wrap: wrap; gap: 6px;
+}
+.deact-radio-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  background: var(--surface);
+  color: var(--text);
+}
+.deact-radio-pill:hover { border-color: var(--muted); }
+.deact-radio-pill.on {
+  background: var(--blue-50);
+  border-color: var(--blue-600);
+  color: var(--blue-600);
+}
+.deact-radio-pill.danger.on {
+  background: #fef2f2;
+  border-color: var(--red-600);
+  color: var(--red-600);
+}
+.deact-radio-pill input[type=radio] {
+  width: 12px; height: 12px;
+  accent-color: var(--blue-600);
+  margin: 0; cursor: pointer;
+}
+.deact-confirm-input {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-size: 13px;
+  font-family: inherit;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+.deact-confirm-input:focus { outline: none; border-color: var(--red-600); }
+.deact-confirm-input.matched { border-color: var(--red-600); background: #fff8f7; }
+.deact-actions {
+  display: flex; gap: 8px; margin-top: 16px;
+}
+.deact-err {
+  font-size: 12px; color: var(--red-600);
+  margin-top: 6px; min-height: 16px;
+}
+
 /* Mobile */
 @media (max-width: 600px) {
+  .top-bar { padding: 0 14px; gap: 8px; }
   .page-head { padding: 18px 14px 10px; }
   .canvas { padding: 0 14px 40px; }
   .page-title { font-size: 19px; }
-  /* Scorecards collapse to a single column with a pill-style layout —
-     venue name + small stats on the left, count on the right. */
   .scorecard-strip {
     padding: 0 14px;
     grid-template-columns: 1fr;
@@ -336,17 +754,26 @@ body {
     gap: 10px;
     flex-wrap: wrap;
   }
-  .emp-name { flex: 1 1 100%; }
-  .dropdown-wrap { flex: 1; }
+  .emp-name { flex: 1 1 100%; order: 0; }
+  .card-btn { order: 2; }
+  .dropdown-wrap { flex: 1; order: 1; }
   .venue-select { width: 100%; min-width: 0; }
-  .row-status { width: auto; min-width: 50px; }
+  .row-status { width: auto; min-width: 50px; order: 3; }
   .group-head { padding: 11px 14px 7px; }
+  .status-tabs { padding: 0 14px; }
+  .modal-overlay { padding: 16px 8px; }
+  .modal-box { border-radius: 10px; }
+  .card-header { padding: 14px; }
+  .card-section { padding: 12px 14px; }
+  .card-footer { padding: 12px 14px; }
 }
 </style>
 </head>
 <body>
 
 <div class="top-bar">
+  <a class="back-link" href="/">&larr; Toolkit</a>
+  <span class="vdivider"></span>
   <span class="brand-name">Popcorn Chez</span>
   <span class="brand-badge">Manager Toolkit</span>
   <div class="topbar-spacer"></div>
@@ -354,15 +781,20 @@ body {
 </div>
 
 <div class="page-head">
-  <a class="back-link" href="/">&larr; Toolkit</a>
   <h1 class="page-title">Home Components</h1>
-  <p class="page-sub">Set each employee's home component (their primary venue). Employees hired for a specific building have priority for that building's shifts.</p>
+  <p class="page-sub">Set each employee's home component (their primary venue) and manage their record. Click "Card" on any row for full details.</p>
 </div>
 
 <!-- Scorecard strip — three cards across the top showing how many employees
      have each major venue as their home component, vs. par for a full-tier
      event. Updates live as managers change the dropdowns below. -->
 <div class="scorecard-strip" id="scorecardStrip"></div>
+
+<!-- Active / Inactive tabs. Default = Active. The page fetches all employees
+     once at load time and filters client-side; toggling is instant. -->
+<div class="status-tabs">
+  <div class="status-tab-group" id="statusTabGroup"></div>
+</div>
 
 <div class="canvas">
   <div class="card">
@@ -383,6 +815,12 @@ body {
   </div>
 </div>
 
+<!-- Card modal mount point. Empty until a row's "Card" button is clicked. -->
+<div id="cardModalRoot"></div>
+
+<!-- Deactivate sub-modal mount point. Stacks on top of the card modal. -->
+<div id="deactModalRoot"></div>
+
 <div class="toast" id="toast"></div>
 
 <script src="/pc-auth.js"></script>
@@ -395,8 +833,7 @@ body {
   // -------------------------------------------------------------
   var SUPABASE_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
 
-  // Venue codes — same list used everywhere else in the project.
-  // Order here = order in the dropdown (alphabetical by label).
+  // Venue codes — same list used everywhere in the project.
   var VENUE_LABELS = {
     ACCC: 'ACCC',
     BWH: 'BWH',
@@ -410,57 +847,69 @@ body {
     Subaru: 'Subaru',
     Villanova: 'Villanova'
   };
-  // Build dropdown order (alphabetical by label)
   var VENUE_ORDER = Object.keys(VENUE_LABELS).sort(function(a, b) {
     return VENUE_LABELS[a].localeCompare(VENUE_LABELS[b]);
   });
+  var VENUE_STATE = {
+    FMP: 'NJ', BWH: 'NJ', ACCC: 'NJ', Cure: 'NJ',
+    Mann: 'PA', Subaru: 'PA', Montage: 'PA', Villanova: 'PA',
+    DE: 'DE', SATB: 'DE', Kirkwood: 'DE'
+  };
 
-  // -------------------------------------------------------------
-  // SCORECARD CONFIG
-  // -------------------------------------------------------------
-  // Three venues that get a top-of-page scorecard. Other 8 venues are
-  // typically staffed by Mann/FMP home folks (2-4 people per event), so
-  // a "home component count" doesn't carry the same planning weight.
+  // Roles that minors can't be assigned (alcohol-handling).
+  var ALCOHOL_ROLES = ['Bartender', 'Beer Tender'];
+
+  // Three venues that get a top-of-page scorecard.
   var SCORECARD_VENUES = ['Mann', 'FMP', 'SATB'];
 
-  // Venue brand colors — match VENUE_COLORS used on Schedule Assistant
-  // and the venue badges across the app. Used for the left-edge accent
-  // and the bar fill on each scorecard card.
   var VENUE_COLORS = {
-    FMP: '#c0392b',
-    Mann: '#5a9e1a',
-    Cure: '#2471a3',
-    Subaru: '#7d3fbf',
-    Villanova: '#1a237e',
-    Montage: '#607d8b',
-    DE: '#00796b',
-    BWH: '#e67e22',
-    ACCC: '#c0620a',
-    SATB: '#888780',
-    Kirkwood: '#b71c1c'
+    FMP: '#c0392b', Mann: '#5a9e1a', Cure: '#2471a3',
+    Subaru: '#7d3fbf', Villanova: '#1a237e', Montage: '#607d8b',
+    DE: '#00796b', BWH: '#e67e22', ACCC: '#c0620a',
+    SATB: '#888780', Kirkwood: '#b71c1c'
   };
 
-  // Roles that the par_levels schema treats as "excluded from event total"
-  // by default when no explicit excluded_from_total flag is set on the row.
-  // Mirrors the DEX object in event-planning so our "par for a full event"
-  // computation matches what gets shown on the calendar there.
+  // par_levels role-exclusion rules — match event-planning page.
   var DEFAULT_EXCLUDED_ROLES = {
-    'Cleaning Crew': true,
-    'Warehouse/Runner': true,
-    'Supervisor': true,
-    'Venue Manager': true
+    'Cleaning Crew': true, 'Warehouse/Runner': true,
+    'Supervisor': true, 'Venue Manager': true
   };
   var SUPPORT_STAND = 'Support Staff';
+
+  // Deactivation category options. Five-bucket list locked in earlier in
+  // the design conversation. Order matches what the UI shows.
+  var DEACT_CATEGORIES = [
+    { value: 'quit', label: 'Quit' },
+    { value: 'fired', label: 'Fired' },
+    { value: 'ncns', label: 'No-call no-show' },
+    { value: 'seasonal', label: 'Seasonal end' },
+    { value: 'other', label: 'Other' }
+  ];
 
   // -------------------------------------------------------------
   // STATE
   // -------------------------------------------------------------
+  // employees: rows from the employees table (active + inactive). Each row
+  //   has id, first_name, last_name, punch_id, phone, is_active, home_venue.
+  // candidates: rows from the candidates table keyed by punch_id. The card
+  //   modal pulls almost all its content from here.
+  // payRates: pulled in for the pay-rate auto-lookup in the Roles & Venues
+  //   editor (mirrors what the pipeline hire modal does).
+  // pcRoles: list of role names (derived from payRates).
   var state = {
     employees: [],
+    candidates: {},      // keyed by punch_id
+    payRates: [],
+    pcRoles: [],
+    parTotals: {},
     filter: '',
-    // parTotals: { Mann: 80, FMP: 60, SATB: 30 } — full-tier headcount
-    // per scorecard venue, computed once at page load from par_levels.
-    parTotals: {}
+    statusTab: 'active',
+    // Card modal local state — separate from main page state so that
+    // changes in the modal don't require a full page re-render.
+    modalEmpId: null,    // employees.id of the open card
+    modalSection: null,  // which section is currently in edit mode (or null)
+    modalEditDraft: null,// transient form values for the section being edited
+    onboardingOpen: false
   };
 
   // -------------------------------------------------------------
@@ -514,43 +963,35 @@ body {
   }
 
   // -------------------------------------------------------------
-  // DATA
+  // DATA LOADING — single fetch per table on page load.
+  // Active/Inactive filtering is client-side after this point.
   // -------------------------------------------------------------
   function loadEmployees() {
+    // Drop the is_active filter from the URL so we get everyone in one shot.
+    // Tab toggle filters in memory.
     var url = SUPABASE_URL +
       '/rest/v1/employees' +
-      '?select=id,first_name,last_name,is_active,home_venue' +
-      '&is_active=eq.true' +
+      '?select=id,first_name,last_name,punch_id,phone,is_active,home_venue' +
       '&order=last_name.asc,first_name.asc';
-    return authFetch(url, {
-      method: 'GET',
-      headers: pcAuth.headers()
-    });
+    return authFetch(url, { method: 'GET', headers: pcAuth.headers() });
   }
 
-  function saveHomeVenue(employeeId, newValue) {
-    var url = SUPABASE_URL + '/rest/v1/employees?id=eq.' + encodeURIComponent(employeeId);
-    var headers = pcAuth.headers();
-    headers['Content-Type'] = 'application/json';
-    headers['Prefer'] = 'return=minimal';
-    return authFetch(url, {
-      method: 'PATCH',
-      headers: headers,
-      body: JSON.stringify({ home_venue: newValue })
-    });
+  function loadCandidates() {
+    // We fetch all columns because the card modal renders most of them.
+    // ~230 rows and we hit this once per page load — fine.
+    var url = SUPABASE_URL +
+      '/rest/v1/candidates' +
+      '?select=*';
+    return authFetch(url, { method: 'GET', headers: pcAuth.headers() });
   }
 
-  // Fetches par_levels for the scorecard venues, full tier only, and
-  // sums default_count per venue while skipping rows that are excluded
-  // from the event total. Returns a {venue: total} map.
-  //
-  // Mirrors the calculation in event-planning's evtStaff() — we want the
-  // scorecard's "par 80 · full" to read the same number the calendar
-  // would show as the staff total for a tier=full event.
-  //
-  // Excluded rows: (a) Support Staff stand entirely, (b) any row with
-  // excluded_from_total = true, (c) rows where the role is one of the
-  // DEFAULT_EXCLUDED_ROLES AND no explicit excluded_from_total flag.
+  function loadPayRates() {
+    var url = SUPABASE_URL +
+      '/rest/v1/pay_rates' +
+      '?select=*&order=state.asc,role.asc';
+    return authFetch(url, { method: 'GET', headers: pcAuth.headers() });
+  }
+
   function loadParTotals() {
     var venueList = SCORECARD_VENUES.map(function(v) { return '"' + v + '"'; }).join(',');
     var url = SUPABASE_URL +
@@ -558,17 +999,12 @@ body {
       '?select=venue,stand,role,default_count,excluded_from_total,tier' +
       '&tier=eq.full' +
       '&venue=in.(' + venueList + ')';
-    return authFetch(url, {
-      method: 'GET',
-      headers: pcAuth.headers()
-    }).then(function(rows) {
+    return authFetch(url, { method: 'GET', headers: pcAuth.headers() }).then(function(rows) {
       var totals = {};
       SCORECARD_VENUES.forEach(function(v) { totals[v] = 0; });
       (rows || []).forEach(function(r) {
         if (!r.venue || totals[r.venue] === undefined) return;
         if (r.stand === SUPPORT_STAND) return;
-        // Resolve the excluded flag: explicit value if present, else
-        // role-based default. matches event-planning's exTot() logic.
         var excluded;
         if (r.excluded_from_total === true || r.excluded_from_total === false) {
           excluded = r.excluded_from_total;
@@ -583,19 +1019,104 @@ body {
   }
 
   // -------------------------------------------------------------
-  // RENDER
+  // WRITES — generic patch helpers
   // -------------------------------------------------------------
-  function fullName(emp) {
-    return ((emp.first_name || '') + ' ' + (emp.last_name || '')).trim();
+  function patchEmployee(empId, body) {
+    var url = SUPABASE_URL + '/rest/v1/employees?id=eq.' + encodeURIComponent(empId);
+    var headers = pcAuth.headers();
+    headers['Content-Type'] = 'application/json';
+    headers['Prefer'] = 'return=minimal';
+    return authFetch(url, {
+      method: 'PATCH', headers: headers, body: JSON.stringify(body)
+    });
   }
 
+  function patchCandidate(candId, body) {
+    var url = SUPABASE_URL + '/rest/v1/candidates?id=eq.' + encodeURIComponent(candId);
+    var headers = pcAuth.headers();
+    headers['Content-Type'] = 'application/json';
+    headers['Prefer'] = 'return=minimal';
+    return authFetch(url, {
+      method: 'PATCH', headers: headers, body: JSON.stringify(body)
+    });
+  }
+
+  // -------------------------------------------------------------
+  // HELPERS
+  // -------------------------------------------------------------
+  function fullName(e) {
+    return ((e.first_name || '') + ' ' + (e.last_name || '')).trim();
+  }
+  function getInitials(f, l) {
+    return ((f ? f[0] : '?') + (l ? l[0] : '?')).toUpperCase();
+  }
+  function escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  function formatDate(ts) {
+    if (!ts) return '';
+    var d = new Date(ts);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+  function formatPhone(phone) {
+    if (!phone) return '';
+    var d = phone.replace(/\D/g, '');
+    if (d.length === 10) return '(' + d.slice(0,3) + ') ' + d.slice(3,6) + '-' + d.slice(6);
+    if (d.length === 11 && d[0] === '1') return '(' + d.slice(1,4) + ') ' + d.slice(4,7) + '-' + d.slice(7);
+    return phone;
+  }
+  function getCandidateForEmployee(emp) {
+    if (!emp || !emp.punch_id) return null;
+    return state.candidates[emp.punch_id] || null;
+  }
   function passesFilter(emp) {
     if (!state.filter) return true;
-    var name = fullName(emp).toLowerCase();
-    return name.indexOf(state.filter) !== -1;
+    return fullName(emp).toLowerCase().indexOf(state.filter) !== -1;
+  }
+  function visibleEmployees() {
+    var wantActive = state.statusTab === 'active';
+    return state.employees.filter(function(e) {
+      return (e.is_active === true) === wantActive;
+    });
   }
 
-  function buildOptions(currentValue) {
+  // -------------------------------------------------------------
+  // STATUS TABS (Active / Inactive)
+  // -------------------------------------------------------------
+  function renderStatusTabs() {
+    var actCount = state.employees.filter(function(e) { return e.is_active === true; }).length;
+    var inactCount = state.employees.filter(function(e) { return e.is_active === false; }).length;
+    var html =
+      '<button class="status-tab' + (state.statusTab === 'active' ? ' active' : '') + '" data-tab="active">' +
+        'Active <span class="status-tab-count">' + actCount + '</span>' +
+      '</button>' +
+      '<button class="status-tab' + (state.statusTab === 'inactive' ? ' active' : '') + '" data-tab="inactive">' +
+        'Inactive <span class="status-tab-count">' + inactCount + '</span>' +
+      '</button>';
+    var el = document.getElementById('statusTabGroup');
+    el.innerHTML = html;
+    // Wire tab clicks. Each tab swaps state.statusTab, then re-renders the
+    // list, counts, and tabs themselves (to update the "active" highlight).
+    var btns = el.querySelectorAll('.status-tab');
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].addEventListener('click', function(e) {
+        var tab = e.currentTarget.getAttribute('data-tab');
+        if (tab === state.statusTab) return;
+        state.statusTab = tab;
+        renderStatusTabs();
+        renderList();
+        renderCounts();
+      });
+    }
+  }
+
+  // -------------------------------------------------------------
+  // ROW LIST RENDER
+  // -------------------------------------------------------------
+  function buildVenueOptions(currentValue) {
     var html = '<option value="">(none)</option>';
     html += '<option value="NA"' + (currentValue === 'NA' ? ' selected' : '') + '>Doesn\'t apply</option>';
     for (var i = 0; i < VENUE_ORDER.length; i++) {
@@ -608,18 +1129,30 @@ body {
   }
 
   function renderRow(emp) {
-    var unset = !emp.home_venue;
+    var unset = !emp.home_venue && state.statusTab === 'active';
     var isNA = emp.home_venue === 'NA';
     var classes = 'emp-row' +
       (unset ? ' unset' : '') +
       (isNA ? ' na' : '');
     var name = fullName(emp);
+    // The "Card" button uses a small file/document icon. data-emp-id lets
+    // the click handler look up the employee record for the modal.
+    var cardBtn =
+      '<button class="card-btn" data-card-emp="' + emp.id + '" title="Open employee card">' +
+        '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+          '<rect x="4" y="3" width="16" height="18" rx="2"></rect>' +
+          '<line x1="8" y1="9" x2="16" y2="9"></line>' +
+          '<line x1="8" y1="13" x2="14" y2="13"></line>' +
+        '</svg>' +
+        'Card' +
+      '</button>';
     return '' +
       '<div class="' + classes + '" data-emp-id="' + emp.id + '">' +
         '<div class="emp-name">' + escapeHtml(name) + '</div>' +
+        cardBtn +
         '<div class="dropdown-wrap">' +
           '<select class="venue-select" data-emp-id="' + emp.id + '">' +
-            buildOptions(emp.home_venue) +
+            buildVenueOptions(emp.home_venue) +
           '</select>' +
           '<span class="dropdown-arrow">&#9662;</span>' +
         '</div>' +
@@ -627,20 +1160,8 @@ body {
       '</div>';
   }
 
-  function escapeHtml(s) {
-    return String(s)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  }
-
   function renderList() {
-    var visible = state.employees.filter(passesFilter);
-    var unset = visible.filter(function(e) { return !e.home_venue; });
-    var assigned = visible.filter(function(e) { return !!e.home_venue; });
-
+    var visible = visibleEmployees().filter(passesFilter);
     var area = document.getElementById('listArea');
 
     if (state.employees.length === 0) {
@@ -648,40 +1169,68 @@ body {
       return;
     }
     if (visible.length === 0) {
-      area.innerHTML = '<div class="empty">No employees match "' + escapeHtml(state.filter) + '".</div>';
+      var msg = state.filter
+        ? 'No ' + state.statusTab + ' employees match "' + escapeHtml(state.filter) + '".'
+        : 'No ' + state.statusTab + ' employees.';
+      area.innerHTML = '<div class="empty">' + msg + '</div>';
       return;
     }
 
-    var html = '';
-    if (unset.length > 0) {
-      html += '<div class="group-head unset">' +
-        '<span>&#9888; Unset</span>' +
-        '<span class="grp-count">' + unset.length + '</span>' +
-      '</div>';
-      for (var i = 0; i < unset.length; i++) html += renderRow(unset[i]);
+    // Inactive view: don't bother grouping by unset/assigned. Inactive
+    // employees don't need a home venue assigned, so the "unset worklist"
+    // concept doesn't apply. Just show them all alphabetically.
+    if (state.statusTab === 'inactive') {
+      var html = '';
+      for (var i = 0; i < visible.length; i++) html += renderRow(visible[i]);
+      area.innerHTML = html;
+    } else {
+      // Active view: split into Unset (yellow) and Assigned, like before.
+      var unset = visible.filter(function(e) { return !e.home_venue; });
+      var assigned = visible.filter(function(e) { return !!e.home_venue; });
+      var html2 = '';
+      if (unset.length > 0) {
+        html2 += '<div class="group-head unset">' +
+          '<span>&#9888; Unset</span>' +
+          '<span class="grp-count">' + unset.length + '</span>' +
+        '</div>';
+        for (var j = 0; j < unset.length; j++) html2 += renderRow(unset[j]);
+      }
+      if (assigned.length > 0) {
+        html2 += '<div class="group-head">' +
+          '<span>&#10003; Assigned</span>' +
+          '<span class="grp-count">' + assigned.length + '</span>' +
+        '</div>';
+        for (var k = 0; k < assigned.length; k++) html2 += renderRow(assigned[k]);
+      }
+      area.innerHTML = html2;
     }
-    if (assigned.length > 0) {
-      html += '<div class="group-head">' +
-        '<span>&#10003; Assigned</span>' +
-        '<span class="grp-count">' + assigned.length + '</span>' +
-      '</div>';
-      for (var j = 0; j < assigned.length; j++) html += renderRow(assigned[j]);
-    }
-    area.innerHTML = html;
 
-    // Wire up change handlers on every fresh render.
+    // Wire dropdown change handlers on every fresh render.
     var selects = area.querySelectorAll('select.venue-select');
-    for (var k = 0; k < selects.length; k++) {
-      selects[k].addEventListener('change', onVenueChange);
+    for (var s = 0; s < selects.length; s++) {
+      selects[s].addEventListener('change', onVenueChange);
+    }
+    // Wire Card button clicks.
+    var cardBtns = area.querySelectorAll('button[data-card-emp]');
+    for (var c = 0; c < cardBtns.length; c++) {
+      cardBtns[c].addEventListener('click', function(e) {
+        var empId = e.currentTarget.getAttribute('data-card-emp');
+        openCardModal(empId);
+      });
     }
   }
 
   function renderCounts() {
-    var total = state.employees.length;
-    var unset = state.employees.filter(function(e) { return !e.home_venue; }).length;
-    var na = state.employees.filter(function(e) { return e.home_venue === 'NA'; }).length;
+    var visible = visibleEmployees();
+    var total = visible.length;
     var el = document.getElementById('counts');
-    if (total === 0) { el.textContent = ''; return; }
+    if (total === 0) { el.innerHTML = ''; return; }
+    if (state.statusTab === 'inactive') {
+      el.innerHTML = total + ' inactive';
+      return;
+    }
+    var unset = visible.filter(function(e) { return !e.home_venue; }).length;
+    var na = visible.filter(function(e) { return e.home_venue === 'NA'; }).length;
     var parts = [];
     parts.push('<span class="unset-num">' + unset + '</span> unset');
     if (na > 0) parts.push(na + ' n/a');
@@ -689,9 +1238,6 @@ body {
     el.innerHTML = parts.join(' &middot; ');
   }
 
-  // Renders the three scorecard cards. Pure read on state; safe to call
-  // any time after loadEmployees + loadParTotals resolve. Re-renders
-  // whenever an employee's home venue changes (called from onVenueChange).
   function renderScorecard() {
     var strip = document.getElementById('scorecardStrip');
     if (!strip) return;
@@ -699,20 +1245,19 @@ body {
     SCORECARD_VENUES.forEach(function(venue) {
       var color = VENUE_COLORS[venue] || '#666';
       var par = state.parTotals[venue] || 0;
+      // Scorecard counts only ACTIVE employees with this home venue.
+      // Inactive folks shouldn't pad the count.
       var count = state.employees.filter(function(e) {
-        return e.home_venue === venue;
+        return e.home_venue === venue && e.is_active === true;
       }).length;
       var pct = par > 0 ? Math.round((count / par) * 100) : 0;
       var pctCapped = Math.min(100, pct);
-
       var parLabel = par > 0
         ? 'par ' + par + ' &middot; full tier'
         : 'no par configured';
-
       var pctLabel = par > 0
         ? pct + '% of par from home staff'
         : '&mdash;';
-
       html += '<div class="scorecard-card" style="border-left-color:' + color + ';">' +
         '<div class="scorecard-head">' +
           '<span class="scorecard-venue">' + escapeHtml(venue) + '</span>' +
@@ -730,7 +1275,7 @@ body {
   }
 
   // -------------------------------------------------------------
-  // EVENT HANDLERS
+  // ROW EVENT HANDLERS
   // -------------------------------------------------------------
   function onVenueChange(e) {
     var select = e.currentTarget;
@@ -747,11 +1292,8 @@ body {
       statusEl.className = 'row-status saving';
     }
 
-    saveHomeVenue(empId, newValue).then(function() {
-      // Update local state
+    patchEmployee(empId, { home_venue: newValue }).then(function() {
       emp.home_venue = newValue;
-
-      // Brief saved indicator
       if (statusEl) {
         statusEl.textContent = 'Saved';
         statusEl.className = 'row-status saved';
@@ -762,11 +1304,7 @@ body {
           }
         }, 1400);
       }
-
       showToast('Saved', 'success');
-
-      // Re-render to move the row between groups + update counts + scorecard
-      // (small delay so the user can see the "Saved" indicator first)
       setTimeout(function() {
         renderList();
         renderCounts();
@@ -775,7 +1313,6 @@ body {
     }).catch(function(err) {
       if (err && err.authFailed) { handleAuthFailure(); return; }
       console.error('Save failed:', err);
-      // Revert dropdown
       select.value = previousValue || '';
       if (statusEl) {
         statusEl.textContent = 'Failed';
@@ -794,40 +1331,1103 @@ body {
   function onSearchInput(e) {
     state.filter = (e.target.value || '').toLowerCase().trim();
     renderList();
+    renderCounts();
   }
 
-  // -------------------------------------------------------------
+  // ============================================================
+  // CARD MODAL
+  // ============================================================
+
+  function openCardModal(empId) {
+    state.modalEmpId = empId;
+    state.modalSection = null;
+    state.modalEditDraft = null;
+    state.onboardingOpen = false;
+    renderCardModal();
+  }
+
+  function closeCardModal() {
+    state.modalEmpId = null;
+    state.modalSection = null;
+    state.modalEditDraft = null;
+    document.getElementById('cardModalRoot').innerHTML = '';
+  }
+
+  function renderCardModal() {
+    var root = document.getElementById('cardModalRoot');
+    if (!state.modalEmpId) { root.innerHTML = ''; return; }
+    var emp = state.employees.find(function(x) { return x.id === state.modalEmpId; });
+    if (!emp) { closeCardModal(); return; }
+    var cand = getCandidateForEmployee(emp);
+
+    var html =
+      '<div class="modal-overlay" data-modal-bg>' +
+        '<div class="modal-box">' +
+          renderCardHeader(emp, cand) +
+          renderHomeVenueSection(emp) +
+          renderContactSection(emp, cand) +
+          renderRolesSection(emp, cand) +
+          renderNotesSection(emp, cand) +
+          renderOnboardingSection(emp, cand) +
+          renderCardFooter(emp, cand) +
+        '</div>' +
+      '</div>';
+    root.innerHTML = html;
+
+    // Close handlers — backdrop click, X button, escape key.
+    var bg = root.querySelector('[data-modal-bg]');
+    if (bg) {
+      bg.addEventListener('click', function(ev) {
+        if (ev.target === bg) closeCardModal();
+      });
+    }
+    wireCardModalEvents(emp, cand);
+  }
+
+  function renderCardHeader(emp, cand) {
+    var name = fullName(emp);
+    var initials = getInitials(emp.first_name, emp.last_name);
+    var isLegacy = cand && cand.legacy_import === true;
+    var isMinor = cand && cand.is_minor === true;
+    var statusPill = emp.is_active
+      ? '<span class="status-pill active">Active</span>'
+      : '<span class="status-pill inactive">Inactive</span>';
+    var minorPill = isMinor ? '<span class="status-pill minor">Minor</span>' : '';
+    var legacyPill = isLegacy ? '<span class="status-pill legacy">Legacy</span>' : '';
+
+    // Sub-line: prefer hire date if known, otherwise applied date, otherwise nothing.
+    var sub = '';
+    if (cand) {
+      if (cand.hired_at && !isLegacy) {
+        sub = 'Hired ' + formatDate(cand.hired_at);
+      } else if (cand.applied_at && !isLegacy) {
+        sub = 'Applied ' + formatDate(cand.applied_at);
+      } else if (isLegacy) {
+        sub = 'Legacy employee — no application date on file';
+      }
+    }
+
+    return '<div class="card-header">' +
+      '<div class="avatar">' + initials + '</div>' +
+      '<div class="card-header-info">' +
+        '<div class="card-header-name">' + escapeHtml(name) + minorPill + legacyPill + '</div>' +
+        (sub ? '<div class="card-header-sub">' + escapeHtml(sub) + '</div>' : '') +
+      '</div>' +
+      statusPill +
+      '<button class="card-header-close" data-close-modal title="Close">&times;</button>' +
+    '</div>';
+  }
+
+  // ---- Home venue section (always editable inline as a dropdown) ----
+  function renderHomeVenueSection(emp) {
+    return '<div class="card-section">' +
+      '<div class="card-section-head">' +
+        '<span class="section-title">Home component</span>' +
+      '</div>' +
+      '<div class="dropdown-wrap" style="display:inline-block;">' +
+        '<select class="venue-select" data-card-home-venue style="min-width:180px;">' +
+          buildVenueOptions(emp.home_venue) +
+        '</select>' +
+        '<span class="dropdown-arrow">&#9662;</span>' +
+      '</div>' +
+    '</div>';
+  }
+
+  // ---- Contact & basics (per-section edit pattern) ----
+  function renderContactSection(emp, cand) {
+    var inEdit = state.modalSection === 'contact';
+    var c = cand || {};
+    if (inEdit) {
+      var draft = state.modalEditDraft || {};
+      return '<div class="card-section">' +
+        '<div class="card-section-head">' +
+          '<span class="section-title">Contact &amp; basics</span>' +
+        '</div>' +
+        '<div class="detail-grid">' +
+          renderEditField('email', 'Email', draft.email || '', 'email') +
+          renderEditField('phone', 'Phone', draft.phone || '', 'tel') +
+          renderEditField('punch_id', 'Punch ID', draft.punch_id || '', 'text', 4) +
+          renderEditField('date_of_birth', 'Date of birth', draft.date_of_birth || '', 'date') +
+          renderEditField('earliest_start_date', 'Start date', draft.earliest_start_date || '', 'date') +
+          '<div class="detail-item">' +
+            '<div class="detail-label">Minor (under 18)</div>' +
+            '<label class="detail-checkbox-row">' +
+              '<input type="checkbox" data-edit-field="is_minor"' + (draft.is_minor ? ' checked' : '') + ' />' +
+              '<span>Yes, this employee is a minor</span>' +
+            '</label>' +
+          '</div>' +
+        '</div>' +
+        '<div class="section-action-row">' +
+          '<button class="btn btn-primary" data-section-save="contact">Save</button>' +
+          '<button class="btn" data-section-cancel="contact">Cancel</button>' +
+        '</div>' +
+        '<div class="deact-err" data-section-err="contact"></div>' +
+      '</div>';
+    }
+    // Display mode
+    return '<div class="card-section">' +
+      '<div class="card-section-head">' +
+        '<span class="section-title">Contact &amp; basics</span>' +
+        '<button class="section-edit-btn" data-section-edit="contact">Edit</button>' +
+      '</div>' +
+      '<div class="detail-grid">' +
+        renderDisplayField('Email', c.email
+          ? '<a href="mailto:' + escapeHtml(c.email) + '">' + escapeHtml(c.email) + '</a>'
+          : null) +
+        renderDisplayField('Phone', emp.phone
+          ? '<a href="tel:' + escapeHtml(emp.phone) + '">' + escapeHtml(formatPhone(emp.phone)) + '</a>'
+          : null) +
+        renderDisplayField('Punch ID', emp.punch_id
+          ? '<span style="font-family:monospace;letter-spacing:0.1em;">' + escapeHtml(emp.punch_id) + '</span>'
+          : null) +
+        renderDisplayField('Date of birth', c.date_of_birth ? escapeHtml(formatDate(c.date_of_birth)) : null) +
+        renderDisplayField('Start date', c.earliest_start_date ? escapeHtml(formatDate(c.earliest_start_date)) : null) +
+        renderDisplayField('Minor (under 18)', c.is_minor ? 'Yes' : 'No', !c.is_minor) +
+      '</div>' +
+    '</div>';
+  }
+
+  function renderEditField(name, label, val, type, maxlen) {
+    var maxAttr = maxlen ? ' maxlength="' + maxlen + '"' : '';
+    return '<div class="detail-item">' +
+      '<div class="detail-label">' + label + '</div>' +
+      '<input type="' + type + '" class="detail-input" data-edit-field="' + name + '" value="' + escapeHtml(val) + '"' + maxAttr + ' />' +
+    '</div>';
+  }
+
+  function renderDisplayField(label, valHtml, dim) {
+    var cls = valHtml ? 'detail-value' : 'detail-value empty';
+    if (dim && valHtml) cls = 'detail-value';
+    var content = valHtml || 'not on file';
+    return '<div class="detail-item">' +
+      '<div class="detail-label">' + label + '</div>' +
+      '<div class="' + cls + '">' + content + '</div>' +
+    '</div>';
+  }
+
+  // ---- Roles & venues ----
+  function renderRolesSection(emp, cand) {
+    var inEdit = state.modalSection === 'roles';
+    var c = cand || {};
+    if (inEdit) {
+      return renderRolesSectionEdit(emp, c);
+    }
+    var roles = c.assigned_roles || [];
+    var venues = c.assigned_venues || [];
+    var rolesHtml = roles.length > 0 ? renderTags(roles) : '<span class="detail-value empty">none assigned</span>';
+    var venuesHtml = venues.length > 0 ? renderVenueTags(venues) : '<span class="detail-value empty">none assigned</span>';
+    var payHtml = renderStartingPayDisplay(c.starting_pay_rate);
+    return '<div class="card-section">' +
+      '<div class="card-section-head">' +
+        '<span class="section-title">Roles &amp; venues</span>' +
+        '<button class="section-edit-btn" data-section-edit="roles">Edit</button>' +
+      '</div>' +
+      '<div class="detail-item" style="margin-bottom:10px;">' +
+        '<div class="detail-label">Assigned venues</div>' +
+        '<div class="tag-list">' + venuesHtml + '</div>' +
+      '</div>' +
+      '<div class="detail-item" style="margin-bottom:10px;">' +
+        '<div class="detail-label">Assigned roles</div>' +
+        '<div class="tag-list">' + rolesHtml + '</div>' +
+      '</div>' +
+      payHtml +
+    '</div>';
+  }
+
+  function renderRolesSectionEdit(emp, c) {
+    var draft = state.modalEditDraft || { roles: [], venues: [] };
+    var isMinor = c.is_minor === true;
+    // Venue pills
+    var venueHtml = '';
+    for (var i = 0; i < VENUE_ORDER.length; i++) {
+      var code = VENUE_ORDER[i];
+      var on = draft.venues.indexOf(code) > -1;
+      venueHtml += '<label class="ms-pill' + (on ? ' on' : '') + '">' +
+        '<input type="checkbox" data-edit-venue="' + code + '"' + (on ? ' checked' : '') + ' />' +
+        VENUE_LABELS[code] +
+      '</label>';
+    }
+    // Role pills
+    var roleHtml = '';
+    for (var j = 0; j < state.pcRoles.length; j++) {
+      var role = state.pcRoles[j];
+      var isAlc = ALCOHOL_ROLES.indexOf(role) !== -1;
+      var disabled = isMinor && isAlc;
+      var on2 = draft.roles.indexOf(role) > -1;
+      roleHtml += '<label class="ms-pill' + (on2 ? ' on' : '') + (disabled ? ' disabled-role' : '') + '">' +
+        '<input type="checkbox" data-edit-role="' + escapeHtml(role) + '"' + (on2 ? ' checked' : '') + (disabled ? ' disabled' : '') + ' />' +
+        escapeHtml(role) + (disabled ? ' (minor restriction)' : '') +
+      '</label>';
+    }
+    return '<div class="card-section">' +
+      '<div class="card-section-head">' +
+        '<span class="section-title">Roles &amp; venues</span>' +
+      '</div>' +
+      '<div class="detail-item" style="margin-bottom:10px;">' +
+        '<div class="detail-label">Assigned venues</div>' +
+        '<div class="ms-pill-group">' + venueHtml + '</div>' +
+      '</div>' +
+      '<div class="detail-item">' +
+        '<div class="detail-label">Assigned roles</div>' +
+        '<div class="ms-pill-group">' + roleHtml + '</div>' +
+      '</div>' +
+      '<div id="rolesPayLookup"></div>' +
+      '<div class="section-action-row">' +
+        '<button class="btn btn-primary" data-section-save="roles">Save</button>' +
+        '<button class="btn" data-section-cancel="roles">Cancel</button>' +
+      '</div>' +
+      '<div class="deact-err" data-section-err="roles"></div>' +
+    '</div>';
+  }
+
+  function renderTags(arr) {
+    var h = '';
+    for (var i = 0; i < arr.length; i++) {
+      h += '<span class="tag">' + escapeHtml(arr[i]) + '</span>';
+    }
+    return h;
+  }
+  function renderVenueTags(arr) {
+    var h = '';
+    for (var i = 0; i < arr.length; i++) {
+      var code = arr[i];
+      var color = VENUE_COLORS[code] || '#888';
+      h += '<span class="tag" style="background:' + color + '20;color:' + color + ';font-weight:600;">' +
+        escapeHtml(code) +
+      '</span>';
+    }
+    return h;
+  }
+
+  function renderStartingPayDisplay(payRateStr) {
+    if (!payRateStr) return '';
+    var rateObj = null;
+    try { rateObj = JSON.parse(payRateStr); } catch(e) {}
+    if (!rateObj || typeof rateObj !== 'object') {
+      var lr = parseFloat(payRateStr);
+      if (isNaN(lr)) return '';
+      return '<div class="detail-item"><div class="detail-label">Starting pay rate</div><div class="detail-value" style="color:#1D9E75;">$' + lr.toFixed(2) + ' / hr</div></div>';
+    }
+    var stateRoles = {};
+    var rk = Object.keys(rateObj);
+    for (var ri = 0; ri < rk.length; ri++) {
+      var rn = rk[ri], sm = rateObj[rn];
+      if (!sm || typeof sm !== 'object') continue;
+      var sk = Object.keys(sm);
+      for (var si = 0; si < sk.length; si++) {
+        var sc = sk[si];
+        if (!stateRoles[sc]) stateRoles[sc] = [];
+        stateRoles[sc].push({ role: rn, rate: sm[sc] });
+      }
+    }
+    var sl = Object.keys(stateRoles).sort();
+    if (sl.length === 0) return '';
+    var html = '<div class="detail-item"><div class="detail-label">Starting pay rates</div>';
+    for (var sli = 0; sli < sl.length; sli++) {
+      var stl = sl[sli], its = stateRoles[stl];
+      html += '<div style="' + (sli > 0 ? 'margin-top:6px;' : '') + '">' +
+        '<div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:2px;">' + stl + '</div>';
+      for (var iti = 0; iti < its.length; iti++) {
+        var it = its[iti];
+        var rate = parseFloat(it.rate);
+        if (rate === 0) {
+          html += '<div style="font-size:12px;color:#555;">' + escapeHtml(it.role) + ': <em>commission-based</em></div>';
+        } else {
+          html += '<div style="font-size:12px;color:#1D9E75;font-weight:500;">' + escapeHtml(it.role) + ': $' + rate.toFixed(2) + ' / hr</div>';
+        }
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  // Live pay-rate lookup while editing roles/venues. Recomputes whenever
+  // the pill set changes. Same logic as the pipeline hire modal.
+  function updateRolesPayLookup() {
+    var el = document.getElementById('rolesPayLookup');
+    if (!el || !state.modalEditDraft) return;
+    var venues = state.modalEditDraft.venues || [];
+    var roles = state.modalEditDraft.roles || [];
+    if (venues.length === 0 || roles.length === 0) { el.innerHTML = ''; return; }
+    var statesSet = {};
+    for (var v = 0; v < venues.length; v++) {
+      var st = VENUE_STATE[venues[v]];
+      if (st) statesSet[st] = true;
+    }
+    var statesList = Object.keys(statesSet).sort();
+    var html = '<div class="pay-lookup">';
+    for (var s = 0; s < statesList.length; s++) {
+      var stt = statesList[s];
+      html += '<div style="' + (s > 0 ? 'margin-top:6px;padding-top:6px;border-top:1px solid #b8dfc8;' : '') + '">' +
+        '<div style="font-weight:600;font-size:11px;color:var(--green-800);">' + stt + ' rates</div>';
+      for (var r = 0; r < roles.length; r++) {
+        var role = roles[r];
+        var rate = getPayRateByState(stt, role);
+        if (rate !== null && rate > 0) {
+          html += '<div style="font-size:12px;">' + escapeHtml(role) + ': <strong>$' + parseFloat(rate).toFixed(2) + ' / hr</strong></div>';
+        } else if (rate !== null && rate === 0) {
+          html += '<div style="font-size:12px;">' + escapeHtml(role) + ': <em>commission-based</em></div>';
+        } else {
+          html += '<div style="font-size:12px;color:var(--muted);">' + escapeHtml(role) + ': <em>no rate set</em></div>';
+        }
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+    el.innerHTML = html;
+  }
+
+  function getPayRateByState(state2, role) {
+    for (var i = 0; i < state.payRates.length; i++) {
+      var pr = state.payRates[i];
+      if (pr.state === state2 && pr.role === role) return pr.base_rate;
+    }
+    return null;
+  }
+
+  // ---- Internal notes ----
+  function renderNotesSection(emp, cand) {
+    var c = cand || {};
+    var notes = c.internal_notes || '';
+    return '<div class="card-section">' +
+      '<div class="card-section-head">' +
+        '<span class="section-title">Internal notes</span>' +
+      '</div>' +
+      '<textarea class="notes-textarea" data-notes-field placeholder="Add notes about this employee...">' + escapeHtml(notes) + '</textarea>' +
+      '<div class="section-action-row">' +
+        '<button class="btn btn-primary" data-notes-save>Save notes</button>' +
+        '<span class="checklist-status" data-notes-feedback></span>' +
+      '</div>' +
+    '</div>';
+  }
+
+  // ---- Onboarding history (collapsed by default) ----
+  function renderOnboardingSection(emp, cand) {
+    var c = cand || {};
+    var open = state.onboardingOpen;
+    var w4 = (c.w4_complete && c.direct_deposit_complete) || c.w4_url;
+    var i9 = c.i9_submitted || c.i9_url;
+    var i9v = !!c.i9_verified;
+    var hb = !!c.handbook_complete;
+    var wp = !!c.working_papers_complete;
+    return '<div class="card-section">' +
+      '<div class="card-section-head">' +
+        '<span class="section-title">Onboarding history</span>' +
+        '<button class="expand-chevron' + (open ? ' open' : '') + '" data-onboarding-toggle>' +
+          '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">' +
+            '<polyline points="9 18 15 12 9 6"></polyline>' +
+          '</svg>' +
+          (open ? 'Hide' : 'Show') +
+        '</button>' +
+      '</div>' +
+      '<div class="onboarding-list' + (open ? ' open' : '') + '">' +
+        renderChecklistRow('W-4 and Payroll', w4, c.w4_completed_at) +
+        renderChecklistRow('I-9 submitted', i9, c.i9_submitted_at) +
+        renderChecklistRow('I-9 verified', i9v, c.i9_verified_at) +
+        renderChecklistRow('Employee handbook', hb, c.handbook_completed_at) +
+        (c.is_minor ? renderChecklistRow('Working papers (minor)', wp, c.working_papers_uploaded_at) : '') +
+      '</div>' +
+    '</div>';
+  }
+
+  function renderChecklistRow(label, done, ts) {
+    var ck = '<svg fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>';
+    var iconClass = done ? 'check-icon' : 'check-icon empty';
+    var labelClass = done ? 'checklist-label done' : 'checklist-label';
+    var status = done ? (ts ? formatDate(ts) : 'Done') : 'Not on file';
+    var statusClass = done ? 'checklist-status done' : 'checklist-status';
+    return '<div class="checklist-row">' +
+      '<div class="left">' +
+        '<div class="' + iconClass + '">' + (done ? ck : '') + '</div>' +
+        '<span class="' + labelClass + '">' + escapeHtml(label) + '</span>' +
+      '</div>' +
+      '<span class="' + statusClass + '">' + escapeHtml(status) + '</span>' +
+    '</div>';
+  }
+
+  // ---- Footer ----
+  function renderCardFooter(emp, cand) {
+    if (emp.is_active) {
+      return '<div class="card-footer">' +
+        '<button class="btn btn-danger" data-deactivate>Deactivate employee</button>' +
+        '<button class="btn" data-close-modal>Close</button>' +
+      '</div>';
+    }
+    return '<div class="card-footer">' +
+      '<button class="btn btn-green" data-reactivate>Reactivate employee</button>' +
+      '<button class="btn" data-close-modal>Close</button>' +
+    '</div>';
+  }
+
+  // ---- Card modal event wiring ----
+  function wireCardModalEvents(emp, cand) {
+    var root = document.getElementById('cardModalRoot');
+    // Close buttons
+    var closes = root.querySelectorAll('[data-close-modal]');
+    for (var i = 0; i < closes.length; i++) {
+      closes[i].addEventListener('click', closeCardModal);
+    }
+    // Home venue dropdown — same write as the row dropdown.
+    var hv = root.querySelector('[data-card-home-venue]');
+    if (hv) {
+      hv.addEventListener('change', function(ev) {
+        var newVal = ev.target.value || null;
+        var prev = emp.home_venue;
+        patchEmployee(emp.id, { home_venue: newVal }).then(function() {
+          emp.home_venue = newVal;
+          showToast('Home venue saved', 'success');
+          renderList();
+          renderCounts();
+          renderScorecard();
+        }).catch(function(err) {
+          if (err && err.authFailed) { handleAuthFailure(); return; }
+          ev.target.value = prev || '';
+          showToast('Save failed', 'error');
+        });
+      });
+    }
+    // Section edit start
+    var editBtns = root.querySelectorAll('[data-section-edit]');
+    for (var e = 0; e < editBtns.length; e++) {
+      editBtns[e].addEventListener('click', function(ev) {
+        var section = ev.currentTarget.getAttribute('data-section-edit');
+        beginSectionEdit(section, emp, cand);
+      });
+    }
+    // Section save
+    var saveBtns = root.querySelectorAll('[data-section-save]');
+    for (var sv = 0; sv < saveBtns.length; sv++) {
+      saveBtns[sv].addEventListener('click', function(ev) {
+        var section = ev.currentTarget.getAttribute('data-section-save');
+        saveSectionEdit(section, emp, cand);
+      });
+    }
+    // Section cancel
+    var cancelBtns = root.querySelectorAll('[data-section-cancel]');
+    for (var cn = 0; cn < cancelBtns.length; cn++) {
+      cancelBtns[cn].addEventListener('click', function() {
+        state.modalSection = null;
+        state.modalEditDraft = null;
+        renderCardModal();
+      });
+    }
+    // Edit field listeners (live-update the draft as user types)
+    var editFields = root.querySelectorAll('[data-edit-field]');
+    for (var ef = 0; ef < editFields.length; ef++) {
+      editFields[ef].addEventListener('input', onContactDraftChange);
+      editFields[ef].addEventListener('change', onContactDraftChange);
+    }
+    // Roles edit checkboxes
+    var venueChecks = root.querySelectorAll('[data-edit-venue]');
+    for (var vc = 0; vc < venueChecks.length; vc++) {
+      venueChecks[vc].addEventListener('change', onRolesDraftChange);
+    }
+    var roleChecks = root.querySelectorAll('[data-edit-role]');
+    for (var rc = 0; rc < roleChecks.length; rc++) {
+      roleChecks[rc].addEventListener('change', onRolesDraftChange);
+    }
+    // Notes save
+    var notesBtn = root.querySelector('[data-notes-save]');
+    if (notesBtn) {
+      notesBtn.addEventListener('click', function() {
+        saveNotes(emp, cand);
+      });
+    }
+    // Onboarding toggle
+    var ob = root.querySelector('[data-onboarding-toggle]');
+    if (ob) {
+      ob.addEventListener('click', function() {
+        state.onboardingOpen = !state.onboardingOpen;
+        renderCardModal();
+      });
+    }
+    // Deactivate / reactivate
+    var deact = root.querySelector('[data-deactivate]');
+    if (deact) {
+      deact.addEventListener('click', function() {
+        openDeactivateModal(emp, cand);
+      });
+    }
+    var react = root.querySelector('[data-reactivate]');
+    if (react) {
+      react.addEventListener('click', function() {
+        openReactivateModal(emp, cand);
+      });
+    }
+  }
+
+  function beginSectionEdit(section, emp, cand) {
+    var c = cand || {};
+    if (section === 'contact') {
+      state.modalEditDraft = {
+        email: c.email || '',
+        phone: emp.phone || '',
+        punch_id: emp.punch_id || '',
+        date_of_birth: c.date_of_birth || '',
+        earliest_start_date: c.earliest_start_date || '',
+        is_minor: c.is_minor === true
+      };
+    } else if (section === 'roles') {
+      state.modalEditDraft = {
+        roles: (c.assigned_roles || []).slice(),
+        venues: (c.assigned_venues || []).slice()
+      };
+    }
+    state.modalSection = section;
+    renderCardModal();
+    if (section === 'roles') updateRolesPayLookup();
+  }
+
+  function onContactDraftChange(ev) {
+    if (!state.modalEditDraft) return;
+    var name = ev.target.getAttribute('data-edit-field');
+    if (!name) return;
+    if (ev.target.type === 'checkbox') {
+      state.modalEditDraft[name] = ev.target.checked;
+    } else {
+      state.modalEditDraft[name] = ev.target.value;
+    }
+  }
+
+  function onRolesDraftChange(ev) {
+    if (!state.modalEditDraft) return;
+    var t = ev.target;
+    var ven = t.getAttribute('data-edit-venue');
+    var role = t.getAttribute('data-edit-role');
+    if (ven) {
+      var idx = state.modalEditDraft.venues.indexOf(ven);
+      if (t.checked && idx === -1) state.modalEditDraft.venues.push(ven);
+      else if (!t.checked && idx !== -1) state.modalEditDraft.venues.splice(idx, 1);
+    } else if (role) {
+      var idx2 = state.modalEditDraft.roles.indexOf(role);
+      if (t.checked && idx2 === -1) state.modalEditDraft.roles.push(role);
+      else if (!t.checked && idx2 !== -1) state.modalEditDraft.roles.splice(idx2, 1);
+    }
+    // Visual update of the pill class
+    var pill = t.closest('.ms-pill');
+    if (pill) pill.classList.toggle('on', t.checked);
+    updateRolesPayLookup();
+  }
+
+  function saveSectionEdit(section, emp, cand) {
+    var errEl = document.querySelector('[data-section-err="' + section + '"]');
+    if (errEl) errEl.textContent = '';
+    var draft = state.modalEditDraft || {};
+
+    if (section === 'contact') {
+      // Validate phone if provided.
+      if (draft.phone) {
+        var digits = draft.phone.replace(/\D/g, '');
+        if (digits.length < 10) {
+          if (errEl) errEl.textContent = 'Phone must be at least 10 digits.';
+          return;
+        }
+      }
+      // Validate punch_id if provided.
+      if (draft.punch_id && !/^\d{4}$/.test(draft.punch_id)) {
+        if (errEl) errEl.textContent = 'Punch ID must be exactly 4 digits.';
+        return;
+      }
+      saveContactSection(emp, cand, draft, errEl);
+      return;
+    }
+    if (section === 'roles') {
+      saveRolesSection(emp, cand, draft, errEl);
+      return;
+    }
+  }
+
+  // Contact section save: writes phone + punch_id to BOTH employees and candidates,
+  // writes email/dob/start_date/is_minor to candidates only.
+  function saveContactSection(emp, cand, draft, errEl) {
+    var oldPunch = emp.punch_id;
+    var newPunch = draft.punch_id || null;
+    var empBody = {};
+    var candBody = {};
+
+    if (draft.phone !== emp.phone) empBody.phone = draft.phone || null;
+    if (newPunch !== oldPunch) empBody.punch_id = newPunch;
+
+    if (cand && cand.id) {
+      // Update candidate row
+      if (draft.email !== (cand.email || '')) candBody.email = draft.email || null;
+      if (draft.phone !== (cand.phone || '')) candBody.phone = draft.phone || null;
+      if (newPunch !== (cand.punch_id || null)) candBody.punch_id = newPunch;
+      if (draft.date_of_birth !== (cand.date_of_birth || '')) candBody.date_of_birth = draft.date_of_birth || null;
+      if (draft.earliest_start_date !== (cand.earliest_start_date || '')) candBody.earliest_start_date = draft.earliest_start_date || null;
+      if (draft.is_minor !== (cand.is_minor === true)) candBody.is_minor = draft.is_minor;
+    }
+
+    var ops = [];
+    if (Object.keys(empBody).length > 0) {
+      empBody.updated_at = new Date().toISOString();
+      ops.push(patchEmployee(emp.id, empBody));
+    }
+    if (cand && cand.id && Object.keys(candBody).length > 0) {
+      candBody.updated_at = new Date().toISOString();
+      ops.push(patchCandidate(cand.id, candBody));
+    }
+    if (ops.length === 0) {
+      // Nothing changed
+      state.modalSection = null;
+      state.modalEditDraft = null;
+      renderCardModal();
+      return;
+    }
+
+    Promise.all(ops).then(function() {
+      // Reflect the changes in our local in-memory copies so the UI updates
+      // without refetching the whole list.
+      if (Object.keys(empBody).length > 0) {
+        Object.keys(empBody).forEach(function(k) {
+          if (k !== 'updated_at') emp[k] = empBody[k];
+        });
+      }
+      if (cand && Object.keys(candBody).length > 0) {
+        Object.keys(candBody).forEach(function(k) {
+          if (k !== 'updated_at') cand[k] = candBody[k];
+        });
+      }
+      // If punch_id changed, the candidate keying (state.candidates[punch_id])
+      // is now stale. Refresh it.
+      if (newPunch !== oldPunch && cand) {
+        if (oldPunch && state.candidates[oldPunch] === cand) {
+          delete state.candidates[oldPunch];
+        }
+        if (newPunch) state.candidates[newPunch] = cand;
+      }
+      state.modalSection = null;
+      state.modalEditDraft = null;
+      showToast('Saved', 'success');
+      renderList();
+      renderCardModal();
+    }).catch(function(err) {
+      if (err && err.authFailed) { handleAuthFailure(); return; }
+      console.error('Save failed:', err);
+      if (errEl) errEl.textContent = 'Save failed. Please try again. ' + (err.message || '');
+    });
+  }
+
+  // Roles section save: writes assigned_venues, assigned_roles, and
+  // recomputes starting_pay_rate JSON. All to candidates.
+  function saveRolesSection(emp, cand, draft, errEl) {
+    if (!cand || !cand.id) {
+      if (errEl) errEl.textContent = 'No candidate record exists for this employee. Cannot save roles.';
+      return;
+    }
+    var venues = draft.venues || [];
+    var roles = draft.roles || [];
+    // Recompute starting_pay_rate JSON: { roleName: { stateCode: rate } }
+    var sv = {};
+    for (var v = 0; v < venues.length; v++) {
+      var st = VENUE_STATE[venues[v]];
+      if (st) sv[st] = true;
+    }
+    var statesList = Object.keys(sv);
+    var rateObj = {};
+    for (var r = 0; r < roles.length; r++) {
+      var role = roles[r];
+      var rr = {};
+      for (var s = 0; s < statesList.length; s++) {
+        var rt = getPayRateByState(statesList[s], role);
+        if (rt !== null) rr[statesList[s]] = rt;
+      }
+      rateObj[role] = rr;
+    }
+    var body = {
+      assigned_venues: venues,
+      assigned_roles: roles,
+      starting_pay_rate: JSON.stringify(rateObj),
+      updated_at: new Date().toISOString()
+    };
+    patchCandidate(cand.id, body).then(function() {
+      cand.assigned_venues = venues;
+      cand.assigned_roles = roles;
+      cand.starting_pay_rate = body.starting_pay_rate;
+      state.modalSection = null;
+      state.modalEditDraft = null;
+      showToast('Saved', 'success');
+      renderCardModal();
+    }).catch(function(err) {
+      if (err && err.authFailed) { handleAuthFailure(); return; }
+      console.error('Save failed:', err);
+      if (errEl) errEl.textContent = 'Save failed. Please try again.';
+    });
+  }
+
+  function saveNotes(emp, cand) {
+    if (!cand || !cand.id) {
+      showToast('No candidate record — cannot save notes', 'error');
+      return;
+    }
+    var ta = document.querySelector('[data-notes-field]');
+    var fb = document.querySelector('[data-notes-feedback]');
+    if (!ta) return;
+    var notes = ta.value;
+    if (fb) fb.textContent = '';
+    patchCandidate(cand.id, {
+      internal_notes: notes,
+      updated_at: new Date().toISOString()
+    }).then(function() {
+      cand.internal_notes = notes;
+      if (fb) {
+        fb.textContent = 'Saved';
+        fb.className = 'checklist-status done';
+        setTimeout(function() { if (fb) fb.textContent = ''; }, 1800);
+      }
+    }).catch(function(err) {
+      if (err && err.authFailed) { handleAuthFailure(); return; }
+      console.error('Notes save failed:', err);
+      if (fb) {
+        fb.textContent = 'Save failed';
+        fb.className = 'checklist-status';
+        fb.style.color = 'var(--red-600)';
+      }
+    });
+  }
+
+  // ============================================================
+  // DEACTIVATE SUB-MODAL
+  // ============================================================
+
+  // Local state for the deactivate modal (separate from the main page state
+  // so its UI is self-contained).
+  var deactState = null;
+
+  function openDeactivateModal(emp, cand) {
+    deactState = {
+      emp: emp,
+      cand: cand,
+      category: null,
+      rehire: null, // 'yes' | 'no' | null (Don't know)
+      notes: '',
+      confirmText: ''
+    };
+    renderDeactivateModal();
+  }
+
+  function closeDeactivateModal() {
+    deactState = null;
+    document.getElementById('deactModalRoot').innerHTML = '';
+  }
+
+  function renderDeactivateModal() {
+    var root = document.getElementById('deactModalRoot');
+    if (!deactState) { root.innerHTML = ''; return; }
+    var emp = deactState.emp;
+    var name = fullName(emp);
+    var catHtml = '';
+    DEACT_CATEGORIES.forEach(function(c) {
+      var on = deactState.category === c.value;
+      catHtml += '<label class="deact-radio-pill' + (on ? ' on' : '') + '">' +
+        '<input type="radio" name="deactCat" value="' + c.value + '"' + (on ? ' checked' : '') + ' />' +
+        c.label +
+      '</label>';
+    });
+    var rehireOpts = [
+      { value: 'yes', label: 'Yes' },
+      { value: 'no', label: 'No' },
+      { value: '', label: "Don't know" }
+    ];
+    var rehireHtml = '';
+    rehireOpts.forEach(function(o) {
+      var on = (deactState.rehire || '') === o.value;
+      rehireHtml += '<label class="deact-radio-pill' + (on ? ' on' : '') + '">' +
+        '<input type="radio" name="deactRehire" value="' + o.value + '"' + (on ? ' checked' : '') + ' />' +
+        o.label +
+      '</label>';
+    });
+    var canSubmit =
+      !!deactState.category &&
+      deactState.confirmText.trim().toUpperCase() === 'DEACTIVATE';
+    var html =
+      '<div class="deact-overlay" data-deact-bg>' +
+        '<div class="deact-modal">' +
+          '<h3>Deactivate ' + escapeHtml(name) + '</h3>' +
+          '<p>This removes them from the availability sign-up list immediately. Their record is preserved.</p>' +
+          '<div class="deact-field">' +
+            '<label class="deact-label">Reason <span class="req">*</span></label>' +
+            '<div class="deact-radio-group" data-deact-cats>' + catHtml + '</div>' +
+          '</div>' +
+          '<div class="deact-field">' +
+            '<label class="deact-label">Notes (optional)</label>' +
+            '<textarea class="notes-textarea" data-deact-notes placeholder="Specifics that don\'t fit a category...">' + escapeHtml(deactState.notes) + '</textarea>' +
+          '</div>' +
+          '<div class="deact-field">' +
+            '<label class="deact-label">Eligible for rehire?</label>' +
+            '<div class="deact-radio-group" data-deact-rehire>' + rehireHtml + '</div>' +
+          '</div>' +
+          '<div class="deact-field">' +
+            '<label class="deact-label">Type DEACTIVATE to confirm <span class="req">*</span></label>' +
+            '<input type="text" class="deact-confirm-input' + (deactState.confirmText.trim().toUpperCase() === 'DEACTIVATE' ? ' matched' : '') + '" data-deact-confirm value="' + escapeHtml(deactState.confirmText) + '" placeholder="DEACTIVATE" autocomplete="off" />' +
+          '</div>' +
+          '<div class="deact-err" data-deact-err></div>' +
+          '<div class="deact-actions">' +
+            '<button class="btn" style="flex:1;" data-deact-cancel>Cancel</button>' +
+            '<button class="btn btn-danger" style="flex:1;"' + (canSubmit ? '' : ' disabled') + ' data-deact-confirm-btn>Deactivate</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    root.innerHTML = html;
+    wireDeactivateModalEvents();
+  }
+
+  function wireDeactivateModalEvents() {
+    var root = document.getElementById('deactModalRoot');
+    var bg = root.querySelector('[data-deact-bg]');
+    if (bg) {
+      bg.addEventListener('click', function(ev) {
+        if (ev.target === bg) closeDeactivateModal();
+      });
+    }
+    var cancelBtn = root.querySelector('[data-deact-cancel]');
+    if (cancelBtn) cancelBtn.addEventListener('click', closeDeactivateModal);
+
+    var catRadios = root.querySelectorAll('[data-deact-cats] input[type=radio]');
+    for (var i = 0; i < catRadios.length; i++) {
+      catRadios[i].addEventListener('change', function(ev) {
+        deactState.category = ev.target.value;
+        renderDeactivateModal();
+      });
+    }
+    var rehireRadios = root.querySelectorAll('[data-deact-rehire] input[type=radio]');
+    for (var j = 0; j < rehireRadios.length; j++) {
+      rehireRadios[j].addEventListener('change', function(ev) {
+        deactState.rehire = ev.target.value || null;
+        renderDeactivateModal();
+      });
+    }
+    var notesTa = root.querySelector('[data-deact-notes]');
+    if (notesTa) {
+      notesTa.addEventListener('input', function(ev) {
+        deactState.notes = ev.target.value;
+      });
+    }
+    var conf = root.querySelector('[data-deact-confirm]');
+    if (conf) {
+      conf.addEventListener('input', function(ev) {
+        deactState.confirmText = ev.target.value;
+        renderDeactivateModal();
+        // Restore focus + caret to the input after re-render.
+        setTimeout(function() {
+          var fresh = document.querySelector('[data-deact-confirm]');
+          if (fresh) {
+            fresh.focus();
+            fresh.setSelectionRange(fresh.value.length, fresh.value.length);
+          }
+        }, 0);
+      });
+    }
+    var submit = root.querySelector('[data-deact-confirm-btn]');
+    if (submit) {
+      submit.addEventListener('click', performDeactivate);
+    }
+  }
+
+  function performDeactivate() {
+    if (!deactState) return;
+    if (!deactState.category) return;
+    if (deactState.confirmText.trim().toUpperCase() !== 'DEACTIVATE') return;
+    var emp = deactState.emp;
+    var cand = deactState.cand;
+    var errEl = document.querySelector('[data-deact-err]');
+    var btn = document.querySelector('[data-deact-confirm-btn]');
+    if (btn) { btn.disabled = true; btn.textContent = 'Deactivating…'; }
+    if (errEl) errEl.textContent = '';
+
+    var actor = (pcAuth.getUser && pcAuth.getUser()) || null;
+    var actorName = actor ? (actor.display_name || actor.email || 'Unknown') : 'Unknown';
+    var now = new Date().toISOString();
+
+    var ops = [];
+    if (cand && cand.id) {
+      var candBody = {
+        pipeline_stage: 'inactive',
+        deactivation_category: deactState.category,
+        deactivation_reason: deactState.notes ? deactState.notes.trim() : null,
+        rehire_eligible: deactState.rehire || null,
+        deactivated_by: actorName,
+        stage_updated_at: now,
+        stage_updated_by: actorName,
+        updated_at: now
+      };
+      ops.push(patchCandidate(cand.id, candBody));
+    }
+    ops.push(patchEmployee(emp.id, { is_active: false, updated_at: now }));
+
+    Promise.all(ops).then(function() {
+      // Update local state
+      emp.is_active = false;
+      if (cand) {
+        cand.pipeline_stage = 'inactive';
+        cand.deactivation_category = deactState.category;
+        cand.deactivation_reason = deactState.notes ? deactState.notes.trim() : null;
+        cand.rehire_eligible = deactState.rehire || null;
+        cand.deactivated_by = actorName;
+        cand.stage_updated_at = now;
+        cand.stage_updated_by = actorName;
+      }
+      closeDeactivateModal();
+      showToast('Employee deactivated', 'success');
+      // Re-render everything that reflects the new status.
+      renderStatusTabs();
+      renderList();
+      renderCounts();
+      renderScorecard();
+      renderCardModal();
+    }).catch(function(err) {
+      if (err && err.authFailed) { handleAuthFailure(); return; }
+      console.error('Deactivate failed:', err);
+      if (errEl) errEl.textContent = 'Failed to deactivate. ' + (err.message || 'Try again.');
+      if (btn) { btn.disabled = false; btn.textContent = 'Deactivate'; }
+    });
+  }
+
+  // ============================================================
+  // REACTIVATE — simple confirm dialog
+  // ============================================================
+
+  function openReactivateModal(emp, cand) {
+    var name = fullName(emp);
+    var html =
+      '<div class="deact-overlay" data-react-bg>' +
+        '<div class="deact-modal">' +
+          '<h3>Reactivate ' + escapeHtml(name) + '?</h3>' +
+          '<p>They will appear in the active employee list and on the availability sign-up page.</p>' +
+          '<div class="deact-actions">' +
+            '<button class="btn" style="flex:1;" data-react-cancel>Cancel</button>' +
+            '<button class="btn btn-green" style="flex:1;" data-react-confirm>Reactivate</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    document.getElementById('deactModalRoot').innerHTML = html;
+    var root = document.getElementById('deactModalRoot');
+    var bg = root.querySelector('[data-react-bg]');
+    if (bg) {
+      bg.addEventListener('click', function(ev) {
+        if (ev.target === bg) closeReactivateModal();
+      });
+    }
+    var cancelBtn = root.querySelector('[data-react-cancel]');
+    if (cancelBtn) cancelBtn.addEventListener('click', closeReactivateModal);
+    var confirmBtn = root.querySelector('[data-react-confirm]');
+    if (confirmBtn) {
+      confirmBtn.addEventListener('click', function() {
+        performReactivate(emp, cand, confirmBtn);
+      });
+    }
+  }
+
+  function closeReactivateModal() {
+    document.getElementById('deactModalRoot').innerHTML = '';
+  }
+
+  function performReactivate(emp, cand, btn) {
+    if (btn) { btn.disabled = true; btn.textContent = 'Reactivating…'; }
+    var now = new Date().toISOString();
+    var ops = [];
+    if (cand && cand.id) {
+      // Per "simple history" decision: clear deactivation_category and
+      // deactivated_by on reactivate, but KEEP deactivation_reason and
+      // rehire_eligible as historical record. They'll be overwritten on the
+      // next deactivation if it happens.
+      var candBody = {
+        pipeline_stage: 'active',
+        deactivation_category: null,
+        deactivated_by: null,
+        stage_updated_at: now,
+        updated_at: now
+      };
+      ops.push(patchCandidate(cand.id, candBody));
+    }
+    ops.push(patchEmployee(emp.id, { is_active: true, updated_at: now }));
+
+    Promise.all(ops).then(function() {
+      emp.is_active = true;
+      if (cand) {
+        cand.pipeline_stage = 'active';
+        cand.deactivation_category = null;
+        cand.deactivated_by = null;
+        cand.stage_updated_at = now;
+      }
+      closeReactivateModal();
+      showToast('Employee reactivated', 'success');
+      renderStatusTabs();
+      renderList();
+      renderCounts();
+      renderScorecard();
+      renderCardModal();
+    }).catch(function(err) {
+      if (err && err.authFailed) { handleAuthFailure(); return; }
+      console.error('Reactivate failed:', err);
+      showToast('Reactivate failed', 'error');
+      if (btn) { btn.disabled = false; btn.textContent = 'Reactivate'; }
+    });
+  }
+
+  // ============================================================
   // BOOT
-  // -------------------------------------------------------------
+  // ============================================================
   pcAuth.require({
     pageSlug: 'home-components',
     onReady: function(user) {
-      // Header user + sign out
       var hr = document.getElementById('header-right');
       if (hr && user) {
         hr.innerHTML =
           '<span class="header-user">' + escapeHtml(user.display_name || user.email || '') + '</span>' +
           '<button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
       }
-
-      // Search
       document.getElementById('searchInput').addEventListener('input', onSearchInput);
 
-      // Load data — employees and par totals in parallel so the
-      // scorecard can render the moment both resolve.
+      // Escape key closes top-most modal.
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+          if (document.getElementById('deactModalRoot').innerHTML) {
+            closeDeactivateModal();
+            closeReactivateModal();
+          } else if (state.modalEmpId) {
+            closeCardModal();
+          }
+        }
+      });
+
       Promise.all([
         loadEmployees(),
+        loadCandidates().catch(function(err) {
+          console.warn('Candidates fetch failed (non-blocking):', err);
+          return [];
+        }),
+        loadPayRates().catch(function(err) {
+          console.warn('Pay rates fetch failed (non-blocking):', err);
+          return [];
+        }),
         loadParTotals().catch(function(err) {
-          // Non-blocking: if par_levels fetch fails we still want the
-          // employee list to work. Scorecards just fall back to "—".
           console.warn('Par totals fetch failed:', err);
-          var fallback = {};
-          SCORECARD_VENUES.forEach(function(v) { fallback[v] = 0; });
-          return fallback;
+          var fb = {};
+          SCORECARD_VENUES.forEach(function(v) { fb[v] = 0; });
+          return fb;
         })
       ]).then(function(results) {
         state.employees = results[0] || [];
-        state.parTotals = results[1] || {};
+        // Index candidates by punch_id for fast lookup. If two candidates
+        // share a punch_id (data corruption) the last one wins — non-fatal,
+        // user will notice when they open the card.
+        var candList = results[1] || [];
+        var candMap = {};
+        for (var i = 0; i < candList.length; i++) {
+          var c = candList[i];
+          if (c.punch_id) candMap[c.punch_id] = c;
+        }
+        state.candidates = candMap;
+        state.payRates = results[2] || [];
+        // Derive role list from pay rates.
+        var roleSet = {};
+        state.payRates.forEach(function(r) { roleSet[r.role] = true; });
+        state.pcRoles = Object.keys(roleSet).sort();
+        state.parTotals = results[3] || {};
+
+        renderStatusTabs();
         renderCounts();
         renderScorecard();
         renderList();
