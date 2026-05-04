@@ -322,6 +322,15 @@ function renderHireDetails(c){
     for(var i=0;i<c.assigned_venues.length;i++)html+='<span class="tag">'+(VENUE_LABELS[c.assigned_venues[i]]||c.assigned_venues[i])+'</span>';
     html+='</div></div>';
   }
+  if(c.home_venue){
+    html+='<div style="margin-top:10px;"><div class="detail-label" style="margin-bottom:4px;">Home component</div><div class="tag-list">';
+    if(c.home_venue==='NA'){
+      html+='<span class="tag" style="background:#f5f5f3;color:#888;">Doesn\'t apply</span>';
+    } else {
+      html+='<span class="tag" style="background:#eaf6ec;border-color:#7dc98a;color:#1e6b2e;font-weight:600;">'+(VENUE_LABELS[c.home_venue]||c.home_venue)+'</span>';
+    }
+    html+='</div></div>';
+  }
   if(c.assigned_roles&&c.assigned_roles.length>0)html+='<div style="margin-top:10px;"><div class="detail-label" style="margin-bottom:4px;">Assigned roles</div><div class="tag-list">'+renderTags(c.assigned_roles)+'</div></div>';
   if(c.starting_pay_rate){
     var rateObj=null;try{rateObj=JSON.parse(c.starting_pay_rate);}catch(e){}
@@ -405,12 +414,13 @@ function pcPipeShowHireModal(){if(!pcSelected)return;pcPipeRenderHireModal({});}
 
 function pcPipeRenderHireModal(state){
   if(!pcSelected)return;
-  // state shape: { selectedVenues:[], selectedRoles:[], hiredBy:'', punchOverride:'', collisionMsg:'' }
+  // state shape: { selectedVenues:[], selectedRoles:[], hiredBy:'', punchOverride:'', collisionMsg:'', homeVenue:'' }
   state=state||{};
   var selVenues=state.selectedVenues||[];
   var selRoles=state.selectedRoles||[];
   var hiredBy=state.hiredBy||'';
   var collisionMsg=state.collisionMsg||'';
+  var homeVenue=state.homeVenue||'';
   var defaultPunch=getPunchId(pcSelected.phone);
   var punchValue=state.punchOverride||defaultPunch;
   var hasCollision=!!collisionMsg;
@@ -447,6 +457,17 @@ function pcPipeRenderHireModal(state){
     punchBlock='<div class="punch-display" style="margin-bottom:14px;"><div class="punch-lbl">Punch ID (last 4 of phone)</div><div class="punch-num">'+punchValue+'</div></div>';
   }
   var hiredByEsc=hiredBy.replace(/"/g,'&quot;');
+  // Home-component dropdown -- required at hire time (May 3, 2026 addition)
+  var homeOptions='<option value="">-- Select home component --</option>';
+  for(var hi=0;hi<VENUE_CODES.length;hi++){
+    var hc=VENUE_CODES[hi];
+    var hsel=(homeVenue===hc)?' selected':'';
+    homeOptions+='<option value="'+hc+'"'+hsel+'>'+(VENUE_LABELS[hc]||hc)+'</option>';
+  }
+  homeOptions+='<option value="NA"'+(homeVenue==='NA'?' selected':'')+'>Doesn\'t apply (works multiple venues)</option>';
+  var homeBlock=
+    '<label style="font-size:13px;font-weight:500;color:#444;display:block;margin-bottom:6px;">Home component <span style="color:#c0392b;">*</span></label>'+
+    '<select id="hire-home-venue" onchange="pcHireHomeVenueChanged()" style="margin-bottom:12px;">'+homeOptions+'</select>';
   document.getElementById('pcpipe-modal').innerHTML=
     '<div class="modal-overlay" onclick="pcPipeCloseModal(event)">'+
       '<div class="modal-box">'+
@@ -458,6 +479,7 @@ function pcPipeRenderHireModal(state){
         '<div class="multi-select-group" id="hire-venues-group">'+venueHtml+'</div>'+
         '<label style="font-size:13px;font-weight:500;color:#444;display:block;margin-bottom:6px;">Assign roles <span style="color:#c0392b;">*</span></label>'+
         '<div class="multi-select-group" id="hire-roles-group">'+roleHtml+'</div>'+
+        homeBlock+
         '<div id="hire-pay-lookup" class="pay-lookup"></div>'+
         '<label style="font-size:13px;font-weight:500;color:#444;display:block;margin-bottom:4px;">Your name <span style="color:#c0392b;">*</span></label>'+
         '<input type="text" id="hire-by-name" placeholder="Who is marking this hire?" value="'+hiredByEsc+'" style="margin-bottom:12px;" />'+
@@ -473,6 +495,7 @@ function pcPipeRenderHireModal(state){
 }
 function pcHireVenueChanged(){document.querySelectorAll('#hire-venues-group .ms-pill').forEach(function(p){var cb=p.querySelector('input[type=checkbox]');p.classList.toggle('on',cb&&cb.checked);});updatePayLookup();}
 function pcHireRoleChanged(){document.querySelectorAll('#hire-roles-group .ms-pill').forEach(function(p){var cb=p.querySelector('input[type=checkbox]');p.classList.toggle('on',cb&&cb.checked);});updatePayLookup();}
+function pcHireHomeVenueChanged(){/* placeholder for future visual feedback on home-venue change */}
 
 function pcPipeHireModalPunchInputChanged(){
   var inp=document.getElementById('hire-punch-input');
@@ -493,6 +516,11 @@ function pcPipeConfirmHire(){
   if(venues.length===0){errEl.innerHTML='Please select at least one venue.';return;}
   if(roles.length===0){errEl.innerHTML='Please select at least one role.';return;}
   if(!hiredBy){errEl.innerHTML='Please enter your name.';return;}
+  // Home-component gate (May 3, 2026): every new hire must have a home component decided at hire time.
+  // Picking 'NA' ("Doesn't apply") is acceptable; leaving it blank is not.
+  var homeVenueEl=document.getElementById('hire-home-venue');
+  var homeVenue=homeVenueEl?homeVenueEl.value:'';
+  if(!homeVenue){errEl.innerHTML='Please select a home component (or "Doesn\'t apply") for this employee.';return;}
   // Determine punch ID -- either the override from the collision input, or default last-4-of-phone
   var punchInput=document.getElementById('hire-punch-input');
   var punch=punchInput?punchInput.value.replace(/\D/g,''):getPunchId(pcSelected.phone);
@@ -519,14 +547,15 @@ function pcPipeConfirmHire(){
           selectedRoles:roles,
           hiredBy:hiredBy,
           punchOverride:punch,
-          collisionMsg:msg
+          collisionMsg:msg,
+          homeVenue:homeVenue
         });
         // Focus the new punch input so user can immediately type
         setTimeout(function(){var ni=document.getElementById('hire-punch-input');if(ni){ni.focus();ni.select();}},30);
         return null;
       }
       // No collision -- proceed with hire
-      return doHireWrite(punch,venues,roles,hiredBy);
+      return doHireWrite(punch,venues,roles,hiredBy,homeVenue);
     })
     .catch(function(err){
       console.error('Hire failed:',err);
@@ -542,7 +571,7 @@ function pcPipeConfirmHire(){
     });
 }
 
-function doHireWrite(punch,venues,roles,hiredBy){
+function doHireWrite(punch,venues,roles,hiredBy,homeVenue){
   // Build the candidates update + employees insert. Returns a promise.
   var sv={};
   for(var v=0;v<venues.length;v++){var st=VENUE_STATE[venues[v]];if(st)sv[st]=true;}
@@ -553,8 +582,8 @@ function doHireWrite(punch,venues,roles,hiredBy){
     for(var s=0;s<states.length;s++){var rt=getPayRateByState(states[s],role);if(rt!==null)rr[states[s]]=rt;}
     rateObj[role]=rr;
   }
-  var cu={pipeline_stage:'onboarding',hired:true,hired_at:new Date().toISOString(),hired_by:hiredBy,punch_id:punch,assigned_venues:venues,assigned_roles:roles,starting_pay_rate:JSON.stringify(rateObj),stage_updated_at:new Date().toISOString(),updated_at:new Date().toISOString()};
-  var er={first_name:pcSelected.first_name,last_name:pcSelected.last_name,punch_id:punch,is_active:true,phone:pcSelected.phone};
+  var cu={pipeline_stage:'onboarding',hired:true,hired_at:new Date().toISOString(),hired_by:hiredBy,punch_id:punch,assigned_venues:venues,assigned_roles:roles,home_venue:homeVenue,starting_pay_rate:JSON.stringify(rateObj),stage_updated_at:new Date().toISOString(),updated_at:new Date().toISOString()};
+  var er={first_name:pcSelected.first_name,last_name:pcSelected.last_name,punch_id:punch,is_active:true,phone:pcSelected.phone,home_venue:homeVenue};
   cancelBookingForCandidate(pcSelected.id);
   var failStep='candidates update';
   return sbFetch('/rest/v1/candidates?id=eq.'+pcSelected.id,{method:'PATCH',prefer:'return=minimal',body:cu})
