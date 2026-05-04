@@ -224,6 +224,25 @@ header {
   font-size: 11px; font-weight: 700; color: var(--slate);
   background: var(--slate-light); padding: 3px 8px; border-radius: 4px;
 }
+/* JMAC ribbon badges. JMAC = external/agency staffing. */
+.jmac-tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10px; font-weight: 800;
+  letter-spacing: 0.05em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 4px;
+  background: #ede9fe; color: #5b21b6;
+  border: 1px solid #c4b5fd;
+  white-space: nowrap;
+}
+.jmac-reduce-tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10px; font-weight: 800;
+  letter-spacing: 0.05em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 4px;
+  background: #fef3c7; color: #92400e;
+  border: 1px solid #fbbf24;
+  white-space: nowrap;
+}
 .event-spacer { flex: 1; min-width: 12px; }
 
 /* Dual coverage: signups on the left, filled on the right */
@@ -571,6 +590,15 @@ header {
   background: var(--amber); color: white;
   padding: 1px 4px; border-radius: 3px;
 }
+.slot-filled.jmac {
+  background: #ede9fe; border-color: #c4b5fd;
+  color: #5b21b6;
+}
+.jmac-slot-tag {
+  font-size: 8px; font-weight: 800; letter-spacing: 0.04em;
+  background: #7c3aed; color: white;
+  padding: 1px 4px; border-radius: 3px;
+}
 .slot-filled.conflict {
   background: #fff3e0; border-color: var(--amber-border);
   color: var(--amber-dark);
@@ -615,6 +643,14 @@ header {
   text-transform: uppercase; letter-spacing: 0.04em;
 }
 .typeahead-item.signup-tag .ta-meta { color: var(--green-dark); }
+.typeahead-item.jmac-item {
+  background: #ede9fe; color: #5b21b6;
+  border: 1px solid #c4b5fd;
+}
+.typeahead-item.jmac-item:hover, .typeahead-item.jmac-item.focused {
+  background: #ddd6fe; color: #4c1d95;
+}
+.typeahead-item.jmac-item .ta-meta { color: #6d28d9; }
 .typeahead-no-match {
   padding: 8px; font-size: 11px; color: var(--amber-dark);
   background: var(--amber-light); border-radius: 5px;
@@ -2046,6 +2082,35 @@ function renderEventRow(ev) {
   if (evUnresolved > 0) {
     html += '<span class="unresolved-tag">⚠ ' + evUnresolved + ' unresolved</span>';
   }
+  // JMAC ribbon badges. Two separate signals:
+  //  1. JMAC ×N — how many slots on this event are JMAC-covered.
+  //  2. Replace JMAC? — appears when JMAC is in use AND there are signed-up
+  //     people on the event who aren't placed yet (potential replacements).
+  // The first badge persists as long as any JMAC slot exists on the event.
+  // The second badge persists as long as there's a real-employee alternative
+  // to one of the JMAC slots.
+  const jmacOnEvent = positionsForEvent(ev.id).filter(p => p.source === 'jmac');
+  const jmacCount = jmacOnEvent.length;
+  if (jmacCount > 0) {
+    html += '<span class="jmac-tag" title="' + jmacCount + ' position' +
+      (jmacCount === 1 ? '' : 's') + ' covered by JMAC">📞 JMAC ×' + jmacCount + '</span>';
+    // Count signups on this event who aren't already placed at it.
+    // Those people could replace a JMAC slot.
+    const placedNamesHere = new Set(
+      positionsForEvent(ev.id).map(p => p.staff_name)
+    );
+    const replaceable = state.availability.filter(a =>
+      a.event_id === ev.id &&
+      !a.removed_at &&
+      !placedNamesHere.has(a.staff_name)
+    ).length;
+    if (replaceable > 0) {
+      html += '<span class="jmac-reduce-tag" title="' + replaceable +
+        ' signed-up employee' + (replaceable === 1 ? '' : 's') +
+        ' could replace a JMAC slot. Reduce the JMAC ask when you place them.">' +
+        '⚠ Replace JMAC? (' + replaceable + ')</span>';
+    }
+  }
   if (locked) html += '<span class="lock-tag">🔒 Locked</span>';
   html += '<span class="event-spacer"></span>';
 
@@ -2379,7 +2444,19 @@ function renderFilledSlot(ev, p, locked) {
   let cls = 'slot-filled';
   if (p.source === 'manual') cls += ' manager-typed';
   if (p.source === 'placeholder') cls += ' placeholder';
+  if (p.source === 'jmac') cls += ' jmac';
   if (locked) cls += ' locked';
+
+  // JMAC slots are agency staffing — no conflict logic, no home-venue badge,
+  // no new-hire badge. Render a simplified pill and bail.
+  if (p.source === 'jmac') {
+    let html = '<div class="' + cls + '" draggable="false" data-position-id="' + p.id + '" data-staff-name="' + escapeAttr(p.staff_name) + '" data-source="jmac">';
+    html += '<span class="person-name">📞 ' + escapeHtml(p.staff_name) + '</span>';
+    html += '<span class="jmac-slot-tag">AGENCY</span>';
+    if (!locked) html += '<button class="x" data-remove-position="' + p.id + '" title="Remove">✕</button>';
+    html += '</div>';
+    return html;
+  }
 
   // Conflict check
   const multiCount = state.multiSignupCounts[ev.event_date + '|' + p.staff_name] || 1;
@@ -2442,6 +2519,14 @@ function renderTypeahead() {
     return '<div style="padding:6px;font-size:11px;color:var(--label)">Start typing…</div>';
   }
   const q = t.value.toLowerCase().trim();
+  // JMAC special token — agency staffing, allows duplicates per event,
+  // bypasses home-venue override, and counts as filled for staffing status.
+  if (q === 'jmac') {
+    return '<div class="typeahead-item jmac-item focused" data-pick-jmac="1">' +
+      '<span class="ta-name">JMAC</span>' +
+      '<span class="ta-meta">Agency · counts as filled</span>' +
+      '</div>';
+  }
   const ev = state.events.find(e => e.id === t.eventId);
   const dateSignups = ev ? Array.from(new Set(
     state.availability.filter(a => a.event_id === t.eventId).map(a => a.staff_name)
@@ -2674,7 +2759,12 @@ function attachEventHandlers() {
       if (e.key === 'Enter') {
         const focused = document.querySelector('.typeahead-item.focused');
         if (focused) {
-          pickName(focused.getAttribute('data-pick-name'));
+          // JMAC special token uses a different attribute than employee names.
+          if (focused.hasAttribute('data-pick-jmac')) {
+            pickJmac();
+          } else {
+            pickName(focused.getAttribute('data-pick-name'));
+          }
           return;
         }
         const placeholder = document.querySelector('[data-add-placeholder]');
@@ -2770,6 +2860,12 @@ function attachTypeaheadHandlers() {
     item.addEventListener('click', e => {
       e.stopPropagation();
       pickName(item.getAttribute('data-pick-name'));
+    });
+  });
+  document.querySelectorAll('[data-pick-jmac]').forEach(item => {
+    item.addEventListener('click', e => {
+      e.stopPropagation();
+      pickJmac();
     });
   });
   document.querySelectorAll('[data-add-placeholder]').forEach(btn => {
@@ -3041,10 +3137,15 @@ function placePosition(eventId, stand, role, staffName, source) {
   // event-home people or new pipeline hires at this venue), show the
   // dialog and bail. The user's confirm-with-reason will re-enter via
   // _commitPlacement which carries the reason through to the log.
-  const claimants = checkOverrideRequired(eventId, staffName);
-  if (claimants) {
-    openOverrideDialog(eventId, stand, role, staffName, source, claimants);
-    return;
+  //
+  // JMAC is exempt: it has no home venue and represents an external
+  // staffing call, not a person being preferentially placed.
+  if (source !== 'jmac') {
+    const claimants = checkOverrideRequired(eventId, staffName);
+    if (claimants) {
+      openOverrideDialog(eventId, stand, role, staffName, source, claimants);
+      return;
+    }
   }
   // Normal path: no override needed.
   _commitPlacement(eventId, stand, role, staffName, source, null);
@@ -3064,11 +3165,15 @@ function _commitPlacement(eventId, stand, role, staffName, source, overrideReaso
     return;
   }
 
-  // Don't allow same person twice in same event
-  const dup = positionsForEvent(eventId).find(p => p.staff_name === staffName);
-  if (dup) {
-    showToast(staffName + ' is already placed at this event', 'error');
-    return;
+  // Don't allow same person twice in same event — UNLESS this is a JMAC slot.
+  // JMAC is an external staffing source; multiple JMAC pills represent
+  // multiple people the agency is sending.
+  if (source !== 'jmac') {
+    const dup = positionsForEvent(eventId).find(p => p.staff_name === staffName);
+    if (dup) {
+      showToast(staffName + ' is already placed at this event', 'error');
+      return;
+    }
   }
 
   const ev = state.events.find(e => e.id === eventId);
@@ -3098,7 +3203,9 @@ function _commitPlacement(eventId, stand, role, staffName, source, overrideReaso
     }
     return logAction(eventId, inserted.id, 'placed', logDetails);
   }).then(() => {
-    // Auto-resolve multi-signup
+    // Auto-resolve multi-signup. Skip for JMAC — it isn't a real person
+    // and won't ever appear in availability_assignments.
+    if (source === 'jmac') return;
     return autoResolveMultiSignup(staffName, ev.event_date, eventId);
   }).then(() => {
     showToast('Placed ' + staffName, 'success');
@@ -3170,7 +3277,8 @@ function removePosition(positionId) {
     // Also release any availability_assignments row for this person on this date.
     // This is the "full release" behavior — ✕ on a placed pill returns the person
     // to the unresolved pool across ALL events they signed up for that day.
-    if (!eventDate) return;
+    // JMAC is exempt: it isn't a person and never has an availability_assignments row.
+    if (!eventDate || pos.source === 'jmac') return;
     return authFetch(
       SUPABASE_URL + '/rest/v1/availability_assignments?staff_name=eq.' +
         encodeURIComponent(pos.staff_name) + '&event_date=eq.' + eventDate,
@@ -3187,7 +3295,7 @@ function removePosition(positionId) {
       });
     });
   }).then(() => {
-    showToast('Released ' + pos.staff_name);
+    showToast(pos.source === 'jmac' ? 'Removed JMAC slot' : 'Released ' + pos.staff_name);
     render();
   }).catch(err => {
     if (err.authFailed) { handleAuthFailure(); return; }
@@ -3286,6 +3394,15 @@ function pickName(name) {
   const dateSignups = state.availability.filter(a => a.event_id === t.eventId).map(a => a.staff_name);
   const source = dateSignups.indexOf(name) !== -1 ? 'signup' : 'manual';
   placePosition(t.eventId, t.stand, t.role, name, source);
+}
+
+// JMAC = external/agency staffing. Always 'JMAC' as the staff_name,
+// always 'jmac' as source. Duplicates are allowed at the same event.
+function pickJmac() {
+  if (!state.typing) return;
+  const t = state.typing;
+  clearTypingState();
+  placePosition(t.eventId, t.stand, t.role, 'JMAC', 'jmac');
 }
 
 function addPlaceholder(name) {
