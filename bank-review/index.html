@@ -284,6 +284,20 @@ header {
 .modal-save.red { background: #A32D2D; }
 .modal-cancel { padding: 11px 16px; background: #f5f5f5; color: #555; border: 1px solid #ddd; border-radius: 10px; font-size: 14px; cursor: pointer; }
 
+/* Toast (small bottom-right confirmation) */
+.toast {
+  position: fixed; bottom: 20px; right: 20px;
+  background: #1a1a1a; color: white;
+  padding: 12px 18px; border-radius: 10px;
+  font-size: 13px; font-weight: 500;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  z-index: 2000; opacity: 0;
+  transition: opacity 0.25s, transform 0.25s;
+  transform: translateY(8px);
+  max-width: 360px;
+}
+.toast.show { opacity: 1; transform: translateY(0); }
+
 @media (max-width: 600px) {
   header { padding: 0 16px; height: auto; flex-wrap: wrap; padding: 12px 16px; gap: 10px; }
   .stats-strip { grid-template-columns: repeat(3, 1fr); }
@@ -1086,7 +1100,7 @@ function renderExpenses(items) {
       html += '<option value="' + EXPENSE_CATEGORIES[e].id + '"' + (c.category_id === EXPENSE_CATEGORIES[e].id ? ' selected' : '') + '>' + escapeHtml(EXPENSE_CATEGORIES[e].name) + '</option>';
     }
     html += '</select>';
-    html += '<button class="move-btn" onclick="moveToFood(\'' + c.id + '\')" title="Move to food purchases">&#8594; Food</button>';
+    html += '<button class="move-btn" onclick="moveToFood(\'' + c.id + '\')" title="Reclassify as food (will appear in food section, save there)">&rarr; Food</button>';
     html += '<button class="move-btn" onclick="openDiscardModal(\'' + c.id + '\', \'expense\')" title="Discard charge" style="color:#A32D2D;border-color:#f0c0c0;">&#128465;</button>';
     html += '</div>';
   }
@@ -1127,7 +1141,7 @@ function renderFood(items) {
     html += '<span class="food-vendor">' + escapeHtml(c.vendor_name) + '</span>';
     html += '<span class="food-amount' + (isCredit ? ' credit' : '') + '">' + displayAmt + '</span>';
     html += '<span class="food-cat">' + escapeHtml(c.category_name || 'Food Purchases') + '</span>';
-    html += '<button class="move-btn" onclick="moveToExpense(\'' + c.id + '\')" title="Move to expenses">&#8594; Expense</button>';
+    html += '<button class="move-btn" onclick="moveToExpense(\'' + c.id + '\')" title="Reclassify as non-food (will appear in expenses section, save there)">&rarr; Expense</button>';
     html += '<button class="move-btn" onclick="openDiscardModal(\'' + c.id + '\', \'food\')" title="Discard charge" style="color:#A32D2D;border-color:#f0c0c0;">&#128465;</button>';
     html += '</div>';
   }
@@ -1315,17 +1329,48 @@ async function restoreFromTrash(chargeId) {
   for (var i = 0; i < trashCharges.length; i++) if (trashCharges[i].id === chargeId) { charge = trashCharges[i]; break; }
   if (!charge) return;
 
-  var restoreTo = charge.prior_status || 'food_pending';
-  if (!confirm('Restore this charge?\n\n' + (charge.vendor_name || 'Unknown') + ' -- $' + fmtMoney(charge.amount) + '\n\nWill go back to: ' + restoreTo)) return;
+  // ── Re-run category detection on the (possibly fixed) vendor name. ──
+  // Original prior_status was set when the charge was discarded, but if the
+  // vendor_name has since been corrected (e.g. by the SQL re-parse), the
+  // category routing it WOULD have gotten on a fresh upload may differ from
+  // what prior_status says. Re-detect so Sunoco ends up in expenses, not food.
+  var detectedCat = guessCategory(charge.vendor_name);
+  var isFood = !detectedCat || isFoodCategory(detectedCat);
+  var restoreTo;
+  if (charge.prior_status === 'returned' || charge.prior_status === 'pending_venue') {
+    // These statuses came from a manager workflow, not auto-detection. Respect them.
+    restoreTo = charge.prior_status;
+  } else {
+    // For food_pending / expense_pending / matched / unprocessed, let category drive.
+    restoreTo = isFood ? 'food_pending' : 'expense_pending';
+  }
+
+  // Build the human-readable destination label for the confirm dialog
+  var destLabel = restoreTo === 'expense_pending' ? 'Non-food expenses'
+                : restoreTo === 'food_pending'    ? 'Unmatched food purchases'
+                : restoreTo === 'pending_venue'   ? 'Pending venue (managers)'
+                : restoreTo === 'returned'        ? 'Returned by managers'
+                : restoreTo;
+
+  if (!confirm('Restore this charge?\n\n' + (charge.vendor_name || 'Unknown') + ' -- $' + fmtMoney(charge.amount) + '\n\nWill go to: ' + destLabel)) return;
+
+  // Update both status AND category_id so the row appears with the right
+  // category preselected in whichever section it lands in.
+  var payload = {
+    status: restoreTo,
+    discarded_by: null, discarded_at: null, discard_reason: null, prior_status: null
+  };
+  if (detectedCat) payload.category_id = detectedCat.id;
+  else if (restoreTo === 'food_pending') {
+    var foodFallback = findCategoryByName('Food Purchases');
+    if (foodFallback) payload.category_id = foodFallback.id;
+  }
 
   try {
     var res = await fetch(SUPA_URL + '/rest/v1/bank_charges?id=eq.' + chargeId, {
       method: 'PATCH',
       headers: Object.assign({}, hdrs(), {'Content-Type': 'application/json', 'Prefer': 'return=minimal'}),
-      body: JSON.stringify({
-        status: restoreTo,
-        discarded_by: null, discarded_at: null, discard_reason: null, prior_status: null
-      })
+      body: JSON.stringify(payload)
     });
     if (!res.ok) throw new Error();
     await loadTrash();
@@ -1371,6 +1416,7 @@ function moveToFood(id) {
       }
       delete expenseChecked[id];
       foodChecked[id] = true;
+      showToast('Moved to food section &mdash; scroll down and click "Send to managers" to save');
       break;
     }
   }
@@ -1382,10 +1428,31 @@ function moveToExpense(id) {
       currentCharges[i].status = 'expense_pending';
       expenseChecked[id] = true;
       delete foodChecked[id];
+      showToast('Moved to expenses &mdash; pick a category below and click "Save expenses" to finish');
       break;
     }
   }
   renderReview();
+}
+
+// Small bottom-right confirmation; auto-hides
+var _toastTimer = null;
+function showToast(msg) {
+  var existing = document.getElementById('pc-toast');
+  if (existing) existing.parentNode.removeChild(existing);
+  var t = document.createElement('div');
+  t.id = 'pc-toast';
+  t.className = 'toast';
+  t.innerHTML = msg;
+  document.body.appendChild(t);
+  // force reflow then animate in
+  void t.offsetWidth;
+  t.classList.add('show');
+  if (_toastTimer) clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(function() {
+    t.classList.remove('show');
+    setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 300);
+  }, 4000);
 }
 
 // ══════════════════════════════════════════════
@@ -1568,9 +1635,9 @@ async function saveExpenses() {
   }
 
   if (errors) alert(errors + ' expense(s) failed to save.');
-  currentCharges = currentCharges.filter(function(c) { return c.status !== 'saved_expense'; });
-  renderReview();
-  updateResumeBanner();
+  // Reload from DB rather than trust local state — guarantees the resume
+  // banner, section counts, and visible rows match what's actually saved.
+  await loadPendingCharges();
 }
 
 async function sendToManagers() {
@@ -1596,15 +1663,14 @@ async function sendToManagers() {
   }
 
   if (errors) alert(errors + ' charge(s) failed to send.');
-  currentCharges = currentCharges.filter(function(c) { return c.status !== 'sent_to_managers'; });
 
-  if (currentCharges.filter(function(c) { return c.status === 'food_pending' || c.status === 'expense_pending'; }).length === 0) {
-    document.getElementById('review-section').style.display = 'none';
+  // Reload from DB to guarantee state consistency
+  await loadPendingCharges();
+
+  var stillPending = currentCharges.filter(function(c) { return c.status === 'food_pending' || c.status === 'expense_pending'; }).length;
+  if (stillPending === 0) {
     alert('Done! ' + toSend.length + ' charge(s) sent to the Purchases page for venue assignment.');
-  } else {
-    renderReview();
   }
-  updateResumeBanner();
   loadHistory();
 }
 
