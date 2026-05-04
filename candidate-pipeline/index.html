@@ -242,9 +242,21 @@ function getFiltered(){
     var archived=isArchived(c);
     var isLegacy=c.legacy_import===true;
     if(pcFilter==='archive'){
+      // Archive view: only show archived rows, but exclude legacy rows here when the
+      // Legacy toggle is OFF. Legacy rows are always "archived" by their 2020 timestamp
+      // and would dominate the Archive tab if we let them through unconditionally.
+      // When the toggle is ON, legacy rows surface in the stage tabs (active/inactive/etc),
+      // so we don't need them duplicated in Archive too.
       if(!archived)continue;
+      if(isLegacy&&pcShowLegacy)continue;
     }else{
-      if(archived)continue;
+      // Stage tabs (all, applied, contacted, ..., active, inactive):
+      //   - Non-legacy rows: respect the normal archive filter.
+      //   - Legacy rows: skip the archive check entirely when the toggle is ON, since
+      //     the whole point of the toggle is to surface legacy people in the stage tabs
+      //     even though their stage_updated_at is years old. When toggle is OFF, the
+      //     explicit "if(isLegacy&&!pcShowLegacy)continue;" below hides them.
+      if(archived&&!(isLegacy&&pcShowLegacy))continue;
       var mf=pcFilter==='all'||c.pipeline_stage===pcFilter;
       if(!mf)continue;
       if(isLegacy&&!pcShowLegacy)continue;
