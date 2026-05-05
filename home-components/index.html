@@ -1118,12 +1118,15 @@ body {
     // Pull signups (lifetime). Includes removed_at because removal is the
     // manager's action, not the employee's, so we still credit the signup
     // for lead-time and engagement scoring.
+    // No date filter on availability — signups can predate system start
+    // (employees signed up months in advance for upcoming events). The
+    // events fetch below is what bounds the relevant set; signups for
+    // events outside that window get naturally filtered when we look up
+    // event_id → event in eventsById and find no match.
     var signupsUrl = SUPABASE_URL +
       '/rest/v1/availability' +
       '?select=id,staff_name,event_id,submitted_at,removed_at' +
-      '&submitted_at=gte.' + SYSTEM_START_DATE +
       '&order=submitted_at.asc';
-
     // Pull verified attendance only. raw_name_text is what the AI read off
     // the sign-in sheet; employee_id is the matched roster record.
     // verified=true means a manager has confirmed the match.
