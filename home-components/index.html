@@ -1605,25 +1605,29 @@ body {
   }
 
   // --- Factor 8: Tenure ---
-  function computeTenure(hiredAt, totalPlacements, now) {
-    if (!hiredAt) {
-      return {
-        score: null, weight: RATING_WEIGHTS.tenure,
-        naReason: 'No hire date on file',
-        raw: {}
-      };
+ function computeTenure(hiredAt, totalPlacements, now) {
+  // Everyone starts fresh from system start. Legacy employees with sentinel
+  // dates (2020-01-01) and brand-new pipeline hires both get their tenure
+  // clock counted from April 30, 2026.
+  var systemStartMs = new Date(SYSTEM_START_DATE).getTime();
+  var hiredMs = hiredAt ? new Date(hiredAt).getTime() : systemStartMs;
+  // The effective tenure start is the LATER of hire date and system start.
+  // For legacy employees with hired_at = 2020-01-01, this clamps to system start.
+  // For new hires after system start, this uses their actual hire date.
+  var effectiveStartMs = Math.max(hiredMs, systemStartMs);
+  var daysSinceStart = (now.getTime() - effectiveStartMs) / (1000 * 60 * 60 * 24);
+  if (daysSinceStart < 0) daysSinceStart = 0;
+  var pts = tenurePoints(daysSinceStart, totalPlacements);
+  return {
+    score: Math.round(pts * 1000) / 10,
+    weight: RATING_WEIGHTS.tenure,
+    raw: {
+      daysSinceSystemStart: Math.round(daysSinceStart),
+      totalPlacements: totalPlacements,
+      legacyClampApplied: hiredAt && hiredMs < systemStartMs
     }
-    var daysSinceHire = (now.getTime() - new Date(hiredAt).getTime()) / (1000 * 60 * 60 * 24);
-    var pts = tenurePoints(daysSinceHire, totalPlacements);
-    return {
-      score: Math.round(pts * 1000) / 10,
-      weight: RATING_WEIGHTS.tenure,
-      raw: {
-        daysSinceHire: Math.round(daysSinceHire),
-        totalPlacements: totalPlacements
-      }
-    };
-  }
+  };
+}
 
   // --- Factor 9: Last-minute attendance ---
   function computeLastMinuteAttendance(countablePlacements, attendedEventIds, eventsById) {
