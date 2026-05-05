@@ -283,6 +283,108 @@ header {
   display: inline-flex; align-items: center; gap: 6px;
 }
 .btn-print:hover { background: #fafaf8; }
+
+/* Split button — Print + chevron sit flush as one unit */
+.print-split { display: inline-flex; align-items: stretch; }
+.print-split .btn-print {
+  border-top-right-radius: 0; border-bottom-right-radius: 0;
+  border-right: none;
+}
+.btn-print-chevron {
+  background: white; border: 1px solid var(--border-strong); color: var(--primary);
+  font-size: 11px; font-weight: 700; padding: 0 8px;
+  border-top-left-radius: 0; border-bottom-left-radius: 0;
+  cursor: pointer;
+  display: inline-flex; align-items: center;
+  border-top-right-radius: 6px; border-bottom-right-radius: 6px;
+}
+.btn-print-chevron:hover { background: #fafaf8; }
+.print-split { position: relative; }
+.print-menu {
+  position: absolute; top: calc(100% + 4px); right: 0;
+  background: white; border: 1px solid var(--border-strong);
+  border-radius: 6px; box-shadow: 0 6px 16px rgba(0,0,0,0.12);
+  z-index: 50; min-width: 180px; padding: 4px;
+  display: none;
+}
+.print-menu.show { display: block; }
+.print-menu-item {
+  display: block; width: 100%; text-align: left;
+  padding: 8px 12px; font-size: 12px; font-weight: 600; color: var(--primary);
+  background: none; border: none; border-radius: 4px;
+  cursor: pointer; font-family: inherit;
+}
+.print-menu-item:hover { background: var(--blue-light); color: var(--blue-dark); }
+
+/* Email modal */
+.email-modal-body { padding: 18px 20px; max-height: 70vh; overflow-y: auto; }
+.email-modal-body .field-group { margin-bottom: 14px; }
+.email-modal-body .field-label {
+  display: block; font-size: 11px; font-weight: 700;
+  letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--label); margin-bottom: 6px;
+}
+.email-modal-body input[type="text"],
+.email-modal-body input[type="email"],
+.email-modal-body textarea {
+  width: 100%; box-sizing: border-box;
+  padding: 8px 10px; font-size: 13px; font-family: inherit;
+  border: 1px solid var(--border-strong); border-radius: 5px;
+  background: white;
+}
+.email-modal-body textarea { min-height: 70px; resize: vertical; }
+.email-modal-body input:focus, .email-modal-body textarea:focus {
+  outline: none; border-color: var(--blue); box-shadow: 0 0 0 2px var(--blue-light);
+}
+.recipients-group {
+  border: 1px solid var(--border); border-radius: 6px;
+  background: #fafafa; padding: 10px 12px;
+}
+.recipients-group + .recipients-group { margin-top: 8px; }
+.recipients-group .group-title {
+  font-size: 10px; font-weight: 800; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--label); margin-bottom: 6px;
+}
+.recipient-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 0; font-size: 13px;
+}
+.recipient-item input[type="checkbox"] {
+  width: 16px; height: 16px; cursor: pointer;
+}
+.recipient-item .recipient-label { font-weight: 600; color: var(--primary); }
+.recipient-item .recipient-email { color: var(--label); font-size: 11px; }
+.cc-line {
+  font-size: 11px; color: var(--label); font-style: italic;
+  padding: 8px 10px; background: var(--blue-light);
+  border: 1px solid #c7d9ec; border-radius: 5px;
+}
+.cc-line strong { color: var(--blue-dark); font-style: normal; }
+.email-staff-preview {
+  background: #faf8f3; border: 1px solid var(--border);
+  border-radius: 5px; padding: 10px 12px;
+  font-size: 12px; max-height: 200px; overflow-y: auto;
+}
+.email-staff-preview .preview-name {
+  padding: 3px 0; border-bottom: 1px solid #efe9da;
+}
+.email-staff-preview .preview-name:last-child { border-bottom: none; }
+.email-staff-preview .preview-jmac {
+  margin-top: 8px; padding: 6px 8px;
+  background: #ede9fe; color: #5b21b6;
+  border-radius: 4px; font-weight: 600; font-size: 11px;
+}
+.no-recipients-msg {
+  font-size: 12px; color: var(--label); font-style: italic;
+  padding: 8px 0;
+}
+.modal-error {
+  margin: 8px 20px; padding: 8px 12px;
+  background: var(--red-light); border: 1px solid var(--red-border);
+  color: var(--red-dark); font-size: 12px; border-radius: 5px;
+  display: none;
+}
+.modal-error.show { display: block; }
 .chevron {
   background: none; border: none; cursor: pointer; padding: 4px;
   color: var(--label); font-size: 14px; transition: transform 0.2s ease;
@@ -1114,6 +1216,52 @@ header {
   </div>
 </div>
 
+<!-- Email staff list modal. Opened from the per-event split button.
+     Sends a clean alphabetized roster to selected approved recipients.
+     CC always includes erikapeters@camdenco.com for audit trail. -->
+<div class="modal-backdrop" id="email-modal">
+  <div class="modal" style="max-width: 560px;">
+    <div class="modal-head">
+      <h3 id="email-modal-title">Email staff list</h3>
+      <button class="modal-close" data-close-modal="email-modal">✕</button>
+    </div>
+    <div class="modal-error" id="email-modal-error"></div>
+    <div class="email-modal-body">
+      <div id="email-event-summary" style="font-size:12px;color:var(--label);margin-bottom:14px;line-height:1.5;"></div>
+
+      <div class="field-group">
+        <label class="field-label">To</label>
+        <div id="email-recipients-list"></div>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label">Subject</label>
+        <input type="text" id="email-subject" />
+      </div>
+
+      <div class="field-group">
+        <label class="field-label">Message (optional)</label>
+        <textarea id="email-message" placeholder="Optional note that appears above the staff list..."></textarea>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label">Staff list preview</label>
+        <div class="email-staff-preview" id="email-staff-preview"></div>
+      </div>
+
+      <div class="field-group">
+        <div class="cc-line">
+          A copy will always be sent to <strong>erikapeters@camdenco.com</strong> for record-keeping.
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot" style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;align-items:center;">
+      <button class="btn" data-close-modal="email-modal" style="background:white;border-color:var(--border-strong);color:var(--primary);">Cancel</button>
+      <button class="btn-confirm" id="email-send-btn" style="padding:6px 18px;">Send</button>
+    </div>
+  </div>
+</div>
+
 <!-- Home-venue override dialog. Shown when placing a non-home-venue person
      ahead of unplaced home-venue people for the event. Manager must type a
      reason (>= 15 chars) before "Save and place" enables. Cancel = no
@@ -1414,6 +1562,13 @@ const state = {
   recentSignups: [],
   recentSignupEvents: {},
 
+  // Approved email recipients (loaded from approved_email_recipients table).
+  // Used by the per-event "Email staff list" modal. Each row:
+  //   { id, label, email, venue, is_active }
+  // venue=null means global (visible on all events). venue='FMP' etc means
+  // visible only on events at that venue.
+  approvedRecipients: [],
+
   filters: {
     venue: '',
     range: 'next-14',
@@ -1514,11 +1669,16 @@ function loadAll() {
     // NEW HIRE badge — candidate phones for pipeline-hire detection
     authFetch(candidatesUrl, { headers: apiHeaders() }),
     // Recent signups for the box at the top of the page
-    authFetch(recentSignupsUrl, { headers: apiHeaders() })
-  ]).then(([events, employees, allAvail, pastPlacements, candidatePhones, recentSignups]) => {
+    authFetch(recentSignupsUrl, { headers: apiHeaders() }),
+    // Approved email recipients for the per-event "Email staff list" feature.
+    // Lightweight: just the active rows. Filtered by venue at modal-open time.
+    authFetch(SUPABASE_URL + '/rest/v1/approved_email_recipients?select=id,label,email,venue&is_active=eq.true&order=venue.asc,label.asc',
+      { headers: apiHeaders() })
+  ]).then(([events, employees, allAvail, pastPlacements, candidatePhones, recentSignups, approvedRecipients]) => {
     state.events = events || [];
     state.employees = employees || [];
     state.recentSignups = recentSignups || [];
+    state.approvedRecipients = approvedRecipients || [];
 
     // Build historical signup counts per staff_name. Used to sort the
     // Available-to-call list — most-reliable employees first.
@@ -2142,7 +2302,12 @@ function renderEventRow(ev) {
     html += '</div>';
   }
 
-  html += '<button class="btn btn-print" data-print-event="' + ev.id + '">🖨 Print</button>';
+  // Split button: main action stays Print (one click, no regression).
+  // Chevron opens a tiny menu with "Email staff list" as a second option.
+  html += '<div class="print-split">' +
+    '<button class="btn btn-print" data-print-event="' + ev.id + '">🖨 Print</button>' +
+    '<button class="btn btn-print-chevron" data-print-menu="' + ev.id + '" title="More options">▾</button>' +
+    '</div>';
   html += '<button class="chevron">▼</button>';
   html += '</div>';
 
@@ -2658,6 +2823,18 @@ function attachEventHandlers() {
       e.stopPropagation();
       const id = btn.getAttribute('data-print-event');
       printEvent(id);
+    });
+  });
+
+  // Print-menu chevron — opens dropdown with Print + Email staff list.
+  // Uses a single global menu element appended to body so it can layer above
+  // event-row z-index. Closes on outside click.
+  document.querySelectorAll('[data-print-menu]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      e.preventDefault();
+      const eventId = btn.getAttribute('data-print-menu');
+      openPrintMenu(btn, eventId);
     });
   });
 
@@ -3881,6 +4058,291 @@ document.querySelectorAll('.modal-backdrop').forEach(b => {
     if (e.target === b) b.classList.remove('show');
   });
 });
+
+// ---------- Print menu (split-button dropdown) ----------
+// Opens a small floating menu near the chevron with Print + Email options.
+// Single shared menu element (cheap to create/destroy each time).
+function openPrintMenu(anchorBtn, eventId) {
+  // If menu is already open for this event, close it (toggle behavior).
+  const existing = document.getElementById('print-menu-popup');
+  if (existing) {
+    existing.remove();
+    if (existing.dataset.eventId === eventId) return;  // toggled off
+  }
+
+  const menu = document.createElement('div');
+  menu.id = 'print-menu-popup';
+  menu.className = 'print-menu show';
+  menu.dataset.eventId = eventId;
+  menu.innerHTML =
+    '<button class="print-menu-item" data-menu-print="' + eventId + '">🖨 Print</button>' +
+    '<button class="print-menu-item" data-menu-email="' + eventId + '">✉ Email staff list</button>';
+
+  // Position the menu under the anchor button. Append to body so it isn't
+  // clipped by event-row overflow.
+  const rect = anchorBtn.getBoundingClientRect();
+  menu.style.position = 'fixed';
+  menu.style.top = (rect.bottom + 4) + 'px';
+  menu.style.right = (window.innerWidth - rect.right) + 'px';
+  document.body.appendChild(menu);
+
+  // Wire menu items.
+  menu.querySelector('[data-menu-print]').addEventListener('click', e => {
+    e.stopPropagation();
+    menu.remove();
+    printEvent(eventId);
+  });
+  menu.querySelector('[data-menu-email]').addEventListener('click', e => {
+    e.stopPropagation();
+    menu.remove();
+    openEmailModal(eventId);
+  });
+
+  // Close on next outside click.
+  setTimeout(() => {
+    document.addEventListener('click', function closeMenu(e) {
+      if (!menu.contains(e.target)) {
+        menu.remove();
+        document.removeEventListener('click', closeMenu);
+      }
+    });
+  }, 0);
+}
+
+// ---------- Email staff list modal ----------
+// State for the currently-open email modal. Set on open, cleared on close.
+let emailModalEventId = null;
+
+function openEmailModal(eventId) {
+  const ev = state.events.find(e => e.id === eventId);
+  if (!ev) return;
+
+  // Build the staff list now so we can show preview AND validate non-empty.
+  const positions = positionsForEvent(eventId);
+  const realStaff = positions
+    .filter(p => p.source !== 'jmac')
+    .map(p => p.staff_name)
+    .sort((a, b) => a.localeCompare(b));
+  const jmacCount = positions.filter(p => p.source === 'jmac').length;
+
+  if (realStaff.length === 0 && jmacCount === 0) {
+    showToast('No staff placed yet — nothing to email', 'error');
+    return;
+  }
+
+  emailModalEventId = eventId;
+
+  // Header summary line.
+  const reportT = getReportTime(ev);
+  const reportStr = reportT ? ' · Report ' + fmtTime(reportT) : '';
+  document.getElementById('email-event-summary').innerHTML =
+    '<strong>' + escapeHtml(ev.event_name) + '</strong> &middot; ' +
+    escapeHtml(ev.venue) + ' &middot; ' + escapeHtml(ev.event_date) + reportStr;
+
+  // Pre-fill subject.
+  const dateStr = ev.event_date.split('-');
+  const displayDate = dateStr.length === 3
+    ? dateStr[1] + '/' + dateStr[2] + '/' + dateStr[0]
+    : ev.event_date;
+  document.getElementById('email-subject').value =
+    ev.venue + ' ' + ev.event_name + ' — Staff for ' + displayDate;
+
+  // Clear message and any prior error.
+  document.getElementById('email-message').value = '';
+  document.getElementById('email-modal-error').classList.remove('show');
+  document.getElementById('email-modal-error').textContent = '';
+
+  // Render the recipients list — venue contacts + global, plus "+ Other".
+  renderEmailRecipientsList(ev.venue);
+
+  // Render the staff preview.
+  renderEmailStaffPreview(realStaff, jmacCount);
+
+  // Reset the send button.
+  const sendBtn = document.getElementById('email-send-btn');
+  sendBtn.disabled = false;
+  sendBtn.textContent = 'Send';
+
+  document.getElementById('email-modal').classList.add('show');
+}
+
+function renderEmailRecipientsList(venue) {
+  const container = document.getElementById('email-recipients-list');
+  const venueContacts = state.approvedRecipients.filter(r => r.venue === venue);
+  const globalContacts = state.approvedRecipients.filter(r => !r.venue);
+
+  let html = '';
+
+  if (venueContacts.length === 0 && globalContacts.length === 0) {
+    html += '<div class="no-recipients-msg">No saved contacts. Use "Other recipient" below or add contacts in Supabase Studio.</div>';
+  }
+
+  if (venueContacts.length > 0) {
+    html += '<div class="recipients-group">';
+    html += '<div class="group-title">' + escapeHtml(venue) + ' contacts</div>';
+    venueContacts.forEach(r => {
+      html += '<label class="recipient-item">' +
+        '<input type="checkbox" data-email-recipient="' + escapeAttr(r.email) + '" />' +
+        '<span class="recipient-label">' + escapeHtml(r.label) + '</span>' +
+        '<span class="recipient-email">&lt;' + escapeHtml(r.email) + '&gt;</span>' +
+        '</label>';
+    });
+    html += '</div>';
+  }
+
+  if (globalContacts.length > 0) {
+    html += '<div class="recipients-group">';
+    html += '<div class="group-title">All venues</div>';
+    globalContacts.forEach(r => {
+      html += '<label class="recipient-item">' +
+        '<input type="checkbox" data-email-recipient="' + escapeAttr(r.email) + '" />' +
+        '<span class="recipient-label">' + escapeHtml(r.label) + '</span>' +
+        '<span class="recipient-email">&lt;' + escapeHtml(r.email) + '&gt;</span>' +
+        '</label>';
+    });
+    html += '</div>';
+  }
+
+  // "+ Other recipient" — free-text fallback for one-off addresses.
+  html += '<div class="recipients-group" style="margin-top:8px;">';
+  html += '<div class="group-title">Other</div>';
+  html += '<input type="text" id="email-other-recipient" placeholder="one-off@example.com (or comma-separated list)" />';
+  html += '</div>';
+
+  container.innerHTML = html;
+}
+
+function renderEmailStaffPreview(staffNames, jmacCount) {
+  const container = document.getElementById('email-staff-preview');
+  let html = '';
+  if (staffNames.length === 0) {
+    html += '<div style="color:var(--label);font-style:italic;">No employees placed yet</div>';
+  } else {
+    staffNames.forEach(n => {
+      html += '<div class="preview-name">' + escapeHtml(n) + '</div>';
+    });
+  }
+  if (jmacCount > 0) {
+    html += '<div class="preview-jmac">📞 Agency — ' + jmacCount + ' staff via JMAC</div>';
+  }
+  container.innerHTML = html;
+}
+
+// Wire the Send button. Lives at top-level so listener attaches once at page init.
+document.getElementById('email-send-btn').addEventListener('click', () => {
+  if (!emailModalEventId) return;
+  sendStaffListEmail();
+});
+
+function sendStaffListEmail() {
+  const eventId = emailModalEventId;
+  const ev = state.events.find(e => e.id === eventId);
+  if (!ev) return;
+
+  const errBox = document.getElementById('email-modal-error');
+  const sendBtn = document.getElementById('email-send-btn');
+  errBox.classList.remove('show');
+  errBox.textContent = '';
+
+  // Collect recipients: every checked approved + parsed "Other" field.
+  const checked = Array.from(
+    document.querySelectorAll('#email-recipients-list [data-email-recipient]:checked')
+  ).map(cb => cb.getAttribute('data-email-recipient'));
+
+  const otherInput = document.getElementById('email-other-recipient');
+  const otherEmails = (otherInput.value || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(s => s.length > 0);
+
+  const allTo = checked.concat(otherEmails);
+  if (allTo.length === 0) {
+    errBox.textContent = 'Pick at least one recipient or enter an address in "Other".';
+    errBox.classList.add('show');
+    return;
+  }
+
+  // Validate emails. Same regex as the edge function for symmetry.
+  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const bad = allTo.filter(e => !emailRe.test(e));
+  if (bad.length > 0) {
+    errBox.textContent = 'Invalid email address(es): ' + bad.join(', ');
+    errBox.classList.add('show');
+    return;
+  }
+
+  const subject = (document.getElementById('email-subject').value || '').trim();
+  if (!subject) {
+    errBox.textContent = 'Subject is required.';
+    errBox.classList.add('show');
+    return;
+  }
+
+  // Re-collect staff names at send time (in case anything moved while modal was open).
+  const positions = positionsForEvent(eventId);
+  const realStaff = positions
+    .filter(p => p.source !== 'jmac')
+    .map(p => p.staff_name)
+    .sort((a, b) => a.localeCompare(b));
+  const jmacCount = positions.filter(p => p.source === 'jmac').length;
+
+  const reportT = getReportTime(ev);
+  const reportStr = reportT ? fmtTime(reportT) : '';
+
+  const payload = {
+    to: allTo,
+    cc: ['erikapeters@camdenco.com'],   // hard-wired audit-trail recipient
+    subject: subject,
+    message: (document.getElementById('email-message').value || '').trim(),
+    venue: ev.venue,
+    event_name: ev.event_name,
+    event_date: ev.event_date,
+    report_time: reportStr,
+    staff_names: realStaff,
+    jmac_count: jmacCount,
+    sender_name: (state.user && state.user.display_name) ||
+                 (state.user && state.user.email) || 'Camden Co. Staffing'
+  };
+
+  // Lock the button and show progress.
+  sendBtn.disabled = true;
+  sendBtn.textContent = 'Sending…';
+
+  authFetch(SUPABASE_URL + '/functions/v1/send-staff-list-email', {
+    method: 'POST',
+    headers: apiHeadersJson(),
+    body: JSON.stringify(payload)
+  }).then(resp => {
+    // authFetch returns the parsed JSON. Edge function returns {success, id, error}.
+    if (resp && resp.success) {
+      document.getElementById('email-modal').classList.remove('show');
+      emailModalEventId = null;
+      showToast('Staff list emailed to ' + allTo.length +
+        ' recipient' + (allTo.length === 1 ? '' : 's'), 'success');
+    } else {
+      const msg = (resp && resp.error) ? resp.error : 'Send failed (no error returned)';
+      errBox.textContent = msg;
+      errBox.classList.add('show');
+      sendBtn.disabled = false;
+      sendBtn.textContent = 'Send';
+    }
+  }).catch(err => {
+    if (err.authFailed) { handleAuthFailure(); return; }
+    console.error('[email] send failed:', err);
+    // authFetch throws Error(responseText) on non-OK responses. The edge
+    // function returns a JSON body with {error: ...} on every failure path,
+    // so try to parse it for a clean message.
+    let msg = err.message || 'unknown error';
+    try {
+      const parsed = JSON.parse(msg);
+      if (parsed && parsed.error) msg = parsed.error;
+    } catch { /* not JSON, use raw text */ }
+    errBox.textContent = 'Send failed: ' + msg;
+    errBox.classList.add('show');
+    sendBtn.disabled = false;
+    sendBtn.textContent = 'Send';
+  });
+}
 
 // ---------- Print ----------
 function printEvent(eventId) {
