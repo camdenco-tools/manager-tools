@@ -178,6 +178,11 @@ var VENUE_LABELS={FMP:'Freedom Mortgage Pavilion',Mann:'Mann Music Center',BWH:'
 var VENUE_CODES=['FMP','Mann','BWH','ACCC','Cure','Subaru','DE','Montage','SATB','Villanova','Kirkwood'];
 var STAGE_LABELS={applied:'Applied',contacted:'Contacted',interview_scheduled:'Interview Scheduled',hired:'Hired',onboarding:'Onboarding',active:'Active',inactive:'Inactive',rejected:'Rejected'};
 var ARCHIVE_DAYS={applied:30,contacted:30,interview_scheduled:0,hired:7,onboarding:35,active:14,inactive:14,rejected:7};
+/* SHIRT_SIZES: must match the CHECK constraint on candidates.shirt_size and
+   employees.shirt_size in the DB. Order is small -> large for sortability.
+   If you change this list, also update the SQL CHECK constraint, the
+   apply-online page, and the home-components page. */
+var SHIRT_SIZES=['XS','S','M','L','XL','2XL','3XL','4XL','5XL'];
 /* pcShowLegacy: when false (default), legacy_import rows are hidden from Active/Inactive/All
    filters on the pipeline page. Those employees live on the home-components page. The
    "Legacy" pill toggle lets a manager opt in to seeing them here for ad-hoc lookups. */
@@ -185,6 +190,7 @@ var pcCandidates=[],pcPayRates=[],pcRoles=[],pcBookings=[],pcSelected=null,pcFil
 var pcEditingPhone=false;
 var pcEditingEmail=false;
 var pcEditingPunchId=false;
+var pcEditingShirtSize=false;
 
 function apiHeaders() {
   return pcAuth.headers();
@@ -290,7 +296,7 @@ function getEmailAvailability(c){
   return{e1:e1,e2:e2,e3:e3};
 }
 
-function render(){var main=document.getElementById('pcpipe-main');if(pcLoading){main.innerHTML='<p class="page-sub">Loading...</p>';return;}var listEl=document.getElementById('pcpipe-list');var detailEl=document.getElementById('pcpipe-detail');if(!listEl){main.innerHTML=renderShell();listEl=document.getElementById('pcpipe-list');detailEl=document.getElementById('pcpipe-detail');}listEl.innerHTML=renderList();detailEl.innerHTML=pcSelected?renderCandidateCard(pcSelected):'<div class="empty-state" style="background:#f9f9f9;border-radius:10px;border:1px solid #eee;padding:60px 20px;">Select a candidate to view their record.</div>';updateStatCounts();updateFilterPills();if(pcEditingPhone){setTimeout(function(){var inp=document.getElementById('phone-edit-input');if(inp)inp.focus();},30);}if(pcEditingEmail){setTimeout(function(){var inp=document.getElementById('email-edit-input');if(inp)inp.focus();},30);}if(pcEditingPunchId){setTimeout(function(){var inp=document.getElementById('punch-edit-input');if(inp){inp.focus();inp.select();}},30);}}
+function render(){var main=document.getElementById('pcpipe-main');if(pcLoading){main.innerHTML='<p class="page-sub">Loading...</p>';return;}var listEl=document.getElementById('pcpipe-list');var detailEl=document.getElementById('pcpipe-detail');if(!listEl){main.innerHTML=renderShell();listEl=document.getElementById('pcpipe-list');detailEl=document.getElementById('pcpipe-detail');}listEl.innerHTML=renderList();detailEl.innerHTML=pcSelected?renderCandidateCard(pcSelected):'<div class="empty-state" style="background:#f9f9f9;border-radius:10px;border:1px solid #eee;padding:60px 20px;">Select a candidate to view their record.</div>';updateStatCounts();updateFilterPills();if(pcEditingPhone){setTimeout(function(){var inp=document.getElementById('phone-edit-input');if(inp)inp.focus();},30);}if(pcEditingEmail){setTimeout(function(){var inp=document.getElementById('email-edit-input');if(inp)inp.focus();},30);}if(pcEditingPunchId){setTimeout(function(){var inp=document.getElementById('punch-edit-input');if(inp){inp.focus();inp.select();}},30);}if(pcEditingShirtSize){setTimeout(function(){var inp=document.getElementById('shirt-edit-input');if(inp)inp.focus();},30);}}
 
 function renderShell(){var html='<p class="page-sub">Manage applicants from application through onboarding.</p>';
 html+='<div class="stat-row" id="pcpipe-stats"></div>';
@@ -341,7 +347,7 @@ html+='<div class="card-section"><div class="section-title">Application details<
 if(pcEditingEmail){html+='<div class="phone-edit-inline"><input type="text" id="email-edit-input" value="'+(c.email||'')+'" placeholder="e.g. name@gmail.com" style="width:200px;" /><button class="btn btn-sm btn-primary" onclick="pcPipeSaveEmail()" style="padding:4px 10px;">Save</button><button class="btn btn-sm" onclick="pcPipeCancelEmailEdit()" style="padding:4px 10px;">Cancel</button></div><div id="email-edit-err" class="error-msg"></div>';}else{html+=(c.email?'<a href="mailto:'+c.email+'" style="color:#2d7dd2;">'+c.email+'</a>':'--')+'<button class="edit-phone-btn" onclick="pcPipeEditEmail()" title="Edit email address">'+pencilSvg+'</button>';}
 html+='</div></div><div><div class="detail-label">Phone</div><div class="detail-value">';
 if(pcEditingPhone){html+='<div class="phone-edit-inline"><input type="tel" id="phone-edit-input" value="'+(c.phone||'')+'" placeholder="e.g. 856 357 6785" style="width:150px;" oninput="pcPipePhonePreview()" /><button class="btn btn-sm btn-primary" onclick="pcPipeSavePhone()" style="padding:4px 10px;">Save</button><button class="btn btn-sm" onclick="pcPipeCancelPhoneEdit()" style="padding:4px 10px;">Cancel</button></div><div id="phone-edit-err" class="error-msg"></div><div class="phone-punch-preview" id="phone-punch-preview"></div>';}else{html+=(c.phone?'<a href="tel:'+c.phone+'" style="color:#2d7dd2;">'+formatPhoneDisplay(c.phone)+'</a>':'--')+'<button class="edit-phone-btn" onclick="pcPipeEditPhone()" title="Edit phone number">'+pencilSvg+'</button>';}
-html+='</div></div><div><div class="detail-label">Date of birth</div><div class="detail-value">'+(c.date_of_birth?formatDate(c.date_of_birth):'--')+'</div></div><div><div class="detail-label">Earliest start</div><div class="detail-value">'+(c.earliest_start_date?formatDate(c.earliest_start_date):'--')+'</div></div></div><div style="margin-top:10px;"><div class="detail-label" style="margin-bottom:4px;">Roles applied for</div><div class="tag-list">'+renderTags(c.roles)+'</div></div><div style="margin-top:10px;"><div class="detail-label" style="margin-bottom:4px;">Locations</div><div class="tag-list">'+renderTags(c.locations)+'</div></div>'+(c.referral_source?'<div style="margin-top:10px;"><div class="detail-label">Referred by</div><div class="detail-value">'+c.referral_source+'</div></div>':'')+'<div style="margin-top:10px;"><div class="detail-label" style="margin-bottom:4px;">Experience</div><div style="font-size:13px;color:#444;line-height:1.6;">'+(c.experience_notes||'--')+'</div></div>'+(c.resume_url?'<div style="margin-top:10px;"><div class="detail-label" style="margin-bottom:4px;">Resume</div><button class="btn btn-sm" onclick="pcPipeOpenFile(\''+c.id+'\',\'resume\')">View resume</button></div>':'')+'</div>';
+html+='</div></div><div><div class="detail-label">Date of birth</div><div class="detail-value">'+(c.date_of_birth?formatDate(c.date_of_birth):'--')+'</div></div><div><div class="detail-label">Earliest start</div><div class="detail-value">'+(c.earliest_start_date?formatDate(c.earliest_start_date):'--')+'</div></div><div><div class="detail-label">Uniform shirt size</div><div class="detail-value">'+(pcEditingShirtSize?('<div class="phone-edit-inline"><select id="shirt-edit-input" style="width:120px;padding:6px 8px;">'+buildShirtSizeOptions(c.shirt_size||'')+'</select><button class="btn btn-sm btn-primary" onclick="pcPipeSaveShirtSize()" style="padding:4px 10px;">Save</button><button class="btn btn-sm" onclick="pcPipeCancelShirtSizeEdit()" style="padding:4px 10px;">Cancel</button></div><div id="shirt-edit-err" class="error-msg"></div>'):((c.shirt_size?c.shirt_size:'--')+'<button class="edit-phone-btn" onclick="pcPipeEditShirtSize()" title="Edit shirt size">'+pencilSvg+'</button>'))+'</div></div></div><div style="margin-top:10px;"><div class="detail-label" style="margin-bottom:4px;">Roles applied for</div><div class="tag-list">'+renderTags(c.roles)+'</div></div><div style="margin-top:10px;"><div class="detail-label" style="margin-bottom:4px;">Locations</div><div class="tag-list">'+renderTags(c.locations)+'</div></div>'+(c.referral_source?'<div style="margin-top:10px;"><div class="detail-label">Referred by</div><div class="detail-value">'+c.referral_source+'</div></div>':'')+'<div style="margin-top:10px;"><div class="detail-label" style="margin-bottom:4px;">Experience</div><div style="font-size:13px;color:#444;line-height:1.6;">'+(c.experience_notes||'--')+'</div></div>'+(c.resume_url?'<div style="margin-top:10px;"><div class="detail-label" style="margin-bottom:4px;">Resume</div><button class="btn btn-sm" onclick="pcPipeOpenFile(\''+c.id+'\',\'resume\')">View resume</button></div>':'')+'</div>';
 if(c.booking_code&&(stage==='contacted'||stage==='interview_scheduled')){html+='<div class="card-section"><div class="section-title">Booking code</div><div style="font-family:monospace;font-size:18px;font-weight:700;color:#2d7dd2;letter-spacing:0.15em;">'+c.booking_code+'</div><div style="font-size:12px;color:#888;margin-top:4px;">Scheduling link: camdenco.com/schedule-interview?code='+c.booking_code+'</div></div>';}
 html+='<div class="card-section"><div class="section-title">Internal notes</div><textarea class="notes-area" id="pipe-notes-field" placeholder="Add notes about this candidate...">'+(c.internal_notes||'')+'</textarea><button class="btn btn-sm" style="margin-top:6px;" onclick="pcPipeSaveNotes()">Save notes</button><div id="notes-saved-msg" style="font-size:12px;color:#1D9E75;display:none;margin-top:4px;">Saved</div></div>';
 if(isHiredPlus){html+=renderHireDetails(c);html+=renderOnboardingChecklist(c);if(c.is_minor)html+=renderMinorChecklist(c);}
@@ -429,7 +435,7 @@ function renderMinorChecklist(c){var venues=c.assigned_venues||[];var states=get
 function renderMinorCheckItem(c,key,tsKey,label){var done=!!c[key];var ts=c[tsKey]?formatDate(c[tsKey]):'';return'<div class="checklist-row"><div style="display:flex;align-items:center;gap:8px;"><input type="checkbox" '+(done?'checked':'')+' onchange="pcPipeToggleChecklist(\''+key+'\',\''+tsKey+'\',this.checked)" style="width:16px;height:16px;accent-color:#d97706;cursor:pointer;" /><span class="checklist-label" style="'+(done?'text-decoration:line-through;color:#aaa;':'color:#78350f;')+'">'+label+'</span></div><span class="checklist-status" style="color:'+(done?'#d97706':'#aaa')+';">'+(done?(ts||'Done'):'Pending')+'</span></div>';}
 function renderTags(arr){if(!arr||arr.length===0)return'<span style="font-size:12px;color:#aaa;">None</span>';var h='';for(var i=0;i<arr.length;i++)h+='<span class="tag">'+arr[i]+'</span>';return h;}
 
-function pcPipeSelect(id){for(var i=0;i<pcCandidates.length;i++){if(pcCandidates[i].id===id){pcSelected=pcCandidates[i];break;}}pcEditingPhone=false;pcEditingEmail=false;pcEditingPunchId=false;render();var rp=document.getElementById('pcpipe-detail');if(rp)rp.scrollIntoView({behavior:'smooth',block:'start'});}
+function pcPipeSelect(id){for(var i=0;i<pcCandidates.length;i++){if(pcCandidates[i].id===id){pcSelected=pcCandidates[i];break;}}pcEditingPhone=false;pcEditingEmail=false;pcEditingPunchId=false;pcEditingShirtSize=false;render();var rp=document.getElementById('pcpipe-detail');if(rp)rp.scrollIntoView({behavior:'smooth',block:'start'});}
 function pcPipeFilter(f){pcFilter=f;render();}
 /* Toggle handler for the "Legacy" checkbox in the filter pills row. Flips pcShowLegacy
    and re-renders so getFiltered picks up the new state. */
@@ -653,7 +659,11 @@ function doHireWrite(punch,venues,roles,hiredBy,homeVenue){
     rateObj[role]=rr;
   }
   var cu={pipeline_stage:'onboarding',hired:true,hired_at:new Date().toISOString(),hired_by:hiredBy,punch_id:punch,assigned_venues:venues,assigned_roles:roles,starting_pay_rate:JSON.stringify(rateObj),stage_updated_at:new Date().toISOString(),updated_at:new Date().toISOString()};
-  var er={first_name:pcSelected.first_name,last_name:pcSelected.last_name,punch_id:punch,is_active:true,phone:pcSelected.phone,home_venue:homeVenue};
+  /* shirt_size carries over from the candidate row to the employee row at
+     hire time. Captured on the application form, so for any post-2026-05-05
+     hire it should be present. Legacy candidates may have null until the
+     Google Form backfill runs. */
+  var er={first_name:pcSelected.first_name,last_name:pcSelected.last_name,punch_id:punch,is_active:true,phone:pcSelected.phone,home_venue:homeVenue,shirt_size:pcSelected.shirt_size||null};
   cancelBookingForCandidate(pcSelected.id);
   var failStep='candidates update';
   return sbFetch('/rest/v1/candidates?id=eq.'+pcSelected.id,{method:'PATCH',prefer:'return=minimal',body:cu})
@@ -930,6 +940,49 @@ function pcPipeSavePhone(){if(!pcSelected)return;var inp=document.getElementById
 function pcPipeEditEmail(){pcEditingEmail=true;render();setTimeout(function(){var inp=document.getElementById('email-edit-input');if(inp)inp.focus();},30);}
 function pcPipeCancelEmailEdit(){pcEditingEmail=false;render();}
 function pcPipeSaveEmail(){if(!pcSelected)return;var inp=document.getElementById('email-edit-input');if(!inp)return;var newEmail=inp.value.trim();var errEl=document.getElementById('email-edit-err');if(!newEmail){if(errEl)errEl.innerHTML='Please enter an email address.';return;}if(newEmail.indexOf('@')===-1||newEmail.indexOf('.')===-1){if(errEl)errEl.innerHTML='Please enter a valid email address.';return;}var now=new Date().toISOString();sbFetch('/rest/v1/candidates?id=eq.'+pcSelected.id,{method:'PATCH',prefer:'return=minimal',body:{email:newEmail,updated_at:now}}).then(function(){pcSelected.email=newEmail;pcEditingEmail=false;loadAll();}).catch(function(err){console.error('Email update failed',err);if(errEl)errEl.innerHTML='Error saving. Please try again.';});}
+
+/* ── Shirt Size Edit Feature ──
+   Shirt size lives in the Application details detail-grid. Editable any time
+   pre-hire (matches home-components pattern). On save we PATCH candidates,
+   and if the candidate has already been hired (has a matching employees row
+   keyed on punch_id), we mirror the value to the employees row too. This
+   matches the phone/punch_id sync pattern further up. */
+function buildShirtSizeOptions(currentValue){
+  var html='<option value="">(not set)</option>';
+  for(var i=0;i<SHIRT_SIZES.length;i++){
+    var sz=SHIRT_SIZES[i];
+    var sel=(currentValue===sz)?' selected':'';
+    html+='<option value="'+sz+'"'+sel+'>'+sz+'</option>';
+  }
+  return html;
+}
+function pcPipeEditShirtSize(){pcEditingShirtSize=true;render();}
+function pcPipeCancelShirtSizeEdit(){pcEditingShirtSize=false;render();}
+function pcPipeSaveShirtSize(){
+  if(!pcSelected)return;
+  var inp=document.getElementById('shirt-edit-input');
+  if(!inp)return;
+  var newSize=inp.value||null;
+  var errEl=document.getElementById('shirt-edit-err');
+  /* Validate: if a value is selected it must be in SHIRT_SIZES.
+     Empty means "clear the value" which is allowed. */
+  if(newSize){
+    var ok=false;
+    for(var i=0;i<SHIRT_SIZES.length;i++){if(SHIRT_SIZES[i]===newSize){ok=true;break;}}
+    if(!ok){if(errEl)errEl.innerHTML='Invalid shirt size.';return;}
+  }
+  var now=new Date().toISOString();
+  sbFetch('/rest/v1/candidates?id=eq.'+pcSelected.id,{method:'PATCH',prefer:'return=minimal',body:{shirt_size:newSize,updated_at:now}})
+    .then(function(){
+      pcSelected.shirt_size=newSize;
+      /* Mirror to employees row if this candidate has been hired (has punch_id). */
+      if(pcSelected.punch_id){
+        return sbFetch('/rest/v1/employees?punch_id=eq.'+pcSelected.punch_id,{method:'PATCH',prefer:'return=minimal',body:{shirt_size:newSize,updated_at:now}});
+      }
+    })
+    .then(function(){pcEditingShirtSize=false;loadAll();})
+    .catch(function(err){console.error('Shirt size update failed',err);if(errEl)errEl.innerHTML='Error saving. Please try again.';});
+}
 
 function init(){
   loadAll();
