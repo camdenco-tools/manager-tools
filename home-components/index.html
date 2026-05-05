@@ -887,6 +887,77 @@ body {
   ];
 
   // -------------------------------------------------------------
+  // PERFORMANCE SIGNALS CONFIG
+  //
+  // All tunable knobs for the rating engine live here. To adjust how
+  // factors score relative to each other, edit RATING_WEIGHTS. To tune
+  // how attendance + source combine, edit RELIABILITY_POINTS. The engine
+  // itself reads from these — no hardcoded numbers in the math.
+  // -------------------------------------------------------------
+
+  // System start date — position_assignments only began recording April 30, 2026.
+  // We don't try to compute anything based on placements before this date.
+  var SYSTEM_START_DATE = '2026-04-30';
+
+  // Cold start threshold — employees with fewer than this many countable
+  // placements have their headline rating hidden, replaced with
+  // "Insufficient data — N more shifts needed."
+  var COLD_START_THRESHOLD = 8;
+
+  // Factor weights (must sum to 100). Tunable from this one place.
+  var RATING_WEIGHTS = {
+    reliability: 45,
+    signupVolume: 10,
+    homeVenueEngagement: 15,
+    eventTier: 0,         // stub — activates when events.staffing_tier is expanded
+    tenure: 5,
+    lastMinuteAttendance: 10,
+    signupLeadTime: 15
+  };
+
+  // Reliability point values per (source, attendance) combination.
+  // Tunable. The engine clamps and normalizes from these.
+  var RELIABILITY_POINTS = {
+    signupShowed:    1.0,   // signed up + showed up — best
+    manualShowed:    0.6,   // manager-typed + showed up — decent
+    manualNoShow:   -0.5,   // manager-typed + no-show — bad but didn't volunteer
+    signupNoShow:   -1.0    // signed up + no-show — broke commitment, worst
+  };
+
+  // Signup lead-time point curve. Lead time = days between submitted_at and
+  // event_date, capped by the opportunity window (days since hire / event creation).
+  // Returns 0-1 points per signup; averaged across all signups.
+  function leadTimePoints(daysAhead) {
+    if (daysAhead >= 30) return 1.0;
+    if (daysAhead >= 14) return 0.85;
+    if (daysAhead >= 7)  return 0.7;
+    if (daysAhead >= 3)  return 0.4;
+    if (daysAhead >= 1)  return 0.2;
+    return 0.1;
+  }
+
+  // Tenure boost curve. Returns 0-1 based on days since hire AND placement count.
+  // Levels off around 30 placements / 180 days.
+  function tenurePoints(daysSinceHire, totalPlacements) {
+    if (daysSinceHire == null || daysSinceHire < 0) return 0;
+    var dayScore = Math.min(1, daysSinceHire / 180);
+    var placementScore = Math.min(1, totalPlacements / 30);
+    return (dayScore * 0.5) + (placementScore * 0.5);
+  }
+
+  // Last-minute window — placements made within this many hours of event_date
+  // count as "last minute fills" for factor 9.
+  var LAST_MINUTE_HOURS = 24;
+
+  // Home-venue engagement cold start — skip this factor (mark NA) if fewer
+  // than this many home-venue events occurred during the employee's tenure.
+  var HOME_VENUE_MIN_EVENTS = 5;
+
+  // Signup volume baseline — 1 signup per active week is treated as 100%
+  // engagement. Caps at 100 (over-signers don't get credit beyond the cap).
+  var SIGNUPS_PER_WEEK_BASELINE = 1.0;
+
+  // -------------------------------------------------------------
   // STATE
   // -------------------------------------------------------------
   // employees: rows from the employees table (active + inactive). Each row
@@ -909,7 +980,13 @@ body {
     modalEmpId: null,    // employees.id of the open card
     modalSection: null,  // which section is currently in edit mode (or null)
     modalEditDraft: null,// transient form values for the section being edited
-    onboardingOpen: false
+    onboardingOpen: false,
+    // Performance Signals data — loaded at boot, used when a card opens.
+    placements: [],         // position_assignments rows (lifetime)
+    signups: [],            // availability rows (lifetime)
+    verifiedAttendance: [], // sale_staff_assignments rows where verified=true
+    eventsById: {},         // event_id → { event_date, venue, created_at, ... }
+    eventsWithSignin: {}    // event_id → true if at least one verified sign-in row exists
   };
 
   // -------------------------------------------------------------
@@ -1019,6 +1096,111 @@ body {
   }
 
   // -------------------------------------------------------------
+  // RATING DATA LOADER — the seam
+  //
+  // This function is the ONLY place that knows how to fetch rating data.
+  // The computation engine downstream operates on whatever this returns.
+  //
+  // Today: 5 client-side REST calls.
+  // Tomorrow: replace this function's body with a single Supabase RPC call
+  // to a server-side aggregator. Engine and UI don't change.
+  // -------------------------------------------------------------
+  function loadRatingData() {
+    // Pull placements (lifetime — i.e., since SYSTEM_START_DATE).
+    // Includes removed_at rows because we still want to know about cancellations
+    // for some debug views; the engine filters them out where appropriate.
+    var placementsUrl = SUPABASE_URL +
+      '/rest/v1/position_assignments' +
+      '?select=id,event_id,venue,stand,role,staff_name,source,assigned_at,removed_at' +
+      '&assigned_at=gte.' + SYSTEM_START_DATE +
+      '&order=assigned_at.asc';
+
+    // Pull signups (lifetime). Includes removed_at because removal is the
+    // manager's action, not the employee's, so we still credit the signup
+    // for lead-time and engagement scoring.
+    var signupsUrl = SUPABASE_URL +
+      '/rest/v1/availability' +
+      '?select=id,staff_name,event_id,submitted_at,removed_at' +
+      '&submitted_at=gte.' + SYSTEM_START_DATE +
+      '&order=submitted_at.asc';
+
+    // Pull verified attendance only. raw_name_text is what the AI read off
+    // the sign-in sheet; employee_id is the matched roster record.
+    // verified=true means a manager has confirmed the match.
+    var attendanceUrl = SUPABASE_URL +
+      '/rest/v1/sale_staff_assignments' +
+      '?select=id,sale_id,employee_id,raw_name_text,verified,verified_at' +
+      '&verified=eq.true';
+
+    // Pull events for date-mapping. We need event_date (for lead-time math)
+    // and created_at (for the opportunity-window calculation).
+    var eventsUrl = SUPABASE_URL +
+      '/rest/v1/events' +
+      '?select=id,event_date,venue,created_at' +
+      '&event_date=gte.' + SYSTEM_START_DATE +
+      '&order=event_date.asc';
+
+    // Sales rows tell us which events had a sign-in sheet uploaded.
+    // We need this to skip "unverified" events from reliability denominators
+    // instead of penalizing employees for manager paperwork lag.
+    var salesUrl = SUPABASE_URL +
+      '/rest/v1/sales' +
+      '?select=id,event_date,venue';
+
+    return Promise.all([
+      authFetch(placementsUrl, { method: 'GET', headers: pcAuth.headers() }),
+      authFetch(signupsUrl, { method: 'GET', headers: pcAuth.headers() }),
+      authFetch(attendanceUrl, { method: 'GET', headers: pcAuth.headers() }),
+      authFetch(eventsUrl, { method: 'GET', headers: pcAuth.headers() }),
+      authFetch(salesUrl, { method: 'GET', headers: pcAuth.headers() })
+    ]).then(function(results) {
+      var placements = results[0] || [];
+      var signups = results[1] || [];
+      var attendance = results[2] || [];
+      var events = results[3] || [];
+      var sales = results[4] || [];
+
+      // Index events by id for O(1) lookup downstream.
+      var eventsById = {};
+      events.forEach(function(e) { eventsById[e.id] = e; });
+
+      // Build a sale_id → event lookup so we can map verified attendance
+      // (which keys on sale_id) back to event_id. Sales rows carry
+      // event_date + venue but not event_id, so we match on (date, venue).
+      var saleToEvent = {};
+      sales.forEach(function(s) {
+        // Find the matching event by date + venue.
+        for (var i = 0; i < events.length; i++) {
+          if (events[i].event_date === s.event_date && events[i].venue === s.venue) {
+            saleToEvent[s.id] = events[i].id;
+            break;
+          }
+        }
+      });
+
+      // Mark which events have at least one verified sign-in row attached.
+      var eventsWithSignin = {};
+      attendance.forEach(function(a) {
+        var evId = saleToEvent[a.sale_id];
+        if (evId) eventsWithSignin[evId] = true;
+      });
+
+      // Decorate each verified attendance row with its event_id (for downstream use).
+      attendance.forEach(function(a) {
+        a.event_id = saleToEvent[a.sale_id] || null;
+      });
+
+      return {
+        placements: placements,
+        signups: signups,
+        verifiedAttendance: attendance,
+        eventsById: eventsById,
+        eventsWithSignin: eventsWithSignin
+      };
+    });
+  }
+
+  // -------------------------------------------------------------
   // WRITES — generic patch helpers
   // -------------------------------------------------------------
   function patchEmployee(empId, body) {
@@ -1081,6 +1263,462 @@ body {
     return state.employees.filter(function(e) {
       return (e.is_active === true) === wantActive;
     });
+  }
+
+  // ============================================================
+  // PERFORMANCE SIGNALS — COMPUTATION ENGINE
+  //
+  // Pure function. Takes pre-fetched data, returns a rating object.
+  // Has zero awareness of:
+  //   - the DOM
+  //   - Supabase
+  //   - whether the data is fresh, stale, or aggregated server-side
+  //
+  // Rating object shape:
+  // {
+  //   employee: { id, name, hired_at, home_venue },
+  //   countablePlacements: number,
+  //   coldStart: boolean,                  // true if below COLD_START_THRESHOLD
+  //   shiftsNeededForRating: number,       // only meaningful if coldStart === true
+  //   factors: {
+  //     reliability:           { score: 0-100, weight, naReason?, raw },
+  //     signupVolume:          { ... },
+  //     homeVenueEngagement:   { ... },
+  //     eventTier:             { ... },     // always NA in v1
+  //     tenure:                { ... },
+  //     lastMinuteAttendance:  { ... },
+  //     signupLeadTime:        { ... }
+  //   },
+  //   overall: 0-100 | null,                // null if cold start
+  //   stars: 0.0-5.0 | null,
+  //   walkOnCount: number,                  // sign-in appearances without a placement
+  //   unverifiedPlacementCount: number,     // placements at events with no sign-in sheet
+  //   placementMix: { signup, manual, placeholder }
+  // }
+  // ============================================================
+  function computeEmployeeRating(employee, candidate, ratingData) {
+    var hiredAt = candidate && candidate.hired_at ? candidate.hired_at : null;
+    var homeVenue = employee.home_venue || null;
+    var empName = fullName(employee);
+    var empId = employee.id;
+
+    // --- Build the employee's view of each dataset -------------
+    // Placements where this employee was placed (matched on staff_name).
+    // staff_name is the canonical key in position_assignments — it's how
+    // the page records placements. Same matching pattern as everywhere else.
+    var myPlacements = ratingData.placements.filter(function(p) {
+      return !p.removed_at && namesMatch(p.staff_name, empName);
+    });
+
+    // Verified attendance for this employee (matched on employee_id when
+    // available, falls back to raw_name_text if AI parser produced a
+    // match without a hard FK).
+    var myVerifiedAttendance = ratingData.verifiedAttendance.filter(function(a) {
+      if (a.employee_id && a.employee_id === empId) return true;
+      if (a.raw_name_text && namesMatch(a.raw_name_text, empName)) return true;
+      return false;
+    });
+
+    // Build a Set of event_ids where this employee has verified attendance.
+    var attendedEventIds = {};
+    myVerifiedAttendance.forEach(function(a) {
+      if (a.event_id) attendedEventIds[a.event_id] = true;
+    });
+
+    // Signups (including removed — manager removal isn't the employee's fault).
+    var mySignups = ratingData.signups.filter(function(s) {
+      return namesMatch(s.staff_name, empName);
+    });
+
+    var now = new Date();
+    var nowMs = now.getTime();
+
+    // --- Identify past placements with usable verification data ---
+    // A placement is "countable" if:
+    //   - the event has happened (event_date is in the past)
+    //   - the event has at least one verified sign-in row (uploaded sheet)
+    var countablePlacements = [];
+    var unverifiedPlacements = []; // past, but no sign-in sheet uploaded
+    myPlacements.forEach(function(p) {
+      var ev = ratingData.eventsById[p.event_id];
+      if (!ev) return;
+      var eventMs = new Date(ev.event_date + 'T23:59:59').getTime();
+      if (eventMs > nowMs) return; // future event — not countable yet
+      if (ratingData.eventsWithSignin[p.event_id]) {
+        countablePlacements.push(p);
+      } else {
+        unverifiedPlacements.push(p);
+      }
+    });
+
+    // --- Walk-ons: verified attendance with no matching placement ---
+    var placedEventIds = {};
+    myPlacements.forEach(function(p) { placedEventIds[p.event_id] = true; });
+    var walkOnCount = 0;
+    Object.keys(attendedEventIds).forEach(function(evId) {
+      if (!placedEventIds[evId]) walkOnCount++;
+    });
+
+    // --- Placement mix (for display) -----------------------------
+    var placementMix = { signup: 0, manual: 0, placeholder: 0 };
+    myPlacements.forEach(function(p) {
+      if (p.source === 'signup') placementMix.signup++;
+      else if (p.source === 'manual') placementMix.manual++;
+      else if (p.source === 'placeholder') placementMix.placeholder++;
+    });
+
+    // --- Cold start check ----------------------------------------
+    var coldStart = countablePlacements.length < COLD_START_THRESHOLD;
+    var shiftsNeeded = Math.max(0, COLD_START_THRESHOLD - countablePlacements.length);
+
+    // === FACTOR 1: RELIABILITY (source-weighted, both directions) ===
+    var reliability = computeReliability(countablePlacements, attendedEventIds);
+
+    // === FACTOR 2: SIGNUP VOLUME ===
+    var signupVolume = computeSignupVolume(mySignups, hiredAt, now);
+
+    // === FACTOR 5: HOME-VENUE ENGAGEMENT ===
+    var homeVenueEngagement = computeHomeVenueEngagement(
+      mySignups, ratingData.eventsById, homeVenue, hiredAt, now
+    );
+
+    // === FACTOR 6: EVENT TIER (stub) ===
+    var eventTier = {
+      score: null,
+      weight: RATING_WEIGHTS.eventTier,
+      naReason: 'Event tier system not yet active',
+      raw: {}
+    };
+
+    // === FACTOR 8: TENURE ===
+    var tenure = computeTenure(hiredAt, myPlacements.length, now);
+
+    // === FACTOR 9: LAST-MINUTE ATTENDANCE ===
+    var lastMinute = computeLastMinuteAttendance(
+      countablePlacements, attendedEventIds, ratingData.eventsById
+    );
+
+    // === FACTOR 10: SIGNUP LEAD TIME ===
+    var signupLeadTime = computeSignupLeadTime(
+      mySignups, ratingData.eventsById, hiredAt
+    );
+
+    // --- Weighted overall score ----------------------------------
+    var factors = {
+      reliability: reliability,
+      signupVolume: signupVolume,
+      homeVenueEngagement: homeVenueEngagement,
+      eventTier: eventTier,
+      tenure: tenure,
+      lastMinuteAttendance: lastMinute,
+      signupLeadTime: signupLeadTime
+    };
+
+    var overall = null;
+    var stars = null;
+    if (!coldStart) {
+      // Sum (score × weight) for non-NA factors, then divide by sum of
+      // applicable weights so NA factors don't drag the average down.
+      var weightedSum = 0;
+      var totalWeight = 0;
+      Object.keys(factors).forEach(function(key) {
+        var f = factors[key];
+        if (f.score == null) return; // NA
+        if (!f.weight) return;       // zero-weight stub
+        weightedSum += f.score * f.weight;
+        totalWeight += f.weight;
+      });
+      if (totalWeight > 0) {
+        overall = Math.round((weightedSum / totalWeight) * 10) / 10;
+        stars = Math.round((overall / 20) * 10) / 10; // 100 → 5.0
+      }
+    }
+
+    return {
+      employee: {
+        id: empId, name: empName, hired_at: hiredAt, home_venue: homeVenue
+      },
+      countablePlacements: countablePlacements.length,
+      coldStart: coldStart,
+      shiftsNeededForRating: shiftsNeeded,
+      factors: factors,
+      overall: overall,
+      stars: stars,
+      walkOnCount: walkOnCount,
+      unverifiedPlacementCount: unverifiedPlacements.length,
+      placementMix: placementMix
+    };
+  }
+
+  // --- Name matcher: forgiving, case-insensitive, whitespace-collapsed ---
+  function namesMatch(a, b) {
+    if (!a || !b) return false;
+    var na = String(a).toLowerCase().replace(/\s+/g, ' ').trim();
+    var nb = String(b).toLowerCase().replace(/\s+/g, ' ').trim();
+    return na === nb;
+  }
+
+  // --- Factor 1: Reliability ---
+  function computeReliability(countablePlacements, attendedEventIds) {
+    if (countablePlacements.length === 0) {
+      return {
+        score: null, weight: RATING_WEIGHTS.reliability,
+        naReason: 'No verified placements yet',
+        raw: { showed: 0, noShow: 0 }
+      };
+    }
+    var totalPoints = 0;
+    var maxPossible = 0;
+    var showed = 0, noShow = 0;
+    var bySource = { signupShowed: 0, manualShowed: 0, signupNoShow: 0, manualNoShow: 0 };
+
+    countablePlacements.forEach(function(p) {
+      var attended = !!attendedEventIds[p.event_id];
+      var isSignup = p.source === 'signup';
+      var pts;
+      if (attended) {
+        showed++;
+        if (isSignup) { pts = RELIABILITY_POINTS.signupShowed; bySource.signupShowed++; }
+        else          { pts = RELIABILITY_POINTS.manualShowed; bySource.manualShowed++; }
+      } else {
+        noShow++;
+        if (isSignup) { pts = RELIABILITY_POINTS.signupNoShow; bySource.signupNoShow++; }
+        else          { pts = RELIABILITY_POINTS.manualNoShow; bySource.manualNoShow++; }
+      }
+      totalPoints += pts;
+      // Max possible = if every placement scored signupShowed (1.0)
+      maxPossible += RELIABILITY_POINTS.signupShowed;
+    });
+
+    // Normalize: scale from [-maxPossible, +maxPossible] to [0, 100].
+    // (totalPoints + maxPossible) / (2 * maxPossible) × 100
+    var minPossible = -maxPossible;
+    var range = maxPossible - minPossible;
+    var score = range > 0 ? ((totalPoints - minPossible) / range) * 100 : 0;
+    score = Math.max(0, Math.min(100, score));
+    score = Math.round(score * 10) / 10;
+
+    return {
+      score: score,
+      weight: RATING_WEIGHTS.reliability,
+      raw: {
+        countable: countablePlacements.length,
+        showed: showed,
+        noShow: noShow,
+        bySource: bySource,
+        rawPoints: Math.round(totalPoints * 10) / 10,
+        maxPoints: maxPossible
+      }
+    };
+  }
+
+  // --- Factor 2: Signup volume ---
+  function computeSignupVolume(signups, hiredAt, now) {
+    if (!hiredAt) {
+      return {
+        score: null, weight: RATING_WEIGHTS.signupVolume,
+        naReason: 'No hire date on file',
+        raw: { signupCount: signups.length }
+      };
+    }
+    var startMs = Math.max(
+      new Date(hiredAt).getTime(),
+      new Date(SYSTEM_START_DATE).getTime()
+    );
+    var nowMs = now.getTime();
+    var weeks = Math.max(1, (nowMs - startMs) / (1000 * 60 * 60 * 24 * 7));
+    var perWeek = signups.length / weeks;
+    var score = Math.min(100, (perWeek / SIGNUPS_PER_WEEK_BASELINE) * 100);
+    score = Math.round(score * 10) / 10;
+    return {
+      score: score,
+      weight: RATING_WEIGHTS.signupVolume,
+      raw: {
+        signupCount: signups.length,
+        weeksActive: Math.round(weeks * 10) / 10,
+        signupsPerWeek: Math.round(perWeek * 100) / 100
+      }
+    };
+  }
+
+  // --- Factor 5: Home-venue engagement ---
+  function computeHomeVenueEngagement(signups, eventsById, homeVenue, hiredAt, now) {
+    if (!homeVenue || homeVenue === 'NA') {
+      return {
+        score: null, weight: RATING_WEIGHTS.homeVenueEngagement,
+        naReason: 'No home venue assigned',
+        raw: {}
+      };
+    }
+    if (!hiredAt) {
+      return {
+        score: null, weight: RATING_WEIGHTS.homeVenueEngagement,
+        naReason: 'No hire date on file',
+        raw: { homeVenue: homeVenue }
+      };
+    }
+    var hiredMs = new Date(hiredAt).getTime();
+    var systemStartMs = new Date(SYSTEM_START_DATE).getTime();
+    var startMs = Math.max(hiredMs, systemStartMs);
+    var nowMs = now.getTime();
+
+    // Past events at home venue during their tenure
+    var homeEvents = [];
+    Object.keys(eventsById).forEach(function(id) {
+      var e = eventsById[id];
+      if (e.venue !== homeVenue) return;
+      var eMs = new Date(e.event_date + 'T23:59:59').getTime();
+      if (eMs < startMs || eMs > nowMs) return;
+      homeEvents.push(e);
+    });
+
+    if (homeEvents.length < HOME_VENUE_MIN_EVENTS) {
+      return {
+        score: null, weight: RATING_WEIGHTS.homeVenueEngagement,
+        naReason: 'Not enough home-venue events yet (' + homeEvents.length + ' of ' + HOME_VENUE_MIN_EVENTS + ' needed)',
+        raw: { homeVenue: homeVenue, homeEventCount: homeEvents.length }
+      };
+    }
+
+    // How many of those did they sign up for?
+    var homeEventIds = {};
+    homeEvents.forEach(function(e) { homeEventIds[e.id] = true; });
+    var signedUpForCount = 0;
+    var seenEventIds = {};
+    signups.forEach(function(s) {
+      if (homeEventIds[s.event_id] && !seenEventIds[s.event_id]) {
+        signedUpForCount++;
+        seenEventIds[s.event_id] = true;
+      }
+    });
+
+    var score = Math.round((signedUpForCount / homeEvents.length) * 1000) / 10;
+    return {
+      score: score,
+      weight: RATING_WEIGHTS.homeVenueEngagement,
+      raw: {
+        homeVenue: homeVenue,
+        signedUp: signedUpForCount,
+        totalHomeEvents: homeEvents.length
+      }
+    };
+  }
+
+  // --- Factor 8: Tenure ---
+  function computeTenure(hiredAt, totalPlacements, now) {
+    if (!hiredAt) {
+      return {
+        score: null, weight: RATING_WEIGHTS.tenure,
+        naReason: 'No hire date on file',
+        raw: {}
+      };
+    }
+    var daysSinceHire = (now.getTime() - new Date(hiredAt).getTime()) / (1000 * 60 * 60 * 24);
+    var pts = tenurePoints(daysSinceHire, totalPlacements);
+    return {
+      score: Math.round(pts * 1000) / 10,
+      weight: RATING_WEIGHTS.tenure,
+      raw: {
+        daysSinceHire: Math.round(daysSinceHire),
+        totalPlacements: totalPlacements
+      }
+    };
+  }
+
+  // --- Factor 9: Last-minute attendance ---
+  function computeLastMinuteAttendance(countablePlacements, attendedEventIds, eventsById) {
+    var lastMinutePlacements = countablePlacements.filter(function(p) {
+      var ev = eventsById[p.event_id];
+      if (!ev) return false;
+      var assignedMs = new Date(p.assigned_at).getTime();
+      var eventMs = new Date(ev.event_date + 'T23:59:59').getTime();
+      var hoursBefore = (eventMs - assignedMs) / (1000 * 60 * 60);
+      return hoursBefore <= LAST_MINUTE_HOURS && hoursBefore > -24; // assigned within 24h of event
+    });
+    if (lastMinutePlacements.length === 0) {
+      return {
+        score: null, weight: RATING_WEIGHTS.lastMinuteAttendance,
+        naReason: 'No last-minute placements yet',
+        raw: { count: 0 }
+      };
+    }
+    var attended = 0;
+    lastMinutePlacements.forEach(function(p) {
+      if (attendedEventIds[p.event_id]) attended++;
+    });
+    var score = (attended / lastMinutePlacements.length) * 100;
+    score = Math.round(score * 10) / 10;
+    return {
+      score: score,
+      weight: RATING_WEIGHTS.lastMinuteAttendance,
+      raw: {
+        attended: attended,
+        total: lastMinutePlacements.length
+      }
+    };
+  }
+
+  // --- Factor 10: Signup lead time ---
+  function computeSignupLeadTime(signups, eventsById, hiredAt) {
+    if (signups.length === 0) {
+      return {
+        score: null, weight: RATING_WEIGHTS.signupLeadTime,
+        naReason: 'No signups yet',
+        raw: { count: 0 }
+      };
+    }
+    var hiredMs = hiredAt ? new Date(hiredAt).getTime() : null;
+    var totalPoints = 0;
+    var counted = 0;
+    var distribution = { '30+': 0, '14-29': 0, '7-13': 0, '3-6': 0, '1-2': 0, '<1': 0 };
+
+    signups.forEach(function(s) {
+      var ev = eventsById[s.event_id];
+      if (!ev) return;
+      var submittedMs = new Date(s.submitted_at).getTime();
+      var eventMs = new Date(ev.event_date).getTime();
+      var calendarDays = (eventMs - submittedMs) / (1000 * 60 * 60 * 24);
+
+      // Opportunity window — capped by tenure and event creation
+      var earliestPossibleMs = ev.created_at ? new Date(ev.created_at).getTime() : 0;
+      if (hiredMs) earliestPossibleMs = Math.max(earliestPossibleMs, hiredMs);
+      var maxOpportunityDays = (eventMs - earliestPossibleMs) / (1000 * 60 * 60 * 24);
+      var effectiveDays = Math.min(calendarDays, maxOpportunityDays);
+
+      // Skip signups with less than 14 days of opportunity (new hire / late-added event)
+      if (maxOpportunityDays < 14) return;
+
+      var pts = leadTimePoints(effectiveDays);
+      totalPoints += pts;
+      counted++;
+
+      if (effectiveDays >= 30) distribution['30+']++;
+      else if (effectiveDays >= 14) distribution['14-29']++;
+      else if (effectiveDays >= 7) distribution['7-13']++;
+      else if (effectiveDays >= 3) distribution['3-6']++;
+      else if (effectiveDays >= 1) distribution['1-2']++;
+      else distribution['<1']++;
+    });
+
+    if (counted === 0) {
+      return {
+        score: null, weight: RATING_WEIGHTS.signupLeadTime,
+        naReason: 'No signups with sufficient opportunity window yet',
+        raw: { count: 0 }
+      };
+    }
+    var score = (totalPoints / counted) * 100;
+    score = Math.round(score * 10) / 10;
+    return {
+      score: score,
+      weight: RATING_WEIGHTS.signupLeadTime,
+      raw: {
+        countedSignups: counted,
+        skippedForOpportunity: signups.length - counted,
+        distribution: distribution,
+        avgPoints: Math.round((totalPoints / counted) * 100) / 100
+      }
+    };
   }
 
   // -------------------------------------------------------------
@@ -1344,6 +1982,41 @@ body {
     state.modalEditDraft = null;
     state.onboardingOpen = false;
     renderCardModal();
+
+    // PASS 1 DEBUG — dump the rating object for this employee.
+    // Remove once Pass 2 ships the UI section.
+    var emp = state.employees.find(function(x) { return x.id === empId; });
+    if (emp) {
+      var cand = getCandidateForEmployee(emp);
+      var ratingData = {
+        placements: state.placements,
+        signups: state.signups,
+        verifiedAttendance: state.verifiedAttendance,
+        eventsById: state.eventsById,
+        eventsWithSignin: state.eventsWithSignin
+      };
+      var rating = computeEmployeeRating(emp, cand, ratingData);
+      console.log('=== Performance Signals: ' + fullName(emp) + ' ===');
+      console.log(rating);
+      try {
+        console.table({
+          'Reliability':         { score: rating.factors.reliability.score,         weight: rating.factors.reliability.weight,         na: rating.factors.reliability.naReason || '' },
+          'Signup volume':       { score: rating.factors.signupVolume.score,        weight: rating.factors.signupVolume.weight,        na: rating.factors.signupVolume.naReason || '' },
+          'Home-venue engage':   { score: rating.factors.homeVenueEngagement.score, weight: rating.factors.homeVenueEngagement.weight, na: rating.factors.homeVenueEngagement.naReason || '' },
+          'Tenure':              { score: rating.factors.tenure.score,              weight: rating.factors.tenure.weight,              na: rating.factors.tenure.naReason || '' },
+          'Last-minute attend':  { score: rating.factors.lastMinuteAttendance.score, weight: rating.factors.lastMinuteAttendance.weight, na: rating.factors.lastMinuteAttendance.naReason || '' },
+          'Signup lead time':    { score: rating.factors.signupLeadTime.score,      weight: rating.factors.signupLeadTime.weight,      na: rating.factors.signupLeadTime.naReason || '' }
+        });
+      } catch(e) { /* console.table not supported, ignore */ }
+      console.log('Overall: ' + (rating.overall == null ? 'INSUFFICIENT DATA (' + rating.shiftsNeededForRating + ' more shifts needed)' : rating.overall + ' / 100  →  ' + rating.stars + ' stars'));
+      console.log('Placement mix:', rating.placementMix);
+      if (rating.unverifiedPlacementCount > 0) {
+        console.log('⚠ ' + rating.unverifiedPlacementCount + ' placements at events with no sign-in sheet uploaded');
+      }
+      if (rating.walkOnCount > 0) {
+        console.log('⚠ ' + rating.walkOnCount + ' walk-on appearances (signed in without a placement)');
+      }
+    }
   }
 
   function closeCardModal() {
@@ -2407,6 +3080,10 @@ body {
           var fb = {};
           SCORECARD_VENUES.forEach(function(v) { fb[v] = 0; });
           return fb;
+        }),
+        loadRatingData().catch(function(err) {
+          console.warn('Rating data fetch failed (non-blocking):', err);
+          return { placements: [], signups: [], verifiedAttendance: [], eventsById: {}, eventsWithSignin: {} };
         })
       ]).then(function(results) {
         state.employees = results[0] || [];
@@ -2426,6 +3103,14 @@ body {
         state.payRates.forEach(function(r) { roleSet[r.role] = true; });
         state.pcRoles = Object.keys(roleSet).sort();
         state.parTotals = results[3] || {};
+
+        // Performance Signals data
+        var ratingData = results[4] || { placements: [], signups: [], verifiedAttendance: [], eventsById: {}, eventsWithSignin: {} };
+        state.placements = ratingData.placements;
+        state.signups = ratingData.signups;
+        state.verifiedAttendance = ratingData.verifiedAttendance;
+        state.eventsById = ratingData.eventsById;
+        state.eventsWithSignin = ratingData.eventsWithSignin;
 
         renderStatusTabs();
         renderCounts();
