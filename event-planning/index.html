@@ -397,6 +397,19 @@ var DEX={'Cleaning Crew':1,'Warehouse/Runner':1,'Supervisor':1,'Venue Manager':1
 function apiHeaders(){return Object.assign({},pcAuth.headers(),{'Content-Type':'application/json','Prefer':'return=representation'});}
 function apiHeadersMin(){return Object.assign({},pcAuth.headers(),{'Content-Type':'application/json','Prefer':'return=minimal'});}
 
+// JWT EXPIRY HANDLING PATTERN (matches schedule-assistant, availability-responses, events-admin)
+function handleAuthFailure(){
+  try{localStorage.removeItem('sb_access_token');localStorage.removeItem('sb_refresh_token');}catch(e){}
+  showToast('Session expired. Reloading to sign in again...');
+  setTimeout(function(){window.location.reload();},1800);
+}
+function checkAuthError(res,text){
+  if(res.status===401||(text&&text.indexOf('JWT expired')!==-1)){
+    var err=new Error('JWT expired');err.authFailed=true;return err;
+  }
+  return null;
+}
+
 var pcE=[],pL={},pSh={},pEx={},subs={},sStatus={},allSales=[],reqLog={};
 var cY,cM,aEI=null,isLk=false,adhD=null;
 var cMode='same',cSel=[],cOther=null,cPanOpen=false,cRefOpen=false;
@@ -404,15 +417,15 @@ var _ddResults=[];
 var loggedInUser=null;
 var clOpen=false;
 
-function sb(m,p,b){return fetch(SB_URL+'/rest/v1/'+p,{method:m,headers:apiHeaders(),body:b?JSON.stringify(b):undefined}).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t);});return r.status===204?null:r.json();});}
+function sb(m,p,b){return fetch(SB_URL+'/rest/v1/'+p,{method:m,headers:apiHeaders(),body:b?JSON.stringify(b):undefined}).then(function(r){if(!r.ok)return r.text().then(function(t){var ae=checkAuthError(r,t);if(ae)throw ae;throw new Error(t);});return r.status===204?null:r.json();});}
 
-function init(){var n=new Date();cY=n.getFullYear();cM=n.getMonth();Promise.all([loadE(),loadP(),loadS(),loadSS(),loadSales(),loadLog()]).then(function(){renderCal();});}
-function loadE(){return sb('GET','events?order=event_date.asc').then(function(d){pcE=d||[];}).catch(function(e){console.error(e);});}
-function loadP(){return sb('GET','par_levels?select=venue,stand,role,default_count,show_in_planning,excluded_from_total,tier').then(function(d){pL={};pSh={};pEx={};(d||[]).forEach(function(r){var t=r.tier||'full',k=r.venue+'||'+r.stand+'||'+r.role+'||'+t;pL[k]=r.default_count;pSh[k]=r.show_in_planning!==false;pEx[k]=r.excluded_from_total===true;});}).catch(function(e){console.error(e);});}
-function loadS(){return sb('GET','staffing_requests?select=id,event_id,venue,stand,role,headcount,manager_name,sales_forecast,staff_notes,submitted_at').then(function(d){subs={};(d||[]).forEach(function(r){subs[r.event_id+'||'+r.venue+'||'+r.stand+'||'+r.role]=r;if(!subs['_e_'+r.event_id])subs['_e_'+r.event_id]=[];subs['_e_'+r.event_id].push(r);});}).catch(function(e){console.error(e);});}
-function loadSS(){return sb('GET','event_staffing_status?select=event_id,venue,is_confirmed,confirmed_by,confirmed_at').then(function(d){sStatus={};(d||[]).forEach(function(r){sStatus[r.event_id+'||'+r.venue]=r;});}).catch(function(e){console.error(e);});}
-function loadSales(){return sb('GET','sales?select=event_date,event_name,venue,stand,amount,staff_count,tip_amount&order=event_date.desc').then(function(d){allSales=d||[];}).catch(function(e){console.error(e);});}
-function loadLog(){return sb('GET','staffing_request_log?select=id,event_id,venue,manager_name,total_staff,total_forecast,action,created_at&order=created_at.desc').then(function(d){reqLog={};(d||[]).forEach(function(r){var k=r.event_id+'||'+r.venue;if(!reqLog[k])reqLog[k]=[];reqLog[k].push(r);});}).catch(function(e){console.error(e);});}
+function init(){var n=new Date();cY=n.getFullYear();cM=n.getMonth();Promise.all([loadE(),loadP(),loadS(),loadSS(),loadSales(),loadLog()]).then(function(){renderCal();}).catch(function(e){if(e&&e.authFailed){handleAuthFailure();return;}console.error(e);});}
+function loadE(){return sb('GET','events?order=event_date.asc').then(function(d){pcE=d||[];}).catch(function(e){if(e&&e.authFailed)throw e;console.error(e);});}
+function loadP(){return sb('GET','par_levels?select=venue,stand,role,default_count,show_in_planning,excluded_from_total,tier').then(function(d){pL={};pSh={};pEx={};(d||[]).forEach(function(r){var t=r.tier||'full',k=r.venue+'||'+r.stand+'||'+r.role+'||'+t;pL[k]=r.default_count;pSh[k]=r.show_in_planning!==false;pEx[k]=r.excluded_from_total===true;});}).catch(function(e){if(e&&e.authFailed)throw e;console.error(e);});}
+function loadS(){return sb('GET','staffing_requests?select=id,event_id,venue,stand,role,headcount,manager_name,sales_forecast,staff_notes,submitted_at').then(function(d){subs={};(d||[]).forEach(function(r){subs[r.event_id+'||'+r.venue+'||'+r.stand+'||'+r.role]=r;if(!subs['_e_'+r.event_id])subs['_e_'+r.event_id]=[];subs['_e_'+r.event_id].push(r);});}).catch(function(e){if(e&&e.authFailed)throw e;console.error(e);});}
+function loadSS(){return sb('GET','event_staffing_status?select=event_id,venue,is_confirmed,confirmed_by,confirmed_at').then(function(d){sStatus={};(d||[]).forEach(function(r){sStatus[r.event_id+'||'+r.venue]=r;});}).catch(function(e){if(e&&e.authFailed)throw e;console.error(e);});}
+function loadSales(){return sb('GET','sales?select=event_date,event_name,venue,stand,amount,staff_count,tip_amount&order=event_date.desc').then(function(d){allSales=d||[];}).catch(function(e){if(e&&e.authFailed)throw e;console.error(e);});}
+function loadLog(){return sb('GET','staffing_request_log?select=id,event_id,venue,manager_name,total_staff,total_forecast,action,created_at&order=created_at.desc').then(function(d){reqLog={};(d||[]).forEach(function(r){var k=r.event_id+'||'+r.venue;if(!reqLog[k])reqLog[k]=[];reqLog[k].push(r);});}).catch(function(e){if(e&&e.authFailed)throw e;console.error(e);});}
 
 function pc(v,s,r,t){return pL[v+'||'+s+'||'+r+'||'+(t||'full')]||0;}
 function sc(ei,v,s,r){var x=subs[ei+'||'+v+'||'+s+'||'+r];return x?x.headcount:null;}
@@ -488,9 +501,9 @@ function submitAdhocEvent(){var v=document.getElementById('adhoc-venue').value;i
   var btn=document.getElementById('adhoc-submit-btn');btn.disabled=true;btn.textContent='Creating...';
   sb('POST','events',{venue:v,event_name:'Non-Event Labor',event_date:adhD,event_type:'adhoc',report_time:rt,end_time:et,notes:notes,staffing_tier:'full'})
   .then(function(res){var id=res?(res[0]?res[0].id:res.id):null;if(!id)throw new Error('No ID');if(!hasS)return;
-    return fetch(SB_URL+'/rest/v1/staffing_requests',{method:'POST',headers:apiHeadersMin(),body:JSON.stringify(sRows.map(function(sr){return{event_id:id,venue:v,stand:NS,role:sr.role,headcount:sr.headcount,manager_name:mgr,sales_forecast:null,staff_notes:notes,submitted_at:new Date().toISOString()};}))});})
+    return fetch(SB_URL+'/rest/v1/staffing_requests',{method:'POST',headers:apiHeadersMin(),body:JSON.stringify(sRows.map(function(sr){return{event_id:id,venue:v,stand:NS,role:sr.role,headcount:sr.headcount,manager_name:mgr,sales_forecast:null,staff_notes:notes,submitted_at:new Date().toISOString()};}))}).then(function(r){if(!r.ok)return r.text().then(function(t){var ae=checkAuthError(r,t);if(ae)throw ae;throw new Error(t);});});})
   .then(function(){showToast(hasS?'Non-event labor created and submitted':'Non-event labor created',true);closeAdhocModal();return Promise.all([loadE(),loadS(),loadSS()]);}).then(function(){renderCal();})
-  .catch(function(e){showToast('Error creating event.');btn.disabled=false;btn.textContent='Create and Submit Request';console.error(e);});}
+  .catch(function(e){if(e&&e.authFailed){handleAuthFailure();return;}showToast('Error creating event.');btn.disabled=false;btn.textContent='Create and Submit Request';console.error(e);});}
 
 function toggleChangelog(){clOpen=!clOpen;document.getElementById('changelog-icon').className='changelog-icon'+(clOpen?' open':'');document.getElementById('changelog-panel').className='changelog-panel'+(clOpen?' open':'');}
 
@@ -715,16 +728,22 @@ function submitRequest(){
       rows.push({event_id:evt.id,venue:venue,stand:stand,role:role,headcount:hc,manager_name:mgr,sales_forecast:(!skipF&&fv>0)?fv:null,staff_notes:sNote,submitted_at:new Date().toISOString()});});});
   var btn=document.getElementById('submit-btn');btn.disabled=true;btn.textContent='Submitting...';
   var hdr=pcAuth.headers();
+  // Helper: throw on non-OK, with auth-failure detection
+  function checkOk(r){if(r.ok)return r;return r.text().then(function(t){var ae=checkAuthError(r,t);if(ae)throw ae;throw new Error(t);});}
   // Step 1: Insert change log entry
-  fetch(SB_URL+'/rest/v1/staffing_request_log',{method:'POST',headers:apiHeadersMin(),body:JSON.stringify({event_id:evt.id,venue:venue,manager_name:mgr,total_staff:totalStaff,total_forecast:totalForecast,action:wasSub?'resubmitted':'submitted'})})
-  // Step 2: Delete old rows
-  .then(function(){return fetch(SB_URL+'/rest/v1/staffing_requests?event_id=eq.'+evt.id+'&venue=eq.'+encodeURIComponent(venue),{method:'DELETE',headers:hdr});})
+  fetch(SB_URL+'/rest/v1/staffing_request_log',{method:'POST',headers:apiHeadersMin(),body:JSON.stringify({event_id:evt.id,venue:venue,manager_name:mgr,total_staff:totalStaff,total_forecast:totalForecast,action:wasSub?'resubmitted':'submitted'})}).then(checkOk)
+  // Step 2: Delete old rows -- VERIFY with return=representation so we know if rows were actually deleted
+  .then(function(){return fetch(SB_URL+'/rest/v1/staffing_requests?event_id=eq.'+evt.id+'&venue=eq.'+encodeURIComponent(venue),{method:'DELETE',headers:Object.assign({},hdr,{'Prefer':'return=representation'})}).then(checkOk).then(function(r){return r.json();}).then(function(deletedRows){
+    // Sanity check: if this was a resubmit (had existing rows) but DELETE returned empty, RLS is silently blocking. Surface it.
+    if(wasSub&&(!deletedRows||deletedRows.length===0)){throw new Error('Resubmit could not clear previous rows. Contact staffing@camdenco.com.');}
+    return deletedRows;
+  });})
   // Step 3: Insert new rows in chunks
   .then(function(){var chs=[];for(var i=0;i<rows.length;i+=100)chs.push(rows.slice(i,i+100));
-    function ins(idx){if(idx>=chs.length)return Promise.resolve();return fetch(SB_URL+'/rest/v1/staffing_requests',{method:'POST',headers:apiHeadersMin(),body:JSON.stringify(chs[idx])}).then(function(){return ins(idx+1);});}return ins(0);})
+    function ins(idx){if(idx>=chs.length)return Promise.resolve();return fetch(SB_URL+'/rest/v1/staffing_requests',{method:'POST',headers:apiHeadersMin(),body:JSON.stringify(chs[idx])}).then(checkOk).then(function(){return ins(idx+1);});}return ins(0);})
   // Step 4: Auto-decertify if resubmission
-  .then(function(){if(!wasSub)return false;return fetch(SB_URL+'/rest/v1/event_staffing_status?event_id=eq.'+evt.id+'&venue=eq.'+encodeURIComponent(venue)+'&is_confirmed=eq.true',{headers:hdr}).then(function(r){return r.json();}).then(function(sr){
-    if(sr&&sr.length>0)return fetch(SB_URL+'/rest/v1/event_staffing_status?event_id=eq.'+evt.id+'&venue=eq.'+encodeURIComponent(venue),{method:'PATCH',headers:Object.assign({},hdr,{'Content-Type':'application/json','Prefer':'return=minimal'}),body:JSON.stringify({is_confirmed:false,confirmed_by:null,confirmed_at:null})}).then(function(){return true;});return false;});})
+  .then(function(){if(!wasSub)return false;return fetch(SB_URL+'/rest/v1/event_staffing_status?event_id=eq.'+evt.id+'&venue=eq.'+encodeURIComponent(venue)+'&is_confirmed=eq.true',{headers:hdr}).then(checkOk).then(function(r){return r.json();}).then(function(sr){
+    if(sr&&sr.length>0)return fetch(SB_URL+'/rest/v1/event_staffing_status?event_id=eq.'+evt.id+'&venue=eq.'+encodeURIComponent(venue),{method:'PATCH',headers:Object.assign({},hdr,{'Content-Type':'application/json','Prefer':'return=minimal'}),body:JSON.stringify({is_confirmed:false,confirmed_by:null,confirmed_at:null})}).then(checkOk).then(function(){return true;});return false;});})
   // Step 5: Send notification email via edge function
   .then(function(certCleared){
     var dd=new Date(evt.event_date+'T12:00:00');
@@ -737,7 +756,14 @@ function submitRequest(){
     }).catch(function(e){console.error('Email notification error:',e);});
     showToast('Staffing request submitted',true);closeModal();return Promise.all([loadS(),loadSS(),loadLog()]);})
   .then(function(){renderCal();})
-  .catch(function(e){showToast('Error submitting. Please try again.');btn.disabled=false;btn.textContent=wasSub?'Resubmit staffing request':'Submit staffing request';btn.style.background=ad?'#2d7a3d':(VC[evt.venue]||'#1a1a1a');console.error(e);});}
+  .catch(function(e){
+    if(e&&e.authFailed){handleAuthFailure();return;}
+    var msg=(e&&e.message)?e.message:'';
+    if(msg.indexOf('could not clear previous rows')!==-1){showToast(msg);}
+    else{showToast('Error submitting. Please try again.');}
+    btn.disabled=false;btn.textContent=wasSub?'Resubmit staffing request':'Submit staffing request';btn.style.background=ad?'#2d7a3d':(VC[evt.venue]||'#1a1a1a');
+    console.error(e);
+  });}
 
 // Login gate
 pcAuth.require({
