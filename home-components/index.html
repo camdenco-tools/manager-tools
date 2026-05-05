@@ -274,6 +274,16 @@ body {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+}
+.scorecard-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+  border-color: var(--muted);
+}
+.scorecard-card:active {
+  transform: translateY(0);
 }
 .scorecard-head {
   display: flex; align-items: baseline; justify-content: space-between;
@@ -777,6 +787,128 @@ body {
   .ps-factor-score { text-align: left; }
 }
 
+/* ============================================================
+   VENUE ROSTER MODAL — opens when a scorecard card is clicked.
+   Shows everyone assigned to that home_venue. Lightweight modal,
+   reuses .modal-overlay / .modal-box patterns. Each row has a
+   "Card" button that opens the employee card modal underneath.
+   ============================================================ */
+.vr-modal-header {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-lt);
+  display: flex; align-items: center; gap: 10px;
+}
+.vr-venue-dot {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.vr-venue-name {
+  font-size: 17px; font-weight: 700;
+  letter-spacing: -0.01em;
+  flex: 1;
+}
+.vr-venue-count {
+  font-size: 12px; color: var(--muted);
+  font-weight: 500;
+}
+.vr-toggle-row {
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--border-lt);
+  display: flex; align-items: center; gap: 10px;
+  font-size: 12px; color: var(--muted);
+}
+.vr-toggle-row label {
+  display: inline-flex; align-items: center; gap: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+.vr-toggle-row input[type=checkbox] {
+  width: 14px; height: 14px;
+  accent-color: var(--blue-600);
+}
+.vr-list {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.vr-row {
+  display: flex; align-items: center;
+  padding: 8px 18px;
+  border-bottom: 1px solid var(--border-lt);
+  gap: 10px;
+}
+.vr-row:last-child { border-bottom: none; }
+.vr-row.is-inactive {
+  background: #fafaf8;
+  color: var(--muted);
+}
+.vr-row-name {
+  font-size: 13px; font-weight: 600;
+  flex: 1; min-width: 0;
+}
+.vr-row.is-inactive .vr-row-name { color: var(--muted); font-weight: 500; }
+.vr-row .status-pill { font-size: 9px; padding: 2px 7px; }
+.vr-empty {
+  padding: 36px 18px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* ============================================================
+   CARD HISTORY SECTION — shows audit trail of edits made via the
+   employee card. Logged via employee_card_changes table. New rows
+   are inserted whenever a card field changes; the list renders the
+   most recent first. Collapsed by default to keep the card compact.
+   ============================================================ */
+.history-list {
+  display: none;
+  margin-top: 6px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.history-list.open { display: block; }
+.history-row {
+  display: flex; flex-direction: column;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-lt);
+  gap: 2px;
+}
+.history-row:last-child { border-bottom: none; }
+.history-line {
+  font-size: 12px; color: var(--text);
+  line-height: 1.4;
+}
+.history-line .field-name {
+  font-weight: 600; color: var(--text);
+}
+.history-line .old-val {
+  color: var(--muted);
+  text-decoration: line-through;
+  margin: 0 4px;
+}
+.history-line .new-val {
+  color: var(--green-800);
+  font-weight: 600;
+}
+.history-line .system-tag {
+  display: inline-block;
+  font-size: 9px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  background: var(--blue-50);
+  color: var(--blue-600);
+  padding: 1px 5px; border-radius: 3px;
+  margin-left: 4px;
+}
+.history-meta {
+  font-size: 11px; color: var(--muted);
+}
+.history-empty {
+  padding: 14px 0 4px;
+  font-size: 12px; color: var(--muted);
+  font-style: italic;
+}
+
 /* Onboarding history (collapsed by default) */
 .onboarding-list {
   display: none;
@@ -1170,7 +1302,16 @@ body {
     signups: [],            // availability rows (lifetime)
     verifiedAttendance: [], // sale_staff_assignments rows where verified=true
     eventsById: {},         // event_id → { event_date, venue, created_at, ... }
-    eventsWithSignin: {}    // event_id → true if at least one verified sign-in row exists
+    eventsWithSignin: {},   // event_id → true if at least one verified sign-in row exists
+    // Card change history — loaded at boot, indexed by employee_id.
+    // Each value is an array of change rows sorted newest-first.
+    changeHistory: {},
+    // Card modal: whether the card history section is expanded
+    historyOpen: false,
+    // Venue roster modal: which venue's modal is open (or null), and
+    // whether to show inactive employees in that modal.
+    rosterModalVenue: null,
+    rosterModalShowInactive: false
   };
 
   // -------------------------------------------------------------
@@ -1276,6 +1417,31 @@ body {
         totals[r.venue] += (r.default_count || 0);
       });
       return totals;
+    });
+  }
+
+  // -------------------------------------------------------------
+  // CHANGE HISTORY — load the audit trail of card edits and build
+  // an in-memory index keyed by employee_id, newest-first.
+  //
+  // Schema: employee_card_changes (id, employee_id, field_name,
+  // old_value, new_value, changed_by, changed_at). Generic so any
+  // card field can be logged; v1 only writes home_venue changes
+  // but the table is forward-compatible.
+  // -------------------------------------------------------------
+  function loadChangeHistory() {
+    var url = SUPABASE_URL +
+      '/rest/v1/employee_card_changes' +
+      '?select=id,employee_id,field_name,old_value,new_value,changed_by,changed_at' +
+      '&order=changed_at.desc';
+    return authFetch(url, { method: 'GET', headers: pcAuth.headers() }).then(function(rows) {
+      var byEmp = {};
+      (rows || []).forEach(function(r) {
+        if (!r.employee_id) return;
+        if (!byEmp[r.employee_id]) byEmp[r.employee_id] = [];
+        byEmp[r.employee_id].push(r);
+      });
+      return byEmp;
     });
   }
 
@@ -1408,6 +1574,45 @@ body {
     headers['Prefer'] = 'return=minimal';
     return authFetch(url, {
       method: 'PATCH', headers: headers, body: JSON.stringify(body)
+    });
+  }
+
+  // -------------------------------------------------------------
+  // logCardChange — write a single row to employee_card_changes and
+  // mirror it into state.changeHistory so the card UI updates without
+  // a refetch. Fire-and-forget: failures here shouldn't roll back the
+  // underlying data write, but we surface them in the console for
+  // debugging. v1 only logs home_venue changes; future code can call
+  // this for any card field by passing a different fieldName.
+  // -------------------------------------------------------------
+  function logCardChange(empId, fieldName, oldValue, newValue) {
+    if (oldValue === newValue) return Promise.resolve(); // no-op
+    var actor = (pcAuth.getUser && pcAuth.getUser()) || null;
+    var actorName = actor ? (actor.display_name || actor.email || 'Unknown') : 'Unknown';
+    var now = new Date().toISOString();
+    var body = {
+      employee_id: empId,
+      field_name: fieldName,
+      old_value: oldValue == null ? null : String(oldValue),
+      new_value: newValue == null ? null : String(newValue),
+      changed_by: actorName,
+      changed_at: now
+    };
+    var url = SUPABASE_URL + '/rest/v1/employee_card_changes';
+    var headers = pcAuth.headers();
+    headers['Content-Type'] = 'application/json';
+    headers['Prefer'] = 'return=representation';
+    return authFetch(url, {
+      method: 'POST', headers: headers, body: JSON.stringify(body)
+    }).then(function(rows) {
+      // Mirror into local state so the history section reflects the new
+      // entry immediately. The POST returns an array with the inserted row.
+      var inserted = (rows && rows[0]) || body;
+      if (!state.changeHistory[empId]) state.changeHistory[empId] = [];
+      state.changeHistory[empId].unshift(inserted);
+      return inserted;
+    }).catch(function(err) {
+      console.warn('logCardChange failed (non-blocking):', err);
     });
   }
 
@@ -2088,7 +2293,7 @@ body {
       var pctLabel = par > 0
         ? pct + '% of par from home staff'
         : '&mdash;';
-      html += '<div class="scorecard-card" style="border-left-color:' + color + ';">' +
+      html += '<div class="scorecard-card" data-roster-venue="' + venue + '" style="border-left-color:' + color + ';">' +
         '<div class="scorecard-head">' +
           '<span class="scorecard-venue">' + escapeHtml(venue) + '</span>' +
           '<span class="scorecard-par">' + parLabel + '</span>' +
@@ -2102,6 +2307,14 @@ body {
       '</div>';
     });
     strip.innerHTML = html;
+    // Wire click handlers — each scorecard opens the venue roster modal.
+    var cards = strip.querySelectorAll('[data-roster-venue]');
+    for (var i = 0; i < cards.length; i++) {
+      cards[i].addEventListener('click', function(ev) {
+        var v = ev.currentTarget.getAttribute('data-roster-venue');
+        if (v) openRosterModal(v);
+      });
+    }
   }
 
   // -------------------------------------------------------------
@@ -2123,6 +2336,9 @@ body {
     }
 
     patchEmployee(empId, { home_venue: newValue }).then(function() {
+      // Log the change to the audit table. Fire-and-forget — even if
+      // logging fails, the underlying save already succeeded.
+      logCardChange(empId, 'home_venue', previousValue, newValue);
       emp.home_venue = newValue;
       if (statusEl) {
         statusEl.textContent = 'Saved';
@@ -2173,6 +2389,7 @@ body {
     state.modalSection = null;
     state.modalEditDraft = null;
     state.onboardingOpen = false;
+    state.historyOpen = false;
     renderCardModal();
   }
 
@@ -2199,6 +2416,7 @@ body {
           renderHomeVenueSection(emp) +
           renderRolesSection(emp, cand) +
           renderNotesSection(emp, cand) +
+          renderHistorySection(emp) +
           renderOnboardingSection(emp, cand) +
           renderCardFooter(emp, cand) +
         '</div>' +
@@ -2866,6 +3084,212 @@ body {
     '</div>';
   }
 
+  // ---- Card change history (collapsed by default) ----
+  // Renders the audit trail of changes made to this employee's card.
+  // Reads from state.changeHistory[empId] which was populated at boot
+  // (see loadChangeHistory). Collapsed by default to avoid pushing the
+  // Onboarding history section further down.
+  function renderHistorySection(emp) {
+    var open = state.historyOpen;
+    var rows = (state.changeHistory[emp.id] || []).slice();
+    var label = 'Card change history';
+    var countLabel = rows.length > 0 ? ' (' + rows.length + ')' : '';
+    var bodyHtml = rows.length === 0
+      ? '<div class="history-empty">No tracked changes for this employee yet.</div>'
+      : rows.map(renderHistoryRow).join('');
+    return '<div class="card-section">' +
+      '<div class="card-section-head">' +
+        '<span class="section-title">' + label + escapeHtml(countLabel) + '</span>' +
+        '<button class="expand-chevron' + (open ? ' open' : '') + '" data-history-toggle>' +
+          '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">' +
+            '<polyline points="9 18 15 12 9 6"></polyline>' +
+          '</svg>' +
+          (open ? 'Hide' : 'Show') +
+        '</button>' +
+      '</div>' +
+      '<div class="history-list' + (open ? ' open' : '') + '">' +
+        bodyHtml +
+      '</div>' +
+    '</div>';
+  }
+
+  // Renders a single history row. The "System import" actor is styled
+  // with a small tag to distinguish baseline rows from real edits.
+  function renderHistoryRow(row) {
+    var isSystem = row.changed_by === 'System import';
+    var fieldLabel = HISTORY_FIELD_LABELS[row.field_name] || row.field_name;
+    var oldDisplay = formatHistoryValue(row.field_name, row.old_value);
+    var newDisplay = formatHistoryValue(row.field_name, row.new_value);
+    var lineHtml;
+    if (row.old_value == null || row.old_value === '') {
+      lineHtml = '<span class="field-name">' + escapeHtml(fieldLabel) + '</span> set to ' +
+        '<span class="new-val">' + escapeHtml(newDisplay) + '</span>';
+    } else if (row.new_value == null || row.new_value === '') {
+      lineHtml = '<span class="field-name">' + escapeHtml(fieldLabel) + '</span> cleared ' +
+        '<span class="old-val">' + escapeHtml(oldDisplay) + '</span>';
+    } else {
+      lineHtml = '<span class="field-name">' + escapeHtml(fieldLabel) + '</span> changed ' +
+        '<span class="old-val">' + escapeHtml(oldDisplay) + '</span>&rarr; ' +
+        '<span class="new-val">' + escapeHtml(newDisplay) + '</span>';
+    }
+    var systemTag = isSystem ? '<span class="system-tag">baseline</span>' : '';
+    return '<div class="history-row">' +
+      '<div class="history-line">' + lineHtml + systemTag + '</div>' +
+      '<div class="history-meta">' + formatHistoryDate(row.changed_at) + ' &middot; by ' + escapeHtml(row.changed_by) + '</div>' +
+    '</div>';
+  }
+
+  // Field-name display labels. Add entries here as new fields get logged.
+  var HISTORY_FIELD_LABELS = {
+    home_venue: 'Home venue'
+  };
+
+  function formatHistoryValue(fieldName, value) {
+    if (value == null || value === '') return '(unset)';
+    if (fieldName === 'home_venue') {
+      if (value === 'NA') return "Doesn't apply";
+      return VENUE_LABELS[value] || value;
+    }
+    return value;
+  }
+
+  function formatHistoryDate(ts) {
+    if (!ts) return '';
+    var d = new Date(ts);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) +
+      ' ' +
+      d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  }
+
+  // ============================================================
+  // VENUE ROSTER MODAL — opens when a scorecard card is clicked.
+  // Lists all employees whose home_venue matches that card. Each
+  // row has a "Card" button that closes this modal and opens the
+  // employee card modal. An "Include inactive" toggle reveals
+  // deactivated employees at the same venue, which can be useful
+  // when reviewing rehire decisions or seasonal patterns.
+  // ============================================================
+  function openRosterModal(venue) {
+    state.rosterModalVenue = venue;
+    state.rosterModalShowInactive = false;
+    renderRosterModal();
+  }
+
+  function closeRosterModal() {
+    state.rosterModalVenue = null;
+    state.rosterModalShowInactive = false;
+    document.getElementById('cardModalRoot').innerHTML = '';
+  }
+
+  function renderRosterModal() {
+    if (!state.rosterModalVenue) return;
+    // We mount the roster modal into the cardModalRoot since only one of
+    // the two should be open at once. Opening an employee card from inside
+    // the roster will swap this for the card modal.
+    var venue = state.rosterModalVenue;
+    var color = VENUE_COLORS[venue] || '#666';
+    var includeInactive = state.rosterModalShowInactive;
+
+    var matched = state.employees.filter(function(e) {
+      if (e.home_venue !== venue) return false;
+      if (!includeInactive && e.is_active !== true) return false;
+      return true;
+    });
+    matched.sort(function(a, b) {
+      // Active first (when inactive is shown), then alphabetical by last name
+      if (a.is_active !== b.is_active) return a.is_active ? -1 : 1;
+      return fullName(a).localeCompare(fullName(b));
+    });
+
+    var activeCount = state.employees.filter(function(e) {
+      return e.home_venue === venue && e.is_active === true;
+    }).length;
+    var inactiveCount = state.employees.filter(function(e) {
+      return e.home_venue === venue && e.is_active === false;
+    }).length;
+
+    var rowsHtml = matched.length === 0
+      ? '<div class="vr-empty">No' + (includeInactive ? '' : ' active') + ' employees with ' + escapeHtml(venue) + ' as their home component.</div>'
+      : matched.map(renderRosterRow).join('');
+
+    var toggleHtml = inactiveCount > 0
+      ? '<div class="vr-toggle-row">' +
+          '<label>' +
+            '<input type="checkbox" data-roster-toggle-inactive' + (includeInactive ? ' checked' : '') + ' />' +
+            'Include inactive employees (' + inactiveCount + ')' +
+          '</label>' +
+        '</div>'
+      : '';
+
+    var html =
+      '<div class="modal-overlay" data-roster-bg>' +
+        '<div class="modal-box">' +
+          '<div class="vr-modal-header">' +
+            '<span class="vr-venue-dot" style="background:' + color + ';"></span>' +
+            '<span class="vr-venue-name">' + escapeHtml(VENUE_LABELS[venue] || venue) + '</span>' +
+            '<span class="vr-venue-count">' + activeCount + ' active' +
+              (includeInactive && inactiveCount > 0 ? ' &middot; ' + inactiveCount + ' inactive' : '') +
+            '</span>' +
+            '<button class="card-header-close" data-close-roster title="Close">&times;</button>' +
+          '</div>' +
+          toggleHtml +
+          '<div class="vr-list">' + rowsHtml + '</div>' +
+        '</div>' +
+      '</div>';
+    document.getElementById('cardModalRoot').innerHTML = html;
+    wireRosterModalEvents();
+  }
+
+  function renderRosterRow(emp) {
+    var statusPill = emp.is_active
+      ? '<span class="status-pill active">Active</span>'
+      : '<span class="status-pill inactive">Inactive</span>';
+    var rowClass = 'vr-row' + (emp.is_active ? '' : ' is-inactive');
+    return '<div class="' + rowClass + '">' +
+      '<span class="vr-row-name">' + escapeHtml(fullName(emp)) + '</span>' +
+      statusPill +
+      '<button class="card-btn" data-roster-card="' + emp.id + '" title="Open employee card">' +
+        '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+          '<rect x="4" y="3" width="16" height="18" rx="2"></rect>' +
+          '<line x1="8" y1="9" x2="16" y2="9"></line>' +
+          '<line x1="8" y1="13" x2="14" y2="13"></line>' +
+        '</svg>' +
+        'Card' +
+      '</button>' +
+    '</div>';
+  }
+
+  function wireRosterModalEvents() {
+    var root = document.getElementById('cardModalRoot');
+    var bg = root.querySelector('[data-roster-bg]');
+    if (bg) {
+      bg.addEventListener('click', function(ev) {
+        if (ev.target === bg) closeRosterModal();
+      });
+    }
+    var closeBtn = root.querySelector('[data-close-roster]');
+    if (closeBtn) closeBtn.addEventListener('click', closeRosterModal);
+    var toggle = root.querySelector('[data-roster-toggle-inactive]');
+    if (toggle) {
+      toggle.addEventListener('change', function(ev) {
+        state.rosterModalShowInactive = ev.target.checked;
+        renderRosterModal();
+      });
+    }
+    // Card buttons — switch from the roster modal to the employee card modal
+    var cardBtns = root.querySelectorAll('[data-roster-card]');
+    for (var i = 0; i < cardBtns.length; i++) {
+      cardBtns[i].addEventListener('click', function(ev) {
+        var empId = ev.currentTarget.getAttribute('data-roster-card');
+        // Clear roster state and open the card modal in its place
+        state.rosterModalVenue = null;
+        state.rosterModalShowInactive = false;
+        openCardModal(empId);
+      });
+    }
+  }
+
   // ---- Footer ----
   function renderCardFooter(emp, cand) {
     if (emp.is_active) {
@@ -2895,11 +3319,15 @@ body {
         var newVal = ev.target.value || null;
         var prev = emp.home_venue;
         patchEmployee(emp.id, { home_venue: newVal }).then(function() {
+          // Log the change to the audit table. Same pattern as the row dropdown.
+          logCardChange(emp.id, 'home_venue', prev, newVal);
           emp.home_venue = newVal;
           showToast('Home venue saved', 'success');
           renderList();
           renderCounts();
           renderScorecard();
+          // Re-render the modal so the history section picks up the new entry.
+          renderCardModal();
         }).catch(function(err) {
           if (err && err.authFailed) { handleAuthFailure(); return; }
           ev.target.value = prev || '';
@@ -2959,6 +3387,14 @@ body {
     if (ob) {
       ob.addEventListener('click', function() {
         state.onboardingOpen = !state.onboardingOpen;
+        renderCardModal();
+      });
+    }
+    // Card history toggle
+    var ht = root.querySelector('[data-history-toggle]');
+    if (ht) {
+      ht.addEventListener('click', function() {
+        state.historyOpen = !state.historyOpen;
         renderCardModal();
       });
     }
@@ -3506,6 +3942,8 @@ body {
           if (document.getElementById('deactModalRoot').innerHTML) {
             closeDeactivateModal();
             closeReactivateModal();
+          } else if (state.rosterModalVenue) {
+            closeRosterModal();
           } else if (state.modalEmpId) {
             closeCardModal();
           }
@@ -3531,6 +3969,10 @@ body {
         loadRatingData().catch(function(err) {
           console.warn('Rating data fetch failed (non-blocking):', err);
           return { placements: [], signups: [], verifiedAttendance: [], eventsById: {}, eventsWithSignin: {} };
+        }),
+        loadChangeHistory().catch(function(err) {
+          console.warn('Change history fetch failed (non-blocking):', err);
+          return {};
         })
       ]).then(function(results) {
         state.employees = results[0] || [];
@@ -3558,6 +4000,9 @@ body {
         state.verifiedAttendance = ratingData.verifiedAttendance;
         state.eventsById = ratingData.eventsById;
         state.eventsWithSignin = ratingData.eventsWithSignin;
+
+        // Card change history — keyed by employee_id, sorted newest-first.
+        state.changeHistory = results[5] || {};
 
         renderStatusTabs();
         renderCounts();
