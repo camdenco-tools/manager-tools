@@ -2085,25 +2085,31 @@ function renderEventRow(ev) {
   // JMAC ribbon badges. Two separate signals:
   //  1. JMAC ×N — how many slots on this event are JMAC-covered.
   //  2. Replace JMAC? — appears when JMAC is in use AND there are signed-up
-  //     people on the event who aren't placed yet (potential replacements).
+  //     employees on this event who are genuinely available to take a slot
+  //     (not placed elsewhere on the same date, not soft-removed).
   // The first badge persists as long as any JMAC slot exists on the event.
-  // The second badge persists as long as there's a real-employee alternative
-  // to one of the JMAC slots.
+  // The second badge persists as long as a real-employee replacement exists.
   const jmacOnEvent = positionsForEvent(ev.id).filter(p => p.source === 'jmac');
   const jmacCount = jmacOnEvent.length;
   if (jmacCount > 0) {
     html += '<span class="jmac-tag" title="' + jmacCount + ' position' +
       (jmacCount === 1 ? '' : 's') + ' covered by JMAC">📞 JMAC ×' + jmacCount + '</span>';
-    // Count signups on this event who aren't already placed at it.
-    // Those people could replace a JMAC slot.
+    // Count signups who are TRULY available to replace a JMAC slot:
+    // they signed up here, aren't placed here, and aren't placed at any
+    // other event on the same date. Mirrors the Available panel's "N left"
+    // logic exactly so the two numbers stay coherent.
+    const sigsHere = state.availability.filter(a =>
+      a.event_id === ev.id && !a.removed_at);
     const placedNamesHere = new Set(
       positionsForEvent(ev.id).map(p => p.staff_name)
     );
-    const replaceable = state.availability.filter(a =>
-      a.event_id === ev.id &&
-      !a.removed_at &&
-      !placedNamesHere.has(a.staff_name)
-    ).length;
+    const dayAssignments = state.assignments[ev.event_date] || {};
+    const replaceable = sigsHere.filter(s => {
+      if (placedNamesHere.has(s.staff_name)) return false;       // already here
+      const assigned = dayAssignments[s.staff_name];
+      if (assigned && assigned !== ev.id) return false;          // placed elsewhere today
+      return true;
+    }).length;
     if (replaceable > 0) {
       html += '<span class="jmac-reduce-tag" title="' + replaceable +
         ' signed-up employee' + (replaceable === 1 ? '' : 's') +
@@ -2521,7 +2527,12 @@ function renderTypeahead() {
   const q = t.value.toLowerCase().trim();
   // JMAC special token — agency staffing, allows duplicates per event,
   // bypasses home-venue override, and counts as filled for staffing status.
+  // Match on prefix so 'j', 'jm', 'jma', 'jmac' all surface the suggestion.
+  // The suggestion is rendered alongside any matching employees so a single
+  // letter like 'j' doesn't hijack the list.
+  const jmacMatches = q.length > 0 && 'jmac'.startsWith(q);
   if (q === 'jmac') {
+    // Exact match — JMAC is the only sensible thing to show.
     return '<div class="typeahead-item jmac-item focused" data-pick-jmac="1">' +
       '<span class="ta-name">JMAC</span>' +
       '<span class="ta-meta">Agency · counts as filled</span>' +
@@ -2535,14 +2546,24 @@ function renderTypeahead() {
     .map(e => ({ name: (e.first_name + ' ' + e.last_name).trim() }))
     .filter(e => e.name.toLowerCase().indexOf(q) !== -1)
     .slice(0, 8);
+  // If the typed prefix is part of "jmac", prepend a JMAC suggestion row.
+  // It surfaces from the very first letter ('j' / 'jm' / 'jma') alongside
+  // any matching employees, and is the only row when typing the full word.
+  const jmacRow = jmacMatches
+    ? '<div class="typeahead-item jmac-item" data-pick-jmac="1">' +
+        '<span class="ta-name">JMAC</span>' +
+        '<span class="ta-meta">Agency · counts as filled</span>' +
+        '</div>'
+    : '';
   if (!matches.length) {
-    let html = '<div class="typeahead-no-match">';
+    let html = jmacRow;
+    html += '<div class="typeahead-no-match">';
     html += '<span>⚠ No employee matches "' + escapeHtml(t.value) + '"</span>';
     html += '<button class="add-placeholder" data-add-placeholder="' + escapeAttr(t.value) + '">+ Add as placeholder (will be flagged)</button>';
     html += '</div>';
     return html;
   }
-  return matches.map((m, i) => {
+  return jmacRow + matches.map((m, i) => {
     const isSignedUp = dateSignups.indexOf(m.name) !== -1;
     const cls = 'typeahead-item' + (i === t.focusedIndex ? ' focused' : '') + (isSignedUp ? ' signup-tag' : '');
     return '<div class="' + cls + '" data-pick-name="' + escapeAttr(m.name) + '">' +
