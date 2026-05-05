@@ -1178,6 +1178,12 @@ body {
   // Three venues that get a top-of-page scorecard.
   var SCORECARD_VENUES = ['Mann', 'FMP', 'SATB'];
 
+  // Uniform shirt sizes — must match the CHECK constraint on
+  // candidates.shirt_size and employees.shirt_size in the database.
+  // Order is small -> large for sortability. If you change this list,
+  // also update the SQL CHECK constraint and the apply-online page.
+  var SHIRT_SIZES = ['XS','S','M','L','XL','2XL','3XL','4XL','5XL'];
+
   var VENUE_COLORS = {
     FMP: '#c0392b', Mann: '#5a9e1a', Cure: '#2471a3',
     Subaru: '#7d3fbf', Villanova: '#1a237e', Montage: '#607d8b',
@@ -1371,9 +1377,10 @@ body {
   function loadEmployees() {
     // Drop the is_active filter from the URL so we get everyone in one shot.
     // Tab toggle filters in memory.
+    // shirt_size added May 5, 2026 — read it so the card can display it.
     var url = SUPABASE_URL +
       '/rest/v1/employees' +
-      '?select=id,first_name,last_name,punch_id,phone,is_active,home_venue' +
+      '?select=id,first_name,last_name,punch_id,phone,is_active,home_venue,shirt_size' +
       '&order=last_name.asc,first_name.asc';
     return authFetch(url, { method: 'GET', headers: pcAuth.headers() });
   }
@@ -2163,6 +2170,18 @@ body {
     return html;
   }
 
+  // Builds the <option> tags for the shirt size dropdown.
+  // Used in the contact section's edit mode.
+  function buildShirtSizeOptions(currentValue) {
+    var html = '<option value="">(not set)</option>';
+    for (var i = 0; i < SHIRT_SIZES.length; i++) {
+      var sz = SHIRT_SIZES[i];
+      var sel = (currentValue === sz) ? ' selected' : '';
+      html += '<option value="' + sz + '"' + sel + '>' + sz + '</option>';
+    }
+    return html;
+  }
+
   function renderRow(emp) {
     var unset = !emp.home_venue && state.statusTab === 'active';
     var isNA = emp.home_venue === 'NA';
@@ -2772,6 +2791,9 @@ body {
   }
 
   // ---- Contact & basics (per-section edit pattern) ----
+  // Shirt size (May 5, 2026): added to the bottom of the grid as a dropdown
+  // in edit mode, plain text in display mode. Saves to BOTH employees and
+  // candidates tables to match the existing phone/punch_id sync pattern.
   function renderContactSection(emp, cand) {
     var inEdit = state.modalSection === 'contact';
     var c = cand || {};
@@ -2793,6 +2815,12 @@ body {
               '<input type="checkbox" data-edit-field="is_minor"' + (draft.is_minor ? ' checked' : '') + ' />' +
               '<span>Yes, this employee is a minor</span>' +
             '</label>' +
+          '</div>' +
+          '<div class="detail-item">' +
+            '<div class="detail-label">Uniform shirt size</div>' +
+            '<select class="detail-input" data-edit-field="shirt_size">' +
+              buildShirtSizeOptions(draft.shirt_size || '') +
+            '</select>' +
           '</div>' +
         '</div>' +
         '<div class="section-action-row">' +
@@ -2821,6 +2849,7 @@ body {
         renderDisplayField('Date of birth', c.date_of_birth ? escapeHtml(formatDate(c.date_of_birth)) : null) +
         renderDisplayField('Start date', c.earliest_start_date ? escapeHtml(formatDate(c.earliest_start_date)) : null) +
         renderDisplayField('Minor (under 18)', c.is_minor ? 'Yes' : 'No', !c.is_minor) +
+        renderDisplayField('Uniform shirt size', emp.shirt_size ? escapeHtml(emp.shirt_size) : null) +
       '</div>' +
     '</div>';
   }
@@ -3141,7 +3170,8 @@ body {
 
   // Field-name display labels. Add entries here as new fields get logged.
   var HISTORY_FIELD_LABELS = {
-    home_venue: 'Home venue'
+    home_venue: 'Home venue',
+    shirt_size: 'Uniform shirt size'
   };
 
   function formatHistoryValue(fieldName, value) {
@@ -3416,13 +3446,18 @@ body {
   function beginSectionEdit(section, emp, cand) {
     var c = cand || {};
     if (section === 'contact') {
+      // shirt_size: read from the employee row first (source of truth post-hire),
+      // fall back to candidate row (covers cases where the employee row hasn't
+      // been populated yet — e.g., legacy employee whose candidate row was
+      // backfilled but the employee mirror hasn't run).
       state.modalEditDraft = {
         email: c.email || '',
         phone: emp.phone || '',
         punch_id: emp.punch_id || '',
         date_of_birth: c.date_of_birth || '',
         earliest_start_date: c.earliest_start_date || '',
-        is_minor: c.is_minor === true
+        is_minor: c.is_minor === true,
+        shirt_size: emp.shirt_size || c.shirt_size || ''
       };
     } else if (section === 'roles') {
       state.modalEditDraft = {
@@ -3485,6 +3520,19 @@ body {
         if (errEl) errEl.textContent = 'Punch ID must be exactly 4 digits.';
         return;
       }
+      // Validate shirt_size if provided. Must be one of the allowed sizes
+      // or empty (clearing). The DB CHECK constraint is the real enforcer,
+      // but we validate client-side so the user gets a friendly message.
+      if (draft.shirt_size) {
+        var validSize = false;
+        for (var ss = 0; ss < SHIRT_SIZES.length; ss++) {
+          if (SHIRT_SIZES[ss] === draft.shirt_size) { validSize = true; break; }
+        }
+        if (!validSize) {
+          if (errEl) errEl.textContent = 'Invalid shirt size.';
+          return;
+        }
+      }
       saveContactSection(emp, cand, draft, errEl);
       return;
     }
@@ -3494,16 +3542,20 @@ body {
     }
   }
 
-  // Contact section save: writes phone + punch_id to BOTH employees and candidates,
-  // writes email/dob/start_date/is_minor to candidates only.
+  // Contact section save: writes phone + punch_id + shirt_size to BOTH employees
+  // and candidates (mirror pattern), writes email/dob/start_date/is_minor to
+  // candidates only.
   function saveContactSection(emp, cand, draft, errEl) {
     var oldPunch = emp.punch_id;
     var newPunch = draft.punch_id || null;
+    var oldShirt = emp.shirt_size || null;
+    var newShirt = draft.shirt_size || null;
     var empBody = {};
     var candBody = {};
 
     if (draft.phone !== emp.phone) empBody.phone = draft.phone || null;
     if (newPunch !== oldPunch) empBody.punch_id = newPunch;
+    if (newShirt !== oldShirt) empBody.shirt_size = newShirt;
 
     if (cand && cand.id) {
       // Update candidate row
@@ -3513,6 +3565,7 @@ body {
       if (draft.date_of_birth !== (cand.date_of_birth || '')) candBody.date_of_birth = draft.date_of_birth || null;
       if (draft.earliest_start_date !== (cand.earliest_start_date || '')) candBody.earliest_start_date = draft.earliest_start_date || null;
       if (draft.is_minor !== (cand.is_minor === true)) candBody.is_minor = draft.is_minor;
+      if (newShirt !== (cand.shirt_size || null)) candBody.shirt_size = newShirt;
     }
 
     var ops = [];
@@ -3552,6 +3605,11 @@ body {
           delete state.candidates[oldPunch];
         }
         if (newPunch) state.candidates[newPunch] = cand;
+      }
+      // Audit-log shirt size changes (home_venue is logged where it's edited;
+      // other contact fields aren't currently tracked — see HISTORY_FIELD_LABELS).
+      if (newShirt !== oldShirt) {
+        logCardChange(emp.id, 'shirt_size', oldShirt, newShirt);
       }
       state.modalSection = null;
       state.modalEditDraft = null;
