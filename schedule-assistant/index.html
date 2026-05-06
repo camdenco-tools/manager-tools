@@ -1359,6 +1359,11 @@ const VENUE_COLORS = {
 // — they're treated identically to a NULL home_venue.
 const HOME_VENUE_NA = 'NA';
 
+// Uniform shirt sizes — must match the CHECK constraint on
+// employees.shirt_size and candidates.shirt_size. Order is small → large
+// for tally display in the per-event "Email staff list" feature.
+const SHIRT_SIZES = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL'];
+
 // Role display order — Lead always first
 const ROLE_ORDER = [
   'Concessions Lead', 'Pizza Lead', 'Supervisor', 'Venue Manager',
@@ -1613,6 +1618,58 @@ function homeVenueOf(staffName) {
   return emp.home_venue;
 }
 
+// Look up an employee's shirt size by full name. Mirrors homeVenueOf()'s
+// matching logic — first_name + ' ' + last_name vs the staff_name string.
+// Returns the size string ('S', 'M', '2XL', etc.) or null when the employee
+// isn't found OR has no shirt_size on file. Used to annotate names in the
+// per-event "Email staff list" preview and to build the tally that gets
+// appended to the outgoing email.
+function shirtSizeOf(staffName) {
+  if (!staffName) return null;
+  const name = staffName.trim();
+  if (!name) return null;
+  const emp = state.employees.find(e =>
+    ((e.first_name || '') + ' ' + (e.last_name || '')).trim() === name
+  );
+  if (!emp) return null;
+  if (!emp.shirt_size) return null;
+  return emp.shirt_size;
+}
+
+// Build a shirt-size tally for a list of staff names. Returns an object:
+//   { counts: { S: 3, M: 5, ... }, unknown: 2, total: 10 }
+// counts only contains keys for sizes actually present (no zeros). unknown
+// is the count of names with no shirt_size on file. Sizes in `counts` are
+// sorted via SHIRT_SIZES order when iterated by formatShirtTally().
+// JMAC/agency staff are NOT included — they bring their own uniforms.
+function buildShirtTally(staffNames) {
+  const counts = {};
+  let unknown = 0;
+  (staffNames || []).forEach(n => {
+    const sz = shirtSizeOf(n);
+    if (!sz) { unknown++; return; }
+    counts[sz] = (counts[sz] || 0) + 1;
+  });
+  return {
+    counts: counts,
+    unknown: unknown,
+    total: (staffNames || []).length
+  };
+}
+
+// Format a tally object into a human-readable single-line string, in
+// SHIRT_SIZES order. Example: "3 S · 5 M · 2 L · 1 XL · 2 unknown".
+// Returns empty string if total is 0.
+function formatShirtTally(tally) {
+  if (!tally || tally.total === 0) return '';
+  const parts = [];
+  SHIRT_SIZES.forEach(sz => {
+    if (tally.counts[sz]) parts.push(tally.counts[sz] + ' ' + sz);
+  });
+  if (tally.unknown > 0) parts.push(tally.unknown + ' unknown');
+  return parts.join(' · ');
+}
+
 // ---------- Data loaders ----------
 function loadAll() {
   const range = getDateRange(state.filters.range);
@@ -1656,7 +1713,7 @@ function loadAll() {
 
   return Promise.all([
     authFetch(eventsUrl, { headers: apiHeaders() }),
-    authFetch(SUPABASE_URL + '/rest/v1/employees?select=first_name,last_name,phone,home_venue,is_active&is_active=eq.true&order=last_name.asc',
+    authFetch(SUPABASE_URL + '/rest/v1/employees?select=first_name,last_name,phone,home_venue,shirt_size,is_active&is_active=eq.true&order=last_name.asc',
       { headers: apiHeaders() }),
     // Historical availability counts for "reliability" sort on the Available-to-call list.
     // We fetch ALL availability rows (including soft-deleted) just to count past activity.
@@ -4219,11 +4276,26 @@ function renderEmailStaffPreview(staffNames, jmacCount) {
     html += '<div style="color:var(--label);font-style:italic;">No employees placed yet</div>';
   } else {
     staffNames.forEach(n => {
-      html += '<div class="preview-name">' + escapeHtml(n) + '</div>';
+      const sz = shirtSizeOf(n);
+      const sizeBadge = sz
+        ? '<span style="color:var(--label);font-weight:600;margin-left:8px;">— ' + escapeHtml(sz) + '</span>'
+        : '<span style="color:#b45309;font-weight:600;margin-left:8px;font-style:italic;">— size unknown</span>';
+      html += '<div class="preview-name">' + escapeHtml(n) + sizeBadge + '</div>';
     });
   }
   if (jmacCount > 0) {
     html += '<div class="preview-jmac">📞 Agency — ' + jmacCount + ' staff via JMAC</div>';
+  }
+  // Shirt-size tally: appended below the list so the recipient (and the
+  // user composing the email) can see at a glance how many shirts of each
+  // size to stage. Built from real-staff names only — JMAC staff bring
+  // their own uniforms and are excluded.
+  const tally = buildShirtTally(staffNames);
+  if (tally.total > 0) {
+    const tallyStr = formatShirtTally(tally);
+    html += '<div style="margin-top:10px;padding:8px 10px;background:#eef2ff;color:#3730a3;border-radius:4px;font-weight:600;font-size:11px;">' +
+      '👕 Shirts needed: ' + escapeHtml(tallyStr) +
+      '</div>';
   }
   container.innerHTML = html;
 }
@@ -4289,6 +4361,18 @@ function sendStaffListEmail() {
   const reportT = getReportTime(ev);
   const reportStr = reportT ? fmtTime(reportT) : '';
 
+  // Build shirt-size annotations for each staff name plus the venue tally.
+  // staff_with_sizes is an array of {name, shirt_size} objects in the same
+  // order as staff_names — the edge function can render either field; we
+  // keep staff_names for backward compatibility until the edge function
+  // is updated to consume the richer payload. shirt_tally drives the
+  // "Shirts needed" line at the bottom of the email body.
+  const staffWithSizes = realStaff.map(n => ({
+    name: n,
+    shirt_size: shirtSizeOf(n)   // null when not on file
+  }));
+  const shirtTally = buildShirtTally(realStaff);
+
   const payload = {
     to: allTo,
     cc: ['erikapeters@camdenco.com'],   // hard-wired audit-trail recipient
@@ -4299,6 +4383,9 @@ function sendStaffListEmail() {
     event_date: ev.event_date,
     report_time: reportStr,
     staff_names: realStaff,
+    staff_with_sizes: staffWithSizes,
+    shirt_tally: shirtTally,
+    shirt_tally_display: formatShirtTally(shirtTally),
     jmac_count: jmacCount,
     sender_name: (state.user && state.user.display_name) ||
                  (state.user && state.user.email) || 'Camden Co. Staffing'
