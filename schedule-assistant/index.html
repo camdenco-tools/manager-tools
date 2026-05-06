@@ -4288,13 +4288,30 @@ function renderEmailStaffPreview(staffNames, jmacCount) {
   }
   // Shirt-size tally: appended below the list so the recipient (and the
   // user composing the email) can see at a glance how many shirts of each
-  // size to stage. Built from real-staff names only — JMAC staff bring
-  // their own uniforms and are excluded.
+  // size to stage. Rendered as a vertical list (S = 2, M = 4, ...) so it
+  // matches the email body and is easy to read line-by-line off the rack.
+  // JMAC staff are excluded — they bring their own uniforms.
   const tally = buildShirtTally(staffNames);
   if (tally.total > 0) {
-    const tallyStr = formatShirtTally(tally);
-    html += '<div style="margin-top:10px;padding:8px 10px;background:#eef2ff;color:#3730a3;border-radius:4px;font-weight:600;font-size:11px;">' +
-      '👕 Shirts needed: ' + escapeHtml(tallyStr) +
+    let rows = '';
+    SHIRT_SIZES.forEach(sz => {
+      const n = tally.counts[sz] || 0;
+      if (n > 0) {
+        rows += '<div style="display:flex;justify-content:space-between;padding:2px 0;">' +
+                  '<span>' + escapeHtml(sz) + '</span>' +
+                  '<span style="font-weight:700;">' + n + '</span>' +
+                '</div>';
+      }
+    });
+    if (tally.unknown > 0) {
+      rows += '<div style="display:flex;justify-content:space-between;padding:2px 0;border-top:1px solid #c7d2fe;margin-top:3px;padding-top:5px;">' +
+                '<span style="font-style:italic;">Unknown</span>' +
+                '<span style="font-weight:700;">' + tally.unknown + '</span>' +
+              '</div>';
+    }
+    html += '<div style="margin-top:10px;padding:8px 12px;background:#eef2ff;color:#3730a3;border-radius:4px;font-size:11px;">' +
+      '<div style="font-weight:700;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px;">👕 Shirts needed</div>' +
+      rows +
       '</div>';
   }
   container.innerHTML = html;
