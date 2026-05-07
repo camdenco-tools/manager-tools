@@ -506,8 +506,11 @@ body {
   padding: 10px 12px;
 }
 .card-subcard + .card-subcard { margin-top: 10px; }
-.card-subcard .detail-item { margin-bottom: 8px; }
-.card-subcard .detail-item:last-child { margin-bottom: 0; }
+/* Note: .detail-item inside .detail-grid is positioned by the grid's
+   own row gap. Don't add margin-bottom here — it would double-space
+   grid rows. Only apply spacing to detail-items that aren't in a grid. */
+.card-subcard > .detail-item { margin-bottom: 8px; }
+.card-subcard > .detail-item:last-child { margin-bottom: 0; }
 .card-subcard-empty {
   font-size: 12px; color: var(--muted);
   font-style: italic;
@@ -673,6 +676,27 @@ body {
 .detail-value.empty { color: var(--light); font-style: italic; font-weight: 400; }
 .detail-value a { color: var(--blue-600); text-decoration: none; }
 .detail-value a:hover { text-decoration: underline; }
+
+/* Inline treatment for empty fields in display mode — keeps the field
+   from taking two rows of vertical space when there's nothing to show. */
+.detail-item-empty {
+  display: flex; align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  /* Aligns vertically with the label-above-value items in the same
+     grid row by occupying just one line plus a thin baseline. */
+}
+.detail-label-inline {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 11px;
+}
+.detail-label-inline::after { content: '—'; margin-left: 4px; color: var(--light); }
+.detail-value-empty-inline {
+  color: var(--light);
+  font-style: italic;
+}
 .detail-input {
   width: 100%;
   padding: 6px 9px;
@@ -3314,12 +3338,21 @@ body {
   }
 
   function renderDisplayField(label, valHtml, dim) {
-    var cls = valHtml ? 'detail-value' : 'detail-value empty';
-    if (dim && valHtml) cls = 'detail-value';
-    var content = valHtml || 'not on file';
+    // Empty case: render the label and "not on file" inline on a single
+    // line, muted, so the field doesn't take up two stacked rows of
+    // visual space. Cleaner than label-above-italic-empty-value when
+    // many fields on the card are unset (legacy employees, etc.).
+    if (!valHtml) {
+      return '<div class="detail-item detail-item-empty">' +
+        '<span class="detail-label-inline">' + label + '</span>' +
+        '<span class="detail-value-empty-inline">not on file</span>' +
+      '</div>';
+    }
+    // Populated case: same as before — label above, value below.
+    var cls = dim ? 'detail-value' : 'detail-value';
     return '<div class="detail-item">' +
       '<div class="detail-label">' + label + '</div>' +
-      '<div class="' + cls + '">' + content + '</div>' +
+      '<div class="' + cls + '">' + valHtml + '</div>' +
     '</div>';
   }
 
