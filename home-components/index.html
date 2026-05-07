@@ -909,6 +909,81 @@ body {
   font-style: italic;
 }
 
+/* Signups section (collapsible, mirrors history-list patterns) */
+.signups-list {
+  display: none;
+  margin-top: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.signups-list.open { display: block; }
+.signups-group-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 8px 0 4px;
+}
+.signups-group-label:first-child { padding-top: 4px; }
+.signup-row {
+  display: flex; flex-direction: column;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-lt);
+  gap: 3px;
+}
+.signup-row:last-child { border-bottom: none; }
+.signup-row.past .signup-line,
+.signup-row.past .signup-meta {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--muted);
+}
+.signup-line {
+  font-size: 12px; color: var(--text);
+  line-height: 1.4;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.signup-date {
+  font-weight: 600; color: var(--text);
+}
+.signup-venue-tag {
+  display: inline-block;
+  font-size: 9px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.04em;
+  padding: 1px 6px; border-radius: 3px;
+  background: var(--blue-50);
+  color: var(--blue-600);
+}
+.signup-event-name {
+  color: var(--text);
+}
+.signup-show-time {
+  color: var(--muted);
+  font-size: 11px;
+}
+.signup-meta {
+  font-size: 11px; color: var(--muted);
+}
+.signup-count-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--blue-50);
+  color: var(--blue-600);
+  padding: 1px 7px;
+  border-radius: 10px;
+  margin-left: 6px;
+}
+.signups-empty {
+  padding: 14px 0 4px;
+  font-size: 12px; color: var(--muted);
+  font-style: italic;
+}
+
 /* Onboarding history (collapsed by default) */
 .onboarding-list {
   display: none;
@@ -1314,6 +1389,8 @@ body {
     changeHistory: {},
     // Card modal: whether the card history section is expanded
     historyOpen: false,
+    // Card modal: whether the signups section is expanded
+    signupsOpen: false,
     // Venue roster modal: which venue's modal is open (or null), and
     // whether to show inactive employees in that modal.
     rosterModalVenue: null,
@@ -1495,9 +1572,12 @@ body {
 
     // Pull events for date-mapping. We need event_date (for lead-time math)
     // and created_at (for the opportunity-window calculation).
+    // event_name and show_time are read by the Signups section on the card modal.
+    // The Performance Signals engine itself only uses event_date / venue / created_at;
+    // adding these two columns to the same fetch is free and avoids a second round trip.
     var eventsUrl = SUPABASE_URL +
       '/rest/v1/events' +
-      '?select=id,event_date,venue,created_at' +
+      '?select=id,event_date,venue,event_name,show_time,created_at' +
       '&event_date=gte.' + SYSTEM_START_DATE +
       '&order=event_date.asc';
 
@@ -2409,6 +2489,7 @@ body {
     state.modalEditDraft = null;
     state.onboardingOpen = false;
     state.historyOpen = false;
+    state.signupsOpen = false;
     renderCardModal();
   }
 
@@ -2433,6 +2514,7 @@ body {
           renderContactSection(emp, cand) +
           renderPerformanceSignalsSection(emp, cand) +
           renderHomeVenueSection(emp) +
+          renderSignupsSection(emp) +
           renderRolesSection(emp, cand) +
           renderNotesSection(emp, cand) +
           renderHistorySection(emp) +
@@ -3113,6 +3195,169 @@ body {
     '</div>';
   }
 
+  // ============================================================
+  // SIGNUPS SECTION (collapsed by default)
+  //
+  // Reads from state.signups (loaded at boot for Performance Signals)
+  // and state.eventsById, then filters to this employee's name. The
+  // header shows a count of UPCOMING signups only (event_date >= today).
+  // When expanded, the section also displays past signups within the
+  // last 14 days as struck-through reference rows. Older past signups
+  // and soft-deleted rows are hidden — they remain in the DB.
+  //
+  // No additional fetches happen for this section; the data is
+  // already in memory from the page-boot rating-data load.
+  // ============================================================
+
+  // Match availability.staff_name (free-text from WordPress signup form)
+  // against an employee's full name. Case-insensitive, trimmed. Known
+  // soft gap: nicknames, typos, and name changes won't match — same
+  // limitation that exists on the Schedule Assistant.
+  function signupsForEmployee(emp) {
+    var target = fullName(emp).trim().toLowerCase();
+    if (!target) return [];
+    var rows = state.signups || [];
+    var out = [];
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      if (r.removed_at) continue; // soft-deleted — hide
+      if (!r.staff_name) continue;
+      if (r.staff_name.trim().toLowerCase() === target) out.push(r);
+    }
+    return out;
+  }
+
+  // Bucket signups into upcoming vs recent-past (within 14 days).
+  // Older-than-14-days past signups are filtered out entirely.
+  function partitionSignups(signups) {
+    var today = new Date();
+    today.setHours(0, 0, 0, 0);
+    var todayMs = today.getTime();
+    var fourteenDaysAgoMs = todayMs - 14 * 24 * 60 * 60 * 1000;
+
+    var upcoming = [];
+    var recentPast = [];
+    for (var i = 0; i < signups.length; i++) {
+      var r = signups[i];
+      var ev = state.eventsById[r.event_id];
+      if (!ev || !ev.event_date) continue;
+      // Parse YYYY-MM-DD as local midnight for fair comparison.
+      var parts = String(ev.event_date).split('-');
+      if (parts.length !== 3) continue;
+      var evMs = new Date(parseInt(parts[0],10), parseInt(parts[1],10) - 1, parseInt(parts[2],10)).getTime();
+      if (evMs >= todayMs) {
+        upcoming.push({ row: r, ev: ev, evMs: evMs });
+      } else if (evMs >= fourteenDaysAgoMs) {
+        recentPast.push({ row: r, ev: ev, evMs: evMs });
+      }
+      // else: older than 14 days past — drop
+    }
+    upcoming.sort(function(a, b) { return a.evMs - b.evMs; });
+    recentPast.sort(function(a, b) { return b.evMs - a.evMs; }); // most recent past first
+    return { upcoming: upcoming, recentPast: recentPast };
+  }
+
+  function formatSignupEventDate(ev) {
+    var parts = String(ev.event_date).split('-');
+    if (parts.length !== 3) return ev.event_date || '';
+    var d = new Date(parseInt(parts[0],10), parseInt(parts[1],10) - 1, parseInt(parts[2],10));
+    if (isNaN(d.getTime())) return ev.event_date || '';
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  }
+
+  function formatShowTime(t) {
+    if (!t) return '';
+    // Postgres time comes back as 'HH:MM:SS' or 'HH:MM:SS+00'. Take the first 5 chars.
+    var s = String(t).substring(0, 5);
+    var bits = s.split(':');
+    if (bits.length < 2) return '';
+    var h = parseInt(bits[0], 10);
+    var m = parseInt(bits[1], 10);
+    if (isNaN(h) || isNaN(m)) return '';
+    var ampm = h >= 12 ? 'PM' : 'AM';
+    var h12 = h % 12;
+    if (h12 === 0) h12 = 12;
+    var mm = m < 10 ? '0' + m : String(m);
+    return h12 + ':' + mm + ' ' + ampm;
+  }
+
+  function formatSignupSubmittedAt(ts) {
+    if (!ts) return '';
+    var d = new Date(ts);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) +
+      ' at ' +
+      d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  }
+
+  function renderSignupRow(item, isPast) {
+    var ev = item.ev;
+    var row = item.row;
+    var dateLabel = formatSignupEventDate(ev);
+    var venueLabel = VENUE_LABELS[ev.venue] || ev.venue || '';
+    var eventName = ev.event_name || '(unnamed event)';
+    var showTime = formatShowTime(ev.show_time);
+    var submittedAt = formatSignupSubmittedAt(row.submitted_at);
+    var showTimeHtml = showTime ? '<span class="signup-show-time">' + escapeHtml(showTime) + '</span>' : '';
+    var pastClass = isPast ? ' past' : '';
+    return '<div class="signup-row' + pastClass + '">' +
+      '<div class="signup-line">' +
+        '<span class="signup-date">' + escapeHtml(dateLabel) + '</span>' +
+        '<span class="signup-venue-tag">' + escapeHtml(venueLabel) + '</span>' +
+        '<span class="signup-event-name">' + escapeHtml(eventName) + '</span>' +
+        showTimeHtml +
+      '</div>' +
+      '<div class="signup-meta">Signed up ' + escapeHtml(submittedAt) + '</div>' +
+    '</div>';
+  }
+
+  function renderSignupsSection(emp) {
+    var open = state.signupsOpen;
+    var rows = signupsForEmployee(emp);
+    var parts = partitionSignups(rows);
+    var upcomingCount = parts.upcoming.length;
+    var pastCount = parts.recentPast.length;
+
+    var bodyHtml;
+    if (parts.upcoming.length === 0 && parts.recentPast.length === 0) {
+      bodyHtml = '<div class="signups-empty">No upcoming signups, and nothing in the last 14 days.</div>';
+    } else {
+      var pieces = [];
+      if (parts.upcoming.length > 0) {
+        pieces.push('<div class="signups-group-label">Upcoming &middot; ' + parts.upcoming.length + '</div>');
+        for (var i = 0; i < parts.upcoming.length; i++) {
+          pieces.push(renderSignupRow(parts.upcoming[i], false));
+        }
+      } else {
+        pieces.push('<div class="signups-group-label">Upcoming &middot; none</div>');
+      }
+      if (parts.recentPast.length > 0) {
+        pieces.push('<div class="signups-group-label">Past 14 days &middot; ' + parts.recentPast.length + '</div>');
+        for (var j = 0; j < parts.recentPast.length; j++) {
+          pieces.push(renderSignupRow(parts.recentPast[j], true));
+        }
+      }
+      bodyHtml = pieces.join('');
+    }
+
+    var countBadge = '<span class="signup-count-badge">' + upcomingCount + '</span>';
+
+    return '<div class="card-section">' +
+      '<div class="card-section-head">' +
+        '<span class="section-title">Signups' + countBadge + '</span>' +
+        '<button class="expand-chevron' + (open ? ' open' : '') + '" data-signups-toggle>' +
+          '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">' +
+            '<polyline points="9 18 15 12 9 6"></polyline>' +
+          '</svg>' +
+          (open ? 'Hide' : 'Show') +
+        '</button>' +
+      '</div>' +
+      '<div class="signups-list' + (open ? ' open' : '') + '">' +
+        bodyHtml +
+      '</div>' +
+    '</div>';
+  }
+
   // ---- Card change history (collapsed by default) ----
   // Renders the audit trail of changes made to this employee's card.
   // Reads from state.changeHistory[empId] which was populated at boot
@@ -3425,6 +3670,14 @@ body {
     if (ht) {
       ht.addEventListener('click', function() {
         state.historyOpen = !state.historyOpen;
+        renderCardModal();
+      });
+    }
+    // Signups section toggle
+    var st = root.querySelector('[data-signups-toggle]');
+    if (st) {
+      st.addEventListener('click', function() {
+        state.signupsOpen = !state.signupsOpen;
         renderCardModal();
       });
     }
