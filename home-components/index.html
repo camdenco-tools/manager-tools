@@ -658,6 +658,39 @@ body {
 .expand-chevron svg { transition: transform 0.15s; }
 .expand-chevron.open svg { transform: rotate(90deg); }
 
+.cert-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border-lt);
+}
+.cert-row:last-child { border-bottom: none; }
+.cert-row .cert-name { font-weight: 500; }
+.cert-row .cert-status {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+  padding: 2px 8px; border-radius: 999px;
+}
+.cert-row .cert-status.valid    { background: var(--green-50); color: var(--green-800); }
+.cert-row .cert-status.expiring { background: var(--amber-100); color: var(--amber-800); }
+.cert-row .cert-status.expired  { background: var(--red-50); color: var(--red-600); }
+.cert-row .cert-status.unknown  { background: var(--bg); color: var(--muted); }
+.cert-manage-link {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--blue-600);
+  text-decoration: none;
+}
+.cert-manage-link:hover { text-decoration: underline; }
+.cert-empty {
+  font-size: 13px;
+  color: var(--muted);
+  font-style: italic;
+}
+
 .detail-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1467,6 +1500,10 @@ body {
   // Three venues that get a top-of-page scorecard.
   var SCORECARD_VENUES = ['Mann', 'FMP', 'SATB'];
 
+  // Threshold for "Expiring soon" status on certifications, in days.
+  // Must match the same constant on /certifications/index.html.
+  var EXPIRING_SOON_DAYS = 30;
+
   // Uniform shirt sizes — must match the CHECK constraint on
   // candidates.shirt_size and employees.shirt_size in the database.
   // Order is small -> large for sortability. If you change this list,
@@ -1601,6 +1638,10 @@ body {
     // Card change history — loaded at boot, indexed by employee_id.
     // Each value is an array of change rows sorted newest-first.
     changeHistory: {},
+    // Certifications — loaded at boot, read-only on this page.
+    // The /certifications/ page is the editor; this page just displays.
+    certs: [],
+    certTypesById: {},
     // Card modal: whether the card history section is expanded
     historyOpen: false,
     // Card modal: whether the signups section is expanded
@@ -1669,6 +1710,44 @@ body {
   // DATA LOADING — single fetch per table on page load.
   // Active/Inactive filtering is client-side after this point.
   // -------------------------------------------------------------
+
+  // ---- Cert helpers (display only) ----
+  // Certifications are read-only on this page. Editing happens on
+  // /certifications/. The card just displays the rows.
+  function certsForEmployee(empId) {
+    if (!empId || !state.certs) return [];
+    return state.certs.filter(function(c) { return c.employee_id === empId; });
+  }
+
+  function certStatusFromExpires(isoDate) {
+    if (!isoDate) return { kind: 'unknown', label: 'No expiration' };
+    var t = new Date();
+    t.setHours(0,0,0,0);
+    var d = new Date(isoDate + 'T00:00:00');
+    var diff = Math.round((d - t) / 86400000);
+    if (diff < 0) return { kind: 'expired',  label: 'Expired ' + Math.abs(diff) + 'd ago' };
+    if (diff <= EXPIRING_SOON_DAYS) return { kind: 'expiring', label: 'Expires in ' + diff + 'd' };
+    return { kind: 'valid', label: 'Expires ' + formatDate(isoDate) };
+  }
+
+  // ---- Certifications (read-only on this page) ----
+  // The /certifications/ page is the source of truth for editing.
+  function loadCerts() {
+    var url = SUPABASE_URL +
+      '/rest/v1/employee_certifications' +
+      '?select=id,employee_id,cert_type,issued_at,expires_at' +
+      '&removed_at=is.null';
+    return authFetch(url, { method: 'GET', headers: pcAuth.headers() });
+  }
+
+  function loadCertTypes() {
+    var url = SUPABASE_URL +
+      '/rest/v1/cert_types' +
+      '?select=id,display_name,state,category,requires_expiration' +
+      '&active=eq.true&order=sort_order.asc';
+    return authFetch(url, { method: 'GET', headers: pcAuth.headers() });
+  }
+
   function loadEmployees() {
     // Drop the is_active filter from the URL so we get everyone in one shot.
     // Tab toggle filters in memory.
@@ -3324,8 +3403,53 @@ body {
         renderDisplayField('Start date', c.earliest_start_date ? escapeHtml(formatDate(c.earliest_start_date)) : null) +
         renderDisplayField('Minor (under 18)', c.is_minor ? 'Yes' : 'No', !c.is_minor) +
         renderDisplayField('Uniform shirt size', emp.shirt_size ? escapeHtml(emp.shirt_size) : null) +
+        renderCertsCell(emp) +
       '</div>' +
       '</div>' +
+    '</div>';
+  }
+
+  // Renders a "Certifications" detail-item that holds the read-only cert
+  // list + a deep link into /certifications/. Editing happens there, not here.
+  function renderCertsCell(emp) {
+    var certs = certsForEmployee(emp.id);
+    var manageLink = '<a class="cert-manage-link" href="/certifications/?employee=' +
+      encodeURIComponent(emp.id) + '">Manage in Certifications &rarr;</a>';
+
+    if (certs.length === 0) {
+      return '<div class="detail-item">' +
+        '<div class="detail-label">Certifications</div>' +
+        '<div class="cert-empty">None on file</div>' +
+        manageLink +
+      '</div>';
+    }
+
+    // Sort: expired/expiring first, then valid, then unknown. Soonest first within group.
+    var order = { expired: 0, expiring: 1, valid: 2, unknown: 3 };
+    certs.sort(function(a, b) {
+      var sa = certStatusFromExpires(a.expires_at).kind;
+      var sb = certStatusFromExpires(b.expires_at).kind;
+      if (order[sa] !== order[sb]) return order[sa] - order[sb];
+      var ea = a.expires_at || '9999-12-31';
+      var eb = b.expires_at || '9999-12-31';
+      return ea < eb ? -1 : (ea > eb ? 1 : 0);
+    });
+
+    var rowsHtml = certs.map(function(c) {
+      var t = state.certTypesById[c.cert_type];
+      var typeLabel = t ? t.display_name : c.cert_type;
+      var stateTag = t && t.state ? ' (' + escapeHtml(t.state) + ')' : '';
+      var st = certStatusFromExpires(c.expires_at);
+      return '<div class="cert-row">' +
+        '<span class="cert-name">' + escapeHtml(typeLabel) + stateTag + '</span>' +
+        '<span class="cert-status ' + st.kind + '">' + escapeHtml(st.label) + '</span>' +
+      '</div>';
+    }).join('');
+
+    return '<div class="detail-item">' +
+      '<div class="detail-label">Certifications</div>' +
+      '<div>' + rowsHtml + '</div>' +
+      manageLink +
     '</div>';
   }
 
@@ -4750,6 +4874,14 @@ body {
         loadChangeHistory().catch(function(err) {
           console.warn('Change history fetch failed (non-blocking):', err);
           return {};
+        }),
+        loadCerts().catch(function(err) {
+          console.warn('Certs fetch failed (non-blocking):', err);
+          return [];
+        }),
+        loadCertTypes().catch(function(err) {
+          console.warn('Cert types fetch failed (non-blocking):', err);
+          return [];
         })
       ]).then(function(results) {
         state.employees = results[0] || [];
@@ -4780,6 +4912,12 @@ body {
 
         // Card change history — keyed by employee_id, sorted newest-first.
         state.changeHistory = results[5] || {};
+
+        // Certifications (read-only on this page)
+        state.certs = results[6] || [];
+        var certTypesArr = results[7] || [];
+        state.certTypesById = {};
+        certTypesArr.forEach(function(t) { state.certTypesById[t.id] = t; });
 
         renderStatusTabs();
         renderCounts();
