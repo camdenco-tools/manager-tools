@@ -296,6 +296,11 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
         <div id="ai-status" style="margin-top:10px;font-size:12px;color:#3B6D11;"></div>
         <button class="another-btn" onclick="resetForm()">Log another</button>
       </div>
+
+      <!-- Hidden file input used by the scoreboard's "Retake photo" / "Add sign-in photo"
+           buttons. Single shared input — pendingRetakeSaleId tracks which stand we're
+           replacing/adding for. -->
+      <input type="file" id="file-signin-retake" accept="image/jpeg,image/png" style="display:none;" onchange="handleSigninRetakeSelect(this)">
     </div>
 
     <div class="right-col">
@@ -528,6 +533,100 @@ async function parseSigninSheet(saleId, signinUrl, venue, tipAmount, staffCount,
   loadScoreboard();
 }
 
+// Tracks which sale_id the scoreboard's retake/add-signin button is currently
+// uploading for. The hidden input #file-signin-retake is shared across all stand
+// rows in the scoreboard, and pendingRetakeSaleId tells handleSigninRetakeSelect
+// which sale to attach the new photo to.
+var pendingRetakeSaleId = null;
+
+// Called by the "Add sign-in photo" / "Retake photo" buttons inside a stand-row
+// detail panel. Warns if there are existing manually-edited assignment rows that
+// would be wiped, opens the file picker, and stashes saleId for the onchange handler.
+function startSigninRetake(saleId) {
+  var existing = sbAssignments[saleId] || [];
+  var hasManual = existing.some(function(a) { return a.manual || a.verified; });
+  if (hasManual) {
+    var confirmed = confirm('Re-reading this sign-in sheet will replace ALL existing names for this stand, including any manual edits or confirmations. Continue?');
+    if (!confirmed) return;
+  }
+  pendingRetakeSaleId = saleId;
+  var input = document.getElementById('file-signin-retake');
+  // Reset value so the same file can be re-selected if needed
+  input.value = '';
+  input.click();
+}
+
+// Onchange handler for the shared retake file input. Validates the file, uploads
+// it to storage, writes a new sale_photos row, and re-fires parseSigninSheet
+// against the new URL. The edge function deletes existing assignments for the
+// sale_id and re-inserts, so previous AI rows are cleaned up automatically.
+async function handleSigninRetakeSelect(input) {
+  if (!input.files || !input.files.length) return;
+  var saleId = pendingRetakeSaleId;
+  pendingRetakeSaleId = null;
+  if (!saleId) return;
+  var file = input.files[0];
+
+  // HEIC block (matches the existing rule for the main upload form)
+  if (isBlockedFile(file)) {
+    alert('HEIC not supported — use JPG or PNG.');
+    return;
+  }
+
+  // Show inline "uploading" state in the stand-detail panel
+  var detailEl = document.getElementById('sd-' + saleId);
+  if (detailEl) {
+    detailEl.innerHTML = '<div class="nr-loading"><span class="spinner"></span>Uploading new sign-in sheet...</div>';
+  }
+
+  try {
+    // Fetch the sale row — we need venue/tip_amount/staff_count/event_date for parseSigninSheet
+    var sRes = await fetch(SUPA_URL + '/rest/v1/sales?id=eq.' + saleId + '&select=venue,tip_amount,staff_count,event_date&limit=1', { headers: apiHeaders() });
+    var sRows = await sRes.json();
+    if (!Array.isArray(sRows) || !sRows.length) throw new Error('Sale not found');
+    var sale = sRows[0];
+
+    // Upload the new file to storage
+    var ext = file.name.split('.').pop();
+    var path = saleId + '/signin_retake_' + Date.now() + '.' + ext;
+    var newUrl = await uploadPhoto(file, path);
+    if (!newUrl) throw new Error('Upload failed');
+
+    // Write a new sale_photos row (we leave any existing signin rows in place as
+    // audit trail — the edge function reads only the URL we pass it)
+    await writeSalePhotos(saleId, 'signin', [newUrl]);
+
+    // Clear local cache so renderStandDetail re-fetches after parse completes
+    delete sbAssignments[saleId];
+
+    // Show "reading" state, then fire the edge function
+    if (detailEl) {
+      detailEl.innerHTML = '<div class="nr-loading"><span class="spinner"></span>Reading sign-in sheet...</div>';
+    }
+
+    await parseSigninSheet(
+      saleId, newUrl, sale.venue,
+      parseFloat(sale.tip_amount) || 0,
+      parseInt(sale.staff_count) || 0,
+      sale.event_date
+    );
+
+    // parseSigninSheet calls loadScoreboard() at the end which redraws the row.
+    // Re-fetch and render the detail panel with the fresh assignments. The newly
+    // rebuilt scoreboard has the panel collapsed by default, so open it explicitly.
+    var newDetailEl = document.getElementById('sd-' + saleId);
+    if (newDetailEl) {
+      newDetailEl.style.display = 'block';
+      await loadStandDetail(saleId, true);
+    }
+  } catch(e) {
+    if (detailEl) {
+      detailEl.innerHTML = '<div style="font-size:12px;color:#a00;">Error: ' + (e.message || String(e)) + '</div>' +
+        '<div class="stand-detail-action"><button class="sd-btn sd-btn-amber" onclick="event.stopPropagation();startSigninRetake(\'' + saleId + '\')">Try again</button></div>';
+    }
+  }
+}
+
 function updateSigninPill(saleId) {
   var pill = document.getElementById('si-pill-' + saleId);
   if (!pill) return;
@@ -745,7 +844,7 @@ async function loadStandDetail(saleId, hasSigning) {
   // If no sign-in sheet, show add photo prompt
   if (!hasSigning) {
     detailEl.innerHTML = '<div style="font-size:12px;color:#aaa;">No sign-in sheet uploaded.</div>' +
-      '<div class="stand-detail-action"><button class="sd-btn sd-btn-blue" onclick="event.stopPropagation()">Add sign-in photo</button></div>';
+      '<div class="stand-detail-action"><button class="sd-btn sd-btn-blue" onclick="event.stopPropagation();startSigninRetake(\'' + saleId + '\')">Add sign-in photo</button></div>';
     return;
   }
 
@@ -789,7 +888,7 @@ function renderStandDetail(saleId) {
     var status = signinStatus[saleId];
     detailEl.innerHTML = '<div style="font-size:12px;color:#aaa;">' +
       (status && status.level === 'error' ? 'Could not read sign-in sheet — photo may be too blurry.' : 'No names found on sign-in sheet.') +
-      '</div><div class="stand-detail-action"><button class="sd-btn sd-btn-amber" onclick="event.stopPropagation()">Retake photo</button></div>';
+      '</div><div class="stand-detail-action"><button class="sd-btn sd-btn-amber" onclick="event.stopPropagation();startSigninRetake(\'' + saleId + '\')">Retake photo</button></div>';
     return;
   }
 
