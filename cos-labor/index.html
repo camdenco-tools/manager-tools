@@ -328,6 +328,10 @@ var FISCAL_PERIODS = [
 ];
 
 var selectedVenues = ['ALL'];
+// Diagnostic flag — set to true for verbose console.table dumps of every sale/stand_deal/deal_template
+// processed during render. Errors and unmatched-sales callouts always show regardless. Toggle from the
+// console at runtime via: window.DEBUG_DIAG = true
+var DEBUG_DIAG = false;
 var currentPeriodIdx = 0;
 var pendingNameAction = null;
 var isLocked = false;
@@ -421,12 +425,32 @@ function prevPeriod() { if (currentPeriodIdx>0) { currentPeriodIdx--; updatePeri
 function nextPeriod() { if (currentPeriodIdx<FISCAL_PERIODS.length-1) { currentPeriodIdx++; updatePeriodDisplay(); loadAllData(); } }
 
 /* Supabase helpers */
-function supa(path) { return fetch(SUPA_URL+'/rest/v1/'+path,{headers:apiHeaders()}).then(function(r){return r.json();}); }
+async function supa(path) {
+  var r = await fetch(SUPA_URL+'/rest/v1/'+path, {headers: apiHeaders()});
+  if (!r.ok) {
+    var body=''; try { body = await r.text(); } catch(e) {}
+    var err = new Error('supa GET '+path+' failed: HTTP '+r.status+(body?' — '+body:''));
+    err.status = r.status; err.body = body;
+    console.error('[cos-labor]', err);
+    throw err;
+  }
+  return r.json();
+}
 function supaPost(table,data) { var h=apiHeaders(); h['Content-Type']='application/json'; h['Prefer']='return=minimal'; return fetch(SUPA_URL+'/rest/v1/'+table,{method:'POST',headers:h,body:JSON.stringify(data)}); }
 function supaPatch(table,filter,data) { var h=apiHeaders(); h['Content-Type']='application/json'; h['Prefer']='return=minimal'; return fetch(SUPA_URL+'/rest/v1/'+table+'?'+filter,{method:'PATCH',headers:h,body:JSON.stringify(data)}); }
-async function supaUpsert(table,data) {
-  var h=apiHeaders(); h['Content-Type']='application/json'; h['Prefer']='return=minimal,resolution=merge-duplicates';
-  var resp=await fetch(SUPA_URL+'/rest/v1/'+table,{method:'POST',headers:h,body:JSON.stringify(data)});
+async function supaUpsert(table, data, onConflict) {
+  var h = apiHeaders();
+  h['Content-Type'] = 'application/json';
+  // RFC 7240 requires a comma+space separator between Prefer tokens. Without the
+  // space, some PostgREST versions parse the entire string as one token and ignore
+  // both directives, which silently turns the upsert back into a plain INSERT.
+  h['Prefer'] = 'return=minimal, resolution=merge-duplicates';
+  // PostgREST upserts merge on PRIMARY KEY columns by default. To merge on a
+  // different unique constraint (e.g. eom_payroll's (venue,fiscal_period,week_start)
+  // when id is the PK), pass the constraint columns via on_conflict.
+  var url = SUPA_URL + '/rest/v1/' + table;
+  if (onConflict) url += (table.indexOf('?') >= 0 ? '&' : '?') + 'on_conflict=' + encodeURIComponent(onConflict);
+  var resp = await fetch(url, {method:'POST', headers:h, body:JSON.stringify(data)});
   if (!resp.ok) {
     var body=''; try { body=await resp.text(); } catch(e) {}
     var err=new Error('supaUpsert '+table+' failed: HTTP '+resp.status+(body?' — '+body:''));
@@ -467,7 +491,15 @@ async function loadAllData() {
     var lockBadge=document.getElementById('fp-lock-badge');
     if (isLocked) { lockBadge.innerHTML='<span class="fp-lock-badge">Locked</span>'; lockBadge.style.display='block'; } else { lockBadge.style.display='none'; }
     renderReport();
-  } catch(e) { document.getElementById('report-content').innerHTML='<div class="loading">Error loading data. Please refresh.</div>'; }
+  } catch(e) {
+    console.error('[cos-labor] loadAllData failed:', e);
+    var msg = (e && e.message) ? e.message : String(e);
+    document.getElementById('report-content').innerHTML =
+      '<div class="loading" style="color:#A32D2D;text-align:left;padding:20px;font-size:13px;">'+
+      '<b>Error loading data.</b><br><br><code style="font-size:11px;color:#791F1F;background:#FCEBEB;padding:6px 10px;border-radius:6px;display:inline-block;">'+
+      msg.replace(/</g,'&lt;')+
+      '</code><br><br>See browser console for more detail.</div>';
+  }
 }
 
 /* Revenue calculation */
@@ -587,59 +619,59 @@ function renderReport() {
   html+='<div class="met"><div class="met-label">Other sales</div><div class="met-val">'+fmtMoney(data.activeOtherSales)+'</div>';if(hasOtherActual){html+='<div class="met-note">Actual</div>';}else{html+='<div class="met-note">Estimated</div>';}html+='</div>';
   html+='<div class="met"><div class="met-label">Total sales</div><div class="met-val">'+fmtMoney(data.activeTotalSales)+'</div></div></div>';
 
-  /* Sales-to-deal-structure diagnostic — always logged to console for inspection */
+  /* Sales-to-deal-structure diagnostic */
   var sd=data.salesDiag;
-  try {
-    console.group('[cos-labor] Sales diagnostic for '+(data.venueCode||'COMBINED'));
-    console.log('Period:', p.name, '('+p.start+' to '+p.end+')');
-    console.log('Selected venue codes:', codes);
-    console.log('Total sales rows in cachedSales (all venues):', cachedSales.length);
-    console.log('Total stand_deals rows in cachedStandDeals (all venues):', cachedStandDeals.length);
-    console.log('Total deal_templates rows in cachedDealTemplates (all venues):', cachedDealTemplates.length);
-    if (sd) {
-      console.log('--- Sales for selected venue(s) ---');
-      console.log('Sale rows matching venue:', sd.totalSaleRows);
-      console.log('Gross sales sum:', sd.grossSales);
-      console.log('Computed cosRelatable:', data.cosRelatable);
-      console.log('Computed otherSales:', data.otherSales);
-      console.log('Unmatched sale count:', sd.unmatchedSaleCount);
-      console.log('Unmatched gross:', sd.unmatchedGross);
-      if (sd.unmatchedSaleCount>0) {
-        console.warn('UNMATCHED (venue, stand) pairs:');
-        console.table(Object.keys(sd.unmatchedStands).map(function(k){return {pair:k,count:sd.unmatchedStands[k].count,gross:sd.unmatchedStands[k].gross};}));
+  // Always: warn if any sales went unmatched (silently producing $0 revenue).
+  if (sd && sd.unmatchedSaleCount > 0) {
+    try {
+      console.warn('[cos-labor] '+sd.unmatchedSaleCount+' sale(s) for '+(data.venueCode||'COMBINED')+' did not match a stand_deals row. Set window.DEBUG_DIAG=true and reload for details.');
+      console.table(Object.keys(sd.unmatchedStands).map(function(k){return {pair:k,count:sd.unmatchedStands[k].count,gross:sd.unmatchedStands[k].gross};}));
+    } catch(e) {}
+  }
+  // Verbose: only when explicitly enabled via DEBUG_DIAG.
+  if (DEBUG_DIAG || (typeof window !== 'undefined' && window.DEBUG_DIAG)) {
+    try {
+      console.group('[cos-labor] Sales diagnostic for '+(data.venueCode||'COMBINED'));
+      console.log('Period:', p.name, '('+p.start+' to '+p.end+')');
+      console.log('Selected venue codes:', codes);
+      console.log('Total sales rows in cachedSales (all venues):', cachedSales.length);
+      console.log('Total stand_deals rows in cachedStandDeals (all venues):', cachedStandDeals.length);
+      console.log('Total deal_templates rows in cachedDealTemplates (all venues):', cachedDealTemplates.length);
+      if (sd) {
+        console.log('Sale rows matching venue:', sd.totalSaleRows);
+        console.log('Gross sales sum:', sd.grossSales);
+        console.log('Computed cosRelatable:', data.cosRelatable, '— otherSales:', data.otherSales);
+        console.log('Unmatched sale count:', sd.unmatchedSaleCount, '— Unmatched gross:', sd.unmatchedGross);
       }
-    }
-    console.log('--- Raw sales rows for this venue (after resolveVenueCode filter) ---');
-    var venueRawSales=cachedSales.filter(function(s){
-      if(data.venueCode==='COMBINED') return codes.indexOf(resolveVenueCode(s.venue))!==-1;
-      return resolveVenueCode(s.venue)===data.venueCode;
-    });
-    console.table(venueRawSales.map(function(s){
-      return {
-        event_date: s.event_date,
-        event_name: s.event_name,
-        raw_venue: s.venue,
-        resolved_venue: resolveVenueCode(s.venue),
-        stand: s.stand,
-        amount: s.amount,
-        rev_check: (function(){var r=calcRevenue(s);return r.reason+' / cos:'+Math.round(r.cosRelatable)+' other:'+Math.round(r.otherSales);})()
-      };
-    }));
-    console.log('--- Raw stand_deals rows for this venue ---');
-    var venueStandDeals=cachedStandDeals.filter(function(r){
-      if(data.venueCode==='COMBINED') return codes.indexOf(r.venue)!==-1;
-      return r.venue===data.venueCode;
-    });
-    console.table(venueStandDeals.map(function(r){
-      return {venue:r.venue, stand:r.stand, deal_type:r.deal_type, has_override:r.has_override};
-    }));
-    console.log('--- Raw deal_templates rows for this venue ---');
-    console.table(cachedDealTemplates.filter(function(r){
-      if(data.venueCode==='COMBINED') return codes.indexOf(r.venue)!==-1;
-      return r.venue===data.venueCode;
-    }));
-    console.groupEnd();
-  } catch(e) { try { console.error('[cos-labor] diagnostic failed:', e); } catch(_) {} }
+      console.log('--- Raw sales rows for this venue ---');
+      var venueRawSales=cachedSales.filter(function(s){
+        if(data.venueCode==='COMBINED') return codes.indexOf(resolveVenueCode(s.venue))!==-1;
+        return resolveVenueCode(s.venue)===data.venueCode;
+      });
+      console.table(venueRawSales.map(function(s){
+        return {
+          event_date: s.event_date,
+          event_name: s.event_name,
+          raw_venue: s.venue,
+          resolved_venue: resolveVenueCode(s.venue),
+          stand: s.stand,
+          amount: s.amount,
+          rev_check: (function(){var r=calcRevenue(s);return r.reason+' / cos:'+Math.round(r.cosRelatable)+' other:'+Math.round(r.otherSales);})()
+        };
+      }));
+      console.log('--- Raw stand_deals rows for this venue ---');
+      console.table(cachedStandDeals.filter(function(r){
+        if(data.venueCode==='COMBINED') return codes.indexOf(r.venue)!==-1;
+        return r.venue===data.venueCode;
+      }).map(function(r){return {venue:r.venue, stand:r.stand, deal_type:r.deal_type, has_override:r.has_override};}));
+      console.log('--- Raw deal_templates rows for this venue ---');
+      console.table(cachedDealTemplates.filter(function(r){
+        if(data.venueCode==='COMBINED') return codes.indexOf(r.venue)!==-1;
+        return r.venue===data.venueCode;
+      }));
+      console.groupEnd();
+    } catch(e) { try { console.error('[cos-labor] diagnostic failed:', e); } catch(_) {} }
+  }
 
   /* Inline UI callout if any sales produced $0 silently */
   if(sd && sd.totalSaleRows>0 && sd.unmatchedSaleCount>0 && !hasCosActual){
@@ -738,8 +770,8 @@ function enterActualRevenue(venueCode) {
       var name=currentUserName();
       var p=FISCAL_PERIODS[currentPeriodIdx];var pk=getPeriodKey(p);
       try{
-        await supaUpsert('eom_manual_entries',{venue:venueCode,fiscal_period:pk,entry_type:'actual_cos_revenue',amount:cosVal,note:'From commission statements',entered_by:name,entered_at:new Date().toISOString()});
-        await supaUpsert('eom_manual_entries',{venue:venueCode,fiscal_period:pk,entry_type:'actual_other_revenue',amount:otherVal,note:'From commission statements',entered_by:name,entered_at:new Date().toISOString()});
+        await supaUpsert('eom_manual_entries',{venue:venueCode,fiscal_period:pk,entry_type:'actual_cos_revenue',amount:cosVal,note:'From commission statements',entered_by:name,entered_at:new Date().toISOString()},'venue,fiscal_period,entry_type');
+        await supaUpsert('eom_manual_entries',{venue:venueCode,fiscal_period:pk,entry_type:'actual_other_revenue',amount:otherVal,note:'From commission statements',entered_by:name,entered_at:new Date().toISOString()},'venue,fiscal_period,entry_type');
         await loadAllData();
         alert('Actual revenue saved for '+venueCode+'.');
       }catch(e){
@@ -760,7 +792,7 @@ async function savePayroll(venueCode){
   for(var i=0;i<weeks.length;i++){var input=document.getElementById('payroll-'+i);if(!input)continue;var raw=input.value.trim();if(raw===''){continue;}var val=parseFloat(raw);if(isNaN(val))continue;allData.push({venue:venueCode,fiscal_period:pk,week_start:weeks[i].start,week_end:weeks[i].end,amount:val,entered_by:name,entered_at:new Date().toISOString()});}
   if(allData.length===0){alert('Please enter at least one payroll amount.');return;}
   try{
-    for(var j=0;j<allData.length;j++){await supaUpsert('eom_payroll',allData[j]);}
+    for(var j=0;j<allData.length;j++){await supaUpsert('eom_payroll',allData[j],'venue,fiscal_period,week_start');}
     await loadAllData();
     alert('Saved '+allData.length+' week'+(allData.length!==1?'s':'')+' of payroll for '+venueCode+'.');
   }catch(e){
@@ -771,13 +803,13 @@ async function savePayroll(venueCode){
 
 function editPayroll(venueCode){requireAdmin('Admin access required to edit saved payroll.',function(){alert('Payroll fields are now editable. Make your changes and click Save.');});}
 
-async function saveTransfer(venueCode){var input=document.getElementById('transfer-input');if(!input)return;var val=parseFloat(input.value);if(isNaN(val)){alert('Please enter a dollar amount for transfers.');return;}var p=FISCAL_PERIODS[currentPeriodIdx];var pk=getPeriodKey(p);var name=currentUserName();try{await supaUpsert('eom_manual_entries',{venue:venueCode,fiscal_period:pk,entry_type:'transfer',amount:val,entered_by:name,entered_at:new Date().toISOString()});await loadAllData();}catch(e){console.error('saveTransfer error',e);alert('Error saving transfer:\n\n'+(e&&e.message?e.message:e)+'\n\nNothing was saved. See console for details.');}}
+async function saveTransfer(venueCode){var input=document.getElementById('transfer-input');if(!input)return;var val=parseFloat(input.value);if(isNaN(val)){alert('Please enter a dollar amount for transfers.');return;}var p=FISCAL_PERIODS[currentPeriodIdx];var pk=getPeriodKey(p);var name=currentUserName();try{await supaUpsert('eom_manual_entries',{venue:venueCode,fiscal_period:pk,entry_type:'transfer',amount:val,entered_by:name,entered_at:new Date().toISOString()},'venue,fiscal_period,entry_type');await loadAllData();}catch(e){console.error('saveTransfer error',e);alert('Error saving transfer:\n\n'+(e&&e.message?e.message:e)+'\n\nNothing was saved. See console for details.');}}
 
-function overrideLaborCredit(venueCode){requireAdmin('Admin access required to override labor credit.',function(){var current=window._reportData?window._reportData.laborCredit:0;var newVal=prompt('Enter labor credit override amount for '+venueCode+':\n\nCurrent value: '+fmtMoney(current),current);if(newVal===null)return;var val=parseFloat(newVal);if(isNaN(val)){alert('Please enter a valid number.');return;}(async function(){var name=currentUserName();var p=FISCAL_PERIODS[currentPeriodIdx];var pk=getPeriodKey(p);try{await supaUpsert('eom_manual_entries',{venue:venueCode,fiscal_period:pk,entry_type:'labor_credit',amount:val,note:'Override from QuickBooks',entered_by:name,entered_at:new Date().toISOString()});await loadAllData();alert('Labor credit override saved.');}catch(e){console.error('overrideLaborCredit error',e);alert('Error saving labor credit:\n\n'+(e&&e.message?e.message:e)+'\n\nNothing was saved. See console for details.');}})();});}
+function overrideLaborCredit(venueCode){requireAdmin('Admin access required to override labor credit.',function(){var current=window._reportData?window._reportData.laborCredit:0;var newVal=prompt('Enter labor credit override amount for '+venueCode+':\n\nCurrent value: '+fmtMoney(current),current);if(newVal===null)return;var val=parseFloat(newVal);if(isNaN(val)){alert('Please enter a valid number.');return;}(async function(){var name=currentUserName();var p=FISCAL_PERIODS[currentPeriodIdx];var pk=getPeriodKey(p);try{await supaUpsert('eom_manual_entries',{venue:venueCode,fiscal_period:pk,entry_type:'labor_credit',amount:val,note:'Override from QuickBooks',entered_by:name,entered_at:new Date().toISOString()},'venue,fiscal_period,entry_type');await loadAllData();alert('Labor credit override saved.');}catch(e){console.error('overrideLaborCredit error',e);alert('Error saving labor credit:\n\n'+(e&&e.message?e.message:e)+'\n\nNothing was saved. See console for details.');}})();});}
 
 function deletePurchase(id){requireAdmin('Admin access required to delete a purchase.',async function(){if(!confirm('Delete this invoice? This cannot be undone.'))return;try{await supaDelete('purchases','id=eq.'+id);loadAllData();}catch(e){alert('Error deleting purchase. Please try again.');}});}
 
-async function lockPeriod(){requireAdmin('Admin access required to lock this period.',function(){(async function(){var name=currentUserName();var p=FISCAL_PERIODS[currentPeriodIdx];var pk=getPeriodKey(p);var codes=VENUES.map(function(v){return v.code;});var allData={};codes.forEach(function(c){allData[c]=buildVenueData(c);});try{await supaUpsert('eom_snapshots',{fiscal_period:pk,locked_by:name,locked_at:new Date().toISOString(),snapshot_data:JSON.stringify(allData)});await loadAllData();alert('Period '+p.name+' locked.');}catch(e){console.error('lockPeriod error',e);alert('Error locking period:\n\n'+(e&&e.message?e.message:e)+'\n\nNothing was saved. See console for details.');}})();});}
+async function lockPeriod(){requireAdmin('Admin access required to lock this period.',function(){(async function(){var name=currentUserName();var p=FISCAL_PERIODS[currentPeriodIdx];var pk=getPeriodKey(p);var codes=VENUES.map(function(v){return v.code;});var allData={};codes.forEach(function(c){allData[c]=buildVenueData(c);});try{await supaUpsert('eom_snapshots',{fiscal_period:pk,locked_by:name,locked_at:new Date().toISOString(),snapshot_data:JSON.stringify(allData)},'fiscal_period');await loadAllData();alert('Period '+p.name+' locked.');}catch(e){console.error('lockPeriod error',e);alert('Error locking period:\n\n'+(e&&e.message?e.message:e)+'\n\nNothing was saved. See console for details.');}})();});}
 
 /* Login gate — must sign in to access this page */
 pcAuth.require({
