@@ -366,6 +366,10 @@ function isVenueSelected(code) { return selectedVenues.indexOf('ALL')>=0||select
 function getSelectedVenueCodes() { return selectedVenues.indexOf('ALL')>=0?VENUES.map(function(v){return v.code;}):selectedVenues.slice(); }
 
 /* Name prompt */
+function currentUserName() {
+  try { var u = (typeof pcAuth !== 'undefined' && pcAuth.getUser) ? pcAuth.getUser() : null; if (u && u.display_name) return u.display_name; } catch(e) {}
+  return 'Unknown';
+}
 function promptName(title,desc,cb) {
   document.getElementById('name-title').textContent=title;
   document.getElementById('name-desc').textContent=desc;
@@ -420,7 +424,17 @@ function nextPeriod() { if (currentPeriodIdx<FISCAL_PERIODS.length-1) { currentP
 function supa(path) { return fetch(SUPA_URL+'/rest/v1/'+path,{headers:apiHeaders()}).then(function(r){return r.json();}); }
 function supaPost(table,data) { var h=apiHeaders(); h['Content-Type']='application/json'; h['Prefer']='return=minimal'; return fetch(SUPA_URL+'/rest/v1/'+table,{method:'POST',headers:h,body:JSON.stringify(data)}); }
 function supaPatch(table,filter,data) { var h=apiHeaders(); h['Content-Type']='application/json'; h['Prefer']='return=minimal'; return fetch(SUPA_URL+'/rest/v1/'+table+'?'+filter,{method:'PATCH',headers:h,body:JSON.stringify(data)}); }
-function supaUpsert(table,data) { var h=apiHeaders(); h['Content-Type']='application/json'; h['Prefer']='return=minimal,resolution=merge-duplicates'; return fetch(SUPA_URL+'/rest/v1/'+table,{method:'POST',headers:h,body:JSON.stringify(data)}); }
+async function supaUpsert(table,data) {
+  var h=apiHeaders(); h['Content-Type']='application/json'; h['Prefer']='return=minimal,resolution=merge-duplicates';
+  var resp=await fetch(SUPA_URL+'/rest/v1/'+table,{method:'POST',headers:h,body:JSON.stringify(data)});
+  if (!resp.ok) {
+    var body=''; try { body=await resp.text(); } catch(e) {}
+    var err=new Error('supaUpsert '+table+' failed: HTTP '+resp.status+(body?' — '+body:''));
+    err.status=resp.status; err.body=body;
+    throw err;
+  }
+  return resp;
+}
 function supaDelete(table,filter) { var h=apiHeaders(); h['Prefer']='return=minimal'; return fetch(SUPA_URL+'/rest/v1/'+table+'?'+filter,{method:'DELETE',headers:h}); }
 
 /* Data loading */
@@ -459,16 +473,16 @@ async function loadAllData() {
 /* Revenue calculation */
 function calcRevenue(sale) {
   var venue=resolveVenueCode(sale.venue);var stand=sale.stand;var gross=parseFloat(sale.amount||0);
-  if (!gross) return {cosRelatable:0,otherSales:0};
+  if (!gross) return {cosRelatable:0,otherSales:0,reason:'zero_amount'};
   var sd=null;for (var i=0;i<cachedStandDeals.length;i++){if(cachedStandDeals[i].venue===venue&&cachedStandDeals[i].stand===stand){sd=cachedStandDeals[i];break;}}
-  if (!sd) return {cosRelatable:0,otherSales:0};
+  if (!sd) return {cosRelatable:0,otherSales:0,reason:'no_stand_deal',venue:venue,stand:stand};
   var dt=null;for (var j=0;j<cachedDealTemplates.length;j++){if(cachedDealTemplates[j].venue===venue&&cachedDealTemplates[j].deal_type===sd.deal_type){dt=cachedDealTemplates[j];break;}}
   var dealType=sd.deal_type;var cosRelatable=0;var otherSales=0;
   if (dealType==='rev_split') { var pct=(sd.has_override?sd.override_rev_split_pct:null)||(dt?dt.rev_split_pct:70); cosRelatable=gross*(pct/100); }
   else if (dealType==='rev_bev') { var foodPct=(sd.has_override?sd.override_bev_food_pct:null)||(dt?dt.bev_food_pct:91); var bevPct=(sd.has_override?sd.override_bev_bev_pct:null)||(dt?dt.bev_bev_pct:9); var foodCut=(sd.has_override?sd.override_bev_food_cut:null)||(dt?dt.bev_food_cut:70); var bevComm=(sd.has_override?sd.override_bev_bev_comm:null)||(dt?dt.bev_bev_comm:10); var foodSales=gross*(foodPct/100); var bevSales=gross*(bevPct/100); cosRelatable=foodSales*(foodCut/100); otherSales=bevSales*(bevComm/100); }
   else if (dealType==='labor') { var comm=(sd.has_override?sd.override_labor_comm:null)||(dt?dt.labor_comm:15); otherSales=gross*(comm/100); }
   else if (dealType==='reimb') { var rComm=(sd.has_override?sd.override_reimb_comm:null)||(dt?dt.reimb_comm:5); otherSales=gross*(rComm/100); }
-  return {cosRelatable:cosRelatable,otherSales:otherSales};
+  return {cosRelatable:cosRelatable,otherSales:otherSales,reason:'matched'};
 }
 
 /* Estimated labor */
@@ -496,7 +510,11 @@ function calcEstimatedLaborCredit(venueCode) {
 function buildVenueData(venueCode) {
   var p=FISCAL_PERIODS[currentPeriodIdx];var pk=getPeriodKey(p);var weeks=getWeekRanges(p);
   var cosRelatable=0;var otherSalesTotal=0;var venueSales=cachedSales.filter(function(s){return resolveVenueCode(s.venue)===venueCode;});
-  venueSales.forEach(function(s){var rev=calcRevenue(s);cosRelatable+=rev.cosRelatable;otherSalesTotal+=rev.otherSales;});
+  var unmatchedGross=0;var unmatchedStands={};var unmatchedSaleCount=0;var grossSales=0;
+  venueSales.forEach(function(s){var rev=calcRevenue(s);cosRelatable+=rev.cosRelatable;otherSalesTotal+=rev.otherSales;var amt=parseFloat(s.amount||0);grossSales+=amt;
+    if(rev.reason==='no_stand_deal'){unmatchedSaleCount++;unmatchedGross+=amt;var key=(rev.venue||'?')+' / '+(rev.stand||'(blank)');if(!unmatchedStands[key])unmatchedStands[key]={count:0,gross:0};unmatchedStands[key].count++;unmatchedStands[key].gross+=amt;}
+  });
+  var salesDiag={totalSaleRows:venueSales.length,grossSales:grossSales,unmatchedSaleCount:unmatchedSaleCount,unmatchedGross:unmatchedGross,unmatchedStands:unmatchedStands};
   var totalSales=cosRelatable+otherSalesTotal;var begInv=cachedPriorInventory[venueCode]||0;
   var invoices=cachedPurchases.filter(function(r){return r.type==='invoice'&&resolveVenueCode(r.venue)===venueCode;});
   var weeklyPurchases=weeks.map(function(w){var weekInvoices=invoices.filter(function(inv){return inv.invoice_date>=w.start&&inv.invoice_date<=w.end;});var total=weekInvoices.reduce(function(s,inv){return s+parseFloat(inv.amount||0);},0);return{label:w.label,start:w.start,end:w.end,total:total,invoices:weekInvoices};});
@@ -516,16 +534,18 @@ function buildVenueData(venueCode) {
   var activeCosRelatable=actualCosRevenue!==null?actualCosRevenue:cosRelatable;var activeOtherSales=actualOtherRevenue!==null?actualOtherRevenue:otherSalesTotal;var activeTotalSales=activeCosRelatable+activeOtherSales;
   var cosPercent=activeCosRelatable>0?consumption/activeCosRelatable:0;var laborPercent=activeTotalSales>0?actPayrollTotal/activeTotalSales:0;
   var correctedLabor=actPayrollTotal-laborCredit;var correctedLaborPct=activeCosRelatable>0?correctedLabor/activeCosRelatable:0;var payrollVariance=actPayrollTotal-estPayrollTotal;
-  return {venueCode:venueCode,cosRelatable:cosRelatable,otherSales:otherSalesTotal,totalSales:totalSales,begInv:begInv,weeklyPurchases:weeklyPurchases,totalPurchases:totalPurchases,allInvoices:allInvoices,transfers:transfers,endInv:endInv,consumption:consumption,cosPercent:cosPercent,weeks:weeks,estPayrollWeeks:estPayrollWeeks,estPayrollTotal:estPayrollTotal,actPayrollWeeks:actPayrollWeeks,actPayrollTotal:actPayrollTotal,hasAnyPayroll:hasAnyPayroll,laborPercent:laborPercent,estLaborCredit:estLaborCredit,laborCreditOverride:laborCreditOverride,laborCredit:laborCredit,lcNote:lcNote,lcEnteredBy:lcEnteredBy,correctedLabor:correctedLabor,correctedLaborPct:correctedLaborPct,payrollVariance:payrollVariance,actualCosRevenue:actualCosRevenue,actualOtherRevenue:actualOtherRevenue,actRevEnteredBy:actRevEnteredBy,activeCosRelatable:activeCosRelatable,activeOtherSales:activeOtherSales,activeTotalSales:activeTotalSales};
+  return {venueCode:venueCode,cosRelatable:cosRelatable,otherSales:otherSalesTotal,totalSales:totalSales,begInv:begInv,weeklyPurchases:weeklyPurchases,totalPurchases:totalPurchases,allInvoices:allInvoices,transfers:transfers,endInv:endInv,consumption:consumption,cosPercent:cosPercent,weeks:weeks,estPayrollWeeks:estPayrollWeeks,estPayrollTotal:estPayrollTotal,actPayrollWeeks:actPayrollWeeks,actPayrollTotal:actPayrollTotal,hasAnyPayroll:hasAnyPayroll,laborPercent:laborPercent,estLaborCredit:estLaborCredit,laborCreditOverride:laborCreditOverride,laborCredit:laborCredit,lcNote:lcNote,lcEnteredBy:lcEnteredBy,correctedLabor:correctedLabor,correctedLaborPct:correctedLaborPct,payrollVariance:payrollVariance,actualCosRevenue:actualCosRevenue,actualOtherRevenue:actualOtherRevenue,actRevEnteredBy:actRevEnteredBy,activeCosRelatable:activeCosRelatable,activeOtherSales:activeOtherSales,activeTotalSales:activeTotalSales,salesDiag:salesDiag};
 }
 
 /* Merge venue data */
 function mergeVenueData(codes) {
   var all=codes.map(function(c){return buildVenueData(c);});if(all.length===1)return all[0];
-  var merged={venueCode:'COMBINED',cosRelatable:0,otherSales:0,totalSales:0,begInv:0,totalPurchases:0,transfers:0,endInv:0,consumption:0,weeklyPurchases:[],allInvoices:[],weeks:all[0].weeks,estPayrollWeeks:[],estPayrollTotal:0,actPayrollWeeks:[],actPayrollTotal:0,hasAnyPayroll:false,estLaborCredit:0,laborCreditOverride:null,laborCredit:0,correctedLabor:0,lcNote:null,lcEnteredBy:null};
+  var merged={venueCode:'COMBINED',cosRelatable:0,otherSales:0,totalSales:0,begInv:0,totalPurchases:0,transfers:0,endInv:0,consumption:0,weeklyPurchases:[],allInvoices:[],weeks:all[0].weeks,estPayrollWeeks:[],estPayrollTotal:0,actPayrollWeeks:[],actPayrollTotal:0,hasAnyPayroll:false,estLaborCredit:0,laborCreditOverride:null,laborCredit:0,correctedLabor:0,lcNote:null,lcEnteredBy:null,salesDiag:{totalSaleRows:0,grossSales:0,unmatchedSaleCount:0,unmatchedGross:0,unmatchedStands:{}}};
   var numWeeks=merged.weeks.length;for(var w=0;w<numWeeks;w++){merged.weeklyPurchases.push({label:merged.weeks[w].label,start:merged.weeks[w].start,end:merged.weeks[w].end,total:0,invoices:[]});merged.estPayrollWeeks.push(0);merged.actPayrollWeeks.push(null);}
   var hasAnyOverride=false;var totalOverride=0;
-  all.forEach(function(vd){merged.cosRelatable+=vd.cosRelatable;merged.otherSales+=vd.otherSales;merged.totalSales+=vd.totalSales;merged.begInv+=vd.begInv;merged.totalPurchases+=vd.totalPurchases;merged.transfers+=vd.transfers;merged.endInv+=vd.endInv;merged.consumption+=vd.consumption;merged.allInvoices=merged.allInvoices.concat(vd.allInvoices);merged.estPayrollTotal+=vd.estPayrollTotal;merged.actPayrollTotal+=vd.actPayrollTotal;merged.estLaborCredit+=vd.estLaborCredit;if(vd.hasAnyPayroll)merged.hasAnyPayroll=true;if(vd.laborCreditOverride!==null){hasAnyOverride=true;totalOverride+=vd.laborCreditOverride;}else{totalOverride+=vd.estLaborCredit;}for(var w=0;w<numWeeks;w++){merged.weeklyPurchases[w].total+=vd.weeklyPurchases[w].total;merged.weeklyPurchases[w].invoices=merged.weeklyPurchases[w].invoices.concat(vd.weeklyPurchases[w].invoices);merged.estPayrollWeeks[w]+=vd.estPayrollWeeks[w];if(vd.actPayrollWeeks[w]!==null){if(merged.actPayrollWeeks[w]===null)merged.actPayrollWeeks[w]=0;merged.actPayrollWeeks[w]+=vd.actPayrollWeeks[w];}}});
+  all.forEach(function(vd){merged.cosRelatable+=vd.cosRelatable;merged.otherSales+=vd.otherSales;merged.totalSales+=vd.totalSales;merged.begInv+=vd.begInv;merged.totalPurchases+=vd.totalPurchases;merged.transfers+=vd.transfers;merged.endInv+=vd.endInv;merged.consumption+=vd.consumption;merged.allInvoices=merged.allInvoices.concat(vd.allInvoices);merged.estPayrollTotal+=vd.estPayrollTotal;merged.actPayrollTotal+=vd.actPayrollTotal;merged.estLaborCredit+=vd.estLaborCredit;if(vd.hasAnyPayroll)merged.hasAnyPayroll=true;if(vd.laborCreditOverride!==null){hasAnyOverride=true;totalOverride+=vd.laborCreditOverride;}else{totalOverride+=vd.estLaborCredit;}for(var w=0;w<numWeeks;w++){merged.weeklyPurchases[w].total+=vd.weeklyPurchases[w].total;merged.weeklyPurchases[w].invoices=merged.weeklyPurchases[w].invoices.concat(vd.weeklyPurchases[w].invoices);merged.estPayrollWeeks[w]+=vd.estPayrollWeeks[w];if(vd.actPayrollWeeks[w]!==null){if(merged.actPayrollWeeks[w]===null)merged.actPayrollWeeks[w]=0;merged.actPayrollWeeks[w]+=vd.actPayrollWeeks[w];}}
+    if(vd.salesDiag){merged.salesDiag.totalSaleRows+=vd.salesDiag.totalSaleRows;merged.salesDiag.grossSales+=vd.salesDiag.grossSales;merged.salesDiag.unmatchedSaleCount+=vd.salesDiag.unmatchedSaleCount;merged.salesDiag.unmatchedGross+=vd.salesDiag.unmatchedGross;Object.keys(vd.salesDiag.unmatchedStands).forEach(function(k){if(!merged.salesDiag.unmatchedStands[k])merged.salesDiag.unmatchedStands[k]={count:0,gross:0};merged.salesDiag.unmatchedStands[k].count+=vd.salesDiag.unmatchedStands[k].count;merged.salesDiag.unmatchedStands[k].gross+=vd.salesDiag.unmatchedStands[k].gross;});}
+  });
   merged.laborCredit=hasAnyOverride?totalOverride:merged.estLaborCredit;merged.laborCreditOverride=hasAnyOverride?totalOverride:null;
   var mergedActCos=null;var mergedActOther=null;var anyActCos=false;var anyActOther=false;
   all.forEach(function(vd){if(vd.actualCosRevenue!==null){anyActCos=true;if(mergedActCos===null)mergedActCos=0;mergedActCos+=vd.actualCosRevenue;}if(vd.actualOtherRevenue!==null){anyActOther=true;if(mergedActOther===null)mergedActOther=0;mergedActOther+=vd.actualOtherRevenue;}});
@@ -566,6 +586,30 @@ function renderReport() {
   html+='<div class="met-row c3"><div class="met"><div class="met-label">COS relatable sales</div><div class="met-val">'+fmtMoney(data.activeCosRelatable)+'</div>';if(hasCosActual){html+='<div class="met-note">Actual (was '+fmtMoney(data.cosRelatable)+' est.)</div>';}else{html+='<div class="met-note">Estimated from sales log</div>';}html+='</div>';
   html+='<div class="met"><div class="met-label">Other sales</div><div class="met-val">'+fmtMoney(data.activeOtherSales)+'</div>';if(hasOtherActual){html+='<div class="met-note">Actual</div>';}else{html+='<div class="met-note">Estimated</div>';}html+='</div>';
   html+='<div class="met"><div class="met-label">Total sales</div><div class="met-val">'+fmtMoney(data.activeTotalSales)+'</div></div></div>';
+
+  /* Sales-to-deal-structure diagnostic */
+  var sd=data.salesDiag;
+  if(sd && sd.totalSaleRows>0 && sd.unmatchedSaleCount>0 && !hasCosActual){
+    var allUnmatched=sd.unmatchedSaleCount===sd.totalSaleRows;
+    var calloutCls=allUnmatched?'missing':'partial';
+    var stands=Object.keys(sd.unmatchedStands).map(function(k){return k+' ('+sd.unmatchedStands[k].count+' sale'+(sd.unmatchedStands[k].count!==1?'s':'')+', '+fmtMoney(sd.unmatchedStands[k].gross)+')';});
+    var headline=allUnmatched
+      ? 'Sales not matching deal structure — '+sd.totalSaleRows+' sale'+(sd.totalSaleRows!==1?'s':'')+' totaling '+fmtMoney(sd.unmatchedGross)+' produced $0 revenue.'
+      : sd.unmatchedSaleCount+' of '+sd.totalSaleRows+' sales ('+fmtMoney(sd.unmatchedGross)+') did not match a deal structure entry.';
+    html+='<div class="inv-callout '+calloutCls+'"><div class="inv-callout-icon">!</div><div>'+headline
+      +'<div class="inv-callout-detail">Each sale needs a row in <b>stand_deals</b> matching its (venue, stand). Unmatched: '+stands.join('; ')
+      +'<br>See browser console for the full sale-by-sale breakdown.</div></div></div>';
+    try {
+      console.group('[cos-labor] Sales not matching deal structure for '+(data.venueCode||'COMBINED'));
+      console.log('Total sale rows for venue:', sd.totalSaleRows);
+      console.log('Gross sales:', sd.grossSales);
+      console.log('Unmatched count:', sd.unmatchedSaleCount, '— Unmatched gross:', sd.unmatchedGross);
+      console.table(Object.keys(sd.unmatchedStands).map(function(k){return {pair:k,count:sd.unmatchedStands[k].count,gross:sd.unmatchedStands[k].gross};}));
+      console.log('Available stand_deals rows for this venue (cachedStandDeals):',
+        cachedStandDeals.filter(function(r){return data.venueCode==='COMBINED' || r.venue===data.venueCode;}));
+      console.groupEnd();
+    } catch(e) {}
+  }
 
   /* Inventory submission status */
   var invSubmittedCount=0;codes.forEach(function(c){if((cachedInventory[c]||0)>0)invSubmittedCount++;});
@@ -647,11 +691,19 @@ function enterActualRevenue(venueCode) {
     var d=window._reportData;var currentCos=d?(d.actualCosRevenue!==null?d.actualCosRevenue:d.cosRelatable):0;var currentOther=d?(d.actualOtherRevenue!==null?d.actualOtherRevenue:d.otherSales):0;
     var cosVal=prompt('Enter ACTUAL COS relatable revenue for '+venueCode+' from commission statements / QuickBooks:\n\nEstimated: '+fmtMoney(d?d.cosRelatable:0),Math.round(currentCos));if(cosVal===null)return;cosVal=parseFloat(cosVal);if(isNaN(cosVal)){alert('Please enter a valid number.');return;}
     var otherVal=prompt('Enter ACTUAL other sales (labor/bev deals) for '+venueCode+':\n\nEstimated: '+fmtMoney(d?d.otherSales:0)+'\n\n(Enter 0 or leave as-is if no other sales)',Math.round(currentOther));if(otherVal===null)return;otherVal=parseFloat(otherVal);if(isNaN(otherVal))otherVal=0;
-    promptName('Actual revenue','Who is entering this data?',async function(name){
+    (async function(){
+      var name=currentUserName();
       var p=FISCAL_PERIODS[currentPeriodIdx];var pk=getPeriodKey(p);
-      try{await supaUpsert('eom_manual_entries',{venue:venueCode,fiscal_period:pk,entry_type:'actual_cos_revenue',amount:cosVal,note:'From commission statements',entered_by:name,entered_at:new Date().toISOString()});
-        await supaUpsert('eom_manual_entries',{venue:venueCode,fiscal_period:pk,entry_type:'actual_other_revenue',amount:otherVal,note:'From commission statements',entered_by:name,entered_at:new Date().toISOString()});loadAllData();}catch(e){alert('Error saving actual revenue. Please try again.');}
-    });
+      try{
+        await supaUpsert('eom_manual_entries',{venue:venueCode,fiscal_period:pk,entry_type:'actual_cos_revenue',amount:cosVal,note:'From commission statements',entered_by:name,entered_at:new Date().toISOString()});
+        await supaUpsert('eom_manual_entries',{venue:venueCode,fiscal_period:pk,entry_type:'actual_other_revenue',amount:otherVal,note:'From commission statements',entered_by:name,entered_at:new Date().toISOString()});
+        await loadAllData();
+        alert('Actual revenue saved for '+venueCode+'.');
+      }catch(e){
+        console.error('enterActualRevenue error',e);
+        alert('Error saving actual revenue:\n\n'+(e&&e.message?e.message:e)+'\n\nNothing was saved. See console for details.');
+      }
+    })();
   });
 }
 
@@ -659,17 +711,30 @@ function updateCOSDiag(){var d=window._reportData;if(!d)return;var targetEl=docu
 function updateCOSWhatIf(){var d=window._reportData;if(!d)return;var whatIfEl=document.getElementById('cos-whatif');if(!whatIfEl)return;var val=parseFloat(whatIfEl.value);if(isNaN(val)){document.getElementById('cos-whatif-result').textContent='';return;}var newConsumption=d.begInv+d.totalPurchases+d.transfers-val;var newPct=d.activeCosRelatable>0?newConsumption/d.activeCosRelatable:0;document.getElementById('cos-whatif-result').textContent='COS % would be '+fmtPct(newPct);}
 function updateLaborDiag(){var d=window._reportData;if(!d)return;var targetEl=document.getElementById('labor-target');if(!targetEl)return;var target=parseFloat(targetEl.value);if(isNaN(target))return;var targetDec=target/100;var targetPayroll=d.activeCosRelatable*targetDec;var diff=d.correctedLabor-targetPayroll;var pointsOff=(d.correctedLaborPct*100)-target;var resEl=document.getElementById('labor-target-result');if(resEl)resEl.textContent='Target payroll: '+fmtMoney(targetPayroll);var diagResult=document.getElementById('labor-diag-result');if(diagResult){if(Math.abs(pointsOff)<0.1){diagResult.textContent='Right on target.';}else if(pointsOff>0){diagResult.textContent=pointsOff.toFixed(1)+' points over target. '+fmtMoney(Math.abs(diff))+' over.';}else{diagResult.textContent=Math.abs(pointsOff).toFixed(1)+' points under target. '+fmtMoney(Math.abs(diff))+' under.';}}}
 
-async function savePayroll(venueCode){promptName('Save payroll','Who is entering payroll for '+venueCode+'?',async function(name){var p=FISCAL_PERIODS[currentPeriodIdx];var pk=getPeriodKey(p);var weeks=getWeekRanges(p);var allData=[];for(var i=0;i<weeks.length;i++){var input=document.getElementById('payroll-'+i);if(!input)continue;var val=parseFloat(input.value);if(isNaN(val))continue;allData.push({venue:venueCode,fiscal_period:pk,week_start:weeks[i].start,week_end:weeks[i].end,amount:val,entered_by:name,entered_at:new Date().toISOString()});}if(allData.length===0){alert('Please enter at least one payroll amount.');return;}try{for(var j=0;j<allData.length;j++){await supaUpsert('eom_payroll',allData[j]);}loadAllData();}catch(e){alert('Error saving payroll. Please try again.');}});}
+async function savePayroll(venueCode){
+  var name=currentUserName();
+  var p=FISCAL_PERIODS[currentPeriodIdx];var pk=getPeriodKey(p);var weeks=getWeekRanges(p);var allData=[];
+  for(var i=0;i<weeks.length;i++){var input=document.getElementById('payroll-'+i);if(!input)continue;var raw=input.value.trim();if(raw===''){continue;}var val=parseFloat(raw);if(isNaN(val))continue;allData.push({venue:venueCode,fiscal_period:pk,week_start:weeks[i].start,week_end:weeks[i].end,amount:val,entered_by:name,entered_at:new Date().toISOString()});}
+  if(allData.length===0){alert('Please enter at least one payroll amount.');return;}
+  try{
+    for(var j=0;j<allData.length;j++){await supaUpsert('eom_payroll',allData[j]);}
+    await loadAllData();
+    alert('Saved '+allData.length+' week'+(allData.length!==1?'s':'')+' of payroll for '+venueCode+'.');
+  }catch(e){
+    console.error('savePayroll error',e);
+    alert('Error saving payroll:\n\n'+(e&&e.message?e.message:e)+'\n\nNothing was saved. See console for details.');
+  }
+}
 
 function editPayroll(venueCode){requireAdmin('Admin access required to edit saved payroll.',function(){alert('Payroll fields are now editable. Make your changes and click Save.');});}
 
-async function saveTransfer(venueCode){var input=document.getElementById('transfer-input');if(!input)return;var val=parseFloat(input.value);if(isNaN(val)){alert('Please enter a dollar amount for transfers.');return;}var p=FISCAL_PERIODS[currentPeriodIdx];var pk=getPeriodKey(p);try{await supaUpsert('eom_manual_entries',{venue:venueCode,fiscal_period:pk,entry_type:'transfer',amount:val,entered_by:'Manager',entered_at:new Date().toISOString()});loadAllData();}catch(e){alert('Error saving transfer. Please try again.');}}
+async function saveTransfer(venueCode){var input=document.getElementById('transfer-input');if(!input)return;var val=parseFloat(input.value);if(isNaN(val)){alert('Please enter a dollar amount for transfers.');return;}var p=FISCAL_PERIODS[currentPeriodIdx];var pk=getPeriodKey(p);var name=currentUserName();try{await supaUpsert('eom_manual_entries',{venue:venueCode,fiscal_period:pk,entry_type:'transfer',amount:val,entered_by:name,entered_at:new Date().toISOString()});await loadAllData();}catch(e){console.error('saveTransfer error',e);alert('Error saving transfer:\n\n'+(e&&e.message?e.message:e)+'\n\nNothing was saved. See console for details.');}}
 
-function overrideLaborCredit(venueCode){requireAdmin('Admin access required to override labor credit.',function(){var current=window._reportData?window._reportData.laborCredit:0;var newVal=prompt('Enter labor credit override amount for '+venueCode+':\n\nCurrent value: '+fmtMoney(current),current);if(newVal===null)return;var val=parseFloat(newVal);if(isNaN(val)){alert('Please enter a valid number.');return;}promptName('Labor credit override','Who is entering this override?',async function(name){var p=FISCAL_PERIODS[currentPeriodIdx];var pk=getPeriodKey(p);try{await supaUpsert('eom_manual_entries',{venue:venueCode,fiscal_period:pk,entry_type:'labor_credit',amount:val,note:'Override from QuickBooks',entered_by:name,entered_at:new Date().toISOString()});loadAllData();}catch(e){alert('Error saving labor credit. Please try again.');}});});}
+function overrideLaborCredit(venueCode){requireAdmin('Admin access required to override labor credit.',function(){var current=window._reportData?window._reportData.laborCredit:0;var newVal=prompt('Enter labor credit override amount for '+venueCode+':\n\nCurrent value: '+fmtMoney(current),current);if(newVal===null)return;var val=parseFloat(newVal);if(isNaN(val)){alert('Please enter a valid number.');return;}(async function(){var name=currentUserName();var p=FISCAL_PERIODS[currentPeriodIdx];var pk=getPeriodKey(p);try{await supaUpsert('eom_manual_entries',{venue:venueCode,fiscal_period:pk,entry_type:'labor_credit',amount:val,note:'Override from QuickBooks',entered_by:name,entered_at:new Date().toISOString()});await loadAllData();alert('Labor credit override saved.');}catch(e){console.error('overrideLaborCredit error',e);alert('Error saving labor credit:\n\n'+(e&&e.message?e.message:e)+'\n\nNothing was saved. See console for details.');}})();});}
 
 function deletePurchase(id){requireAdmin('Admin access required to delete a purchase.',async function(){if(!confirm('Delete this invoice? This cannot be undone.'))return;try{await supaDelete('purchases','id=eq.'+id);loadAllData();}catch(e){alert('Error deleting purchase. Please try again.');}});}
 
-async function lockPeriod(){requireAdmin('Admin access required to lock this period.',function(){promptName('Lock period','Who is locking this period?',async function(name){var p=FISCAL_PERIODS[currentPeriodIdx];var pk=getPeriodKey(p);var codes=VENUES.map(function(v){return v.code;});var allData={};codes.forEach(function(c){allData[c]=buildVenueData(c);});try{await supaUpsert('eom_snapshots',{fiscal_period:pk,locked_by:name,locked_at:new Date().toISOString(),snapshot_data:JSON.stringify(allData)});loadAllData();}catch(e){alert('Error locking period. Please try again.');}});});}
+async function lockPeriod(){requireAdmin('Admin access required to lock this period.',function(){(async function(){var name=currentUserName();var p=FISCAL_PERIODS[currentPeriodIdx];var pk=getPeriodKey(p);var codes=VENUES.map(function(v){return v.code;});var allData={};codes.forEach(function(c){allData[c]=buildVenueData(c);});try{await supaUpsert('eom_snapshots',{fiscal_period:pk,locked_by:name,locked_at:new Date().toISOString(),snapshot_data:JSON.stringify(allData)});await loadAllData();alert('Period '+p.name+' locked.');}catch(e){console.error('lockPeriod error',e);alert('Error locking period:\n\n'+(e&&e.message?e.message:e)+'\n\nNothing was saved. See console for details.');}})();});}
 
 /* Login gate — must sign in to access this page */
 pcAuth.require({
