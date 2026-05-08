@@ -532,6 +532,11 @@ async function fetchRoster() {
   } catch(e) { return []; }
 }
 
+// DEPRECATED (May 8, 2026): No longer called by parseSigninSheet — replaced
+// by fetchExpectedNames() which queries position_assignments for stand-level
+// placements rather than venue-level signups. Kept for reference / backward
+// compat in case any future caller needs venue-wide signup names. Safe to
+// remove in a future cleanup pass.
 async function fetchAvailability(eventDate, venue) {
   try {
     // Get event id for this date/venue
@@ -545,14 +550,59 @@ async function fetchAvailability(eventDate, venue) {
   } catch(e) { return []; }
 }
 
-async function parseSigninSheet(saleId, signinUrl, venue, tipAmount, staffCount, eventDate) {
+// Fetches the names placed at this stand for this event from position_assignments.
+// These are the employees Brian/Meg dragged into stand+role slots via the Position
+// Board. The AI uses these as the priority match pool for sign-in sheet reading,
+// which dramatically tightens confidence (matching against ~10 names known to be
+// at the stand vs. matching against 200+ active employees venue-wide).
+//
+// Returns an array of staff names. Empty array if no placements exist for this
+// stand — in which case the edge function falls back to the full-roster pool
+// (legacy behavior, no breaking change for stands that aren't on the Position
+// Board yet).
+//
+// Query joins through events!inner so we can filter by event_date, since
+// position_assignments uses event_id but we have date+venue+stand from the form.
+async function fetchExpectedNames(eventDate, venue, stand) {
+  if (!eventDate || !venue || !stand) return [];
+  try {
+    var url = SUPA_URL + '/rest/v1/position_assignments' +
+      '?select=staff_name,events!inner(event_date)' +
+      '&venue=eq.' + encodeURIComponent(venue) +
+      '&stand=eq.' + encodeURIComponent(stand) +
+      '&removed_at=is.null' +
+      '&events.event_date=eq.' + encodeURIComponent(eventDate);
+    var res = await fetch(url, { headers: apiHeaders() });
+    if (!res.ok) return [];
+    var rows = await res.json();
+    if (!Array.isArray(rows)) return [];
+    // Dedupe by name — same person at same stand twice is theoretically possible
+    // (different roles) but for AI matching purposes one entry suffices.
+    var seen = {};
+    var names = [];
+    rows.forEach(function(r) {
+      var n = (r.staff_name || '').trim();
+      if (n && !seen[n]) { seen[n] = true; names.push(n); }
+    });
+    return names;
+  } catch(e) {
+    // Non-blocking — if this fetch fails, we proceed without the priority pool.
+    // The edge function will use full-roster matching as a fallback.
+    return [];
+  }
+}
+
+async function parseSigninSheet(saleId, signinUrl, venue, tipAmount, staffCount, eventDate, stand) {
   // Mark as processing immediately for UI feedback
   signinStatus[saleId] = { level: 'processing', label: 'Reading...' };
   updateSigninPill(saleId);
 
   try {
     var fetchedRoster = await fetchRoster();
-    var availability = await fetchAvailability(eventDate, venue);
+    // Fetch the priority match pool (people placed at this stand via the
+    // Position Board). When stand is missing or the stand has no placements,
+    // expectedNames is [] and the edge function falls back to full-roster.
+    var expectedNames = await fetchExpectedNames(eventDate, venue, stand);
 
     var res = await fetch(EDGE_URL, {
       method: 'POST',
@@ -564,7 +614,7 @@ async function parseSigninSheet(saleId, signinUrl, venue, tipAmount, staffCount,
         tip_amount: tipAmount,
         staff_count: staffCount,
         roster: fetchedRoster,
-        availability: availability
+        expected_names: expectedNames
       })
     });
 
@@ -638,7 +688,7 @@ async function handleSigninRetakeSelect(input) {
 
   try {
     // Fetch the sale row — we need venue/tip_amount/staff_count/event_date for parseSigninSheet
-    var sRes = await fetch(SUPA_URL + '/rest/v1/sales?id=eq.' + saleId + '&select=venue,tip_amount,staff_count,event_date&limit=1', { headers: apiHeaders() });
+    var sRes = await fetch(SUPA_URL + '/rest/v1/sales?id=eq.' + saleId + '&select=venue,tip_amount,staff_count,event_date,stand&limit=1', { headers: apiHeaders() });
     var sRows = await sRes.json();
     if (!Array.isArray(sRows) || !sRows.length) throw new Error('Sale not found');
     var sale = sRows[0];
@@ -665,7 +715,8 @@ async function handleSigninRetakeSelect(input) {
       saleId, newUrl, sale.venue,
       parseFloat(sale.tip_amount) || 0,
       parseInt(sale.staff_count) || 0,
-      sale.event_date
+      sale.event_date,
+      sale.stand
     );
 
     // parseSigninSheet calls loadScoreboard() at the end which redraws the row.
@@ -784,7 +835,7 @@ async function submitSale() {
       var aiEl = document.getElementById('ai-status');
       aiEl.textContent = 'Reading sign-in sheet...';
       // Parse the first sign-in sheet photo (additional sheets handled in Tips Report)
-      parseSigninSheet(saleId, signinUrls[0], venue, tipAmount, staffCount, date).then(function() {
+      parseSigninSheet(saleId, signinUrls[0], venue, tipAmount, staffCount, date, stand).then(function() {
         var status = signinStatus[saleId];
         if (aiEl && status) {
           aiEl.textContent = status.level === 'success'
@@ -2076,7 +2127,7 @@ async function submitEdit() {
     if (newUrlsByType.signin.length > 0) {
       // Clear assignments cache so the scoreboard reloads fresh
       delete sbAssignments[saleId];
-      parseSigninSheet(saleId, newUrlsByType.signin[0], sale.venue, tipAmount, staffCount, sale.event_date)
+      parseSigninSheet(saleId, newUrlsByType.signin[0], sale.venue, tipAmount, staffCount, sale.event_date, sale.stand)
         .catch(function() { /* swallow — UI shows status pill */ });
     }
 
