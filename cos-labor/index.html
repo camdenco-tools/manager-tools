@@ -587,8 +587,61 @@ function renderReport() {
   html+='<div class="met"><div class="met-label">Other sales</div><div class="met-val">'+fmtMoney(data.activeOtherSales)+'</div>';if(hasOtherActual){html+='<div class="met-note">Actual</div>';}else{html+='<div class="met-note">Estimated</div>';}html+='</div>';
   html+='<div class="met"><div class="met-label">Total sales</div><div class="met-val">'+fmtMoney(data.activeTotalSales)+'</div></div></div>';
 
-  /* Sales-to-deal-structure diagnostic */
+  /* Sales-to-deal-structure diagnostic — always logged to console for inspection */
   var sd=data.salesDiag;
+  try {
+    console.group('[cos-labor] Sales diagnostic for '+(data.venueCode||'COMBINED'));
+    console.log('Period:', p.name, '('+p.start+' to '+p.end+')');
+    console.log('Selected venue codes:', codes);
+    console.log('Total sales rows in cachedSales (all venues):', cachedSales.length);
+    console.log('Total stand_deals rows in cachedStandDeals (all venues):', cachedStandDeals.length);
+    console.log('Total deal_templates rows in cachedDealTemplates (all venues):', cachedDealTemplates.length);
+    if (sd) {
+      console.log('--- Sales for selected venue(s) ---');
+      console.log('Sale rows matching venue:', sd.totalSaleRows);
+      console.log('Gross sales sum:', sd.grossSales);
+      console.log('Computed cosRelatable:', data.cosRelatable);
+      console.log('Computed otherSales:', data.otherSales);
+      console.log('Unmatched sale count:', sd.unmatchedSaleCount);
+      console.log('Unmatched gross:', sd.unmatchedGross);
+      if (sd.unmatchedSaleCount>0) {
+        console.warn('UNMATCHED (venue, stand) pairs:');
+        console.table(Object.keys(sd.unmatchedStands).map(function(k){return {pair:k,count:sd.unmatchedStands[k].count,gross:sd.unmatchedStands[k].gross};}));
+      }
+    }
+    console.log('--- Raw sales rows for this venue (after resolveVenueCode filter) ---');
+    var venueRawSales=cachedSales.filter(function(s){
+      if(data.venueCode==='COMBINED') return codes.indexOf(resolveVenueCode(s.venue))!==-1;
+      return resolveVenueCode(s.venue)===data.venueCode;
+    });
+    console.table(venueRawSales.map(function(s){
+      return {
+        event_date: s.event_date,
+        event_name: s.event_name,
+        raw_venue: s.venue,
+        resolved_venue: resolveVenueCode(s.venue),
+        stand: s.stand,
+        amount: s.amount,
+        rev_check: (function(){var r=calcRevenue(s);return r.reason+' / cos:'+Math.round(r.cosRelatable)+' other:'+Math.round(r.otherSales);})()
+      };
+    }));
+    console.log('--- Raw stand_deals rows for this venue ---');
+    var venueStandDeals=cachedStandDeals.filter(function(r){
+      if(data.venueCode==='COMBINED') return codes.indexOf(r.venue)!==-1;
+      return r.venue===data.venueCode;
+    });
+    console.table(venueStandDeals.map(function(r){
+      return {venue:r.venue, stand:r.stand, deal_type:r.deal_type, has_override:r.has_override};
+    }));
+    console.log('--- Raw deal_templates rows for this venue ---');
+    console.table(cachedDealTemplates.filter(function(r){
+      if(data.venueCode==='COMBINED') return codes.indexOf(r.venue)!==-1;
+      return r.venue===data.venueCode;
+    }));
+    console.groupEnd();
+  } catch(e) { try { console.error('[cos-labor] diagnostic failed:', e); } catch(_) {} }
+
+  /* Inline UI callout if any sales produced $0 silently */
   if(sd && sd.totalSaleRows>0 && sd.unmatchedSaleCount>0 && !hasCosActual){
     var allUnmatched=sd.unmatchedSaleCount===sd.totalSaleRows;
     var calloutCls=allUnmatched?'missing':'partial';
@@ -599,16 +652,6 @@ function renderReport() {
     html+='<div class="inv-callout '+calloutCls+'"><div class="inv-callout-icon">!</div><div>'+headline
       +'<div class="inv-callout-detail">Each sale needs a row in <b>stand_deals</b> matching its (venue, stand). Unmatched: '+stands.join('; ')
       +'<br>See browser console for the full sale-by-sale breakdown.</div></div></div>';
-    try {
-      console.group('[cos-labor] Sales not matching deal structure for '+(data.venueCode||'COMBINED'));
-      console.log('Total sale rows for venue:', sd.totalSaleRows);
-      console.log('Gross sales:', sd.grossSales);
-      console.log('Unmatched count:', sd.unmatchedSaleCount, '— Unmatched gross:', sd.unmatchedGross);
-      console.table(Object.keys(sd.unmatchedStands).map(function(k){return {pair:k,count:sd.unmatchedStands[k].count,gross:sd.unmatchedStands[k].gross};}));
-      console.log('Available stand_deals rows for this venue (cachedStandDeals):',
-        cachedStandDeals.filter(function(r){return data.venueCode==='COMBINED' || r.venue===data.venueCode;}));
-      console.groupEnd();
-    } catch(e) {}
   }
 
   /* Inventory submission status */
