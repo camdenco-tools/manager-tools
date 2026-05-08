@@ -317,6 +317,7 @@ var VENUE_STANDS = {
 
 // State
 var currentVenue = null;
+var currentVenueLabel = null;
 var currentEventId = null;
 var currentEventDate = null;
 var currentEventName = null;
@@ -374,42 +375,68 @@ async function fetchRoster() {
 }
 
 // ── Venue pills ───────────────────────────────────────────────────────────────
+// labelToCodes maps "DE Chase Field House" → ['DE', 'DE Chase Field House'] when both
+// venue codes exist in the sales table and resolve to the same display label.
+// selectVenue queries with venue=in.(<comma-separated codes>) to catch sales under either.
+var labelToCodes = {};
+
 async function loadVenues() {
   try {
     var res = await fetch(SUPA_URL + '/rest/v1/sales?select=venue&order=venue.asc', { headers: apiHeaders() });
     var rows = await res.json();
-    var seen = {};
-    var venues = [];
-    if (Array.isArray(rows)) rows.forEach(function(r) { if (!seen[r.venue]) { seen[r.venue] = true; venues.push(r.venue); } });
+    labelToCodes = {};
+    var labels = []; // ordered list of distinct display labels
+    if (Array.isArray(rows)) rows.forEach(function(r) {
+      if (!r.venue) return;
+      var label = VENUE_LABELS[r.venue] || r.venue;
+      if (!labelToCodes[label]) { labelToCodes[label] = []; labels.push(label); }
+      if (labelToCodes[label].indexOf(r.venue) === -1) labelToCodes[label].push(r.venue);
+    });
     var pillsEl = document.getElementById('venue-pills');
-    if (!venues.length) { pillsEl.innerHTML = '<span style="font-size:12px;color:#aaa;">No sales logged yet</span>'; return; }
+    if (!labels.length) { pillsEl.innerHTML = '<span style="font-size:12px;color:#aaa;">No sales logged yet</span>'; return; }
     pillsEl.innerHTML = '';
-    venues.forEach(function(v, i) {
+    labels.forEach(function(label, i) {
       var btn = document.createElement('button');
       btn.className = 'venue-pill' + (i === 0 ? ' active' : '');
-      btn.textContent = VENUE_LABELS[v] || v;
-      btn.onclick = function() { selectVenue(v); };
-      btn.id = 'vpill-' + v;
+      btn.textContent = label;
+      btn.onclick = function() { selectVenue(label); };
+      btn.id = 'vpill-' + label.replace(/[^a-zA-Z0-9]/g, '_');
       pillsEl.appendChild(btn);
     });
-    selectVenue(venues[0]);
+    selectVenue(labels[0]);
   } catch(e) {}
 }
 
-async function selectVenue(venue) {
-  currentVenue = venue;
+async function selectVenue(label) {
+  currentVenueLabel = label;
+  // Pick the canonical code: prefer one that exists as a key in VENUE_LABELS
+  // (the short code like 'DE'), fall back to first code seen.
+  var codes = labelToCodes[label] || [label];
+  var canonical = null;
+  for (var i = 0; i < codes.length; i++) {
+    if (VENUE_LABELS[codes[i]]) { canonical = codes[i]; break; }
+  }
+  currentVenue = canonical || codes[0];
   document.querySelectorAll('.venue-pill').forEach(function(p) { p.classList.remove('active'); });
-  var pill = document.getElementById('vpill-' + venue);
+  var pill = document.getElementById('vpill-' + label.replace(/[^a-zA-Z0-9]/g, '_'));
   if (pill) pill.classList.add('active');
-  await loadEventsForVenue(venue);
+  await loadEventsForVenue(label);
 }
 
-async function loadEventsForVenue(venue) {
+function codesForLabel(label) {
+  return labelToCodes[label] || [label];
+}
+
+async function loadEventsForVenue(label) {
   var sel = document.getElementById('event-select');
   sel.innerHTML = '<option value="">Loading...</option>';
   try {
+    var codes = codesForLabel(label);
+    var venueFilter = codes.length === 1
+      ? 'venue=eq.' + encodeURIComponent(codes[0])
+      : 'venue=in.(' + codes.map(encodeURIComponent).join(',') + ')';
     var res = await fetch(
-      SUPA_URL + '/rest/v1/sales?venue=eq.' + encodeURIComponent(venue) + '&select=event_date,event_name&order=event_date.desc',
+      SUPA_URL + '/rest/v1/sales?' + venueFilter + '&select=event_date,event_name&order=event_date.desc',
       { headers: apiHeaders() }
     );
     var rows = await res.json();
@@ -455,9 +482,13 @@ async function loadEvent() {
   document.getElementById('confirm-bar').style.display = 'none';
 
   try {
-    // Sales
+    // Sales — query all venue codes that map to the current label
+    var codes = codesForLabel(currentVenueLabel);
+    var venueFilter = codes.length === 1
+      ? 'venue=eq.' + encodeURIComponent(codes[0])
+      : 'venue=in.(' + codes.map(encodeURIComponent).join(',') + ')';
     var sRes = await fetch(
-      SUPA_URL + '/rest/v1/sales?venue=eq.' + encodeURIComponent(currentVenue) +
+      SUPA_URL + '/rest/v1/sales?' + venueFilter +
       '&event_date=eq.' + currentEventDate +
       (currentEventName ? '&event_name=eq.' + encodeURIComponent(currentEventName) : '') +
       '&select=*&order=stand.asc',
@@ -500,18 +531,22 @@ async function loadEvent() {
       }
     }
 
-    // Staffing requests
+    // Staffing requests — try all venue codes mapped to current label
     staffingRequested = {};
     try {
+      var srCodes = codesForLabel(currentVenueLabel);
+      var evVenueFilter = srCodes.length === 1
+        ? 'venue=eq.' + encodeURIComponent(srCodes[0])
+        : 'venue=in.(' + srCodes.map(encodeURIComponent).join(',') + ')';
       var evRes = await fetch(
-        SUPA_URL + '/rest/v1/events?venue=eq.' + encodeURIComponent(currentVenue) + '&event_date=eq.' + currentEventDate + '&select=id&limit=1',
+        SUPA_URL + '/rest/v1/events?' + evVenueFilter + '&event_date=eq.' + currentEventDate + '&select=id&limit=1',
         { headers: apiHeaders() }
       );
       var evRows = await evRes.json();
       if (Array.isArray(evRows) && evRows.length) {
         var eventId = evRows[0].id;
         var srRes = await fetch(
-          SUPA_URL + '/rest/v1/staffing_requests?event_id=eq.' + eventId + '&venue=eq.' + encodeURIComponent(currentVenue) + '&select=stand,headcount',
+          SUPA_URL + '/rest/v1/staffing_requests?event_id=eq.' + eventId + '&' + evVenueFilter + '&select=stand,headcount',
           { headers: apiHeaders() }
         );
         var srRows = await srRes.json();
