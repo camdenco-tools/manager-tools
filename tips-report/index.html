@@ -70,6 +70,30 @@ header { background: #fff; border-bottom: 1px solid #e8e8e4; padding: 0 32px; di
 .stand-card.verified { border-color: #97C459; }
 .stand-card.not-submitted { border: 1px dashed #ddd; opacity: 0.6; }
 .stand-card.flagged { border-color: #F09595; }
+.stand-card.has-duplicates { border-color: #DC8B4F; }
+
+/* Duplicate-sales warning banner inside a card */
+.dup-banner { background: #FFF3E5; border: 1px solid #F0C896; border-radius: 8px; padding: 8px 10px; margin: 8px 0; font-size: 12px; color: #7A4A1A; cursor: pointer; }
+.dup-banner-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.dup-banner-head strong { color: #5C3812; }
+.dup-banner.expanded { background: #FFF8EE; }
+.dup-list { margin-top: 8px; padding-top: 8px; border-top: 1px solid #F0C896; display: none; }
+.dup-banner.expanded .dup-list { display: block; }
+.dup-row { padding: 6px 0; border-bottom: 1px dashed #F0C896; font-size: 11px; color: #5C3812; }
+.dup-row:last-child { border-bottom: none; }
+.dup-row-meta { color: #8A6238; font-size: 10px; margin-top: 2px; }
+
+/* Labor section (Support Staff, etc — not in tip pool) */
+.labor-section { margin-top: 22px; }
+.labor-section-head { font-size: 12px; font-weight: 700; color: #555; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+.labor-section-sub { font-size: 11px; color: #888; margin-bottom: 10px; font-weight: 400; text-transform: none; letter-spacing: 0; }
+.labor-card { background: #FAFAFA; border: 1px solid #EAEAEA; border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
+.labor-card.flagged-tips { border-color: #F09595; background: #FCEBEB; }
+.labor-card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.labor-card-name { font-size: 13px; font-weight: 700; color: #1a1a1a; }
+.labor-card-meta { font-size: 11px; color: #888; }
+.labor-tip-flag { background: #F09595; color: #5C0F0F; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 20px; }
+.labor-no-pool { font-size: 10px; font-weight: 600; color: #888; padding: 2px 7px; border: 1px solid #ddd; border-radius: 20px; background: white; }
 
 .sc-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2px; }
 .sc-name { font-size: 14px; font-weight: 700; color: #1a1a1a; }
@@ -294,6 +318,12 @@ header { background: #fff; border-bottom: 1px solid #e8e8e4; padding: 0 32px; di
 <script>
 var SUPA_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
 var POOL_VENUES = ['FMP'];
+
+// Labor stands are non-revenue: people who worked the event but not at a sales stand.
+// Their staff_count is excluded from the tip-pool denominator, their tips are flagged
+// (not absorbed into the pool), and they render in a separate section below the grid.
+var LABOR_STANDS = ['Support Staff', 'Client Staffing Needs', 'Non-Event Labor'];
+function isLaborStand(stand) { return LABOR_STANDS.indexOf(stand) !== -1; }
 
 var VENUE_LABELS = {
   'Mann':'Mann Music Center','FMP':'FMP','ACCC':'ACCC','BWH':'Boardwalk Hall',
@@ -568,49 +598,81 @@ function renderPage() {
   var venue = currentVenue;
   var isPool = isPoolVenue(venue);
   var stands = VENUE_STANDS[venue] || [];
-  var salesByStand = {};
-  salesData.forEach(function(r) { salesByStand[r.stand] = r; });
 
-  // Calculate pool tip share if FMP
-  var totalTips = 0, totalSales = 0, totalStaff = 0, totalVerified = 0, totalAssigned = 0;
+  // ── Group sales by stand into arrays (handles duplicate submissions) ──────
+  var salesByStand = {};
+  salesData.forEach(function(r) {
+    if (!salesByStand[r.stand]) salesByStand[r.stand] = [];
+    salesByStand[r.stand].push(r);
+  });
+  // Sort each stand's sales by submitted_at ascending; first one is the "primary"
+  Object.keys(salesByStand).forEach(function(stand) {
+    salesByStand[stand].sort(function(a, b) {
+      var ta = a.submitted_at || '', tb = b.submitted_at || '';
+      if (ta !== tb) return ta < tb ? -1 : 1;
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+    });
+  });
+
+  // ── Split sales: pool-eligible vs labor-only ─────────────────────────────
+  var poolSales = salesData.filter(function(r) { return !isLaborStand(r.stand); });
+  var laborSales = salesData.filter(function(r) { return isLaborStand(r.stand); });
+
+  // ── Pool tip math — uses ONLY pool-eligible sales ─────────────────────────
+  var poolTips = 0, poolStaff = 0;
+  poolSales.forEach(function(r) { poolTips += parseFloat(r.tip_amount) || 0; });
+  poolSales.forEach(function(r) {
+    var assigns = (assignmentsData[r.id] || []).filter(function(a) { return !removedRows[a.id]; });
+    if (assigns.length > 0) poolStaff += assigns.length;
+    else poolStaff += parseInt(r.staff_count) || 0;
+  });
+  var poolTipPerPerson = isPool && poolStaff > 0 ? poolTips / poolStaff : null;
+
+  // ── Labor stats (separate, NOT pooled) ────────────────────────────────────
+  var laborTips = 0, laborStaff = 0;
+  laborSales.forEach(function(r) { laborTips += parseFloat(r.tip_amount) || 0; });
+  laborSales.forEach(function(r) {
+    var assigns = (assignmentsData[r.id] || []).filter(function(a) { return !removedRows[a.id]; });
+    if (assigns.length > 0) laborStaff += assigns.length;
+    else laborStaff += parseInt(r.staff_count) || 0;
+  });
+
+  // ── Overall totals (all sales — used for the top-line summary cards) ──────
+  var totalSales = 0, totalTips = 0, totalVerified = 0, totalAssigned = 0;
   salesData.forEach(function(r) {
     totalSales += parseFloat(r.amount) || 0;
     totalTips += parseFloat(r.tip_amount) || 0;
   });
-
-  // Count staff — use verified assignments where available, fall back to staff_count
-  var allAssignments = [];
   salesData.forEach(function(r) {
-    var assigns = assignmentsData[r.id] || [];
-    var active = assigns.filter(function(a) { return !removedRows[a.id]; });
-    if (active.length > 0) {
-      totalStaff += active.length;
-      active.forEach(function(a) { allAssignments.push(a); if (a.verified) totalVerified++; totalAssigned++; });
-    } else {
-      totalStaff += parseInt(r.staff_count) || 0;
-    }
+    var assigns = (assignmentsData[r.id] || []).filter(function(a) { return !removedRows[a.id]; });
+    assigns.forEach(function(a) { if (a.verified) totalVerified++; totalAssigned++; });
   });
 
-  var poolTipPerPerson = isPool && totalStaff > 0 ? totalTips / totalStaff : null;
-
-  // Summary strip
+  // ── Summary strip ─────────────────────────────────────────────────────────
   var overallPct = totalSales > 0 ? (totalTips / totalSales * 100) : 0;
   document.getElementById('sum-sales').textContent = fmt(totalSales);
   document.getElementById('sum-tips').textContent = fmt(totalTips);
   var pctEl = document.getElementById('sum-tips-pct');
   pctEl.textContent = overallPct.toFixed(1) + '% of sales';
   pctEl.className = 's-pct ' + pctClass(overallPct);
-  document.getElementById('sum-per-person').textContent = poolTipPerPerson !== null ? fmtD(poolTipPerPerson) : (totalStaff > 0 ? 'per stand' : '—');
+  document.getElementById('sum-per-person').textContent = poolTipPerPerson !== null ? fmtD(poolTipPerPerson) : (poolStaff > 0 ? 'per stand' : '—');
   document.getElementById('sum-per-person-sub').textContent = isPool ? 'building-wide pool' : 'calculated per stand';
-  document.getElementById('sum-staff').textContent = totalStaff;
+  // Staff card shows POOL staff count; sub-line surfaces labor staff separately
+  document.getElementById('sum-staff').textContent = poolStaff;
   var reqTotal = Object.values(staffingRequested).reduce(function(s,v){return s+v;},0);
   var staffSubEl = document.getElementById('sum-staff-sub');
-  if (reqTotal > 0) {
-    staffSubEl.textContent = reqTotal + ' requested';
-    staffSubEl.className = 's-sub ' + (totalStaff < reqTotal ? 'amber' : '');
-  } else { staffSubEl.textContent = ''; }
-  document.getElementById('sum-stands').textContent = salesData.length + ' of ' + stands.filter(function(s){ return s !== 'Support Staff' && s !== 'Client Staffing Needs'; }).length;
-  document.getElementById('sum-stands-sub').textContent = (stands.length - salesData.length) + ' not submitted';
+  var staffSubBits = [];
+  if (reqTotal > 0) staffSubBits.push(reqTotal + ' requested');
+  if (laborStaff > 0) staffSubBits.push('+ ' + laborStaff + ' labor (not in pool)');
+  staffSubEl.textContent = staffSubBits.join(' · ');
+  staffSubEl.className = 's-sub ' + (reqTotal > 0 && poolStaff < reqTotal ? 'amber' : '');
+  // Stands reported uses DISTINCT pool-eligible stands, not raw sales row count
+  var distinctPoolStands = {};
+  poolSales.forEach(function(r) { distinctPoolStands[r.stand] = true; });
+  var distinctPoolStandsCount = Object.keys(distinctPoolStands).length;
+  var poolStandTotal = stands.filter(function(s) { return !isLaborStand(s); }).length;
+  document.getElementById('sum-stands').textContent = distinctPoolStandsCount + ' of ' + poolStandTotal;
+  document.getElementById('sum-stands-sub').textContent = (poolStandTotal - distinctPoolStandsCount) + ' not submitted';
   document.getElementById('sum-verified').textContent = totalVerified + ' of ' + totalAssigned;
   var verSubEl = document.getElementById('sum-verified-sub');
   var unverified = totalAssigned - totalVerified;
@@ -618,41 +680,53 @@ function renderPage() {
   verSubEl.className = 's-sub ' + (unverified > 0 ? 'amber' : '');
   document.getElementById('summary-strip').style.display = 'grid';
 
-  // Pool notice
+  // ── Pool notice ───────────────────────────────────────────────────────────
   var poolEl = document.getElementById('pool-notice');
   if (isPool) {
-    poolEl.textContent = 'FMP uses a building-wide tip pool — all tips are combined and split equally across ' + totalStaff + ' staff. Each person earns ' + (poolTipPerPerson !== null ? fmtD(poolTipPerPerson) : '—') + ' regardless of stand.';
+    var notice = 'FMP uses a building-wide tip pool — all tips collected at sales stands are combined and split equally across ' + poolStaff + ' pool-eligible staff. Each person earns ' + (poolTipPerPerson !== null ? fmtD(poolTipPerPerson) : '—') + ' regardless of stand.';
+    if (laborStaff > 0) notice += ' Support staff (' + laborStaff + ') are not part of the pool.';
+    poolEl.textContent = notice;
     poolEl.style.display = 'block';
   } else { poolEl.style.display = 'none'; }
 
-  // Confirm bar
+  // ── Confirm bar ───────────────────────────────────────────────────────────
   var unverifiedStands = salesData.filter(function(r) {
     var assigns = (assignmentsData[r.id] || []).filter(function(a) { return !removedRows[a.id]; });
     return assigns.length > 0 && assigns.some(function(a) { return !a.verified; });
   });
+  // Detect duplicate-stand submissions (any stand with > 1 sale)
+  var dupStandsCount = 0;
+  Object.keys(salesByStand).forEach(function(s) { if (salesByStand[s].length > 1) dupStandsCount++; });
+  // Detect labor sales with non-zero tips (the "tips against support staff" flag)
+  var flaggedLaborTips = laborSales.filter(function(r) { return (parseFloat(r.tip_amount) || 0) > 0; }).length;
   var confirmBar = document.getElementById('confirm-bar');
   var confirmText = document.getElementById('confirm-bar-text');
-  if (unverifiedStands.length > 0) {
+  var alerts = [];
+  if (unverifiedStands.length > 0) alerts.push('<strong>' + unverifiedStands.length + ' stand' + (unverifiedStands.length > 1 ? 's' : '') + '</strong> with unverified names');
+  if (dupStandsCount > 0) alerts.push('<strong>' + dupStandsCount + ' stand' + (dupStandsCount > 1 ? 's' : '') + '</strong> with duplicate submissions');
+  if (flaggedLaborTips > 0) alerts.push('<strong>' + flaggedLaborTips + '</strong> labor submission' + (flaggedLaborTips > 1 ? 's' : '') + ' with tips entered (review)');
+  if (alerts.length > 0) {
     confirmBar.style.display = 'flex';
-    confirmText.innerHTML = '<strong>' + unverifiedStands.length + ' stand' + (unverifiedStands.length > 1 ? 's' : '') + '</strong> with unverified names — review before printing';
-    document.getElementById('confirm-bar-btn').disabled = false;
+    confirmText.innerHTML = alerts.join(' &middot; ') + ' — review before printing';
+    // Confirm button only fixes unverified names. Dupes and labor-tips require Sales History.
+    document.getElementById('confirm-bar-btn').disabled = unverifiedStands.length === 0;
   } else if (salesData.length > 0) {
     confirmBar.style.display = 'flex';
     confirmText.innerHTML = 'All names verified — report is ready to print';
     document.getElementById('confirm-bar-btn').disabled = true;
   } else { confirmBar.style.display = 'none'; }
 
-  // Print header/footer
+  // ── Print header/footer ──────────────────────────────────────────────────
   var dateStr = currentEventDate ? (function() { var p = currentEventDate.split('-'); return p[1]+'/'+p[2]+'/'+p[0]; })() : '';
   document.getElementById('print-header').innerHTML = '<strong>Popcorn Chez</strong> &nbsp;&middot;&nbsp; ' + (VENUE_LABELS[venue]||venue) + ' &nbsp;&middot;&nbsp; ' + (currentEventName||'') + ' &nbsp;&middot;&nbsp; ' + dateStr;
   document.getElementById('print-footer').innerHTML = '<div class="print-sig"><div class="print-sig-line">Manager signature</div><div class="print-sig-line">Date</div></div><div style="margin-top:12px;">Popcorn Chez &middot; ' + (VENUE_LABELS[venue]||venue) + ' &middot; ' + (currentEventName||'') + ' &middot; ' + dateStr + '</div>';
 
-  // Render stand cards
+  // ── Render pool-stand cards grid ─────────────────────────────────────────
   var html = '<div class="stands-grid">';
   stands.forEach(function(stand) {
-    if (stand === 'Support Staff' || stand === 'Client Staffing Needs') return;
-    var sale = salesByStand[stand];
-    if (!sale) {
+    if (isLaborStand(stand)) return;
+    var standSales = salesByStand[stand];
+    if (!standSales || !standSales.length) {
       var requested = staffingRequested[stand] || 0;
       html += '<div class="stand-card not-submitted">';
       html += '<div class="sc-head"><div class="sc-name">' + stand + '</div></div>';
@@ -660,13 +734,120 @@ function renderPage() {
       html += '<div class="not-sub-msg">Not submitted</div></div>';
       return;
     }
-    html += renderStandCard(sale, isPool, poolTipPerPerson);
+    var primary = standSales[0];
+    var dupes = standSales.slice(1);
+    html += renderStandCard(primary, dupes, isPool, poolTipPerPerson);
   });
   html += '</div>';
+
+  // ── Render labor section (Support Staff, etc — not in pool) ──────────────
+  if (laborSales.length > 0) {
+    // Group labor sales by stand so duplicates surface there too
+    var laborByStand = {};
+    laborSales.forEach(function(r) {
+      if (!laborByStand[r.stand]) laborByStand[r.stand] = [];
+      laborByStand[r.stand].push(r);
+    });
+    Object.keys(laborByStand).forEach(function(s) {
+      laborByStand[s].sort(function(a, b) {
+        var ta = a.submitted_at || '', tb = b.submitted_at || '';
+        if (ta !== tb) return ta < tb ? -1 : 1;
+        return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+      });
+    });
+    html += '<div class="labor-section">';
+    html += '<div class="labor-section-head">Labor (not in tip pool)</div>';
+    html += '<div class="labor-section-sub">These submissions track people who worked the event but are not part of the tip pool. Their headcount is excluded from per-person tip calculations.</div>';
+    Object.keys(laborByStand).forEach(function(stand) {
+      var ls = laborByStand[stand];
+      var primary = ls[0];
+      var dupes = ls.slice(1);
+      html += renderLaborCard(primary, dupes);
+    });
+    html += '</div>';
+  }
+
   document.getElementById('main-content').innerHTML = html;
 }
 
-function renderStandCard(sale, isPool, poolTipPerPerson) {
+// Renders the duplicate-sales warning banner inside a card. Click to expand the list.
+function renderDupBanner(primary, dupes) {
+  var html = '<div class="dup-banner" onclick="toggleDupBanner(\'' + primary.id + '\', event)" id="dup-' + primary.id + '">';
+  html += '<div class="dup-banner-head">';
+  html += '<div>&#9888; <strong>' + dupes.length + ' duplicate sale' + (dupes.length > 1 ? 's' : '') + '</strong> for this stand &mdash; review before printing</div>';
+  html += '<div style="font-size:11px;color:#8A6238;">tap to view</div>';
+  html += '</div>';
+  html += '<div class="dup-list">';
+  // Show primary first as a labeled "kept" row, then each duplicate
+  var primDate = primary.event_date ? (function(){ var p=primary.event_date.split('-'); return p[1]+'/'+p[2]+'/'+p[0]; })() : '';
+  var primSubAt = primary.submitted_at ? new Date(primary.submitted_at).toLocaleString() : '';
+  html += '<div class="dup-row"><strong>Showing this submission:</strong> ' + fmt(parseFloat(primary.amount) || 0) + ' &middot; tips ' + fmt(parseFloat(primary.tip_amount) || 0) + ' &middot; ' + (parseInt(primary.staff_count) || 0) + ' staff';
+  html += '<div class="dup-row-meta">by ' + (primary.submitted_by || 'unknown') + (primSubAt ? ' &middot; ' + primSubAt : '') + ' &middot; sale id ' + primary.id.slice(0, 8) + '</div></div>';
+  dupes.forEach(function(d) {
+    var dSubAt = d.submitted_at ? new Date(d.submitted_at).toLocaleString() : '';
+    var dAssigns = (assignmentsData[d.id] || []).filter(function(a) { return !removedRows[a.id]; });
+    html += '<div class="dup-row">Duplicate: ' + fmt(parseFloat(d.amount) || 0) + ' &middot; tips ' + fmt(parseFloat(d.tip_amount) || 0) + ' &middot; ' + (parseInt(d.staff_count) || 0) + ' staff &middot; ' + dAssigns.length + ' name' + (dAssigns.length !== 1 ? 's' : '') + ' on signin';
+    html += '<div class="dup-row-meta">by ' + (d.submitted_by || 'unknown') + (dSubAt ? ' &middot; ' + dSubAt : '') + ' &middot; sale id ' + d.id.slice(0, 8) + ' &middot; <a href="/sales-history/?sale_id=' + d.id + '" onclick="event.stopPropagation()">open in Sales History</a></div></div>';
+  });
+  html += '<div class="dup-row" style="border-bottom:none;color:#8A6238;font-size:11px;font-style:italic;">Resolve in Sales History (edit or delete the extras) before printing the report.</div>';
+  html += '</div>'; // .dup-list
+  html += '</div>'; // .dup-banner
+  return html;
+}
+
+function toggleDupBanner(saleId, evt) {
+  if (evt) evt.stopPropagation();
+  var el = document.getElementById('dup-' + saleId);
+  if (!el) return;
+  el.classList.toggle('expanded');
+}
+
+// Renders a labor sale (Support Staff, Client Staffing Needs, Non-Event Labor).
+// Labor sales show names but NO tip share — those people are not in the pool.
+// Tips entered against a labor stand are flagged in red as "review".
+function renderLaborCard(sale, dupes) {
+  dupes = dupes || [];
+  var hasDupes = dupes.length > 0;
+  var assigns = (assignmentsData[sale.id] || []).slice();
+  var activeAssigns = assigns.filter(function(a) { return !removedRows[a.id]; });
+  var tipAmt = parseFloat(sale.tip_amount) || 0;
+  var hasFlaggedTips = tipAmt > 0;
+  var staff = activeAssigns.length > 0 ? activeAssigns.length : (parseInt(sale.staff_count) || 0);
+
+  var cardClass = 'labor-card' + (hasFlaggedTips ? ' flagged-tips' : '');
+  var html = '<div class="' + cardClass + '" id="labor-card-' + sale.id + '">';
+  html += '<div class="labor-card-head">';
+  html += '<div><div class="labor-card-name">' + sale.stand + '</div>';
+  html += '<div class="labor-card-meta">by ' + (sale.submitted_by || 'unknown') + ' &middot; ' + staff + ' staff &middot; <span class="labor-no-pool">not in tip pool</span></div></div>';
+  if (hasFlaggedTips) {
+    html += '<span class="labor-tip-flag">&#9888; ' + fmt(tipAmt) + ' tips entered &mdash; review</span>';
+  }
+  html += '</div>';
+
+  if (hasDupes) html += renderDupBanner(sale, dupes);
+
+  if (hasFlaggedTips) {
+    html += '<div style="font-size:11px;color:#791F1F;margin-bottom:8px;">Tips were entered against this labor submission. Labor stands do not generate tips — the manager likely meant to log these against a sales stand. Edit in Sales History to correct.</div>';
+  }
+
+  // Names list (read-only on Tips Report — same UI pattern as the stand card but without tip share)
+  if (activeAssigns.length > 0) {
+    html += '<div class="names-label">Sign-in sheet &mdash; ' + activeAssigns.length + ' name' + (activeAssigns.length !== 1 ? 's' : '') + '</div>';
+    assigns.forEach(function(a) {
+      // Reuse renderNameRow with isPool=false and standTipPerPerson=null so no tip share is displayed
+      html += renderNameRow(a, sale.id, false, null, null, activeAssigns.length);
+    });
+  } else if (sale.staff_count) {
+    html += '<div style="font-size:11px;color:#888;font-style:italic;">' + sale.staff_count + ' staff counted &mdash; no sign-in sheet uploaded or no names parsed.</div>';
+  }
+
+  html += '</div>'; // .labor-card
+  return html;
+}
+
+function renderStandCard(sale, dupes, isPool, poolTipPerPerson) {
+  dupes = dupes || [];
+  var hasDupes = dupes.length > 0;
   var assigns = (assignmentsData[sale.id] || []).slice();
   var activeAssigns = assigns.filter(function(a) { return !removedRows[a.id]; });
   var hasAssigns = activeAssigns.length > 0;
@@ -686,9 +867,10 @@ function renderStandCard(sale, isPool, poolTipPerPerson) {
   // Per-stand tip share (non-pool venues)
   var standTipPerPerson = !isPool && signedIn > 0 ? tipAmt / signedIn : null;
 
-  // Card class
+  // Card class — duplicates take precedence over flagged so the orange banner is obvious
   var cardClass = 'stand-card';
-  if (isFlagged) cardClass += ' flagged';
+  if (hasDupes) cardClass += ' has-duplicates';
+  else if (isFlagged) cardClass += ' flagged';
   else if (allVerified) cardClass += ' verified';
   else if (hasUnverified) cardClass += ' needs-review';
 
@@ -706,6 +888,9 @@ function renderStandCard(sale, isPool, poolTipPerPerson) {
   html += '<div><div class="sc-name">' + sale.stand + badgeHtml + '</div></div>';
   html += '<div class="sc-amt-block"><div class="sc-amt">' + fmt(amount) + '</div>' + pctHtml + '</div>';
   html += '</div>';
+
+  // Duplicate-sales warning banner (renders right under the header, above metadata)
+  if (hasDupes) html += renderDupBanner(sale, dupes);
 
   // Meta
   var dateStr = sale.event_date ? (function(){ var p=sale.event_date.split('-'); return p[1]+'/'+p[2]+'/'+p[0]; })() : '';
