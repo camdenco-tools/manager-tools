@@ -111,8 +111,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .tb td.man { background: #FAEEDA; color: #633806; border-radius: 0; }
 .tb td.auto { background: #E6F1FB; color: #0C447C; border-radius: 0; }
 
-.drill { margin: -2px 0 8px; border: 1px solid #eee; border-radius: 10px; overflow: hidden; background: #fafafa; display: none; }
+.drill { border: 1px solid #eee; border-radius: 10px; overflow: hidden; background: #fafafa; display: none; margin: 4px 12px 4px 12px; }
 .drill.open { display: block; }
+.drill-host { padding: 0 !important; background: transparent !important; border-bottom: 1px solid #f5f5f5 !important; }
+.drill-host.zebra { background: #fbfbfb !important; }
 .drill-head { font-size: 11px; font-weight: 600; color: #999; padding: 8px 12px; background: #f5f5f5; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; }
 .drill-row { display: flex; align-items: center; padding: 6px 12px; border-bottom: 1px solid #f0f0f0; font-size: 13px; gap: 8px; }
 .drill-row:last-child { border-bottom: none; }
@@ -123,6 +125,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .drill-photo.has { background: #EAF3DE; color: #27500A; }
 .drill-photo.no { color: #ddd; font-weight: 400; }
 .drill-del { font-size: 10px; background: #FCEBEB; color: #A32D2D; padding: 2px 7px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; }
+.tb tr.week-row.zebra td { background: #fbfbfb; }
+.tb tr.week-row.zebra.click:hover td { background: #f4f4f4; }
+.inv-callout { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; margin-bottom: 10px; font-size: 13px; font-weight: 500; }
+.inv-callout-icon { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; flex-shrink: 0; }
+.inv-callout.ok { background: #EAF3DE; color: #27500A; }
+.inv-callout.ok .inv-callout-icon { background: #3B6D11; color: white; }
+.inv-callout.missing { background: #FCEBEB; color: #A32D2D; }
+.inv-callout.missing .inv-callout-icon { background: #A32D2D; color: white; }
+.inv-callout.partial { background: #FAEEDA; color: #633806; }
+.inv-callout.partial .inv-callout-icon { background: #BA7517; color: white; }
+.inv-callout-detail { font-weight: 400; font-size: 11px; opacity: 0.85; margin-top: 2px; }
 
 .vendor-pop { margin-bottom: 14px; border: 1px solid #85B7EB; border-radius: 12px; overflow: hidden; display: none; }
 .vendor-pop.open { display: block; }
@@ -238,7 +251,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   </div>
 
   <div class="pills" id="venue-pills"></div>
-  <div class="pill-hint">Tap multiple venues for a combined view</div>
+  <div class="pill-hint">Shift+tap (or Cmd/Ctrl+tap) to combine venues</div>
 
   <div class="fp">
     <div class="fp-nav">
@@ -381,9 +394,11 @@ function renderPills() {
   el.innerHTML=html;
   var pills=el.querySelectorAll('.pill');
   for (var i=0;i<pills.length;i++) {
-    pills[i].addEventListener('click',function() {
+    pills[i].addEventListener('click',function(e) {
       var v=this.getAttribute('data-v');
+      var combine=e.shiftKey||e.metaKey||e.ctrlKey;
       if (v==='ALL') { selectedVenues=['ALL']; }
+      else if (!combine) { selectedVenues=[v]; }
       else { var allIdx=selectedVenues.indexOf('ALL'); if (allIdx>=0) selectedVenues.splice(allIdx,1); var idx=selectedVenues.indexOf(v); if (idx>=0) { selectedVenues.splice(idx,1); if (selectedVenues.length===0) selectedVenues=['ALL']; } else { selectedVenues.push(v); } }
       renderPills(); renderReport();
     });
@@ -552,10 +567,22 @@ function renderReport() {
   html+='<div class="met"><div class="met-label">Other sales</div><div class="met-val">'+fmtMoney(data.activeOtherSales)+'</div>';if(hasOtherActual){html+='<div class="met-note">Actual</div>';}else{html+='<div class="met-note">Estimated</div>';}html+='</div>';
   html+='<div class="met"><div class="met-label">Total sales</div><div class="met-val">'+fmtMoney(data.activeTotalSales)+'</div></div></div>';
 
+  /* Inventory submission status */
+  var invSubmittedCount=0;codes.forEach(function(c){if((cachedInventory[c]||0)>0)invSubmittedCount++;});
+  var invMissing=codes.length-invSubmittedCount;
+  if(invSubmittedCount===0){
+    html+='<div class="inv-callout missing"><div class="inv-callout-icon">!</div><div>Ending inventory not yet submitted'+(codes.length>1?' for any selected venue':'')+'.<div class="inv-callout-detail">Consumption and COS % below are incomplete until inventory is entered.</div></div></div>';
+  } else if(invMissing>0){
+    var missingNames=[];codes.forEach(function(c){if(!((cachedInventory[c]||0)>0)){var v=VENUES.filter(function(x){return x.code===c;})[0];missingNames.push(v?v.label:c);}});
+    html+='<div class="inv-callout partial"><div class="inv-callout-icon">!</div><div>Ending inventory submitted for '+invSubmittedCount+' of '+codes.length+' venues.<div class="inv-callout-detail">Missing: '+missingNames.join(', ')+'</div></div></div>';
+  } else {
+    html+='<div class="inv-callout ok"><div class="inv-callout-icon">&#10003;</div><div>Ending inventory submitted'+(codes.length>1?' for all selected venues':'')+'.</div></div>';
+  }
+
   html+='<table class="tb"><thead><tr><th>Inventory &amp; purchases</th><th>Amount</th></tr></thead><tbody>';
   html+='<tr><td>Beginning inventory</td><td>'+fmtMoney(data.begInv)+'</td></tr>';
   if(data.begInv>0){html+='<tr class="sub"><td style="padding-left:20px;">from prior month ending inventory</td><td></td></tr>';}
-  for(var wi=0;wi<weeks.length;wi++){var wp=data.weeklyPurchases[wi];html+='<tr class="click" onclick="toggleDrill(\'drill-'+wi+'\')"><td style="padding-left:12px;">'+wp.label+'</td><td>'+fmtMoney(wp.total)+'</td></tr>';html+='<div class="drill" id="drill-'+wi+'"><div class="drill-head"><span>'+wp.label+'</span><span>'+wp.invoices.length+' invoice'+(wp.invoices.length!==1?'s':'')+'</span></div>';if(wp.invoices.length===0){html+='<div style="padding:12px;text-align:center;color:#ccc;font-size:13px;">No invoices this week</div>';}else{wp.invoices.sort(function(a,b){return a.invoice_date.localeCompare(b.invoice_date);});wp.invoices.forEach(function(inv){html+='<div class="drill-row"><div class="drill-date">'+fmtDate(inv.invoice_date)+'</div><div class="drill-vendor">'+(inv.vendor||'Unknown')+'</div><div class="drill-amt">'+fmtMoneyDec(inv.amount)+'</div>';if(inv.photo_url){html+='<a class="drill-photo has" href="'+inv.photo_url+'" target="_blank">receipt</a>';}else{html+='<span class="drill-photo no">no receipt</span>';}if(!isLocked){html+='<button class="drill-del" onclick="deletePurchase(\''+inv.id+'\')">delete</button>';}html+='</div>';});}html+='</div>';}
+  for(var wi=0;wi<weeks.length;wi++){var wp=data.weeklyPurchases[wi];var zebra=(wi%2===1)?' zebra':'';html+='<tr class="click week-row'+zebra+'" onclick="toggleDrill(\'drill-'+wi+'\')"><td style="padding-left:12px;">'+wp.label+'</td><td>'+fmtMoney(wp.total)+'</td></tr>';html+='<tr class="drill-host'+zebra+'"><td colspan="2"><div class="drill" id="drill-'+wi+'"><div class="drill-head"><span>'+wp.label+'</span><span>'+wp.invoices.length+' invoice'+(wp.invoices.length!==1?'s':'')+'</span></div>';if(wp.invoices.length===0){html+='<div style="padding:12px;text-align:center;color:#ccc;font-size:13px;">No invoices this week</div>';}else{wp.invoices.sort(function(a,b){return a.invoice_date.localeCompare(b.invoice_date);});wp.invoices.forEach(function(inv){html+='<div class="drill-row"><div class="drill-date">'+fmtDate(inv.invoice_date)+'</div><div class="drill-vendor">'+(inv.vendor||'Unknown')+'</div><div class="drill-amt">'+fmtMoneyDec(inv.amount)+'</div>';if(inv.photo_url){html+='<a class="drill-photo has" href="'+inv.photo_url+'" target="_blank">receipt</a>';}else{html+='<span class="drill-photo no">no receipt</span>';}if(!isLocked){html+='<button class="drill-del" onclick="deletePurchase(\''+inv.id+'\')">delete</button>';}html+='</div>';});}html+='</div></td></tr>';}
   html+='<tr class="tot click" onclick="toggleVendorPop()"><td>Total purchases</td><td>'+fmtMoney(data.totalPurchases)+'</td></tr></tbody></table>';
   html+=buildVendorSummary(data.allInvoices);
 
