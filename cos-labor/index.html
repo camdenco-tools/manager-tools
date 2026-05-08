@@ -223,6 +223,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   .met-row.c2 { grid-template-columns: 1fr; }
   .pct-row { flex-direction: column; align-items: flex-start; }
 }
+
+/* Toast — non-blocking save confirmation (slides up from bottom-right, auto-dismisses) */
+.toast { position: fixed; bottom: 24px; right: 24px; background: #1a1a1a; color: white; padding: 12px 18px; border-radius: 10px; font-size: 13px; font-weight: 600; box-shadow: 0 8px 24px rgba(0,0,0,0.2); z-index: 999; transform: translateY(80px); opacity: 0; transition: all 0.25s ease; pointer-events: none; max-width: 360px; }
+.toast.show { transform: translateY(0); opacity: 1; }
+.toast.green { background: #1D9E75; }
+.toast .toast-check { display: inline-block; margin-right: 6px; font-weight: 700; }
+@media (max-width: 500px) { .toast { left: 16px; right: 16px; bottom: 16px; max-width: none; } }
 </style>
 </head>
 <body>
@@ -351,6 +358,21 @@ function fmtMoney(n) { if (n===null||n===undefined||isNaN(n)) return '$0'; retur
 function fmtMoneyDec(n) { if (n===null||n===undefined||isNaN(n)) return '$0.00'; return '$'+parseFloat(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function fmtPct(n) { if (n===null||n===undefined||isNaN(n)) return '0.0%'; return (n*100).toFixed(1)+'%'; }
 function fmtDate(d) { var parts=d.split('-'); return parseInt(parts[1])+'/'+parseInt(parts[2]); }
+
+// Non-blocking save confirmation. green=true for success (✓ + green bg).
+// Disappears after 2.5s, no click required, no scrolling.
+var _toastTimer = null;
+function showToast(msg, green) {
+  var t = document.getElementById('toast');
+  if (!t) return;
+  t.innerHTML = (green ? '<span class="toast-check">&#10003;</span>' : '') + msg;
+  t.className = 'toast' + (green ? ' green' : '');
+  // force reflow so re-trigger animates
+  void t.offsetWidth;
+  t.classList.add('show');
+  if (_toastTimer) clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(function() { t.classList.remove('show'); }, 2500);
+}
 
 function getWeekRanges(period) {
   var ranges=[];var start=new Date(period.start+'T12:00:00');
@@ -773,7 +795,7 @@ function enterActualRevenue(venueCode) {
         await supaUpsert('eom_manual_entries',{venue:venueCode,fiscal_period:pk,entry_type:'actual_cos_revenue',amount:cosVal,note:'From commission statements',entered_by:name,entered_at:new Date().toISOString()},'venue,fiscal_period,entry_type');
         await supaUpsert('eom_manual_entries',{venue:venueCode,fiscal_period:pk,entry_type:'actual_other_revenue',amount:otherVal,note:'From commission statements',entered_by:name,entered_at:new Date().toISOString()},'venue,fiscal_period,entry_type');
         await loadAllData();
-        alert('Actual revenue saved for '+venueCode+'.');
+        showToast('Actual revenue saved for '+venueCode, true);
       }catch(e){
         console.error('enterActualRevenue error',e);
         alert('Error saving actual revenue:\n\n'+(e&&e.message?e.message:e)+'\n\nNothing was saved. See console for details.');
@@ -794,7 +816,7 @@ async function savePayroll(venueCode){
   try{
     for(var j=0;j<allData.length;j++){await supaUpsert('eom_payroll',allData[j],'venue,fiscal_period,week_start');}
     await loadAllData();
-    alert('Saved '+allData.length+' week'+(allData.length!==1?'s':'')+' of payroll for '+venueCode+'.');
+    showToast('Saved '+allData.length+' week'+(allData.length!==1?'s':'')+' of payroll for '+venueCode, true);
   }catch(e){
     console.error('savePayroll error',e);
     alert('Error saving payroll:\n\n'+(e&&e.message?e.message:e)+'\n\nNothing was saved. See console for details.');
@@ -805,11 +827,11 @@ function editPayroll(venueCode){requireAdmin('Admin access required to edit save
 
 async function saveTransfer(venueCode){var input=document.getElementById('transfer-input');if(!input)return;var val=parseFloat(input.value);if(isNaN(val)){alert('Please enter a dollar amount for transfers.');return;}var p=FISCAL_PERIODS[currentPeriodIdx];var pk=getPeriodKey(p);var name=currentUserName();try{await supaUpsert('eom_manual_entries',{venue:venueCode,fiscal_period:pk,entry_type:'transfer',amount:val,entered_by:name,entered_at:new Date().toISOString()},'venue,fiscal_period,entry_type');await loadAllData();}catch(e){console.error('saveTransfer error',e);alert('Error saving transfer:\n\n'+(e&&e.message?e.message:e)+'\n\nNothing was saved. See console for details.');}}
 
-function overrideLaborCredit(venueCode){requireAdmin('Admin access required to override labor credit.',function(){var current=window._reportData?window._reportData.laborCredit:0;var newVal=prompt('Enter labor credit override amount for '+venueCode+':\n\nCurrent value: '+fmtMoney(current),current);if(newVal===null)return;var val=parseFloat(newVal);if(isNaN(val)){alert('Please enter a valid number.');return;}(async function(){var name=currentUserName();var p=FISCAL_PERIODS[currentPeriodIdx];var pk=getPeriodKey(p);try{await supaUpsert('eom_manual_entries',{venue:venueCode,fiscal_period:pk,entry_type:'labor_credit',amount:val,note:'Override from QuickBooks',entered_by:name,entered_at:new Date().toISOString()},'venue,fiscal_period,entry_type');await loadAllData();alert('Labor credit override saved.');}catch(e){console.error('overrideLaborCredit error',e);alert('Error saving labor credit:\n\n'+(e&&e.message?e.message:e)+'\n\nNothing was saved. See console for details.');}})();});}
+function overrideLaborCredit(venueCode){requireAdmin('Admin access required to override labor credit.',function(){var current=window._reportData?window._reportData.laborCredit:0;var newVal=prompt('Enter labor credit override amount for '+venueCode+':\n\nCurrent value: '+fmtMoney(current),current);if(newVal===null)return;var val=parseFloat(newVal);if(isNaN(val)){alert('Please enter a valid number.');return;}(async function(){var name=currentUserName();var p=FISCAL_PERIODS[currentPeriodIdx];var pk=getPeriodKey(p);try{await supaUpsert('eom_manual_entries',{venue:venueCode,fiscal_period:pk,entry_type:'labor_credit',amount:val,note:'Override from QuickBooks',entered_by:name,entered_at:new Date().toISOString()},'venue,fiscal_period,entry_type');await loadAllData();showToast('Labor credit override saved', true);}catch(e){console.error('overrideLaborCredit error',e);alert('Error saving labor credit:\n\n'+(e&&e.message?e.message:e)+'\n\nNothing was saved. See console for details.');}})();});}
 
 function deletePurchase(id){requireAdmin('Admin access required to delete a purchase.',async function(){if(!confirm('Delete this invoice? This cannot be undone.'))return;try{await supaDelete('purchases','id=eq.'+id);loadAllData();}catch(e){alert('Error deleting purchase. Please try again.');}});}
 
-async function lockPeriod(){requireAdmin('Admin access required to lock this period.',function(){(async function(){var name=currentUserName();var p=FISCAL_PERIODS[currentPeriodIdx];var pk=getPeriodKey(p);var codes=VENUES.map(function(v){return v.code;});var allData={};codes.forEach(function(c){allData[c]=buildVenueData(c);});try{await supaUpsert('eom_snapshots',{fiscal_period:pk,locked_by:name,locked_at:new Date().toISOString(),snapshot_data:JSON.stringify(allData)},'fiscal_period');await loadAllData();alert('Period '+p.name+' locked.');}catch(e){console.error('lockPeriod error',e);alert('Error locking period:\n\n'+(e&&e.message?e.message:e)+'\n\nNothing was saved. See console for details.');}})();});}
+async function lockPeriod(){requireAdmin('Admin access required to lock this period.',function(){(async function(){var name=currentUserName();var p=FISCAL_PERIODS[currentPeriodIdx];var pk=getPeriodKey(p);var codes=VENUES.map(function(v){return v.code;});var allData={};codes.forEach(function(c){allData[c]=buildVenueData(c);});try{await supaUpsert('eom_snapshots',{fiscal_period:pk,locked_by:name,locked_at:new Date().toISOString(),snapshot_data:JSON.stringify(allData)},'fiscal_period');await loadAllData();showToast('Period '+p.name+' locked', true);}catch(e){console.error('lockPeriod error',e);alert('Error locking period:\n\n'+(e&&e.message?e.message:e)+'\n\nNothing was saved. See console for details.');}})();});}
 
 /* Login gate — must sign in to access this page */
 pcAuth.require({
@@ -827,5 +849,6 @@ pcAuth.require({
   }
 });
 </script>
+<div class="toast" id="toast"></div>
 </body>
 </html>
