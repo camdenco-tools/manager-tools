@@ -85,7 +85,7 @@ header { background: var(--card); border-bottom: 1px solid var(--border); paddin
 .page-layout { display: block; }
 @media (min-width: 900px) {
   .page-layout { display: grid; grid-template-columns: 1fr 390px; gap: 20px; align-items: start; }
-  .panel-col { position: sticky; top: 84px; }
+  .panel-col { position: sticky; top: 84px; max-height: calc(100vh - 100px); overflow-y: auto; }
 }
 
 .edit-panel { background: var(--card); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); display: none; }
@@ -239,7 +239,13 @@ header { background: var(--card); border-bottom: 1px solid var(--border); paddin
               <div class="field"><label>Case cost ($)</label><input type="number" id="edit-case-cost" step="0.01" min="0" placeholder="0.00" oninput="calcCostPerUnit()"></div>
               <div class="field"><label>Units per case</label><input type="number" id="edit-units" step="0.5" min="0.5" placeholder="1" oninput="calcCostPerUnit()"></div>
             </div>
-            <div class="field"><label>Purchase unit <span style="font-weight:400;color:#bbb;text-transform:none;font-size:10px;">what one unit is called (jug, bag, lb...)</span></label><input type="text" id="edit-purchase-unit" placeholder="jug, bag, box, lb, each..." oninput="calcCostPerUnit()"></div>
+            <div class="field"><label>Purchase unit <span style="font-weight:400;color:#bbb;text-transform:none;font-size:10px;">what one unit is called</span></label>
+              <select id="edit-purchase-unit" onchange="calcCostPerUnit()">
+                <option value="each">each (individual purchase unit)</option>
+                <option value="case">case</option>
+                <option value="lb">lb</option>
+              </select>
+            </div>
             <hr class="divider">
             <div class="section-label">Counting details</div>
             <div class="field"><label>Count unit <span style="font-weight:400;color:#bbb;text-transform:none;font-size:10px;">what unit is entered during inventory count</span></label>
@@ -289,6 +295,11 @@ function apiHeaders(){
 }
 function fmt(n){return'$'+parseFloat(n||0).toFixed(2);}
 
+// Safely set a select's value. If the value isn't one of the existing options
+// (e.g. legacy free-text purchase_unit values like "jug" or "bag"), inject a
+// temporary option so the legacy value stays visible and isn't silently lost.
+function setSelectValueSafe(elId,val){var sel=document.getElementById(elId);if(!sel)return;var v=(val==null?'':String(val)).trim();if(!v){sel.value=sel.options.length?sel.options[0].value:'';return;}for(var i=0;i<sel.options.length;i++){if(sel.options[i].value===v){sel.value=v;return;}}var tmp=sel.querySelector('option[data-legacy="1"]');if(tmp)sel.removeChild(tmp);var opt=document.createElement('option');opt.value=v;opt.textContent=v+' (legacy — pick a standard unit)';opt.setAttribute('data-legacy','1');sel.insertBefore(opt,sel.firstChild);sel.value=v;}
+
 async function loadAll(){try{var hdrs=apiHeaders();var r1=await fetch(SB_URL+'/rest/v1/cos_categories?select=*&order=sort_order.asc',{headers:hdrs});pcCategories=await r1.json();var r2=await fetch(SB_URL+'/rest/v1/inventory_items?select=*&order=name.asc',{headers:hdrs});pcItems=await r2.json();var r3=await fetch(SB_URL+'/rest/v1/inventory_venue_profiles?select=*',{headers:hdrs});pcProfiles=await r3.json();updateStats();populateCatFilter();renderPendingBanner();renderItemsTab();renderCatsTab();}catch(e){document.getElementById('items-list').innerHTML='<div class="loading">Error loading data. Please refresh.</div>';}}
 
 function updateStats(){var activeCount=0;for(var i=0;i<pcItems.length;i++){if(pcItems[i].active&&pcItems[i].status!=='pending')activeCount++;}document.getElementById('stat-total').textContent=pcItems.length;document.getElementById('stat-active').textContent=activeCount;document.getElementById('stat-cats').textContent=pcCategories.length;document.getElementById('stat-profiles').textContent=pcProfiles.length;}
@@ -315,7 +326,7 @@ function renderItemsTab(){var search=document.getElementById('item-search').valu
 
 function toggleCat(sid,tid){var chevron=document.getElementById(sid);var table=document.getElementById(tid);if(!chevron||!table)return;var isOpen=table.classList.contains('open');if(isOpen){table.classList.remove('open');chevron.classList.remove('open');}else{table.classList.add('open');chevron.classList.add('open');}}
 
-function selectItem(id){selectedItemId=id;isNewItem=false;var item=null;for(var i=0;i<pcItems.length;i++){if(pcItems[i].id===id){item=pcItems[i];break;}}if(!item)return;document.getElementById('edit-id').value=id;document.getElementById('panel-title').textContent=item.name;document.getElementById('edit-name').value=item.name;populateCatSelect(item.cos_category_id);document.getElementById('edit-vendor').value=item.vendor||'';document.getElementById('edit-vendor-alt').value=item.vendor_alt||'';document.getElementById('edit-case-cost').value=item.case_cost||'';document.getElementById('edit-units').value=item.units_per_case||1;document.getElementById('edit-purchase-unit').value=item.purchase_unit||item.unit_label||'each';document.getElementById('edit-count-unit').value=item.count_unit||'each';document.getElementById('edit-active').checked=item.active!==false;document.getElementById('save-btn').textContent='Save changes';document.getElementById('panel-error').style.display='none';calcCostPerUnit();renderVenueCheckboxes(id);document.getElementById('edit-panel').classList.add('open');renderItemsTab();}
+function selectItem(id){selectedItemId=id;isNewItem=false;var item=null;for(var i=0;i<pcItems.length;i++){if(pcItems[i].id===id){item=pcItems[i];break;}}if(!item)return;document.getElementById('edit-id').value=id;document.getElementById('panel-title').textContent=item.name;document.getElementById('edit-name').value=item.name;populateCatSelect(item.cos_category_id);document.getElementById('edit-vendor').value=item.vendor||'';document.getElementById('edit-vendor-alt').value=item.vendor_alt||'';document.getElementById('edit-case-cost').value=item.case_cost||'';document.getElementById('edit-units').value=item.units_per_case||1;setSelectValueSafe('edit-purchase-unit',item.purchase_unit||item.unit_label||'each');document.getElementById('edit-count-unit').value=item.count_unit||'each';document.getElementById('edit-active').checked=item.active!==false;document.getElementById('save-btn').textContent='Save changes';document.getElementById('panel-error').style.display='none';calcCostPerUnit();renderVenueCheckboxes(id);document.getElementById('edit-panel').classList.add('open');renderItemsTab();}
 
 function openAddItem(){selectedItemId=null;isNewItem=true;document.getElementById('edit-id').value='';document.getElementById('panel-title').textContent='Add new item';document.getElementById('edit-name').value='';populateCatSelect('');document.getElementById('edit-vendor').value='';document.getElementById('edit-vendor-alt').value='';document.getElementById('edit-case-cost').value='';document.getElementById('edit-units').value='1';document.getElementById('edit-purchase-unit').value='each';document.getElementById('edit-count-unit').value='each';document.getElementById('edit-active').checked=true;document.getElementById('cost-per-unit-display').textContent='--';document.getElementById('cost-per-unit-sub').textContent='--';document.getElementById('unit-helper').textContent='Fill in purchase details above to see counting guidance.';document.getElementById('save-btn').textContent='Add item';document.getElementById('panel-error').style.display='none';renderVenueCheckboxes(null);document.getElementById('edit-panel').classList.add('open');}
 
