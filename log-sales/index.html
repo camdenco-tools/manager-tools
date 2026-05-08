@@ -56,6 +56,37 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
 .photo-error-msg { font-size: 11px; color: #c0392b; margin-top: 4px; display: none; }
 .signin-note { font-size: 11px; color: #7A5C00; background: #FFFBEA; border: 1px solid #F5C400; border-radius: 7px; padding: 6px 10px; margin-top: 6px; }
 
+/* Edit submission modal */
+.em-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 1000; align-items: flex-start; justify-content: center; padding: 24px; overflow-y: auto; }
+.em-overlay.open { display: flex; }
+.em-modal { background: white; border-radius: 16px; max-width: 540px; width: 100%; padding: 22px 24px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); }
+.em-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; }
+.em-title { font-size: 18px; font-weight: 700; color: #1a1a1a; }
+.em-subtitle { font-size: 12px; color: #888; margin-bottom: 16px; }
+.em-close { background: none; border: none; font-size: 22px; line-height: 1; color: #999; cursor: pointer; padding: 0 4px; }
+.em-close:hover { color: #1a1a1a; }
+.em-readonly { font-size: 13px; color: #666; padding: 8px 12px; background: #f5f5f5; border-radius: 8px; margin-bottom: 13px; }
+.em-readonly strong { color: #1a1a1a; }
+.em-photos-existing { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; }
+.em-photo-thumb { position: relative; width: 64px; height: 64px; border-radius: 8px; overflow: hidden; border: 1px solid #e0e0e0; }
+.em-photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.em-photo-thumb.marked-delete img { opacity: 0.3; }
+.em-photo-thumb.marked-delete::after { content: 'remove'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(192,57,43,0.6); color: white; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.em-photo-thumb .em-remove-btn { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border-radius: 50%; background: rgba(0,0,0,0.6); color: white; border: none; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
+.em-photo-thumb .em-remove-btn.undo { background: #1D9E75; }
+.em-actions { display: flex; gap: 10px; margin-top: 18px; }
+.em-cancel-btn { flex: 1; padding: 12px; background: white; border: 1px solid #ddd; color: #555; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.em-cancel-btn:hover { background: #f5f5f5; }
+.em-save-btn { flex: 2; padding: 12px; background: #1a1a1a; color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.em-save-btn:disabled { background: #ccc; cursor: not-allowed; }
+.em-window-warn { font-size: 11px; color: #7A5C00; background: #FFFBEA; border: 1px solid #F5C400; border-radius: 7px; padding: 6px 10px; margin-bottom: 12px; }
+.em-window-blocked { font-size: 13px; color: #7A1A1A; background: #FCEBEB; border: 1px solid #F09595; border-radius: 8px; padding: 12px; text-align: center; }
+
+/* "Edit" button on scoreboard stand-row */
+.stand-row-edit { font-size: 11px; color: #185FA5; cursor: pointer; padding: 2px 6px; border-radius: 6px; user-select: none; white-space: nowrap; }
+.stand-row-edit:hover { background: #E6F1FB; }
+.stand-row-edit-disabled { font-size: 11px; color: #bbb; padding: 2px 6px; user-select: none; cursor: not-allowed; }
+
 .submit-btn { width: 100%; padding: 14px; background: #1a1a1a; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 4px; }
 .submit-btn:disabled { background: #ccc; cursor: not-allowed; }
 .error-msg { color: #c0392b; font-size: 13px; margin-bottom: 10px; display: none; padding: 10px 12px; background: #fdf0ee; border-radius: 8px; }
@@ -294,7 +325,10 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
         <h2>Sale logged!</h2>
         <p id="success-detail"></p>
         <div id="ai-status" style="margin-top:10px;font-size:12px;color:#3B6D11;"></div>
-        <button class="another-btn" onclick="resetForm()">Log another</button>
+        <div style="margin-top:14px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+          <button class="another-btn" onclick="resetForm()">Log another</button>
+          <button class="another-btn" id="success-edit-btn" style="background:white;color:#1a1a1a;border:1px solid #97C459;display:none;" onclick="openEditFromSuccess()">&#9998; Edit submission</button>
+        </div>
       </div>
 
       <!-- Hidden file input used by the scoreboard's "Retake photo" / "Add sign-in photo"
@@ -358,6 +392,8 @@ var signinStatus = {};
 var eventForecasts = {};
 // roster cache for inline name autocomplete
 var roster = [];
+// Tracks the most recently submitted sale so the success card's "Edit" button knows what to open
+var lastSubmittedSaleId = null;
 
 function apiHeaders() { return pcAuth.headers(); }
 
@@ -703,6 +739,8 @@ async function submitSale() {
     // Show success
     document.getElementById('form-card').style.display = 'none';
     document.getElementById('success-card').style.display = 'block';
+    lastSubmittedSaleId = saleId;
+    document.getElementById('success-edit-btn').style.display = 'inline-block';
     var photoSummary = [];
     if (registerUrls.length) photoSummary.push(registerUrls.length + ' register photo' + (registerUrls.length > 1 ? 's' : ''));
     if (unitsUrls.length) photoSummary.push(unitsUrls.length + ' units photo' + (unitsUrls.length > 1 ? 's' : ''));
@@ -739,6 +777,8 @@ async function submitSale() {
 function resetForm() {
   document.getElementById('form-card').style.display = 'block';
   document.getElementById('success-card').style.display = 'none';
+  document.getElementById('success-edit-btn').style.display = 'none';
+  lastSubmittedSaleId = null;
   document.getElementById('ai-status').textContent = '';
   document.getElementById('evt-date').value = todayLocal();
   document.getElementById('staff-count').value = '';
@@ -1480,6 +1520,19 @@ async function loadScoreboard() {
         html += '<div class="stand-row-name">' + r.stand + '</div>';
         if (staffLabel) html += '<div class="stand-row-meta">' + staffLabel + '</div>';
         if (r.submitted_by) html += '<div class="stand-row-submitter">by ' + r.submitted_by + '</div>';
+        // Edit link — visible if user can edit (4-day window for managers, anytime for admins)
+        var canEdit = (pcAuth.isAdmin && pcAuth.isAdmin()) || (function() {
+          if (!r.event_date) return false;
+          var msPerDay = 86400000;
+          var t = new Date(todayLocal() + 'T00:00:00').getTime();
+          var e = new Date(r.event_date + 'T00:00:00').getTime();
+          if (isNaN(t) || isNaN(e)) return false;
+          var d = Math.floor((t - e) / msPerDay);
+          return d >= 0 && d <= 4;
+        })();
+        if (canEdit) {
+          html += '<div class="stand-row-edit" onclick="event.stopPropagation();openEditModal(\'' + r.id + '\')">&#9998; edit</div>';
+        }
         html += '</div>';
         html += '<div class="stand-row-right">';
         html += siPillHtml(r.id, hasSigning);
@@ -1532,6 +1585,392 @@ pcAuth.require({
     setInterval(loadScoreboard, 60000);
   }
 });
+</script>
+
+<!-- Edit submission modal — opens from scoreboard stand rows ("edit" link) and
+     from the success card. Lets a manager modify amount/tips/staff/event_name and
+     add/remove photos in any of the three categories. Re-fires the AI parse if a
+     new sign-in sheet photo was added. Gated by 4-day calendar window for managers,
+     unlimited for admins. -->
+<div class="em-overlay" id="em-overlay" onclick="emOverlayClick(event)">
+  <div class="em-modal" onclick="event.stopPropagation()">
+    <div class="em-head">
+      <div>
+        <div class="em-title">Edit submission</div>
+        <div class="em-subtitle" id="em-subtitle"></div>
+      </div>
+      <button class="em-close" onclick="closeEditModal()" title="Close">&times;</button>
+    </div>
+
+    <div id="em-window-warn-row"></div>
+
+    <!-- Read-only context (date, venue, stand) — these aren't editable here -->
+    <div class="em-readonly" id="em-context"></div>
+
+    <div id="em-form" style="display:none;">
+      <div class="field">
+        <label>Sales total ($)</label>
+        <input type="number" id="em-amount" step="0.01" min="0" inputmode="decimal">
+      </div>
+
+      <div class="field">
+        <label>Tips collected ($)</label>
+        <input type="number" id="em-tip-amount" step="0.01" min="0" inputmode="decimal">
+        <div class="field-note">Enter 0 if no tips were collected</div>
+      </div>
+
+      <div class="field">
+        <label>Staff working this stand</label>
+        <input type="number" id="em-staff-count" min="1" inputmode="numeric">
+        <div class="field-note">At least 1 required</div>
+      </div>
+
+      <!-- Register photos -->
+      <div class="photo-section">
+        <div class="photo-section-label">Register total photos <span>JPG or PNG only</span></div>
+        <div class="em-photos-existing" id="em-photos-register"></div>
+        <div class="photo-drop-zone" id="em-dz-register" onclick="document.getElementById('em-file-register').click()">
+          <div class="dz-icon">+</div>
+          <div class="dz-prompt">Tap to add register photo</div>
+        </div>
+        <div class="photo-error-msg" id="em-err-register"></div>
+        <input type="file" id="em-file-register" accept="image/jpeg,image/png" multiple style="display:none;" onchange="emHandlePhotoSelect(this,'register')">
+      </div>
+
+      <!-- Units photos -->
+      <div class="photo-section">
+        <div class="photo-section-label">Units sold photos <span>Optional</span></div>
+        <div class="em-photos-existing" id="em-photos-units"></div>
+        <div class="photo-drop-zone" id="em-dz-units" onclick="document.getElementById('em-file-units').click()">
+          <div class="dz-icon">+</div>
+          <div class="dz-prompt">Tap to add units photo</div>
+        </div>
+        <div class="photo-error-msg" id="em-err-units"></div>
+        <input type="file" id="em-file-units" accept="image/jpeg,image/png" multiple style="display:none;" onchange="emHandlePhotoSelect(this,'units')">
+      </div>
+
+      <!-- Sign-in photos -->
+      <div class="photo-section">
+        <div class="photo-section-label">Sign-in sheet <span id="em-signin-warn"></span></div>
+        <div class="em-photos-existing" id="em-photos-signin"></div>
+        <div class="photo-drop-zone" id="em-dz-signin" onclick="document.getElementById('em-file-signin').click()">
+          <div class="dz-icon">+</div>
+          <div class="dz-prompt">Tap to add sign-in photo</div>
+        </div>
+        <div class="photo-error-msg" id="em-err-signin"></div>
+        <div class="signin-note">Adding a new sign-in sheet will re-read names with AI and replace any existing parsed names for this stand.</div>
+        <input type="file" id="em-file-signin" accept="image/jpeg,image/png" multiple style="display:none;" onchange="emHandlePhotoSelect(this,'signin')">
+      </div>
+
+      <div class="error-msg" id="em-error-msg"></div>
+
+      <div class="em-actions">
+        <button class="em-cancel-btn" onclick="closeEditModal()">Cancel</button>
+        <button class="em-save-btn" id="em-save-btn" onclick="submitEdit()">Save changes</button>
+      </div>
+    </div>
+
+    <div id="em-blocked-row"></div>
+  </div>
+</div>
+
+<script>
+// ── Edit submission modal ───────────────────────────────────────────────────
+// State for the edit modal. Populated by openEditModal, cleared by closeEditModal.
+var emState = {
+  saleId: null,           // the sale being edited
+  sale: null,             // the sale row from sales table
+  originalPhotos: { register: [], units: [], signin: [] },  // sale_photos rows as fetched
+  photosToDelete: {},     // map of sale_photos.id -> true (marked for deletion on save)
+  photosToAdd: { register: [], units: [], signin: [] }      // File objects queued for upload
+};
+
+// Helper: is the current user allowed to edit this sale?
+// Admins always can. Managers can within 4 calendar days of event_date.
+function emCanEdit(eventDate) {
+  if (pcAuth.isAdmin && pcAuth.isAdmin()) return true;
+  if (!eventDate) return false;
+  // Compare calendar days, not millis — both expressed as YYYY-MM-DD
+  var today = todayLocal();
+  var msPerDay = 86400000;
+  var t = new Date(today + 'T00:00:00').getTime();
+  var e = new Date(eventDate + 'T00:00:00').getTime();
+  if (isNaN(t) || isNaN(e)) return false;
+  var days = Math.floor((t - e) / msPerDay);
+  return days >= 0 && days <= 4;
+}
+
+async function openEditModal(saleId) {
+  // Reset state
+  emState.saleId = saleId;
+  emState.sale = null;
+  emState.originalPhotos = { register: [], units: [], signin: [] };
+  emState.photosToDelete = {};
+  emState.photosToAdd = { register: [], units: [], signin: [] };
+
+  document.getElementById('em-overlay').classList.add('open');
+  document.getElementById('em-form').style.display = 'none';
+  document.getElementById('em-blocked-row').innerHTML = '';
+  document.getElementById('em-window-warn-row').innerHTML = '';
+  document.getElementById('em-error-msg').style.display = 'none';
+  document.getElementById('em-context').textContent = 'Loading...';
+  document.getElementById('em-subtitle').textContent = '';
+
+  try {
+    // Fetch the sale row
+    var sRes = await fetch(SUPA_URL + '/rest/v1/sales?id=eq.' + saleId + '&select=*&limit=1', { headers: apiHeaders() });
+    var sRows = await sRes.json();
+    if (!Array.isArray(sRows) || !sRows.length) throw new Error('Sale not found');
+    var sale = sRows[0];
+    emState.sale = sale;
+
+    // Edit window check
+    if (!emCanEdit(sale.event_date)) {
+      document.getElementById('em-context').innerHTML = 'Editing is locked for this sale.';
+      document.getElementById('em-blocked-row').innerHTML =
+        '<div class="em-window-blocked">This sale is more than 4 days old. Only an admin can edit it now.<br><br>' +
+        '<button class="em-cancel-btn" style="max-width:160px;margin:0 auto;" onclick="closeEditModal()">Close</button></div>';
+      return;
+    }
+
+    // Show a soft warning if we're inside the window but close to the edge
+    var today = todayLocal();
+    var msPerDay = 86400000;
+    var t = new Date(today + 'T00:00:00').getTime();
+    var e = new Date(sale.event_date + 'T00:00:00').getTime();
+    var days = Math.floor((t - e) / msPerDay);
+    if (days >= 3 && !(pcAuth.isAdmin && pcAuth.isAdmin())) {
+      document.getElementById('em-window-warn-row').innerHTML =
+        '<div class="em-window-warn">Heads up — this submission can only be edited until ' +
+        (4 - days) + ' more day' + (4 - days === 1 ? '' : 's') + '.</div>';
+    }
+
+    // Fetch the photos
+    var pRes = await fetch(SUPA_URL + '/rest/v1/sale_photos?sale_id=eq.' + saleId + '&select=*&order=photo_type,sort_order', { headers: apiHeaders() });
+    var pRows = await pRes.json();
+    if (Array.isArray(pRows)) {
+      pRows.forEach(function(p) {
+        if (emState.originalPhotos[p.photo_type]) emState.originalPhotos[p.photo_type].push(p);
+      });
+    }
+    // Backward compat: if no rows in sale_photos but legacy photo_url / units_photo_url exist,
+    // surface them as pseudo-rows. Marking them for delete will set the column to null.
+    if (emState.originalPhotos.register.length === 0 && sale.photo_url) {
+      emState.originalPhotos.register.push({ id: 'legacy-register', photo_url: sale.photo_url, photo_type: 'register', _legacy: true });
+    }
+    if (emState.originalPhotos.units.length === 0 && sale.units_photo_url) {
+      emState.originalPhotos.units.push({ id: 'legacy-units', photo_url: sale.units_photo_url, photo_type: 'units', _legacy: true });
+    }
+
+    // Populate form
+    var dateStr = sale.event_date ? (function(){ var p=sale.event_date.split('-'); return p[1]+'/'+p[2]+'/'+p[0]; })() : '';
+    document.getElementById('em-subtitle').textContent = (VENUE_LABELS[sale.venue] || sale.venue) + ' · ' + sale.stand + ' · ' + dateStr;
+    document.getElementById('em-context').innerHTML =
+      '<strong>Date:</strong> ' + dateStr + ' &nbsp; <strong>Venue:</strong> ' + (VENUE_LABELS[sale.venue] || sale.venue) + ' &nbsp; <strong>Stand:</strong> ' + sale.stand +
+      (sale.event_name ? '<br><strong>Event:</strong> ' + sale.event_name : '') +
+      '<br><span style="color:#888;font-size:11px;">Submitted by ' + (sale.submitted_by || 'unknown') + '. To change date/venue/stand/event, delete this and submit a new sale (admin only).</span>';
+    document.getElementById('em-amount').value = sale.amount != null ? sale.amount : '';
+    document.getElementById('em-tip-amount').value = sale.tip_amount != null ? sale.tip_amount : '';
+    document.getElementById('em-staff-count').value = sale.staff_count != null ? sale.staff_count : '';
+
+    emRenderPhotos();
+    document.getElementById('em-form').style.display = 'block';
+  } catch(e) {
+    document.getElementById('em-context').innerHTML = '<span style="color:#c0392b;">Error loading sale: ' + (e.message || String(e)) + '</span>';
+  }
+}
+
+function closeEditModal() {
+  document.getElementById('em-overlay').classList.remove('open');
+  // Clear queued file inputs so reopening is clean
+  ['register','units','signin'].forEach(function(t) {
+    var input = document.getElementById('em-file-' + t);
+    if (input) input.value = '';
+  });
+  emState.saleId = null;
+}
+
+function emOverlayClick(evt) {
+  // Click on backdrop (outside the modal) closes it
+  if (evt.target.id === 'em-overlay') closeEditModal();
+}
+
+// Render existing photo thumbs + queued-add thumbs for all three categories
+function emRenderPhotos() {
+  ['register','units','signin'].forEach(function(type) {
+    var container = document.getElementById('em-photos-' + type);
+    var html = '';
+    // Existing photos (from sale_photos or legacy columns)
+    emState.originalPhotos[type].forEach(function(p) {
+      var marked = !!emState.photosToDelete[p.id];
+      html += '<div class="em-photo-thumb' + (marked ? ' marked-delete' : '') + '">';
+      html += '<img src="' + p.photo_url + '" alt="">';
+      if (marked) {
+        html += '<button class="em-remove-btn undo" onclick="emTogglePhotoDelete(\'' + type + '\',\'' + p.id + '\')" title="Undo remove">&#8635;</button>';
+      } else {
+        html += '<button class="em-remove-btn" onclick="emTogglePhotoDelete(\'' + type + '\',\'' + p.id + '\')" title="Remove">&times;</button>';
+      }
+      html += '</div>';
+    });
+    // Queued additions (File objects, render as object URL previews)
+    emState.photosToAdd[type].forEach(function(file, idx) {
+      var url = URL.createObjectURL(file);
+      html += '<div class="em-photo-thumb">';
+      html += '<img src="' + url + '" alt="">';
+      html += '<button class="em-remove-btn" onclick="emCancelAdd(\'' + type + '\',' + idx + ')" title="Cancel add">&times;</button>';
+      html += '</div>';
+    });
+    container.innerHTML = html;
+  });
+  // Sign-in warning if any signin photos are queued for addition or marked-delete affects parse
+  var signinChange = emState.photosToAdd.signin.length > 0;
+  document.getElementById('em-signin-warn').textContent = signinChange ? 'New photo will trigger AI re-read' : '';
+}
+
+function emTogglePhotoDelete(type, photoId) {
+  if (emState.photosToDelete[photoId]) delete emState.photosToDelete[photoId];
+  else emState.photosToDelete[photoId] = true;
+  emRenderPhotos();
+}
+
+function emCancelAdd(type, idx) {
+  emState.photosToAdd[type].splice(idx, 1);
+  emRenderPhotos();
+}
+
+function emHandlePhotoSelect(input, type) {
+  if (!input.files || !input.files.length) return;
+  var errEl = document.getElementById('em-err-' + type);
+  errEl.style.display = 'none';
+  var blocked = [];
+  Array.from(input.files).forEach(function(file) {
+    if (isBlockedFile(file)) { blocked.push(file.name); return; }
+    emState.photosToAdd[type].push(file);
+  });
+  if (blocked.length) {
+    errEl.textContent = 'HEIC not supported — use JPG or PNG: ' + blocked.join(', ');
+    errEl.style.display = 'block';
+  }
+  input.value = '';
+  emRenderPhotos();
+}
+
+function openEditFromSuccess() {
+  if (!lastSubmittedSaleId) return;
+  openEditModal(lastSubmittedSaleId);
+}
+
+async function submitEdit() {
+  var errEl = document.getElementById('em-error-msg');
+  errEl.style.display = 'none';
+
+  var sale = emState.sale;
+  var saleId = emState.saleId;
+  if (!saleId || !sale) return;
+
+  // Validate
+  var amountRaw = document.getElementById('em-amount').value;
+  var tipAmountRaw = document.getElementById('em-tip-amount').value;
+  var staffCountRaw = document.getElementById('em-staff-count').value;
+
+  var amount = amountRaw === '' ? null : parseFloat(amountRaw);
+  var tipAmount = tipAmountRaw === '' ? null : parseFloat(tipAmountRaw);
+  var staffCount = staffCountRaw === '' ? null : parseInt(staffCountRaw);
+
+  if (amount === null || isNaN(amount)) {
+    errEl.textContent = 'Sales total is required.'; errEl.style.display = 'block'; return;
+  }
+  if (tipAmount === null || isNaN(tipAmount)) {
+    errEl.textContent = 'Tips are required — enter 0 if none collected.'; errEl.style.display = 'block'; return;
+  }
+  if (!staffCount || staffCount < 1) {
+    errEl.textContent = 'Staff count is required (at least 1).'; errEl.style.display = 'block'; return;
+  }
+
+  // Re-check the edit window in case the user kept the modal open across midnight
+  if (!emCanEdit(sale.event_date)) {
+    errEl.textContent = 'Edit window has expired (>4 days from event date). Only an admin can edit now.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  var btn = document.getElementById('em-save-btn');
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+
+  try {
+    // ── 1. Upload any queued new photos ──────────────────────────────────
+    var newUrlsByType = { register: [], units: [], signin: [] };
+    for (var type of ['register','units','signin']) {
+      var files = emState.photosToAdd[type];
+      for (var i = 0; i < files.length; i++) {
+        var ext = files[i].name.split('.').pop();
+        var path = saleId + '/' + type + '_edit_' + Date.now() + '_' + i + '.' + ext;
+        var url = await uploadPhoto(files[i], path);
+        if (url) newUrlsByType[type].push(url);
+      }
+    }
+
+    // ── 2. Delete photos marked for removal ──────────────────────────────
+    // Real sale_photos rows: DELETE by id. Legacy photos: handled in step 3 (PATCH columns to null).
+    var legacyClears = {}; // { photo_url: null, units_photo_url: null }
+    var idsToDelete = [];
+    Object.keys(emState.photosToDelete).forEach(function(pid) {
+      if (pid === 'legacy-register') legacyClears.photo_url = null;
+      else if (pid === 'legacy-units') legacyClears.units_photo_url = null;
+      else idsToDelete.push(pid);
+    });
+    if (idsToDelete.length > 0) {
+      // Delete in bulk via id=in.()
+      var delHdrs = apiHeaders();
+      delHdrs['Prefer'] = 'return=minimal';
+      await fetch(SUPA_URL + '/rest/v1/sale_photos?id=in.(' + idsToDelete.join(',') + ')', {
+        method: 'DELETE', headers: delHdrs
+      });
+    }
+
+    // ── 3. PATCH the sales row ──────────────────────────────────────────
+    var patchBody = {
+      amount: amount,
+      tip_amount: tipAmount,
+      staff_count: staffCount
+    };
+    Object.assign(patchBody, legacyClears);
+    var patchHdrs = apiHeaders();
+    patchHdrs['Content-Type'] = 'application/json';
+    patchHdrs['Prefer'] = 'return=minimal';
+    var patchRes = await fetch(SUPA_URL + '/rest/v1/sales?id=eq.' + saleId, {
+      method: 'PATCH', headers: patchHdrs, body: JSON.stringify(patchBody)
+    });
+    if (!patchRes.ok) throw new Error('Failed to save: ' + (await patchRes.text()));
+
+    // ── 4. Insert new sale_photos rows ──────────────────────────────────
+    for (var type2 of ['register','units','signin']) {
+      if (newUrlsByType[type2].length > 0) {
+        await writeSalePhotos(saleId, type2, newUrlsByType[type2]);
+      }
+    }
+
+    // ── 5. Re-fire AI parse if a new sign-in sheet was added ─────────────
+    // Run in background — same pattern as submitSale. Closing the modal
+    // immediately gives the user feedback faster, and the scoreboard's
+    // signin pill will update as the parse completes.
+    if (newUrlsByType.signin.length > 0) {
+      // Clear assignments cache so the scoreboard reloads fresh
+      delete sbAssignments[saleId];
+      parseSigninSheet(saleId, newUrlsByType.signin[0], sale.venue, tipAmount, staffCount, sale.event_date)
+        .catch(function() { /* swallow — UI shows status pill */ });
+    }
+
+    closeEditModal();
+    loadScoreboard();
+  } catch(e) {
+    errEl.textContent = 'Error: ' + (e.message || String(e));
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Save changes';
+  }
+}
 </script>
 </body>
 </html>
