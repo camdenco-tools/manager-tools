@@ -595,12 +595,14 @@ async function parseSigninSheet(saleId, signinUrl, venue, tipAmount, staffCount,
 var pendingRetakeSaleId = null;
 
 // Called by the "Add sign-in photo" / "Retake photo" buttons inside a stand-row
-// detail panel. Warns if there are existing manually-edited assignment rows that
+// detail panel. Warns if there are existing verified/edited assignment rows that
 // would be wiped, opens the file picker, and stashes saleId for the onchange handler.
 function startSigninRetake(saleId) {
   var existing = sbAssignments[saleId] || [];
-  var hasManual = existing.some(function(a) { return a.manual || a.verified; });
-  if (hasManual) {
+  // Any verified row indicates a manager confirmed it (either by accepting the AI
+  // read or by editing+saving). Re-parsing wipes everything, so warn first.
+  var hasVerified = existing.some(function(a) { return a.verified; });
+  if (hasVerified) {
     var confirmed = confirm('Re-reading this sign-in sheet will replace ALL existing names for this stand, including any manual edits or confirmations. Continue?');
     if (!confirmed) return;
   }
