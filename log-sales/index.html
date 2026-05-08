@@ -90,6 +90,15 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
 .submit-btn { width: 100%; padding: 14px; background: #1a1a1a; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 4px; }
 .submit-btn:disabled { background: #ccc; cursor: not-allowed; }
 .error-msg { color: #c0392b; font-size: 13px; margin-bottom: 10px; display: none; padding: 10px 12px; background: #fdf0ee; border-radius: 8px; }
+
+/* Duplicate-stand warning banner shown above the submit button when this
+   date+venue+stand has already been submitted. Hard-blocks submit. */
+.dup-warning { display: none; background: #FFF3E5; border: 1px solid #F0C896; border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; font-size: 13px; color: #5C3812; }
+.dup-warning.show { display: block; }
+.dup-warning-title { font-weight: 700; color: #7A4A1A; margin-bottom: 4px; }
+.dup-warning-meta { font-size: 11px; color: #8A6238; margin-bottom: 8px; }
+.dup-warning-edit-btn { background: #1a1a1a; color: white; border: none; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.dup-warning-edit-btn:hover { background: #333; }
 .success-card { background: #f0faf5; border: 1px solid #97C459; border-radius: 16px; padding: 24px; text-align: center; display: none; margin-bottom: 14px; }
 .success-card h2 { font-size: 20px; color: #27500A; margin-bottom: 6px; }
 .success-card p { font-size: 14px; color: #3B6D11; }
@@ -264,7 +273,7 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
         </div>
         <div class="field">
           <label>Stand</label>
-          <select id="stand-sel">
+          <select id="stand-sel" onchange="handleStandChange()">
             <option value="">Select venue first...</option>
           </select>
         </div>
@@ -318,6 +327,12 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
         </div>
 
         <div class="error-msg" id="error-msg"></div>
+        <div class="dup-warning" id="dup-warning">
+          <div class="dup-warning-title">&#9888; Already submitted</div>
+          <div id="dup-warning-detail"></div>
+          <div class="dup-warning-meta" id="dup-warning-meta"></div>
+          <button class="dup-warning-edit-btn" id="dup-warning-edit-btn" onclick="openExistingFromDupWarning()">&#9998; Edit existing submission</button>
+        </div>
         <button class="submit-btn" id="submit-btn" onclick="submitSale()">Submit Sale</button>
       </div>
 
@@ -394,6 +409,10 @@ var eventForecasts = {};
 var roster = [];
 // Tracks the most recently submitted sale so the success card's "Edit" button knows what to open
 var lastSubmittedSaleId = null;
+// If the current date+venue+stand combination already has a sale logged, this holds
+// that sale row. Submit button is disabled while this is set, and a warning banner
+// surfaces with an "Edit existing" link.
+var existingSaleForStand = null;
 
 function apiHeaders() { return pcAuth.headers(); }
 
@@ -704,8 +723,18 @@ async function submitSale() {
     errEl.style.display = 'block'; return;
   }
 
+  // Race-safe duplicate re-check: another manager may have submitted in the
+  // last few seconds. Don't trust the cached existingSaleForStand; re-query.
   var btn = document.getElementById('submit-btn');
   btn.disabled = true;
+  btn.textContent = 'Checking for duplicates...';
+  await checkDuplicateStand(date, venue, stand);
+  if (existingSaleForStand) {
+    // Warning is now visible. checkDuplicateStand already disabled the button
+    // and changed its label. No further action needed — manager must use Edit.
+    return;
+  }
+
   btn.textContent = 'Uploading photos...';
 
   try {
@@ -779,6 +808,7 @@ function resetForm() {
   document.getElementById('success-card').style.display = 'none';
   document.getElementById('success-edit-btn').style.display = 'none';
   lastSubmittedSaleId = null;
+  clearDupWarning();
   document.getElementById('ai-status').textContent = '';
   document.getElementById('evt-date').value = todayLocal();
   document.getElementById('staff-count').value = '';
@@ -807,6 +837,8 @@ async function handleDateChange() {
   document.getElementById('event-auto').style.display = 'none';
   document.getElementById('stand-sel').innerHTML = '<option value="">Select venue first...</option>';
   eventsOnDate = [];
+  // Date change invalidates any active duplicate warning since stand selection resets
+  clearDupWarning();
   if (!date) { document.getElementById('no-event-warning').style.display = 'none'; return; }
   noteEl.textContent = 'Loading events...';
   noteEl.className = 'field-note';
@@ -854,6 +886,90 @@ function handleVenueChange() {
       }
     }
   }
+  // Venue change resets stand selection, so clear any existing dup warning
+  clearDupWarning();
+}
+
+// Triggered when the stand dropdown changes. Queries the sales table for an existing
+// row matching date+venue+stand. If found, surfaces the duplicate-warning banner and
+// disables submit. If not, clears the warning.
+async function handleStandChange() {
+  var date = document.getElementById('evt-date').value;
+  var venue = document.getElementById('venue-sel').value;
+  var stand = document.getElementById('stand-sel').value;
+  if (!date || !venue || !stand) { clearDupWarning(); return; }
+  await checkDuplicateStand(date, venue, stand);
+}
+
+// Core lookup. Sets existingSaleForStand and updates the warning UI accordingly.
+async function checkDuplicateStand(date, venue, stand) {
+  try {
+    var url = SUPA_URL + '/rest/v1/sales?event_date=eq.' + encodeURIComponent(date) +
+              '&venue=eq.' + encodeURIComponent(venue) +
+              '&stand=eq.' + encodeURIComponent(stand) +
+              '&select=id,submitted_by,submitted_at,amount,tip_amount,staff_count&limit=1';
+    var res = await fetch(url, { headers: apiHeaders() });
+    var rows = await res.json();
+    if (Array.isArray(rows) && rows.length > 0) {
+      existingSaleForStand = rows[0];
+      showDupWarning(rows[0], date, venue, stand);
+    } else {
+      clearDupWarning();
+    }
+  } catch(e) {
+    // On error, clear the warning rather than block submit on a transient network blip
+    clearDupWarning();
+  }
+}
+
+function showDupWarning(sale, date, venue, stand) {
+  var dateStr = (function(){ var p=date.split('-'); return p[1]+'/'+p[2]+'/'+p[0]; })();
+  var detailEl = document.getElementById('dup-warning-detail');
+  var metaEl = document.getElementById('dup-warning-meta');
+  var btn = document.getElementById('dup-warning-edit-btn');
+  detailEl.innerHTML = '<strong>' + stand + '</strong> at <strong>' + (VENUE_LABELS[venue] || venue) + '</strong> already has a sale logged for ' + dateStr + '.';
+  var subAt = sale.submitted_at ? new Date(sale.submitted_at).toLocaleString() : '';
+  var amount = parseFloat(sale.amount) || 0;
+  metaEl.innerHTML = 'By ' + (sale.submitted_by || 'unknown') + (subAt ? ' &middot; ' + subAt : '') + ' &middot; $' + Math.round(amount).toLocaleString();
+  // Hide the edit button if the user can't edit (out of window, not admin)
+  var canEdit = (pcAuth.isAdmin && pcAuth.isAdmin()) || (function() {
+    var msPerDay = 86400000;
+    var t = new Date(todayLocal() + 'T00:00:00').getTime();
+    var e = new Date(date + 'T00:00:00').getTime();
+    if (isNaN(t) || isNaN(e)) return false;
+    var d = Math.floor((t - e) / msPerDay);
+    return d >= 0 && d <= 4;
+  })();
+  if (canEdit) {
+    btn.style.display = 'inline-block';
+    btn.disabled = false;
+  } else {
+    btn.style.display = 'none';
+    metaEl.innerHTML += '<br><span style="color:#7A1A1A;">This sale is more than 4 days old. Only an admin can edit it.</span>';
+  }
+  document.getElementById('dup-warning').classList.add('show');
+  // Hard-block submit
+  var submitBtn = document.getElementById('submit-btn');
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Already submitted — edit instead';
+}
+
+function clearDupWarning() {
+  existingSaleForStand = null;
+  document.getElementById('dup-warning').classList.remove('show');
+  var submitBtn = document.getElementById('submit-btn');
+  // Only re-enable if the button isn't currently in a "saving" state from an active submit
+  if (submitBtn.textContent === 'Already submitted — edit instead' || submitBtn.textContent === 'Submit Sale') {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Submit Sale';
+  }
+}
+
+// Called by the duplicate-warning's "Edit existing" button. Opens the edit modal
+// against the sale that's blocking the current submission.
+function openExistingFromDupWarning() {
+  if (!existingSaleForStand) return;
+  openEditModal(existingSaleForStand.id);
 }
 
 function siPillHtml(saleId, hasSigning) {
