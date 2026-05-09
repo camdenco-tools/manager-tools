@@ -1168,6 +1168,12 @@ header {
       <button data-stands="all">Show all</button>
     </span>
 
+    <!-- Admin-only "Managers" button. Hidden by default; revealed in
+         startApp() if pcAuth.isAdmin() returns true. Opens a small modal
+         where admins edit the event_managers list that drives the
+         "MANAGEMENT" section in the staff-list email. -->
+    <button class="btn btn-print" id="managers-btn" style="display:none;" title="Edit the management list shown in staff-list emails">👥 Managers</button>
+
     <button class="btn btn-print" id="refresh-btn" title="Refresh data">↻ Refresh</button>
   </div>
 
@@ -1258,6 +1264,37 @@ header {
     <div class="modal-foot" style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;align-items:center;">
       <button class="btn" data-close-modal="email-modal" style="background:white;border-color:var(--border-strong);color:var(--primary);">Cancel</button>
       <button class="btn-confirm" id="email-send-btn" style="padding:6px 18px;">Send</button>
+    </div>
+  </div>
+</div>
+
+<!-- Managers list modal. Admin-only (gated at the toolbar button level
+     and again on save by RLS — only admins can INSERT/UPDATE/DELETE
+     event_managers rows). The list shown here is exactly what gets
+     rendered in the "MANAGEMENT" section of every staff-list email,
+     in order. No edit-existing flow: to rename someone, delete and
+     re-add. Order is preserved by sort_order; new names append to the
+     end with sort_order = max + 10. No confirmation on delete (small
+     list, easy to re-add per spec). -->
+<div class="modal-backdrop" id="managers-modal">
+  <div class="modal" style="max-width: 460px;">
+    <div class="modal-head">
+      <h3>Management list</h3>
+      <button class="modal-close" data-close-modal="managers-modal">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size: 12px; color: var(--label); margin-bottom: 14px; line-height: 1.5;">
+        These names appear in the <strong>MANAGEMENT</strong> section of every staff-list email,
+        below the venue staff and above the shirt tally. Use first and last name.
+      </div>
+      <div id="managers-list" style="margin-bottom: 16px;"></div>
+      <div style="display:flex; gap:8px; align-items:stretch;">
+        <input type="text" id="managers-add-input"
+               placeholder="First Last"
+               style="flex:1; padding:8px 10px; border:1px solid var(--border-strong); border-radius:6px; font-size:13px; font-family:inherit;" />
+        <button class="btn-confirm" id="managers-add-btn" style="padding:6px 14px;">Add</button>
+      </div>
+      <div id="managers-error" style="color:#b91c1c;font-size:12px;margin-top:8px;display:none;"></div>
     </div>
   </div>
 </div>
@@ -1730,12 +1767,18 @@ function loadAll() {
     // Approved email recipients for the per-event "Email staff list" feature.
     // Lightweight: just the active rows. Filtered by venue at modal-open time.
     authFetch(SUPABASE_URL + '/rest/v1/approved_email_recipients?select=id,label,email,venue&is_active=eq.true&order=venue.asc,label.asc',
+      { headers: apiHeaders() }),
+    // Event-managers list — admin-managed names rendered in a "MANAGEMENT"
+    // section under the staff list in the email. Sorted by sort_order then
+    // display_name so the email order matches what admins set in the modal.
+    authFetch(SUPABASE_URL + '/rest/v1/event_managers?select=id,display_name,sort_order&order=sort_order.asc,display_name.asc',
       { headers: apiHeaders() })
-  ]).then(([events, employees, allAvail, pastPlacements, candidatePhones, recentSignups, approvedRecipients]) => {
+  ]).then(([events, employees, allAvail, pastPlacements, candidatePhones, recentSignups, approvedRecipients, eventManagers]) => {
     state.events = events || [];
     state.employees = employees || [];
     state.recentSignups = recentSignups || [];
     state.approvedRecipients = approvedRecipients || [];
+    state.eventManagers = eventManagers || [];
 
     // Build historical signup counts per staff_name. Used to sort the
     // Available-to-call list — most-reliable employees first.
@@ -4286,27 +4329,47 @@ function renderEmailStaffPreview(staffNames, jmacCount) {
   if (jmacCount > 0) {
     html += '<div class="preview-jmac">📞 Agency — ' + jmacCount + ' staff via JMAC</div>';
   }
+
+  // Management section — listed below the JMAC line (per spec: agency staff
+  // grouped with venue staff, then management as the support cast). Plain
+  // names only — managers don't get issued shirts so no size annotation,
+  // and they're excluded from the tally counts below.
+  const managers = (state.eventManagers || []).slice()
+    .sort((a, b) => {
+      const so = (a.sort_order || 0) - (b.sort_order || 0);
+      if (so !== 0) return so;
+      return (a.display_name || '').localeCompare(b.display_name || '');
+    });
+  if (managers.length > 0) {
+    html += '<div style="margin-top:12px;padding-top:8px;border-top:1px solid #e5e7eb;">' +
+      '<div style="font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--label);margin-bottom:6px;">Management</div>';
+    managers.forEach(m => {
+      html += '<div class="preview-name">' + escapeHtml(m.display_name) + '</div>';
+    });
+    html += '</div>';
+  }
+
   // Shirt-size tally: appended below the list so the recipient (and the
   // user composing the email) can see at a glance how many shirts of each
-  // size to stage. Rendered as a vertical list (S = 2, M = 4, ...) so it
-  // matches the email body and is easy to read line-by-line off the rack.
-  // JMAC staff are excluded — they bring their own uniforms.
+  // size to stage. Rendered with a literal " - " separator (not flex)
+  // because the previous flex-based layout collapsed in many email clients,
+  // jamming size and count together as "S4". The text-with-dash approach
+  // is robust to any client. JMAC and management are both excluded from
+  // this tally — they don't get issued laundered shirts.
   const tally = buildShirtTally(staffNames);
   if (tally.total > 0) {
     let rows = '';
     SHIRT_SIZES.forEach(sz => {
       const n = tally.counts[sz] || 0;
       if (n > 0) {
-        rows += '<div style="display:flex;justify-content:space-between;padding:2px 0;">' +
-                  '<span>' + escapeHtml(sz) + '</span>' +
-                  '<span style="font-weight:700;">' + n + '</span>' +
+        rows += '<div style="padding:2px 0;font-weight:600;">' +
+                  escapeHtml(sz) + ' - ' + n +
                 '</div>';
       }
     });
     if (tally.unknown > 0) {
-      rows += '<div style="display:flex;justify-content:space-between;padding:2px 0;border-top:1px solid #c7d2fe;margin-top:3px;padding-top:5px;">' +
-                '<span style="font-style:italic;">Unknown</span>' +
-                '<span style="font-weight:700;">' + tally.unknown + '</span>' +
+      rows += '<div style="padding:2px 0;border-top:1px solid #c7d2fe;margin-top:3px;padding-top:5px;font-style:italic;">' +
+                'Unknown - ' + tally.unknown +
               '</div>';
     }
     html += '<div style="margin-top:10px;padding:8px 12px;background:#eef2ff;color:#3730a3;border-radius:4px;font-size:11px;">' +
@@ -4390,6 +4453,19 @@ function sendStaffListEmail() {
   }));
   const shirtTally = buildShirtTally(realStaff);
 
+  // Management list — admin-edited names rendered in a "MANAGEMENT" section
+  // of the email, below the venue staff and JMAC line, above the tally.
+  // Sorted by sort_order then display_name to match what the admin sees in
+  // the Managers modal. Excluded from shirtTally on purpose (they don't get
+  // issued shirts).
+  const managerNames = (state.eventManagers || []).slice()
+    .sort((a, b) => {
+      const so = (a.sort_order || 0) - (b.sort_order || 0);
+      if (so !== 0) return so;
+      return (a.display_name || '').localeCompare(b.display_name || '');
+    })
+    .map(m => m.display_name);
+
   const payload = {
     to: allTo,
     cc: ['erikapeters@camdenco.com'],   // hard-wired audit-trail recipient
@@ -4404,6 +4480,7 @@ function sendStaffListEmail() {
     shirt_tally: shirtTally,
     shirt_tally_display: formatShirtTally(shirtTally),
     jmac_count: jmacCount,
+    manager_names: managerNames,
     sender_name: (state.user && state.user.display_name) ||
                  (state.user && state.user.email) || 'Camden Co. Staffing'
   };
@@ -4549,6 +4626,165 @@ document.querySelectorAll('[data-stands]').forEach(btn => {
 });
 document.getElementById('refresh-btn').addEventListener('click', () => loadAll());
 
+// ---------- Managers modal (admin-only) ----------
+// Edits the event_managers table rows that drive the "MANAGEMENT" section
+// of the staff-list email. Toolbar button is hidden by default and revealed
+// in startApp() once we know the user is an admin. Database-side, RLS only
+// permits INSERT/UPDATE/DELETE for admin users, so even if a non-admin
+// somehow got the button to show, the writes would 401/403 cleanly.
+//
+// No edit-existing flow on purpose: to rename someone, delete and re-add.
+// No confirmation on delete: list is small, easy to re-add. Both decisions
+// were taken explicitly with Keith on May 9, 2026.
+
+function openManagersModal() {
+  // Refresh the list from the DB at open time so two admins editing in
+  // parallel don't clobber each other silently. Worst case: one admin's
+  // delete shows up immediately when the other reopens.
+  authFetch(SUPABASE_URL + '/rest/v1/event_managers?select=id,display_name,sort_order&order=sort_order.asc,display_name.asc',
+    { headers: apiHeaders() })
+    .then(rows => {
+      state.eventManagers = rows || [];
+      renderManagersList();
+      document.getElementById('managers-add-input').value = '';
+      const errBox = document.getElementById('managers-error');
+      errBox.style.display = 'none';
+      errBox.textContent = '';
+      document.getElementById('managers-modal').classList.add('show');
+      setTimeout(() => document.getElementById('managers-add-input').focus(), 50);
+    })
+    .catch(err => {
+      console.error('[managers] failed to load list', err);
+      showToast('Could not load managers list', 'error');
+    });
+}
+
+function renderManagersList() {
+  const container = document.getElementById('managers-list');
+  const sorted = (state.eventManagers || []).slice().sort((a, b) => {
+    const so = (a.sort_order || 0) - (b.sort_order || 0);
+    if (so !== 0) return so;
+    return (a.display_name || '').localeCompare(b.display_name || '');
+  });
+  if (sorted.length === 0) {
+    container.innerHTML = '<div style="color:var(--label);font-style:italic;font-size:13px;padding:6px 0;">No managers yet — add one below.</div>';
+    return;
+  }
+  let html = '';
+  sorted.forEach(m => {
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border:1px solid var(--border);border-radius:6px;margin-bottom:6px;background:white;">' +
+      '<span style="font-size:13px;font-weight:600;color:var(--primary);">' + escapeHtml(m.display_name) + '</span>' +
+      '<button class="btn" data-manager-delete="' + escapeAttr(m.id) + '" ' +
+        'style="background:white;border-color:#fca5a5;color:#b91c1c;padding:4px 10px;font-size:11px;" ' +
+        'title="Remove from list">✕ Remove</button>' +
+    '</div>';
+  });
+  container.innerHTML = html;
+}
+
+function addManager() {
+  const input = document.getElementById('managers-add-input');
+  const errBox = document.getElementById('managers-error');
+  const raw = (input.value || '').trim();
+  errBox.style.display = 'none';
+  errBox.textContent = '';
+
+  if (!raw) {
+    errBox.textContent = 'Enter a name first.';
+    errBox.style.display = 'block';
+    return;
+  }
+  // Loose check that they typed at least two whitespace-separated tokens
+  // (first + last). Don't be heavy-handed — names are weird.
+  if (!raw.includes(' ')) {
+    errBox.textContent = 'Use first and last name (e.g. "Brian Helmuth").';
+    errBox.style.display = 'block';
+    return;
+  }
+  // Soft-warn duplicate (case-insensitive). Refuse rather than silently
+  // create a second row.
+  const existing = (state.eventManagers || []).find(m =>
+    (m.display_name || '').toLowerCase() === raw.toLowerCase()
+  );
+  if (existing) {
+    errBox.textContent = '"' + raw + '" is already on the list.';
+    errBox.style.display = 'block';
+    return;
+  }
+
+  // New rows go to the end — compute next sort_order as max + 10.
+  const maxSort = (state.eventManagers || []).reduce(
+    (m, r) => Math.max(m, Number(r.sort_order) || 0), 0
+  );
+  const body = { display_name: raw, sort_order: maxSort + 10 };
+
+  const addBtn = document.getElementById('managers-add-btn');
+  addBtn.disabled = true;
+  addBtn.textContent = '…';
+
+  authFetch(SUPABASE_URL + '/rest/v1/event_managers', {
+    method: 'POST',
+    headers: apiHeadersJson(),
+    body: JSON.stringify(body)
+  }).then(rows => {
+    addBtn.disabled = false;
+    addBtn.textContent = 'Add';
+    const inserted = Array.isArray(rows) ? rows[0] : rows;
+    if (inserted && inserted.id) {
+      state.eventManagers = (state.eventManagers || []).concat([inserted]);
+    }
+    renderManagersList();
+    input.value = '';
+    input.focus();
+    showToast('Added ' + raw, 'success');
+  }).catch(err => {
+    addBtn.disabled = false;
+    addBtn.textContent = 'Add';
+    console.error('[managers] insert failed', err);
+    errBox.textContent = 'Could not add — ' + (err && err.message ? err.message : 'check console');
+    errBox.style.display = 'block';
+  });
+}
+
+function deleteManager(id) {
+  // No confirmation per spec. Optimistic update: remove from local state
+  // first so the UI feels instant, roll back if the DELETE fails.
+  const before = (state.eventManagers || []).slice();
+  const removed = before.find(m => m.id === id);
+  if (!removed) return;
+  state.eventManagers = before.filter(m => m.id !== id);
+  renderManagersList();
+
+  authFetch(SUPABASE_URL + '/rest/v1/event_managers?id=eq.' + encodeURIComponent(id), {
+    method: 'DELETE',
+    headers: apiHeaders()
+  }).then(() => {
+    showToast('Removed ' + (removed.display_name || ''), 'success');
+  }).catch(err => {
+    console.error('[managers] delete failed', err);
+    state.eventManagers = before;
+    renderManagersList();
+    const errBox = document.getElementById('managers-error');
+    errBox.textContent = 'Could not remove — ' + (err && err.message ? err.message : 'check console');
+    errBox.style.display = 'block';
+  });
+}
+
+// Open-button click handler. Registered unconditionally; the button is
+// hidden until startApp confirms the user is admin.
+document.getElementById('managers-btn').addEventListener('click', openManagersModal);
+
+// Modal-internal clicks: Add button + per-row Remove buttons.
+document.getElementById('managers-add-btn').addEventListener('click', addManager);
+document.getElementById('managers-add-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); addManager(); }
+});
+document.getElementById('managers-list').addEventListener('click', e => {
+  const btn = e.target.closest('[data-manager-delete]');
+  if (!btn) return;
+  deleteManager(btn.getAttribute('data-manager-delete'));
+});
+
 // ---------- Init ----------
 function startApp(user) {
   state.user = user;
@@ -4556,6 +4792,11 @@ function startApp(user) {
   if (el && user) {
     el.innerHTML = '<span class="header-user">' + escapeHtml(user.display_name || user.email) + '</span>' +
       '<button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
+  }
+  // Reveal admin-only Managers button. RLS still enforces admin on writes,
+  // so this is just a visibility convenience — non-admins never see it.
+  if (typeof pcAuth.isAdmin === 'function' && pcAuth.isAdmin()) {
+    document.getElementById('managers-btn').style.display = '';
   }
   // Default custom range inputs
   document.getElementById('custom-from').value = todayIsoLocal();
