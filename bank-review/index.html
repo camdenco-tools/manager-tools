@@ -298,14 +298,66 @@ header {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 5px 10px; background: white; border: 1px solid #EF9F27;
   border-radius: 6px; font-size: 12px; color: #633806; font-weight: 600;
-  cursor: grab; user-select: none;
+  cursor: pointer; user-select: none;
+  transition: background 0.12s, box-shadow 0.12s, transform 0.12s;
 }
-.kv-suggestion-chip:active { cursor: grabbing; }
+.kv-suggestion-chip:hover { background: #FFF6E6; }
+.kv-suggestion-chip.armed {
+  background: #FAEEDA; border-color: #BA7517;
+  box-shadow: 0 0 0 2px #EF9F27 inset;
+}
 .kv-suggestion-chip .kv-chip-count {
   background: #EF9F27; color: white; font-size: 10px; font-weight: 700;
   padding: 1px 6px; border-radius: 8px;
 }
-.kv-suggestion-chip.dragging { opacity: 0.5; }
+.kv-suggestion-chip .kv-chip-cancel {
+  cursor: pointer; opacity: 0.7; font-weight: 700; font-size: 14px;
+  padding: 0 2px; line-height: 1;
+}
+.kv-suggestion-chip .kv-chip-cancel:hover { opacity: 1; color: #A32D2D; }
+
+/* Armed-state banner — sticky bar above the vendor table while a chip is armed */
+.kv-arm-banner {
+  position: sticky; top: 76px; z-index: 51;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 14px; margin-bottom: 10px;
+  background: #FAEEDA; border: 1px solid #BA7517; border-radius: 10px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+  font-size: 12px; color: #633806;
+}
+.kv-arm-banner .kv-arm-text { flex: 1; min-width: 200px; }
+.kv-arm-banner .kv-arm-text b { color: #4a2a04; }
+.kv-arm-banner .kv-arm-btn {
+  font-size: 11px; padding: 5px 10px; border-radius: 6px;
+  font-family: inherit; font-weight: 600; cursor: pointer;
+  border: 1px solid #BA7517; background: white; color: #633806;
+}
+.kv-arm-banner .kv-arm-btn:hover { background: #FFF1D9; }
+.kv-arm-banner .kv-arm-btn.primary {
+  background: #534AB7; color: white; border-color: #3C3489;
+}
+.kv-arm-banner .kv-arm-btn.primary:hover { background: #3C3489; }
+.kv-arm-banner .kv-arm-btn.cancel {
+  background: transparent; border-color: #ccc; color: #666;
+}
+.kv-arm-banner .kv-arm-btn.cancel:hover { background: #f4f4f4; color: #333; }
+
+/* Clickable rows while armed */
+.kv-row.armed-clickable {
+  cursor: pointer;
+}
+.kv-row.armed-clickable:hover {
+  border-color: #534AB7; background: #F4F2FE;
+  box-shadow: 0 2px 6px rgba(83,74,183,0.12);
+}
+.kv-row.armed-clickable:hover::after {
+  content: '+ click to add as alias';
+  position: absolute; right: 14px; top: 8px;
+  font-size: 10px; font-weight: 600; color: #534AB7;
+  background: #EEEDFE; padding: 2px 8px; border-radius: 5px;
+  pointer-events: none;
+}
+.kv-row { position: relative; }
 
 /* Vendor table */
 .kv-table {
@@ -322,7 +374,6 @@ header {
   transition: border-color 0.15s, background 0.15s;
 }
 .kv-row:last-child { margin-bottom: 0; }
-.kv-row.drop-target { border-color: #534AB7; border-style: dashed; background: #F4F2FE; }
 .kv-name {
   grid-row: 1; grid-column: 1;
   font-size: 13px; font-weight: 700; color: #3C3489;
@@ -381,7 +432,6 @@ header {
   transition: background 0.15s, border-color 0.15s;
 }
 .kv-add-row-btn:hover { background: #EEEDFE; border-color: #534AB7; }
-.kv-add-row-btn.drop-target { border-color: #534AB7; background: #EEEDFE; border-style: solid; }
 
 /* Raw description tooltip — applied to every charge row across all sections */
 .has-raw-tooltip { position: relative; }
@@ -550,12 +600,12 @@ header {
       <div class="kv-suggestions" id="kv-suggestions" style="display:none;">
         <div class="kv-suggestions-title">
           Unmatched vendors from recent uploads
-          <span class="kv-hint">&mdash; drag onto a vendor to add as alias, or onto "+ Add new vendor" to create a new one</span>
+          <span class="kv-hint">&mdash; click a chip, then click a vendor below to add it as an alias</span>
         </div>
         <div class="kv-suggestions-list" id="kv-suggestions-list"></div>
       </div>
       <div class="kv-table" id="kv-table"></div>
-      <button class="kv-add-row-btn" id="kv-add-row-btn" onclick="addKnownVendor()" ondragover="kvAddBtnDragOver(event)" ondragleave="kvAddBtnDragLeave(event)" ondrop="kvAddBtnDrop(event)">+ Add new vendor</button>
+      <button class="kv-add-row-btn" id="kv-add-row-btn" onclick="addKnownVendor()">+ Add new vendor</button>
     </div>
   </div>
 
@@ -1546,30 +1596,44 @@ function renderKnownVendors() {
 
   var tableEl = document.getElementById('kv-table');
   if (!KNOWN_VENDORS_LIST.length) {
-    tableEl.innerHTML = '<div style="text-align:center;padding:20px;color:#bbb;font-size:12px;font-style:italic;">No known vendors yet. Click "+ Add new vendor" below to start, or drop a suggestion onto it.</div>';
+    tableEl.innerHTML = '<div style="text-align:center;padding:20px;color:#bbb;font-size:12px;font-style:italic;">No known vendors yet. Click "+ Add new vendor" below to start, or click a suggestion chip and add it as a new vendor.</div>';
     return;
   }
 
   var html = '';
+
+  // Armed-state sticky banner — appears at top of table when a suggestion chip is armed
+  if (armedSuggestion) {
+    var armedSafe = JSON.stringify(armedSuggestion).replace(/"/g, '&quot;');
+    html += '<div class="kv-arm-banner">';
+    html += '<span class="kv-arm-text">Click any vendor below to add <b>' + escapeHtml(armedSuggestion) + '</b> as an alias.</span>';
+    html += '<button class="kv-arm-btn primary" onclick="kvAssignAsNewVendor()">+ Add as new vendor</button>';
+    html += '<button class="kv-arm-btn cancel" onclick="clearArm()">Cancel</button>';
+    html += '</div>';
+  }
+
   for (var i = 0; i < KNOWN_VENDORS_LIST.length; i++) {
     var v = KNOWN_VENDORS_LIST[i];
-    html += '<div class="kv-row" data-vendor-id="' + v.id + '" ondragover="kvDragOver(event, this)" ondragleave="kvDragLeave(event, this)" ondrop="kvDrop(event, this)">';
-    html += '<div class="kv-name" contenteditable="false" id="kv-name-' + v.id + '" onclick="kvStartEditName(\'' + v.id + '\')">' + escapeHtml(v.display_name) + '</div>';
-    html += '<div class="kv-row-actions">';
-    html += '<button class="kv-row-btn" onclick="kvStartEditName(\'' + v.id + '\')" title="Rename">Rename</button>';
-    html += '<button class="kv-row-btn delete" onclick="deleteKnownVendor(\'' + v.id + '\')" title="Delete vendor">&#128465;</button>';
+    var rowCls = 'kv-row' + (armedSuggestion ? ' armed-clickable' : '');
+    var rowClick = armedSuggestion ? ' onclick="kvAssignToVendor(\'' + v.id + '\')"' : '';
+    html += '<div class="' + rowCls + '" data-vendor-id="' + v.id + '"' + rowClick + '>';
+    var nameClick = armedSuggestion ? '' : ' onclick="kvStartEditName(\'' + v.id + '\')"';
+    html += '<div class="kv-name" contenteditable="false" id="kv-name-' + v.id + '"' + nameClick + '>' + escapeHtml(v.display_name) + '</div>';
+    html += '<div class="kv-row-actions" onclick="event.stopPropagation()">';
+    html += '<button class="kv-row-btn" onclick="event.stopPropagation();kvStartEditName(\'' + v.id + '\')" title="Rename">Rename</button>';
+    html += '<button class="kv-row-btn delete" onclick="event.stopPropagation();deleteKnownVendor(\'' + v.id + '\')" title="Delete vendor">&#128465;</button>';
     html += '</div>';
-    html += '<div class="kv-aliases" id="kv-aliases-' + v.id + '">';
+    html += '<div class="kv-aliases" id="kv-aliases-' + v.id + '" onclick="event.stopPropagation()">';
     if (v.aliases && v.aliases.length) {
       for (var a = 0; a < v.aliases.length; a++) {
         var alias = v.aliases[a];
         html += '<span class="kv-alias-chip">';
         html += escapeHtml(alias);
-        html += '<span class="kv-alias-x" onclick="removeAlias(\'' + v.id + '\', ' + JSON.stringify(alias).replace(/"/g, '&quot;') + ')" title="Remove alias">&times;</span>';
+        html += '<span class="kv-alias-x" onclick="event.stopPropagation();removeAlias(\'' + v.id + '\', ' + JSON.stringify(alias).replace(/"/g, '&quot;') + ')" title="Remove alias">&times;</span>';
         html += '</span>';
       }
     }
-    html += '<button class="kv-alias-add-btn" onclick="kvStartAddAlias(\'' + v.id + '\')">+ alias</button>';
+    html += '<button class="kv-alias-add-btn" onclick="event.stopPropagation();kvStartAddAlias(\'' + v.id + '\')">+ alias</button>';
     html += '</div>';
     html += '</div>';
   }
@@ -1620,10 +1684,20 @@ function renderSuggestions() {
     var name = keys[i];
     var count = groups[name];
     var safe = JSON.stringify(name).replace(/"/g, '&quot;');
-    html += '<span class="kv-suggestion-chip" draggable="true" data-name="' + escapeHtml(name) + '" ondragstart="kvDragStart(event, ' + safe + ')" ondragend="kvDragEnd(event)">';
-    html += escapeHtml(name);
-    if (count > 1) html += '<span class="kv-chip-count">' + count + '</span>';
-    html += '</span>';
+    var isArmed = (armedSuggestion === name);
+    var chipCls = 'kv-suggestion-chip' + (isArmed ? ' armed' : '');
+    if (isArmed) {
+      html += '<span class="' + chipCls + '" data-name="' + escapeHtml(name) + '">';
+      html += escapeHtml(name);
+      if (count > 1) html += '<span class="kv-chip-count">' + count + '</span>';
+      html += '<span class="kv-chip-cancel" onclick="event.stopPropagation();clearArm()" title="Cancel">&times;</span>';
+      html += '</span>';
+    } else {
+      html += '<span class="' + chipCls + '" data-name="' + escapeHtml(name) + '" onclick="armSuggestion(' + safe + ')">';
+      html += escapeHtml(name);
+      if (count > 1) html += '<span class="kv-chip-count">' + count + '</span>';
+      html += '</span>';
+    }
   }
   listEl.innerHTML = html;
 }
@@ -1638,6 +1712,14 @@ function toggleKnownVendors() {
   // Toggle sticky behavior on suggestions strip — only sticky when section is open
   var sug = document.getElementById('kv-suggestions');
   if (sug) sug.classList.toggle('sticky', !open);
+
+  // If we're closing the section, clear any armed suggestion so it doesn't
+  // render a phantom banner the next time the section is reopened.
+  if (open && armedSuggestion) {
+    armedSuggestion = null;
+    renderSuggestions();
+    renderKnownVendors();
+  }
 }
 
 // ══════════════════════════════════════════════
@@ -1836,74 +1918,43 @@ async function removeAlias(vendorId, aliasText) {
 }
 
 // ══════════════════════════════════════════════
-// ── Known Vendors: drag-and-drop ──
+// ── Known Vendors: click-to-assign ──
 // ══════════════════════════════════════════════
-var _kvDragPayload = null;  // string — the suggestion's vendor name being dragged
+// Replaces drag-and-drop (HTML5 DnD blocked page scroll while a chip was held,
+// and was unusable on touch devices). Click a chip to "arm" it; the table
+// shows a sticky banner and rows become click-to-add-alias.
+var armedSuggestion = null;  // string — the suggestion text being assigned, or null
 
-function kvDragStart(ev, name) {
-  _kvDragPayload = name;
-  ev.dataTransfer.effectAllowed = 'copy';
-  try { ev.dataTransfer.setData('text/plain', name); } catch(e) {}
-  ev.target.classList.add('dragging');
-}
-
-function kvDragEnd(ev) {
-  ev.target.classList.remove('dragging');
-  _kvDragPayload = null;
-  // Clear any lingering drop-target highlights
-  var targets = document.querySelectorAll('.kv-row.drop-target, .kv-add-row-btn.drop-target');
-  for (var i = 0; i < targets.length; i++) targets[i].classList.remove('drop-target');
-}
-
-function kvDragOver(ev, el) {
-  if (!_kvDragPayload) return;
-  ev.preventDefault();
-  ev.dataTransfer.dropEffect = 'copy';
-  el.classList.add('drop-target');
-}
-
-function kvDragLeave(ev, el) {
-  el.classList.remove('drop-target');
-}
-
-function kvDrop(ev, el) {
-  ev.preventDefault();
-  el.classList.remove('drop-target');
-  var name = _kvDragPayload;
-  if (!name) {
-    // Some browsers won't preserve the JS variable across drag boundaries — fallback to DataTransfer
-    try { name = ev.dataTransfer.getData('text/plain'); } catch(e) {}
-  }
+function armSuggestion(name) {
   if (!name) return;
-  var vendorId = el.getAttribute('data-vendor-id');
-  if (vendorId) {
-    addAlias(vendorId, name);
-  }
+  armedSuggestion = name;
+  renderSuggestions();      // re-renders the chip with × cancel + armed style
+  renderKnownVendors();     // re-renders rows with armed-clickable + sticky banner
 }
 
-// Drop on the "+ Add new vendor" button — creates a new vendor with the dropped
-// suggestion as both display_name AND first alias
-function kvAddBtnDragOver(ev) {
-  if (!_kvDragPayload) return;
-  ev.preventDefault();
-  ev.dataTransfer.dropEffect = 'copy';
-  ev.currentTarget.classList.add('drop-target');
+function clearArm() {
+  armedSuggestion = null;
+  renderSuggestions();
+  renderKnownVendors();
 }
 
-function kvAddBtnDragLeave(ev) {
-  ev.currentTarget.classList.remove('drop-target');
+// Click handler on a vendor row while a chip is armed.
+// Adds the armed text as an alias on that vendor, then clears arm state.
+function kvAssignToVendor(vendorId) {
+  if (!armedSuggestion || !vendorId) return;
+  var name = armedSuggestion;
+  armedSuggestion = null;            // clear before async to avoid double-fires
+  addAlias(vendorId, name);          // addAlias will reload + re-render on success
 }
 
-function kvAddBtnDrop(ev) {
-  ev.preventDefault();
-  ev.currentTarget.classList.remove('drop-target');
-  var name = _kvDragPayload;
-  if (!name) {
-    try { name = ev.dataTransfer.getData('text/plain'); } catch(e) {}
-  }
-  if (!name) return;
-  // Use the dropped name as both display_name (canonical) and first alias.
-  // User can rename the canonical afterward if they want a different display.
+// Click handler on the "+ Add as new vendor" button in the armed banner.
+// Creates a new known_vendor with the armed text as both display_name and first alias.
+function kvAssignAsNewVendor() {
+  if (!armedSuggestion) return;
+  var name = armedSuggestion;
+  armedSuggestion = null;
+  // Use the armed name as both display_name (canonical) and first alias.
+  // Admin can rename the canonical afterward if they want a different display.
   addKnownVendor(name, name.toUpperCase());
 }
 
