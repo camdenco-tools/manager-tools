@@ -434,41 +434,59 @@ body {
   flex-wrap: wrap; /* allow note line to wrap below the name row */
 }
 .person-pill[draggable=true]:hover { transform: translateX(2px); border-color: var(--blue); }
-/* (the .person-pill.placed rule is defined below in the SYNC PILL STATES block —
-    red-default, green-when-synced. Legacy green-when-placed rule removed May 11.) */
+/* Available-panel pill styling for a person currently placed at THIS event.
+   Shows "✓ HERE" tag. Green-tinted. Unrelated to the 7shifts sync state of
+   the placed pill in the grid — that's .slot-filled, a different selector. */
+.person-pill.placed {
+  background: var(--green-light); border-color: var(--green-mid);
+  color: var(--green-dark); cursor: default;
+}
 .person-pill.placed:hover { transform: none; }
 
 /* ============================================================
    7shifts SYNC PILL STATES — added May 11, 2026
    ------------------------------------------------------------
-   A placed pill defaults to RED ("placed but not yet in 7shifts").
-   Manager clicks the "7s" toggle → pill turns GREEN ("synced").
-   Any movement of a green pill (drag, role change, removal) reverts
-   it to red. When a green pill is X'd off, the person reappears in
-   the Available panel tinted RED — flagging Meg that they still
-   need to be removed from 7shifts.
+   The GRID placed pill (.slot-filled) defaults to RED ("placed but
+   not yet in 7shifts"). Manager clicks the "7s" toggle → adds
+   .synced class → pill turns GREEN. Any movement of a green pill
+   (drag, role change, removal) reverts it to red. When a green pill
+   is X'd off, the person reappears in the Available panel tinted
+   RED — flagging Meg that they still need to be removed from 7shifts.
 
-   Convention shift from pre-May-11:
-     Previously: green-when-placed (one-state). Today: red-when-
-     placed-and-unsynced, green-only-when-synced.
+   IMPORTANT: the available-panel pill that shows "✓ HERE" for a
+   person currently placed at this event uses class .person-pill.placed
+   — that's an entirely DIFFERENT pill from the grid pill. We leave
+   the available-panel "placed" treatment alone (legacy green) and
+   only override the grid pill (.slot-filled) for the red/green
+   sync state.
    ============================================================ */
 
-/* Default placed-pill override — red instead of the legacy green */
-.person-pill.placed {
-  background: var(--red-light); border-color: var(--red-border);
-  color: var(--red); cursor: default;
+/* Grid pill default — flipped from green to RED on May 11. The
+   manager-typed / placeholder / jmac / conflict variants below this
+   override the red for their own colors. Adding the .synced class
+   flips it back to green. No !important here — we rely on source order:
+   this rule comes after the original .slot-filled rule (overriding the
+   green default), and the variant rules come after this rule
+   (overriding the red for their categories). */
+.slot-filled {
+  background: var(--red-light);
+  border-color: var(--red-border);
+  color: var(--red);
 }
-.person-pill.placed.synced {
-  background: var(--green-light); border-color: var(--green-mid);
+.slot-filled:hover { background: #fbe0db; }
+.slot-filled.synced {
+  background: var(--green-light);
+  border-color: var(--green-mid);
   color: var(--green-dark);
 }
-.person-pill.placed .person-note { color: var(--red); opacity: 0.85; }
-.person-pill.placed.synced .person-note { color: var(--green-dark); opacity: 0.85; }
+.slot-filled.synced:hover { background: #d8f0e6; }
 
-/* The 7s toggle button — sits on the right side of the placed pill.
+/* The 7s toggle button — sits on the right side of the grid pill.
    Outline-red when unsynced, solid-green when synced. Clicking toggles
-   the seven_shifts_synced flag on the position_assignments row. */
-.person-pill .sync-toggle {
+   the seven_shifts_synced flag on the position_assignments row.
+   Both .slot-filled.synced .sync-toggle and .sync-toggle.synced match
+   so the styling works whether the parent or button carries the class. */
+.slot-filled .sync-toggle {
   background: white; color: var(--red); border: 1px solid var(--red);
   font-size: 9px; font-weight: 700; letter-spacing: 0.04em;
   padding: 2px 6px; border-radius: 8px;
@@ -476,11 +494,13 @@ body {
   line-height: 1.2;
   display: inline-flex; align-items: center; gap: 3px;
 }
-.person-pill .sync-toggle:hover { background: var(--red-light); }
-.person-pill .sync-toggle.synced {
+.slot-filled .sync-toggle:hover { background: var(--red-light); }
+.slot-filled.synced .sync-toggle,
+.sync-toggle.synced {
   background: var(--green-dark); color: white; border-color: var(--green-dark);
 }
-.person-pill .sync-toggle.synced:hover { background: var(--green); }
+.slot-filled.synced .sync-toggle:hover,
+.sync-toggle.synced:hover { background: var(--green); }
 
 /* Available-panel pill tinted RED — means this person was placed AND
    synced to 7shifts, then released back to the pool. Until Meg clicks
@@ -713,13 +733,13 @@ body {
 .slot-filled {
   display: flex; align-items: center; gap: 6px;
   padding: 5px 10px;
-  background: var(--green-light); border: 1px solid var(--green-mid);
+  border-width: 1px; border-style: solid;
   border-radius: 6px; font-size: 12px; font-weight: 600;
-  color: var(--green-dark); cursor: grab;
+  cursor: grab;
   user-select: none;
   flex-wrap: wrap;
 }
-.slot-filled:hover { background: #d8f0e6; }
+/* base color/background/border-color owned by the SYNC PILL STATES block above */
 .slot-filled .x {
   background: none; border: none; color: inherit;
   cursor: pointer; padding: 0; font-size: 11px;
