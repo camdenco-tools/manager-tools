@@ -317,52 +317,7 @@ body {
 </head>
 <body>
 
-<div class="top-bar">
-  <span class="brand-name">Popcorn Chez</span>
-  <span class="brand-badge">Manager Toolkit</span>
-  <div class="topbar-spacer"></div>
-  <div class="header-right" id="header-right"></div>
-</div>
-
-<div class="ribbon-bar">
-<div class="ribbon-item">
-    <div class="ribbon-tab" data-tab="people" onclick="scrollToSection('sec-people')">
-      People <span class="tab-arrow">&#9662;</span>
-    </div>
-    <div class="ribbon-dropdown">
-      <a href="/crew/" data-slug="crew">Crew<br><span class="dropdown-sub">Employee profiles, signals, and admin</span></a>
-      <a href="/handbook-signatures/" data-slug="handbook-signatures">Handbook Signatures<br><span class="dropdown-sub">View signed acknowledgments</span></a>
-    </div>
-  </div>
-  <div class="ribbon-item">
-    <div class="ribbon-tab" data-tab="operations" onclick="scrollToSection('sec-operations')">
-      Operations <span class="tab-arrow">&#9662;</span>
-    </div>
-    <div class="ribbon-dropdown">
-      <a href="/submit-event/" data-slug="submit-event">Submit Event<br><span class="dropdown-sub">Send event for review</span></a>
-      <a href="/hiring-snapshot/" data-slug="hiring-snapshot">Hiring Snapshot<br><span class="dropdown-sub">Who's ready</span></a>
-      <a href="/tips-report/" data-slug="tips-report">Tips Report<br><span class="dropdown-sub">Payroll tip verification</span></a>
-      <a href="/cash-deposits/" data-slug="cash-deposits">Cash Deposit Receipts<br><span class="dropdown-sub">Bank teller receipt uploads</span></a>
-    </div>
-  </div>
-  <div class="ribbon-item">
-    <div class="ribbon-tab" data-tab="dashboards" onclick="scrollToSection('sec-dashboards')">
-      Dashboards
-    </div>
-  </div>
-  <div class="ribbon-item" id="adminRibbonItem">
-    <div class="ribbon-tab" data-tab="admin" onclick="scrollToSection('sec-admin')">
-      Admin <span class="tab-arrow">&#9662;</span>
-    </div>
-    <div class="ribbon-dropdown">
-      <a href="/par-levels/" data-slug="par-levels">Par Levels<br><span class="dropdown-sub">Default headcounts</span></a>
-      <a href="/deal-structure/" data-slug="deal-structure">Deal Structure<br><span class="dropdown-sub">Commission setup</span></a>
-      <a href="/item-catalog/" data-slug="item-catalog">Item Catalog<br><span class="dropdown-sub">Products + pricing</span></a>
-      <a href="/venue-item-profiles/" data-slug="venue-item-profiles">Venue Item Profiles<br><span class="dropdown-sub">What each venue counts</span></a>
-      <a href="/user-access/" data-slug="user-access">User Access<br><span class="dropdown-sub">Manage logins</span></a>
-    </div>
-  </div>
-</div>
+<!-- Header bar and ribbon are injected by /pc-nav.js -->
 
 <div class="canvas">
   <div class="main-layout">
@@ -543,6 +498,7 @@ body {
 </div>
 
 <script src="/pc-auth.js"></script>
+<script src="/pc-nav.js"></script>
 <script>
 function scrollToSection(id) {
   var el = document.getElementById(id);
@@ -556,14 +512,10 @@ function scrollToSection(id) {
 pcAuth.require({
   pageSlug: null,
   onReady: function(user) {
-    var el = document.getElementById('header-right');
-    if (el && user) {
-      el.innerHTML = '<span class="header-user">' + (user.display_name || user.email) + '</span>' +
-        '<button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
-    }
-
     var isAdmin = pcAuth.isAdmin();
 
+    // Grey out canvas tiles (tool-cards) the user doesn't have access to.
+    // Header, ribbon, and ribbon greying are handled by pc-nav.js.
     var cards = document.querySelectorAll('.tool-card[data-slug]');
     for (var i = 0; i < cards.length; i++) {
       var card = cards[i];
@@ -574,21 +526,10 @@ pcAuth.require({
       }
     }
 
-    var dropLinks = document.querySelectorAll('.ribbon-dropdown a[data-slug]');
-    for (var j = 0; j < dropLinks.length; j++) {
-      var link = dropLinks[j];
-      var lSlug = link.getAttribute('data-slug');
-      if (!isAdmin && !pcAuth.hasAccess(lSlug)) {
-        link.classList.add('no-access');
-        link.removeAttribute('href');
-      }
-    }
-
+    // Hide the Admin section in the sidebar for non-admins.
     if (!isAdmin) {
       var adminSec = document.getElementById('sec-admin');
       if (adminSec) adminSec.style.display = 'none';
-      var adminRibbon = document.getElementById('adminRibbonItem');
-      if (adminRibbon) adminRibbon.style.display = 'none';
     }
   }
 });
