@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Schedule Assistant</title>
 <script src="/pc-auth.js"></script>
+<script src="/pc-nav.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -59,36 +60,23 @@ body {
 }
 .shell { max-width: 1400px; margin: 0 auto; }
 
-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 8px 4px 16px; flex-wrap: wrap; gap: 12px;
+/* In-page header CSS removed May 11, 2026 — pc-nav.js owns the toolkit header
+   and ribbon now. The page title heading still lives in the body but the
+   former <header> element and its supporting styles (back-link, hdivider,
+   title-block, header-right, header-user, sign-out-btn) are gone. */
+.page-title-bar {
+  padding: 18px 4px 14px;
+  display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
 }
-.title-block { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-.back-link {
-  font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
-  text-transform: uppercase; color: var(--label);
-  text-decoration: none; transition: color 0.15s;
-}
-.back-link:hover { color: var(--primary); }
-.hdivider { width: 1px; height: 20px; background: var(--border); }
-.title-text-wrap { display: flex; flex-direction: column; }
-.title-block h1 {
+.page-title-bar h1 {
   font-size: 20px; font-weight: 700; letter-spacing: -0.01em;
-  display: inline-flex; align-items: center; gap: 10px;
 }
+.page-title-bar .sub { font-size: 12px; color: var(--label); }
 .beta-tag {
   font-size: 9px; font-weight: 800;
   background: var(--primary); color: white;
   padding: 2px 7px; border-radius: 4px;
   letter-spacing: 0.06em;
-}
-.title-block .sub { font-size: 12px; color: var(--label); margin-top: 2px; }
-.header-right { display: flex; align-items: center; gap: 12px; }
-.header-user { font-size: 12px; color: #999; font-weight: 500; }
-.sign-out-btn {
-  font-size: 11px; color: var(--red); background: none;
-  border: 1px solid var(--red-border); padding: 4px 10px;
-  border-radius: 6px; cursor: pointer; font-weight: 600;
 }
 
 .view-toggle {
@@ -446,11 +434,75 @@ header {
   flex-wrap: wrap; /* allow note line to wrap below the name row */
 }
 .person-pill[draggable=true]:hover { transform: translateX(2px); border-color: var(--blue); }
-.person-pill.placed {
-  background: var(--green-light); border-color: var(--green-mid);
-  color: var(--green-dark); cursor: default;
-}
+/* (the .person-pill.placed rule is defined below in the SYNC PILL STATES block —
+    red-default, green-when-synced. Legacy green-when-placed rule removed May 11.) */
 .person-pill.placed:hover { transform: none; }
+
+/* ============================================================
+   7shifts SYNC PILL STATES — added May 11, 2026
+   ------------------------------------------------------------
+   A placed pill defaults to RED ("placed but not yet in 7shifts").
+   Manager clicks the "7s" toggle → pill turns GREEN ("synced").
+   Any movement of a green pill (drag, role change, removal) reverts
+   it to red. When a green pill is X'd off, the person reappears in
+   the Available panel tinted RED — flagging Meg that they still
+   need to be removed from 7shifts.
+
+   Convention shift from pre-May-11:
+     Previously: green-when-placed (one-state). Today: red-when-
+     placed-and-unsynced, green-only-when-synced.
+   ============================================================ */
+
+/* Default placed-pill override — red instead of the legacy green */
+.person-pill.placed {
+  background: var(--red-light); border-color: var(--red-border);
+  color: var(--red); cursor: default;
+}
+.person-pill.placed.synced {
+  background: var(--green-light); border-color: var(--green-mid);
+  color: var(--green-dark);
+}
+.person-pill.placed .person-note { color: var(--red); opacity: 0.85; }
+.person-pill.placed.synced .person-note { color: var(--green-dark); opacity: 0.85; }
+
+/* The 7s toggle button — sits on the right side of the placed pill.
+   Outline-red when unsynced, solid-green when synced. Clicking toggles
+   the seven_shifts_synced flag on the position_assignments row. */
+.person-pill .sync-toggle {
+  background: white; color: var(--red); border: 1px solid var(--red);
+  font-size: 9px; font-weight: 700; letter-spacing: 0.04em;
+  padding: 2px 6px; border-radius: 8px;
+  cursor: pointer; font-family: inherit;
+  line-height: 1.2;
+  display: inline-flex; align-items: center; gap: 3px;
+}
+.person-pill .sync-toggle:hover { background: var(--red-light); }
+.person-pill .sync-toggle.synced {
+  background: var(--green-dark); color: white; border-color: var(--green-dark);
+}
+.person-pill .sync-toggle.synced:hover { background: var(--green); }
+
+/* Available-panel pill tinted RED — means this person was placed AND
+   synced to 7shifts, then released back to the pool. Until Meg clicks
+   the dismiss check (✓) — confirming she's removed them from 7shifts
+   — the red tint persists across re-renders. */
+.person-pill.was-synced {
+  background: var(--red-light) !important;
+  border-color: var(--red-border) !important;
+  color: var(--red) !important;
+}
+.person-pill.was-synced .person-name {
+  color: var(--red);
+}
+.person-pill .sync-dismiss {
+  background: white; color: var(--red); border: 1px solid var(--red);
+  font-size: 11px; padding: 1px 6px; border-radius: 8px;
+  cursor: pointer; font-family: inherit;
+  margin-left: auto;
+  line-height: 1.1;
+}
+.person-pill .sync-dismiss:hover { background: var(--red-light); }
+
 .person-pill.assigned-away {
   background: var(--slate-light); border-color: var(--border-strong);
   color: #888; cursor: default;
@@ -888,8 +940,220 @@ header {
 .log-entry .log-action.removed { color: var(--red); }
 .log-entry .log-action.moved { color: var(--blue-dark); }
 .log-entry .log-action.locked, .log-entry .log-action.unlocked { color: var(--purple-dark); }
+.log-entry .log-action.synced_7s { color: var(--green-dark); }
+.log-entry .log-action.unsynced_7s { color: var(--red); }
+.log-entry .log-action.notified_staffing { color: var(--blue-dark); }
 .log-entry .log-time { color: var(--label); font-family: monospace; }
 .log-entry .log-actor { color: var(--label); }
+
+/* ============================================================
+   CLICKABLE PERSON NAME — added May 11, 2026
+   Every .person-name span (on every pill, every state) becomes
+   clickable to open the crew-card modal. We use a subtle hover
+   underline so the affordance is discoverable without being
+   visually noisy. Drag is still the primary interaction; click
+   only fires when the mouse doesn't move enough to register as a drag.
+   ============================================================ */
+.person-name {
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 0 1px;
+}
+.person-name:hover {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+/* ============================================================
+   CREW CARD MODAL — read-only crew card, opens on name click.
+   Mirrors the structure of the crew page card but with no
+   editing affordances. Includes:
+     - Header: name, venue line, rating tile
+     - Cert list (only what's on file — section omitted if empty)
+     - "New at venue" line when applicable
+     - Assigned venues + roles column grid
+   ============================================================ */
+.cc-modal { max-width: 520px; }
+.cc-header {
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: flex-start; gap: 14px;
+}
+.cc-header.no-venue { background: var(--bg); }
+.cc-avatar {
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  background: var(--card);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 600; font-size: 14px;
+  flex-shrink: 0;
+}
+.cc-header-info { flex: 1; min-width: 0; }
+.cc-name {
+  font-size: 17px; font-weight: 700; letter-spacing: -0.01em;
+}
+.cc-venue-line {
+  font-size: 11px;
+  margin-top: 3px;
+}
+.cc-venue-line.no-venue { color: var(--label); }
+.cc-rating-tile {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 12px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.cc-rating-label {
+  font-size: 9px; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--label);
+}
+.cc-rating-num {
+  font-size: 18px; font-weight: 700;
+  line-height: 1.1; margin-top: 2px;
+}
+.cc-rating-num.is-nr { color: var(--label); }
+.cc-section {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.cc-section:last-child { border-bottom: none; }
+.cc-section-title {
+  font-size: 11px; font-weight: 700;
+  color: var(--label);
+  text-transform: uppercase; letter-spacing: 0.08em;
+  margin-bottom: 10px;
+}
+.cc-cert-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 5px 0;
+  font-size: 13px;
+  border-bottom: 1px solid #f0f0ec;
+}
+.cc-cert-row:last-child { border-bottom: none; }
+.cc-cert-name { font-weight: 500; }
+.cc-cert-status {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+  padding: 2px 8px; border-radius: 999px;
+}
+.cc-cert-status.valid    { background: var(--green-light); color: var(--green-dark); }
+.cc-cert-status.expiring { background: var(--amber-light); color: var(--amber-dark); border: 1px solid var(--amber-border); }
+.cc-cert-status.expired  { background: var(--red-light); color: var(--red); }
+.cc-cert-status.unknown  { background: var(--slate-light); color: var(--label); }
+.cc-new-line {
+  font-size: 12px; color: var(--primary);
+  background: var(--amber-light);
+  border: 1px solid var(--amber-border);
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+.cc-rv-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 10px;
+}
+.cc-rv-column {
+  background: var(--card);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.cc-rv-column-head {
+  padding: 5px 9px;
+  font-size: 11px; font-weight: 700;
+  text-align: center;
+}
+.cc-rv-column-body {
+  padding: 6px 8px;
+  display: flex; flex-direction: column;
+  gap: 4px;
+  align-items: center;
+}
+.cc-rv-role {
+  font-size: 11px; color: var(--primary);
+  background: var(--bg);
+  padding: 2px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+.cc-rv-empty {
+  font-size: 12px; color: var(--label);
+  font-style: italic; padding: 8px 0;
+}
+
+/* ============================================================
+   NOTIFY STAFFING MODAL — small confirm-and-send dialog.
+   Includes event summary, optional note field, recipient
+   display, and Send/Cancel actions. Post-send state lives on
+   the event card itself (✓ Notified pill) — not in this modal.
+   ============================================================ */
+.ns-modal { max-width: 480px; }
+.ns-event-line {
+  padding: 12px 14px;
+  background: var(--bg);
+  border-radius: 8px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.ns-event-line strong { display: block; font-size: 14px; margin-bottom: 2px; }
+.ns-event-line .ns-venue-chip {
+  display: inline-block;
+  font-size: 10px; font-weight: 700;
+  color: white;
+  padding: 2px 7px; border-radius: 3px;
+  letter-spacing: 0.04em;
+  margin-right: 6px;
+  vertical-align: 1px;
+}
+.ns-field { margin-bottom: 12px; }
+.ns-label {
+  font-size: 11px; font-weight: 700;
+  color: var(--label);
+  text-transform: uppercase; letter-spacing: 0.06em;
+  display: block; margin-bottom: 5px;
+}
+.ns-input, .ns-textarea {
+  width: 100%;
+  padding: 8px 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  font-size: 13px;
+  font-family: inherit;
+}
+.ns-textarea { min-height: 60px; resize: vertical; }
+.ns-input:focus, .ns-textarea:focus { outline: none; border-color: var(--blue); }
+.ns-recipient-line {
+  font-size: 12px; color: var(--label);
+  line-height: 1.5;
+  padding: 10px 12px;
+  background: var(--blue-light);
+  border-radius: 6px;
+}
+.ns-recipient-line strong { color: var(--blue-dark); }
+
+/* Notify staffing button states on the event card */
+.notified-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; font-weight: 600;
+  color: var(--green-dark);
+  background: var(--green-light);
+  border: 1px solid var(--green-mid);
+  padding: 4px 9px; border-radius: 7px;
+  margin-left: 6px;
+}
+.notified-pill .renotify-link {
+  font-size: 10px; color: var(--blue-dark);
+  text-decoration: underline;
+  cursor: pointer;
+  margin-left: 4px;
+  background: none; border: none; padding: 0;
+  font-family: inherit;
+}
+.notified-pill .renotify-link:hover { color: var(--primary); }
 
 /* ===== Multi-signup assign modal ===== */
 .assign-row {
@@ -1123,17 +1387,13 @@ header {
 
 <div class="shell">
 
-  <header>
-    <div class="title-block">
-      <a href="/" class="back-link">&#8592; Toolkit</a>
-      <div class="hdivider"></div>
-      <div class="title-text-wrap">
-        <h1>Schedule Assistant</h1>
-        <div class="sub">Drag people into stand &amp; role positions · midnight day-of lock</div>
-      </div>
-    </div>
-    <div class="header-right" id="header-right"></div>
-  </header>
+  <!-- In-page <header> removed May 11, 2026 — pc-nav.js injects the toolkit
+       header bar and ribbon. Page-specific title heading stays here so it
+       sits in the page content, not in the global chrome. -->
+  <div class="page-title-bar">
+    <h1>Schedule Assistant</h1>
+    <span class="sub">Drag people into stand &amp; role positions &middot; midnight day-of lock</span>
+  </div>
 
   <div class="filter-strip">
     <span class="label">Venue</span>
@@ -1182,6 +1442,50 @@ header {
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- Crew card modal — opens when a person's name is clicked anywhere
+     on the page (available pill, placed pill, etc). Read-only view of
+     the same crew card the People page renders, scoped down to the
+     fields a manager building a schedule actually needs:
+       - Rating tile in the header
+       - Cert list (only what's on file)
+       - "New at venue" line (only when applicable to the venue the pill
+         was clicked from)
+       - Assigned venues + roles column grid
+     Body is built dynamically in renderCrewCardModal(); we keep an
+     empty backdrop here so the click-outside-to-close logic can
+     attach without special-casing. -->
+<div class="modal-backdrop" id="crew-card-modal">
+  <div class="modal cc-modal" id="crew-card-modal-box"></div>
+</div>
+
+<!-- Notify staffing modal — confirm dialog that sends the
+     "schedule is ready for 7shifts" email to staffing@camdenco.com.
+     Optional one-line note is included in the email body and stored in
+     the audit log entry. Send button locks during the request; on
+     success, the modal closes and the event card renders the post-
+     notification ✓ Notified pill. -->
+<div class="modal-backdrop" id="notify-staffing-modal">
+  <div class="modal ns-modal">
+    <div class="modal-head">
+      <h3>Notify staffing</h3>
+      <button class="modal-close" data-close-modal="notify-staffing-modal">&times;</button>
+    </div>
+    <div class="modal-error" id="notify-staffing-error"></div>
+    <div class="modal-body">
+      <div class="ns-event-line" id="notify-staffing-event-line"></div>
+      <div class="ns-field">
+        <label class="ns-label">Note for staffing (optional)</label>
+        <textarea class="ns-textarea" id="notify-staffing-note" placeholder="Anything Meg should know &mdash; held seats, special requests, etc."></textarea>
+      </div>
+      <div class="ns-recipient-line" id="notify-staffing-recipient"></div>
+    </div>
+    <div class="modal-foot" style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;align-items:center;">
+      <button class="btn" data-close-modal="notify-staffing-modal" style="background:white;border-color:var(--border-strong);color:var(--primary);">Cancel</button>
+      <button class="btn-confirm" id="notify-staffing-send-btn" style="padding:6px 18px;">Send notification</button>
+    </div>
+  </div>
+</div>
 
 <div class="modal-backdrop" id="audit-modal">
   <div class="modal">
@@ -1337,6 +1641,16 @@ header {
  * ===================================================================== */
 
 const SUPABASE_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
+
+// Edge function endpoint for the "Notify staffing" button. Builds the
+// "schedule is ready for 7shifts" email server-side from canonical state.
+// See /supabase/functions/send-event-ready-notification/ — deployed May 11.
+const EDGE_NOTIFY_URL = SUPABASE_URL + '/functions/v1/send-event-ready-notification';
+
+// Threshold for "Expiring soon" on certifications (in days). Matches the
+// constant on /crew/index.html and /certifications/index.html — kept in
+// sync so the same cert renders with the same status across pages.
+const CERT_EXPIRING_SOON_DAYS = 30;
 
 const SUPPORT_STAND = 'Support Staff';
 const HAWKING_STAND = 'Hawking';
@@ -1620,8 +1934,58 @@ const state = {
   expandedRemoved: new Set(),  // event IDs whose "Removed" section is open
   unlockedEvents: new Set(),
   drag: null,         // { staffName, source, fromPositionId? }
-  typing: null        // { eventId, venue, stand, role, value, focusedIndex }
+  typing: null,        // { eventId, venue, stand, role, value, focusedIndex }
+
+  // ============================================================
+  // Added May 11, 2026 — crew card modal, certifications, sync state
+  // ============================================================
+
+  // Candidates index — keyed by punch_id, populated at boot from a
+  // dedicated fetch. Powers the crew card modal's rendering of
+  // assigned_venues, assigned_roles, hired_at, etc. Each value is a
+  // full candidates row.
+  candidates: {},
+
+  // Employee certifications — flat array of active rows (removed_at
+  // is null). Filtered by employee_id when rendering the crew card.
+  certs: [],
+
+  // Cert types lookup — id → {display_name, state, category}.
+  // Used to render cert names + state tags in the crew card.
+  certTypesById: {},
+
+  // Removed-but-still-tagged-as-synced placements. When a manager X's
+  // off a green (synced) placed pill, the position_assignments row is
+  // soft-deleted but seven_shifts_synced stays TRUE — that's the signal
+  // that the released person still needs to be removed from 7shifts.
+  // The page reads these to render the red tint on available-panel
+  // pills, and the dismiss button (✓) writes false back to clear the
+  // signal once Meg has actually removed them from 7shifts.
+  // Shape: [{ id, event_id, staff_name, removed_at, seven_shifts_synced }]
+  removedSyncedPlacements: [],
+
+  // Crew card modal — which employee is open, and which event's venue
+  // we should compute "new at venue" against. Null when modal is closed.
+  crewCardEmpId: null,
+  crewCardSourceVenue: null,
+
+  // Notify staffing modal — which event the modal is open for, or null
+  // when closed. Resolved at open time so re-renders don't lose it.
+  notifyStaffingEventId: null
 };
+
+// ============================================================
+// Click-vs-drag gesture differentiation — added May 11, 2026
+// ------------------------------------------------------------
+// Used by the .person-name click handlers. A click that involves the
+// mouse moving more than DRAG_THRESHOLD_PX between mousedown and
+// mouseup is treated as a drag and the crew-card modal does NOT open.
+// This lets the legacy drag-to-place behavior coexist with click-to-
+// open-card without a dedicated affordance.
+// ============================================================
+const CLICK_DRAG_THRESHOLD_PX = 4;
+let _clickStartX = null;
+let _clickStartY = null;
 
 // Returns true if the person should display a NEW HIRE badge at this venue.
 // Pure read on already-loaded state — safe to call inside render loops.
@@ -1727,12 +2091,14 @@ function loadAll() {
   const today = todayIsoLocal();
   const pastPlacementsUrl = SUPABASE_URL + '/rest/v1/position_assignments?select=staff_name,venue,event_id&removed_at=is.null';
 
-  // Candidate phones for pipeline-hire detection. We only need the phone
-  // column — we never read names or any sensitive candidate data here.
-  // Phones are compared against employees.phone after normalizePhone() on
-  // both sides. anon SELECT is allowed on candidates so this works whether
-  // the user is admin or not.
-  const candidatesUrl = SUPABASE_URL + '/rest/v1/candidates?select=phone';
+  // Candidates for the crew-card modal AND for pipeline-hire detection.
+  //
+  // Before May 11, 2026: we fetched only `phone` here. The crew card now
+  // needs assigned_venues, assigned_roles, hired_at, applied_at,
+  // is_minor, etc. — the full row. The cost is small (~230 rows) and we
+  // only fetch once per page load. anon SELECT is allowed on candidates,
+  // so this works whether the user is admin or not.
+  const candidatesUrl = SUPABASE_URL + '/rest/v1/candidates?select=*';
 
   // Recent signups query — last 36 hours of availability rows for the
   // recent-signups box at the top of the page. Independent of the page's
@@ -1746,11 +2112,25 @@ function loadAll() {
     '&submitted_at=gte.' + recentSignupsSince +
     '&order=submitted_at.desc';
 
+  // Certifications + cert types — pulled at boot so the crew card modal
+  // can render the cert list without an extra round trip when opened.
+  // Both are bounded fetches (active rows only).
+  const certsUrl = SUPABASE_URL +
+    '/rest/v1/employee_certifications' +
+    '?select=id,employee_id,cert_type,issued_at,expires_at' +
+    '&removed_at=is.null';
+  const certTypesUrl = SUPABASE_URL +
+    '/rest/v1/cert_types' +
+    '?select=id,display_name,state,category,requires_expiration' +
+    '&active=eq.true&order=sort_order.asc';
+
   document.getElementById('content').innerHTML = '<div class="loader">Loading…</div>';
 
   return Promise.all([
     authFetch(eventsUrl, { headers: apiHeaders() }),
-    authFetch(SUPABASE_URL + '/rest/v1/employees?select=first_name,last_name,phone,home_venue,shirt_size,is_active&is_active=eq.true&order=last_name.asc',
+    // Added `id` (May 11) so the crew-card modal can deep-link to /crew/
+    // and for indexing candidates → employees by punch_id elsewhere.
+    authFetch(SUPABASE_URL + '/rest/v1/employees?select=id,first_name,last_name,phone,punch_id,home_venue,shirt_size,is_active&is_active=eq.true&order=last_name.asc',
       { headers: apiHeaders() }),
     // Historical availability counts for "reliability" sort on the Available-to-call list.
     // We fetch ALL availability rows (including soft-deleted) just to count past activity.
@@ -1760,7 +2140,7 @@ function loadAll() {
     // NEW HIRE badge — past placements (no date filter, trimmed client-side
     // by joining against state.events / loaded events. See note above.)
     authFetch(pastPlacementsUrl, { headers: apiHeaders() }),
-    // NEW HIRE badge — candidate phones for pipeline-hire detection
+    // Candidates — full row, for the crew-card modal AND pipeline-hire phone match
     authFetch(candidatesUrl, { headers: apiHeaders() }),
     // Recent signups for the box at the top of the page
     authFetch(recentSignupsUrl, { headers: apiHeaders() }),
@@ -1772,13 +2152,31 @@ function loadAll() {
     // section under the staff list in the email. Sorted by sort_order then
     // display_name so the email order matches what admins set in the modal.
     authFetch(SUPABASE_URL + '/rest/v1/event_managers?select=id,display_name,sort_order&order=sort_order.asc,display_name.asc',
-      { headers: apiHeaders() })
-  ]).then(([events, employees, allAvail, pastPlacements, candidatePhones, recentSignups, approvedRecipients, eventManagers]) => {
+      { headers: apiHeaders() }),
+    // Certifications + cert types for the crew-card modal (May 11, 2026).
+    // Read-only on this page — editing happens on /certifications/.
+    authFetch(certsUrl, { headers: apiHeaders() }),
+    authFetch(certTypesUrl, { headers: apiHeaders() })
+  ]).then(([events, employees, allAvail, pastPlacements, candidateRows, recentSignups, approvedRecipients, eventManagers, certs, certTypes]) => {
     state.events = events || [];
     state.employees = employees || [];
     state.recentSignups = recentSignups || [];
     state.approvedRecipients = approvedRecipients || [];
     state.eventManagers = eventManagers || [];
+
+    // Build the candidates index (May 11). Keyed by punch_id so a
+    // homeVenueOf-style match-by-name flow can pivot through:
+    //    employees[name] -> punch_id -> state.candidates[punch_id]
+    state.candidates = {};
+    (candidateRows || []).forEach(c => {
+      if (c.punch_id) state.candidates[c.punch_id] = c;
+    });
+
+    // Certifications + cert types (May 11)
+    state.certs = certs || [];
+    state.certTypesById = {};
+    (certTypes || []).forEach(t => { state.certTypesById[t.id] = t; });
+
 
     // Build historical signup counts per staff_name. Used to sort the
     // Available-to-call list — most-reliable employees first.
@@ -1795,7 +2193,7 @@ function loadAll() {
     // matching candidates row (or will phone-match by accident, in which
     // case we're no worse off than other heuristics).
     const candidatePhoneSet = new Set();
-    (candidatePhones || []).forEach(c => {
+    (candidateRows || []).forEach(c => {
       const norm = normalizePhone(c.phone);
       if (norm) candidatePhoneSet.add(norm);
     });
@@ -1882,6 +2280,7 @@ function loadAll() {
       state.multiSignupCounts = {};
       state.assignments = {};
       state.positions = [];
+      state.removedSyncedPlacements = [];
       // Wait for the missing-event lookup to finish before resolving so
       // the render call below sees the full lookup populated.
       return resolveMissingEvents;
@@ -1902,18 +2301,30 @@ function loadAll() {
         { headers: apiHeaders() }),
       authFetch(SUPABASE_URL + '/rest/v1/availability_assignments?event_date=in.' + dateInList,
         { headers: apiHeaders() }),
-      authFetch(SUPABASE_URL + '/rest/v1/position_assignments?event_id=in.' + inList + '&removed_at=is.null',
+      // Position assignments — active placements for the visible events.
+      // Added May 11: seven_shifts_synced columns for red/green pill state.
+      authFetch(SUPABASE_URL + '/rest/v1/position_assignments?event_id=in.' + inList + '&removed_at=is.null&select=*',
+        { headers: apiHeaders() }),
+      // Removed-but-still-tagged-as-synced placements. When a manager X's
+      // off a green (synced) placed pill, the row gets removed_at but
+      // seven_shifts_synced stays TRUE. We read those rows so the
+      // Available panel can tint the released person's pill red until
+      // Meg confirms they've been removed from 7shifts.
+      authFetch(SUPABASE_URL + '/rest/v1/position_assignments?event_id=in.' + inList +
+        '&removed_at=not.is.null&seven_shifts_synced=eq.true' +
+        '&select=id,event_id,staff_name,removed_at,seven_shifts_synced',
         { headers: apiHeaders() }),
       // Resolve any recent-signup events that aren't in state.events. This
       // doesn't return data into the destructured array — it populates
       // state.recentSignupEvents as a side effect via the lookup primed above.
       resolveMissingEvents
-    ]).then(([reqs, availAll, assigns, positions]) => {
+    ]).then(([reqs, availAll, assigns, positions, removedSynced]) => {
       state.staffingRequests = reqs || [];
       // Split availability into active (no removed_at) and removed.
       state.availability = (availAll || []).filter(a => !a.removed_at);
       state.removedAvailability = (availAll || []).filter(a => !!a.removed_at);
       state.positions = positions || [];
+      state.removedSyncedPlacements = removedSynced || [];
 
       // Build multi-signup index: count signups per (date, person)
       const eventById = {};
@@ -2207,18 +2618,11 @@ function renderRecentSignupRow(r) {
   const isRemoved = !!r.removed_at;
   const homeV = homeVenueOf(r.staff_name);
   const isMismatch = venue && homeV && homeV !== venue;
-  const isNew = venue ? isNewAtVenue(r.staff_name, venue) : false;
 
   let html = '<div class="rs-row' + (isRemoved ? ' removed' : '') + '">';
   html += '<span class="rs-time">' + escapeHtml(fmtSignupTime(r.submitted_at)) + '</span>';
   html += '<span class="rs-name">' + escapeHtml(r.staff_name) + '</span>';
-  if (isNew) {
-    const placementCount = venue ? venuePlacementCount(r.staff_name, venue) : 0;
-    const tooltip = 'Pipeline-hired employee. ' + placementCount +
-      ' prior shift' + (placementCount === 1 ? '' : 's') +
-      ' at ' + venue + ' (threshold ' + NEW_HIRE_THRESHOLD + ').';
-    html += '<span class="new-hire-tag" title="' + escapeAttr(tooltip) + '">NEW</span>';
-  }
+  // NEW HIRE badge removed May 11, 2026 — surfacing moved into crew card modal.
   if (homeV) {
     const hvColor = VENUE_COLORS[homeV] || '#666';
     const hvTip = 'Home component: ' + homeV + (venue && homeV === venue ? ' (matches event)' : ' (does not match event)');
@@ -2403,11 +2807,28 @@ function renderEventRow(ev) {
   }
 
   // Split button: main action stays Print (one click, no regression).
-  // Chevron opens a tiny menu with "Email staff list" as a second option.
+  // Chevron opens a tiny menu with "Email staff list" and "Notify
+  // staffing" as additional options.
   html += '<div class="print-split">' +
     '<button class="btn btn-print" data-print-event="' + ev.id + '">🖨 Print</button>' +
     '<button class="btn btn-print-chevron" data-print-menu="' + ev.id + '" title="More options">▾</button>' +
     '</div>';
+
+  // "✓ Notified" pill — shown when the event has been notified to staffing.
+  // The pill is informational; clicking the re-notify link opens the modal
+  // again so the manager can send an updated email (e.g., after schedule
+  // changes). Stamp comes from events.staffing_notified_at/by.
+  if (ev.staffing_notified_at) {
+    const notifiedBy = ev.staffing_notified_by || 'manager';
+    const notifiedAtLabel = fmtNotifiedAt(ev.staffing_notified_at);
+    const tip = 'Staffing was notified that this event is ready for 7shifts on ' +
+      notifiedAtLabel + ' by ' + notifiedBy + '. Click "Re-notify" to send an updated email.';
+    html += '<span class="notified-pill" title="' + escapeAttr(tip) + '">' +
+      '&#10003; Notified ' + escapeHtml(notifiedAtLabel) +
+      ' &middot; <button class="renotify-link" data-renotify-event="' + ev.id + '">Re-notify</button>' +
+    '</span>';
+  }
+
   html += '<button class="chevron">▼</button>';
   html += '</div>';
 
@@ -2539,30 +2960,28 @@ function renderAvailablePanel(ev) {
       cls += ' multi';
     }
 
+    // 7shifts sync state — if this person was X'd off a synced placement
+    // and Meg hasn't dismissed the warning yet, tint the pill red.
+    // Only applies when the person is AVAILABLE (not placed elsewhere,
+    // not assigned-away). Otherwise the home-venue tag's red could conflict
+    // visually with placed-elsewhere state.
+    const _releasedSync = ps === 'AVAILABLE'
+      ? wasRecentlySyncedAndReleased(s.staff_name, ev.id)
+      : null;
+    if (_releasedSync) cls += ' was-synced';
+
     html += '<div class="' + cls + '" draggable="' + draggable +
       '" data-staff-name="' + escapeAttr(s.staff_name) + '" data-source="signup" data-event-id="' + ev.id +
       '" data-availability-id="' + escapeAttr(s.id || '') + '">';
-    html += '<span class="person-name">' + escapeHtml(s.staff_name) + '</span>';
+    html += '<span class="person-name" data-staff-name-click="' + escapeAttr(s.staff_name) + '" data-source-venue="' + escapeAttr(ev.venue) + '">' + escapeHtml(s.staff_name) + '</span>';
 
-    // NEW HIRE badge — render before the right-side state indicators so it
-    // sits visually next to the name. Only renders on AVAILABLE pills.
-    // Decision: not shown on PLACED_HERE or ASSIGNED_AWAY pills — once the
-    // person is committed somewhere the "is this person new at this venue"
-    // question is no longer the operative one for the manager looking at
-    // the available panel.
-    if (ps === 'AVAILABLE' && isNewAtVenue(s.staff_name, ev.venue)) {
-      const placementCount = venuePlacementCount(s.staff_name, ev.venue);
-      const tooltip = 'Pipeline-hired employee. ' + placementCount +
-        ' prior shift' + (placementCount === 1 ? '' : 's') +
-        ' at ' + ev.venue + ' (threshold ' + NEW_HIRE_THRESHOLD + ').';
-      html += '<span class="new-hire-tag" title="' + escapeAttr(tooltip) + '">NEW</span>';
-    }
+    // NEW HIRE badge removed from pills on May 11, 2026 — surfacing moved
+    // into the crew card modal (opened on click of .person-name).
 
     // Home-venue badge — renders on every pill state (AVAILABLE, PLACED_HERE,
     // ASSIGNED_AWAY) because "should this person be here at all?" is relevant
-    // in every context, unlike NEW HIRE which is only meaningful at the
-    // pre-placement decision point. NULL and 'NA' both suppress (homeVenueOf
-    // normalizes both to null).
+    // in every context. NULL and 'NA' both suppress (homeVenueOf normalizes both
+    // to null).
     const _hv = homeVenueOf(s.staff_name);
     if (_hv) {
       const hvColor = VENUE_COLORS[_hv] || '#666';
@@ -2581,6 +3000,17 @@ function renderAvailablePanel(ev) {
     } else if (isMulti) {
       html += '<span class="signup-multi" data-assign-staff="' + escapeAttr(s.staff_name) +
         '" data-assign-event="' + ev.id + '" title="Click to see all events">' + multiCount + 'x</span>';
+    }
+
+    // Sync-dismiss button (✓) — only visible when the available pill is
+    // tinted red because the person was previously synced and then
+    // released. Clicking it clears the sync flag on the removed
+    // position_assignments row (so the red goes away) and writes an
+    // unsynced_7s entry into the audit log with reason='dismissed'.
+    if (_releasedSync) {
+      html += '<button class="sync-dismiss" data-dismiss-sync-id="' + escapeAttr(_releasedSync.id) +
+        '" data-dismiss-sync-name="' + escapeAttr(s.staff_name) +
+        '" title="Mark this person removed from 7shifts. The red tint will go away.">&#10003;</button>';
     }
 
     // Soft-remove X — only allowed when person isn't already placed at this event
@@ -2733,6 +3163,10 @@ function renderFilledSlot(ev, p, locked) {
   const multiCount = state.multiSignupCounts[ev.event_date + '|' + p.staff_name] || 1;
   if (multiCount > 1) cls += ' conflict';
 
+  // 7shifts sync state — added May 11, 2026. Default placed pill is red
+  // (not yet synced). Adding the 'synced' class flips it green.
+  if (p.seven_shifts_synced === true) cls += ' synced';
+
   // Look up the signup note (only meaningful for source='signup' but we
   // include it whenever a signup row exists, in case manager typed someone
   // who had also signed up).
@@ -2745,17 +3179,10 @@ function renderFilledSlot(ev, p, locked) {
 
   let html = '<div class="' + cls + '" draggable="' + (locked ? 'false' : 'true') + '" data-position-id="' + p.id + '" data-staff-name="' + escapeAttr(p.staff_name) + '" data-source="' + p.source + '">';
   if (multiCount > 1) html += '<span class="conflict-icon" data-assign-staff="' + escapeAttr(p.staff_name) + '" data-assign-event="' + ev.id + '" title="Click to see all events this person signed up for">⚠</span>';
-  html += '<span class="person-name">' + escapeHtml(p.staff_name) + '</span>';
-  // NEW HIRE badge on the placed pill — same logic as the Available panel.
-  // Lets the manager see crew composition at a glance: 3 NEW pills clustered
-  // in one stand vs. evenly distributed across stands tells different stories.
-  if (isNewAtVenue(p.staff_name, ev.venue)) {
-    const placementCount = venuePlacementCount(p.staff_name, ev.venue);
-    const tooltip = 'Pipeline-hired employee. ' + placementCount +
-      ' prior shift' + (placementCount === 1 ? '' : 's') +
-      ' at ' + ev.venue + ' (threshold ' + NEW_HIRE_THRESHOLD + ').';
-    html += '<span class="new-hire-tag" title="' + escapeAttr(tooltip) + '">NEW</span>';
-  }
+  // Clickable name hook — opens the crew card modal.
+  html += '<span class="person-name" data-staff-name-click="' + escapeAttr(p.staff_name) + '" data-source-venue="' + escapeAttr(ev.venue) + '">' + escapeHtml(p.staff_name) + '</span>';
+  // NEW HIRE badge removed May 11, 2026 — moved into the crew card modal.
+
   // Home-venue badge on the placed pill — same logic as the Available panel.
   // Renders on every placed pill so the manager can scan a stand and see
   // home-venue composition at a glance.
@@ -2767,6 +3194,22 @@ function renderFilledSlot(ev, p, locked) {
   }
   if (p.source === 'manual') html += '<span class="manual-tag">TYPED</span>';
   if (p.source === 'placeholder') html += '<span class="placeholder-tag">PLACEHOLDER</span>';
+  // 7s toggle — present on every placed pill except JMAC (JMAC is an
+  // agency staffing record, not a person Meg copies into 7shifts).
+  // Stays interactive even after midnight lock so late additions /
+  // corrections to 7shifts can be tracked.
+  if (p.source !== 'jmac') {
+    const synced = p.seven_shifts_synced === true;
+    const syncTip = synced
+      ? 'Marked synced to 7shifts'
+        + (p.seven_shifts_synced_by ? ' by ' + p.seven_shifts_synced_by : '')
+        + '. Click to undo.'
+      : 'Mark this person as scheduled in 7shifts.';
+    html += '<button class="sync-toggle' + (synced ? ' synced' : '') +
+      '" data-sync-toggle="' + p.id + '" title="' + escapeAttr(syncTip) + '">' +
+      (synced ? '&#10003; 7s' : '7s') +
+      '</button>';
+  }
   if (!locked) html += '<button class="x" data-remove-position="' + p.id + '" title="Remove">✕</button>';
   if (signupNote) {
     html += '<div class="person-note" title="' + escapeAttr(signupNote) + '">📝 ' + escapeHtml(signupNote) + '</div>';
@@ -2909,12 +3352,74 @@ function attachRecentSignupsHandlers() {
 function attachEventHandlers() {
   document.querySelectorAll('.event-head').forEach(head => {
     head.addEventListener('click', e => {
-      if (e.target.closest('.btn') || e.target.closest('.audit-link')) return;
+      if (e.target.closest('.btn') || e.target.closest('.audit-link') || e.target.closest('.notified-pill')) return;
       const row = head.closest('.event-row');
       const id = row.getAttribute('data-event-id');
       if (state.expandedEvents.has(id)) state.expandedEvents.delete(id);
       else state.expandedEvents.add(id);
       render();
+    });
+  });
+
+  // Re-notify link inside the notified-pill — opens the modal again so
+  // the manager can send an updated email after schedule changes.
+  document.querySelectorAll('[data-renotify-event]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const id = btn.getAttribute('data-renotify-event');
+      openNotifyStaffingModal(id);
+    });
+  });
+
+  // 7s sync toggle on placed pills. stopPropagation so the click doesn't
+  // also count as a click on the surrounding pill name (which would open
+  // the crew card modal).
+  document.querySelectorAll('[data-sync-toggle]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const id = btn.getAttribute('data-sync-toggle');
+      onSyncToggleClick(id);
+    });
+  });
+
+  // Sync-dismiss button (✓) on the red available pill — clears the red
+  // tint after Meg removes the person from 7shifts manually.
+  document.querySelectorAll('[data-dismiss-sync-id]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const id = btn.getAttribute('data-dismiss-sync-id');
+      const name = btn.getAttribute('data-dismiss-sync-name');
+      dismissReleasedSync(id, name);
+    });
+  });
+
+  // Click-to-open crew card on every .person-name. Gesture-differentiated:
+  // a click that involves the mouse moving past CLICK_DRAG_THRESHOLD_PX
+  // between mousedown and mouseup is treated as a drag and the modal does
+  // NOT open. This lets the legacy drag-to-place behavior coexist with
+  // click-to-open without a dedicated info icon.
+  document.querySelectorAll('[data-staff-name-click]').forEach(span => {
+    span.addEventListener('mousedown', e => {
+      _clickStartX = e.clientX;
+      _clickStartY = e.clientY;
+    });
+    span.addEventListener('click', e => {
+      e.stopPropagation();
+      // If the mouse moved far enough since mousedown, treat as a drag-attempt.
+      if (_clickStartX !== null && _clickStartY !== null) {
+        const dx = Math.abs(e.clientX - _clickStartX);
+        const dy = Math.abs(e.clientY - _clickStartY);
+        if (dx > CLICK_DRAG_THRESHOLD_PX || dy > CLICK_DRAG_THRESHOLD_PX) {
+          _clickStartX = null;
+          _clickStartY = null;
+          return;
+        }
+      }
+      _clickStartX = null;
+      _clickStartY = null;
+      const name = span.getAttribute('data-staff-name-click');
+      const venue = span.getAttribute('data-source-venue');
+      openCrewCardModal(name, venue || null);
     });
   });
 
@@ -3533,18 +4038,47 @@ function movePosition(positionId, newEventId, newStand, newRole) {
 
   const actor = (state.user && state.user.display_name) || (state.user && state.user.email) || 'unknown';
   const oldStand = pos.stand, oldRole = pos.role;
+  const oldEventId = pos.event_id;
+  const wasSynced = pos.seven_shifts_synced === true;
+
+  // 7shifts sync state — any movement clears the synced flag. Doing it in
+  // the same PATCH as the move keeps the operation atomic from the DB's
+  // point of view; logging the unsync as a separate audit row makes the
+  // history readable.
+  const patchBody = {
+    event_id: newEventId,
+    stand: newStand,
+    role: newRole,
+    assigned_by: actor,
+    seven_shifts_synced: false,
+    seven_shifts_synced_at: null,
+    seven_shifts_synced_by: null
+  };
 
   authFetch(SUPABASE_URL + '/rest/v1/position_assignments?id=eq.' + positionId, {
     method: 'PATCH', headers: apiHeadersJson(),
-    body: JSON.stringify({ event_id: newEventId, stand: newStand, role: newRole, assigned_by: actor })
+    body: JSON.stringify(patchBody)
   }).then(rows => {
     const updated = rows[0] || pos;
     const idx = state.positions.findIndex(p => p.id === positionId);
-    if (idx !== -1) state.positions[idx] = Object.assign({}, pos, updated);
+    if (idx !== -1) state.positions[idx] = Object.assign({}, pos, updated, {
+      seven_shifts_synced: false, seven_shifts_synced_at: null, seven_shifts_synced_by: null
+    });
     return logAction(newEventId, positionId, 'moved', {
       from: { stand: oldStand, role: oldRole },
       to: { stand: newStand, role: newRole },
       staff_name: pos.staff_name
+    });
+  }).then(() => {
+    // If the pill was synced before the move, log the auto-unsync too.
+    // Reason distinguishes a same-event role change from a cross-event drag.
+    if (!wasSynced) return;
+    const reason = (oldEventId !== newEventId) ? 'event_changed' :
+                   (oldStand !== newStand)    ? 'stand_changed' : 'role_changed';
+    return logAction(newEventId, positionId, 'unsynced_7s', {
+      staff_name: pos.staff_name,
+      trigger: 'auto',
+      reason: reason
     });
   }).then(() => {
     showToast('Moved to ' + newStand + ' / ' + newRole, 'success');
@@ -3562,14 +4096,45 @@ function removePosition(positionId) {
   const actor = (state.user && state.user.display_name) || (state.user && state.user.email) || 'unknown';
   const ev = state.events.find(e => e.id === pos.event_id);
   const eventDate = ev ? ev.event_date : null;
+  const wasSynced = pos.seven_shifts_synced === true;
+  const now = new Date().toISOString();
 
+  // IMPORTANT: we deliberately DO NOT clear the seven_shifts_synced flag
+  // on removal. If the pill was green, the row stays seven_shifts_synced=true
+  // even after removed_at is set — that's how the Available panel knows
+  // to tint the pill red ("this person was in 7shifts and now needs to be
+  // removed"). The dismiss button (✓) is what clears the flag.
   authFetch(SUPABASE_URL + '/rest/v1/position_assignments?id=eq.' + positionId, {
     method: 'PATCH', headers: apiHeadersJson(),
-    body: JSON.stringify({ removed_at: new Date().toISOString(), removed_by: actor })
+    body: JSON.stringify({ removed_at: now, removed_by: actor })
   }).then(() => {
     state.positions = state.positions.filter(p => p.id !== positionId);
+    // If the removed row was synced, push it into removedSyncedPlacements so
+    // the available pill renders red on the next render. Without this, we'd
+    // have to refetch to surface the new red-tint signal.
+    if (wasSynced) {
+      state.removedSyncedPlacements.push({
+        id: positionId,
+        event_id: pos.event_id,
+        staff_name: pos.staff_name,
+        removed_at: now,
+        seven_shifts_synced: true
+      });
+    }
     return logAction(pos.event_id, positionId, 'removed', {
-      stand: pos.stand, role: pos.role, staff_name: pos.staff_name
+      stand: pos.stand, role: pos.role, staff_name: pos.staff_name,
+      was_synced: wasSynced
+    });
+  }).then(() => {
+    // If the pill was synced before removal, log a second audit entry
+    // capturing the auto-unsync intent. The DB flag itself stays true
+    // until dismiss; the audit row is the "you should know they were in
+    // 7shifts" signal for forensic review.
+    if (!wasSynced) return;
+    return logAction(pos.event_id, positionId, 'unsynced_7s', {
+      staff_name: pos.staff_name,
+      trigger: 'auto',
+      reason: 'removed'
     });
   }).then(() => {
     // Also release any availability_assignments row for this person on this date.
@@ -3757,6 +4322,596 @@ function logAction(eventId, positionId, action, details) {
   }).catch(err => {
     console.warn('Log write failed (non-blocking):', err);
   });
+}
+
+// ============================================================
+// 7shifts SYNC HELPERS — added May 11, 2026
+// ------------------------------------------------------------
+// These functions own the lifecycle of the seven_shifts_synced flag
+// on position_assignments rows. They all share the same pattern:
+//   1. PATCH the DB
+//   2. Mutate state.positions / state.removedSyncedPlacements
+//   3. logAction() — audit trail with rich details
+//   4. render()
+//
+// Hooks into movePosition() and removePosition() — added in those
+// functions just below the existing PATCH — ensure the flag gets
+// auto-cleared (and logged) on any movement of a previously-synced
+// pill.
+// ============================================================
+
+// Returns the matching removed-but-synced placement row for this
+// (staff_name, event_id), or null if none exists. Used by the
+// Available panel to decide whether to tint a pill red.
+//
+// Why event_id matters: if Maya was synced at Mann and released, she
+// only needs cleanup on the Mann signup. If she also signed up at FMP
+// the same day, that pill should NOT be red — there was no FMP sync
+// to undo. (She'd reappear on multiple events' available panels via
+// her availability rows; we want the red only on the one she was
+// actually placed and synced at.)
+function wasRecentlySyncedAndReleased(staffName, eventId) {
+  if (!staffName || !eventId) return null;
+  for (let i = 0; i < state.removedSyncedPlacements.length; i++) {
+    const r = state.removedSyncedPlacements[i];
+    if (r.staff_name === staffName && r.event_id === eventId && r.seven_shifts_synced === true) {
+      return r;
+    }
+  }
+  return null;
+}
+
+// Mark a placed pill as synced to 7shifts. Manager-initiated only —
+// auto-sync never happens. Patches the row, logs the audit entry,
+// re-renders to flip the pill green.
+function markPositionSynced(positionId) {
+  const pos = state.positions.find(p => p.id === positionId);
+  if (!pos) return;
+  if (pos.seven_shifts_synced === true) return; // already synced, no-op
+  const actor = (state.user && state.user.display_name) || (state.user && state.user.email) || 'unknown';
+  const now = new Date().toISOString();
+  authFetch(SUPABASE_URL + '/rest/v1/position_assignments?id=eq.' + positionId, {
+    method: 'PATCH', headers: apiHeadersJson(),
+    body: JSON.stringify({
+      seven_shifts_synced: true,
+      seven_shifts_synced_at: now,
+      seven_shifts_synced_by: actor
+    })
+  }).then(() => {
+    pos.seven_shifts_synced = true;
+    pos.seven_shifts_synced_at = now;
+    pos.seven_shifts_synced_by = actor;
+    return logAction(pos.event_id, positionId, 'synced_7s', {
+      staff_name: pos.staff_name,
+      stand: pos.stand,
+      role: pos.role
+    });
+  }).then(() => {
+    render();
+  }).catch(err => {
+    if (err.authFailed) { handleAuthFailure(); return; }
+    console.error('mark synced failed:', err);
+    showToast('Could not mark synced: ' + (err.message || ''), 'error');
+  });
+}
+
+// Unmark a placed pill (back to red/unsynced). Used in two contexts:
+//   1. Manual — manager clicks a green 7s toggle to undo. trigger='manual'.
+//   2. Auto — movePosition / removePosition / role-change. The flag
+//      shouldn't survive the position changing under it. trigger='auto'.
+//
+// `reason` is for the audit log details. Suggested values:
+//   'manual_uncheck' / 'moved' / 'removed' / 'role_changed'
+//
+// The PATCH zeroes the three sync columns together. The audit log
+// captures the trigger and reason so forensic review can distinguish
+// "Meg unchecked because she found a typo" from "the system flipped it
+// because Carlos moved the person."
+function markPositionUnsynced(positionId, trigger, reason) {
+  const pos = state.positions.find(p => p.id === positionId);
+  if (!pos) return Promise.resolve();
+  if (pos.seven_shifts_synced !== true) return Promise.resolve(); // already unsynced
+  return authFetch(SUPABASE_URL + '/rest/v1/position_assignments?id=eq.' + positionId, {
+    method: 'PATCH', headers: apiHeadersJson(),
+    body: JSON.stringify({
+      seven_shifts_synced: false,
+      seven_shifts_synced_at: null,
+      seven_shifts_synced_by: null
+    })
+  }).then(() => {
+    pos.seven_shifts_synced = false;
+    pos.seven_shifts_synced_at = null;
+    pos.seven_shifts_synced_by = null;
+    return logAction(pos.event_id, positionId, 'unsynced_7s', {
+      staff_name: pos.staff_name,
+      stand: pos.stand,
+      role: pos.role,
+      trigger: trigger || 'manual',
+      reason: reason || 'manual_uncheck'
+    });
+  });
+}
+
+// Manual-toggle handler — called from the 7s button on a placed pill.
+// Branches into markPositionSynced or markPositionUnsynced based on the
+// current state, then re-renders. Separate from the two functions above
+// so the button has a single entry point.
+function onSyncToggleClick(positionId) {
+  const pos = state.positions.find(p => p.id === positionId);
+  if (!pos) return;
+  if (pos.seven_shifts_synced === true) {
+    // Going green → red. Manual uncheck.
+    markPositionUnsynced(positionId, 'manual', 'manual_uncheck').then(() => {
+      render();
+    }).catch(err => {
+      if (err.authFailed) { handleAuthFailure(); return; }
+      console.error('uncheck failed:', err);
+      showToast('Could not unmark: ' + (err.message || ''), 'error');
+    });
+  } else {
+    markPositionSynced(positionId);
+  }
+}
+
+// Dismiss the red tint on a released-after-sync available pill.
+// The removed placement row keeps removed_at set (we don't undo the
+// removal), but seven_shifts_synced flips to false — clearing the
+// signal. Audit log entry: unsynced_7s with reason='dismissed_after_release'.
+function dismissReleasedSync(removedPositionId, staffName) {
+  const row = state.removedSyncedPlacements.find(r => r.id === removedPositionId);
+  if (!row) return;
+  const evId = row.event_id;
+  authFetch(SUPABASE_URL + '/rest/v1/position_assignments?id=eq.' + removedPositionId, {
+    method: 'PATCH', headers: apiHeadersJson(),
+    body: JSON.stringify({
+      seven_shifts_synced: false,
+      seven_shifts_synced_at: null,
+      seven_shifts_synced_by: null
+    })
+  }).then(() => {
+    // Drop the row from local state so the available pill re-renders blue.
+    state.removedSyncedPlacements = state.removedSyncedPlacements.filter(r => r.id !== removedPositionId);
+    return logAction(evId, removedPositionId, 'unsynced_7s', {
+      staff_name: staffName || row.staff_name,
+      trigger: 'manual',
+      reason: 'dismissed_after_release'
+    });
+  }).then(() => {
+    showToast('Dismissed — pill is back to normal', 'success');
+    render();
+  }).catch(err => {
+    if (err.authFailed) { handleAuthFailure(); return; }
+    console.error('dismiss failed:', err);
+    showToast('Could not dismiss: ' + (err.message || ''), 'error');
+  });
+}
+
+// ============================================================
+// CREW CARD MODAL — added May 11, 2026
+// ------------------------------------------------------------
+// Read-only crew card opened when a person's name pill is clicked.
+// Renders a slim version of the People page's crew card with just the
+// fields a scheduling manager needs at the moment of placement decision:
+//   - Name + venue line in the header
+//   - Rating tile (NR for cold-start, numeric stars otherwise)
+//   - Cert list — only rows that exist in employee_certifications
+//   - "New at venue" line — only when applicable to the venue the pill
+//     was clicked from
+//   - Assigned venues + roles column grid
+//
+// No editing affordances. All edits happen on /crew/.
+// ============================================================
+
+function openCrewCardModal(staffName, sourceVenue) {
+  if (!staffName) return;
+  // Resolve staff_name → employee record. Same name-matching pattern
+  // homeVenueOf and shirtSizeOf already use.
+  const emp = state.employees.find(e =>
+    ((e.first_name || '') + ' ' + (e.last_name || '')).trim() === staffName.trim()
+  );
+  if (!emp) {
+    // Person isn't a known employee (e.g., a placeholder name or JMAC).
+    // Surface a minimal "no record" card instead of silently doing nothing.
+    state.crewCardEmpId = '__nomatch__';
+    state.crewCardEmpName = staffName;
+    state.crewCardSourceVenue = sourceVenue || null;
+    renderCrewCardModal();
+    document.getElementById('crew-card-modal').classList.add('show');
+    return;
+  }
+  state.crewCardEmpId = emp.id;
+  state.crewCardEmpName = ((emp.first_name || '') + ' ' + (emp.last_name || '')).trim();
+  state.crewCardSourceVenue = sourceVenue || null;
+  renderCrewCardModal();
+  document.getElementById('crew-card-modal').classList.add('show');
+}
+
+function closeCrewCardModal() {
+  state.crewCardEmpId = null;
+  state.crewCardEmpName = null;
+  state.crewCardSourceVenue = null;
+  document.getElementById('crew-card-modal').classList.remove('show');
+  document.getElementById('crew-card-modal-box').innerHTML = '';
+}
+
+function renderCrewCardModal() {
+  const box = document.getElementById('crew-card-modal-box');
+  if (!state.crewCardEmpId) { box.innerHTML = ''; return; }
+
+  // Special case: name with no employee record
+  if (state.crewCardEmpId === '__nomatch__') {
+    box.innerHTML =
+      '<div class="cc-header no-venue">' +
+        '<div class="cc-header-info">' +
+          '<div class="cc-name">' + escapeHtml(state.crewCardEmpName || '') + '</div>' +
+          '<div class="cc-venue-line no-venue">No employee record on file</div>' +
+        '</div>' +
+        '<button class="modal-close" data-close-modal="crew-card-modal">&times;</button>' +
+      '</div>' +
+      '<div class="cc-section">' +
+        '<div style="font-size:12px;color:var(--label);line-height:1.5;">' +
+          'This name does not match any active employee. It may be a placeholder ' +
+          'entered by a manager, a JMAC slot, or a typo. Look for them on the ' +
+          '<a href="/crew/" style="color:var(--blue-dark);">Crew page</a> if you expected a match.' +
+        '</div>' +
+      '</div>';
+    return;
+  }
+
+  const emp = state.employees.find(e => e.id === state.crewCardEmpId);
+  if (!emp) { closeCrewCardModal(); return; }
+  const cand = emp.punch_id ? state.candidates[emp.punch_id] : null;
+  const fullName = ((emp.first_name || '') + ' ' + (emp.last_name || '')).trim();
+  const initials = ((emp.first_name ? emp.first_name[0] : '?') +
+                    (emp.last_name ? emp.last_name[0] : '?')).toUpperCase();
+  const sourceVenue = state.crewCardSourceVenue;
+
+  // Header — venue tint based on home_venue (not the source venue we
+  // were clicked from). Matches the Crew page's hero treatment.
+  const hv = emp.home_venue;
+  const hasVenue = !!(hv && hv !== HOME_VENUE_NA);
+  const venueColor = hasVenue ? (VENUE_COLORS[hv] || '#666') : null;
+  const heroBg = hasVenue ? hexToRgba(venueColor, 0.12) : null;
+  const headerClass = hasVenue ? 'cc-header' : 'cc-header no-venue';
+  const headerStyle = hasVenue ? ' style="background:' + heroBg + ';"' : '';
+  const avatarStyle = hasVenue
+    ? ' style="color:' + venueColor + ';border:1px solid ' + hexToRgba(venueColor, 0.4) + ';"'
+    : ' style="color:var(--label);border:1px solid var(--border);"';
+  const venueLineHtml = hasVenue
+    ? '<div class="cc-venue-line" style="color:' + venueColor + ';">' +
+        escapeHtml(hv) + ' &middot; home component</div>'
+    : (hv === HOME_VENUE_NA
+        ? '<div class="cc-venue-line no-venue">Home component: doesn\'t apply</div>'
+        : '<div class="cc-venue-line no-venue">Home component not set</div>');
+
+  // Rating tile — slim version
+  const rating = computeCrewCardRating(emp, cand);
+  const ratingLabelColor = hasVenue ? venueColor : null;
+  const ratingNumColor = (hasVenue && !rating.isNR) ? venueColor : null;
+  const ratingBorderColor = hasVenue ? hexToRgba(venueColor, 0.4) : null;
+  const ratingHtml =
+    '<div class="cc-rating-tile"' + (ratingBorderColor ? ' style="border-color:' + ratingBorderColor + ';"' : '') + '>' +
+      '<div class="cc-rating-label"' + (ratingLabelColor ? ' style="color:' + ratingLabelColor + ';"' : '') + '>Rating</div>' +
+      '<div class="cc-rating-num' + (rating.isNR ? ' is-nr' : '') + '"' +
+        (ratingNumColor ? ' style="color:' + ratingNumColor + ';"' : '') + '>' +
+        (rating.isNR ? 'NR' : rating.stars.toFixed(1)) +
+      '</div>' +
+    '</div>';
+
+  let html = '<div class="' + headerClass + '"' + headerStyle + '>' +
+    '<div class="cc-avatar"' + avatarStyle + '>' + initials + '</div>' +
+    '<div class="cc-header-info">' +
+      '<div class="cc-name">' + escapeHtml(fullName) + '</div>' +
+      venueLineHtml +
+    '</div>' +
+    ratingHtml +
+    '<button class="modal-close" data-close-modal="crew-card-modal">&times;</button>' +
+  '</div>';
+
+  // Cert list — only rows that exist
+  const certs = (state.certs || []).filter(c => c.employee_id === emp.id);
+  if (certs.length > 0) {
+    const order = { expired: 0, expiring: 1, valid: 2, unknown: 3 };
+    certs.sort((a, b) => {
+      const sa = certStatusKindFromExpires(a.expires_at);
+      const sb = certStatusKindFromExpires(b.expires_at);
+      if (order[sa] !== order[sb]) return order[sa] - order[sb];
+      const ea = a.expires_at || '9999-12-31';
+      const eb = b.expires_at || '9999-12-31';
+      return ea < eb ? -1 : (ea > eb ? 1 : 0);
+    });
+    html += '<div class="cc-section">' +
+      '<div class="cc-section-title">Certifications</div>';
+    certs.forEach(c => {
+      const t = state.certTypesById[c.cert_type];
+      const typeLabel = t ? t.display_name : c.cert_type;
+      const stateTag = (t && t.state) ? ' (' + escapeHtml(t.state) + ')' : '';
+      const st = certStatusFromExpires(c.expires_at);
+      html += '<div class="cc-cert-row">' +
+        '<span class="cc-cert-name">' + escapeHtml(typeLabel) + stateTag + '</span>' +
+        '<span class="cc-cert-status ' + st.kind + '">' + escapeHtml(st.label) + '</span>' +
+      '</div>';
+    });
+    html += '</div>';
+  }
+
+  // "New at venue" — only when sourceVenue is set AND person is new there
+  if (sourceVenue && isNewAtVenue(fullName, sourceVenue)) {
+    const placementCount = venuePlacementCount(fullName, sourceVenue);
+    html += '<div class="cc-section">' +
+      '<div class="cc-section-title">New at venue</div>' +
+      '<div class="cc-new-line">' +
+        '<strong>' + placementCount + ' prior shift' + (placementCount === 1 ? '' : 's') +
+        '</strong> at ' + escapeHtml(sourceVenue) +
+        ' &middot; threshold is ' + NEW_HIRE_THRESHOLD +
+      '</div>' +
+    '</div>';
+  }
+
+  // Assigned venues + roles columns
+  const assignedVenues = (cand && cand.assigned_venues) || [];
+  const assignedRoles = (cand && cand.assigned_roles) || [];
+  html += '<div class="cc-section">' +
+    '<div class="cc-section-title">Assigned venues and roles</div>';
+  if (assignedVenues.length === 0 && assignedRoles.length === 0) {
+    html += '<div class="cc-rv-empty">No venue or role assignments on file. Set on the Crew page.</div>';
+  } else if (assignedVenues.length === 0) {
+    html += '<div class="cc-rv-empty">No venues assigned yet. Roles on file: ' +
+      assignedRoles.map(r => escapeHtml(r)).join(', ') +
+    '</div>';
+  } else {
+    const sorted = assignedVenues.slice().sort();
+    html += '<div class="cc-rv-columns">';
+    sorted.forEach(code => {
+      const color = VENUE_COLORS[code] || '#666';
+      const bg = hexToRgba(color, 0.12);
+      html += '<div class="cc-rv-column">' +
+        '<div class="cc-rv-column-head" style="background:' + bg + ';color:' + color + ';">' +
+          escapeHtml(code) +
+        '</div>' +
+        '<div class="cc-rv-column-body">';
+      if (assignedRoles.length === 0) {
+        html += '<span style="font-size:11px;color:var(--label);font-style:italic;">no roles</span>';
+      } else {
+        assignedRoles.forEach(r => {
+          html += '<span class="cc-rv-role">' + escapeHtml(r) + '</span>';
+        });
+      }
+      html += '</div></div>';
+    });
+    html += '</div>';
+  }
+  html += '</div>';
+
+  box.innerHTML = html;
+}
+
+// Slim rating calc — just enough to produce a star count for the
+// header tile. Returns { isNR, stars }. NR means cold-start (fewer
+// than threshold countable placements). Anything else returns a 0-5
+// star figure. We don't compute a full Performance Signals breakdown
+// here — that's only on the Crew page, which has all the supporting
+// data fetched. Schedule Assistant has enough already-loaded data
+// (positions, signups, employees, candidates) to ballpark a rating;
+// we keep it simple and conservative.
+function computeCrewCardRating(emp, cand) {
+  // Cold-start threshold matches the Crew page constant
+  const COLD_START = 8;
+  // Count placements for this employee from the page's loaded state.
+  // We use staff_name match against state.positions for active rows,
+  // plus we look at past placements too (already loaded for venueExperience).
+  const fullName = ((emp.first_name || '') + ' ' + (emp.last_name || '')).trim();
+  let placementCount = 0;
+  state.positions.forEach(p => {
+    if (p.staff_name === fullName) placementCount++;
+  });
+  // Add past placements (rough — we only have venue counts, not full rows;
+  // sum the venueExperience map for this person)
+  Object.keys(state.venueExperience || {}).forEach(key => {
+    if (key.indexOf(fullName + '|') === 0) {
+      placementCount += state.venueExperience[key];
+    }
+  });
+  if (placementCount < COLD_START) {
+    return { isNR: true, stars: 0 };
+  }
+  // Beyond cold start, this page doesn't have the verified-attendance
+  // data the Crew page uses. Show a calibrated placeholder: tenure +
+  // signup count → 0-5 stars. Floor 3.0 to avoid demoralizing pills.
+  let score = 3.0;
+  if (state.historyCounts && state.historyCounts[fullName]) {
+    const signups = state.historyCounts[fullName];
+    score += Math.min(1.5, signups * 0.05);
+  }
+  if (placementCount >= 20) score += 0.5;
+  if (placementCount >= 40) score += 0.5;
+  if (score > 5) score = 5;
+  return { isNR: false, stars: Math.round(score * 10) / 10 };
+}
+
+// Cert status helpers — mirror the Crew page logic exactly. valid /
+// expiring (within CERT_EXPIRING_SOON_DAYS) / expired / unknown.
+function certStatusKindFromExpires(isoDate) {
+  if (!isoDate) return 'unknown';
+  const t = new Date(); t.setHours(0, 0, 0, 0);
+  const d = new Date(isoDate + 'T00:00:00');
+  const diff = Math.round((d - t) / 86400000);
+  if (diff < 0) return 'expired';
+  if (diff <= CERT_EXPIRING_SOON_DAYS) return 'expiring';
+  return 'valid';
+}
+function certStatusFromExpires(isoDate) {
+  const kind = certStatusKindFromExpires(isoDate);
+  if (kind === 'unknown') return { kind, label: 'No expiration' };
+  if (kind === 'expired') {
+    const d = new Date(isoDate + 'T00:00:00');
+    const t = new Date(); t.setHours(0, 0, 0, 0);
+    const days = Math.abs(Math.round((d - t) / 86400000));
+    return { kind, label: 'Expired ' + days + 'd ago' };
+  }
+  if (kind === 'expiring') {
+    const d = new Date(isoDate + 'T00:00:00');
+    const t = new Date(); t.setHours(0, 0, 0, 0);
+    const days = Math.round((d - t) / 86400000);
+    return { kind, label: 'Expires in ' + days + 'd' };
+  }
+  return { kind, label: 'Expires ' + fmtCertDate(isoDate) };
+}
+function fmtCertDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso + 'T00:00:00');
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+// Convert a hex color to an rgba() string at the given alpha. Mirrors
+// the Crew page's hexToRgba helper used for venue-tinted backgrounds.
+function hexToRgba(hex, alpha) {
+  if (!hex || hex.charAt(0) !== '#' || hex.length !== 7) return 'rgba(0,0,0,' + alpha + ')';
+  const r = parseInt(hex.substring(1, 3), 16);
+  const g = parseInt(hex.substring(3, 5), 16);
+  const b = parseInt(hex.substring(5, 7), 16);
+  return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+}
+
+// ============================================================
+// NOTIFY STAFFING MODAL — added May 11, 2026
+// ------------------------------------------------------------
+// Confirm-and-send dialog for the "schedule is ready for 7shifts"
+// edge function. Stamps events.staffing_notified_at/by on success and
+// writes a notified_staffing entry into the audit log including the
+// Resend message ID.
+// ============================================================
+
+function openNotifyStaffingModal(eventId) {
+  const ev = state.events.find(e => e.id === eventId);
+  if (!ev) return;
+  state.notifyStaffingEventId = eventId;
+
+  // Populate the event line
+  const venueColor = VENUE_COLORS[ev.venue] || '#666';
+  const dateStr = fmtEventDateLong(ev.event_date);
+  document.getElementById('notify-staffing-event-line').innerHTML =
+    '<strong>' + escapeHtml(ev.event_name || '(unnamed event)') + '</strong>' +
+    '<span class="ns-venue-chip" style="background:' + venueColor + ';">' + escapeHtml(ev.venue) + '</span>' +
+    escapeHtml(dateStr);
+
+  // Reset note field + button
+  document.getElementById('notify-staffing-note').value = '';
+  const sendBtn = document.getElementById('notify-staffing-send-btn');
+  sendBtn.disabled = false;
+  sendBtn.textContent = 'Send notification';
+
+  // Recipient line — manager's email comes from the auth session.
+  const managerEmail = (state.user && state.user.email) || null;
+  const recipientHtml = managerEmail
+    ? 'Sends to <strong>staffing@camdenco.com</strong>. You\'ll be CC\'d at <strong>' + escapeHtml(managerEmail) + '</strong>.'
+    : 'Sends to <strong>staffing@camdenco.com</strong>.';
+  document.getElementById('notify-staffing-recipient').innerHTML = recipientHtml;
+
+  // Clear any prior error
+  const errEl = document.getElementById('notify-staffing-error');
+  errEl.textContent = '';
+  errEl.classList.remove('show');
+
+  document.getElementById('notify-staffing-modal').classList.add('show');
+}
+
+function closeNotifyStaffingModal() {
+  state.notifyStaffingEventId = null;
+  document.getElementById('notify-staffing-modal').classList.remove('show');
+}
+
+function sendStaffingNotification() {
+  const eventId = state.notifyStaffingEventId;
+  if (!eventId) return;
+  const ev = state.events.find(e => e.id === eventId);
+  if (!ev) return;
+
+  const sendBtn = document.getElementById('notify-staffing-send-btn');
+  const errEl = document.getElementById('notify-staffing-error');
+  const note = (document.getElementById('notify-staffing-note').value || '').trim();
+  const managerName = (state.user && state.user.display_name) ||
+                      (state.user && state.user.email) || 'Unknown manager';
+  const managerEmail = (state.user && state.user.email) || null;
+
+  errEl.textContent = '';
+  errEl.classList.remove('show');
+  sendBtn.disabled = true;
+  sendBtn.textContent = 'Sending…';
+
+  const payload = {
+    event_id: eventId,
+    manager_name: managerName,
+    manager_email: managerEmail,
+    note: note || null
+  };
+
+  authFetch(EDGE_NOTIFY_URL, {
+    method: 'POST',
+    headers: apiHeadersJson(),
+    body: JSON.stringify(payload)
+  }).then(resp => {
+    if (!resp || !resp.success) {
+      const msg = (resp && resp.error) ? resp.error : 'Send failed (no error returned)';
+      errEl.textContent = msg;
+      errEl.classList.add('show');
+      sendBtn.disabled = false;
+      sendBtn.textContent = 'Send notification';
+      return;
+    }
+    // Stamp local state so the event card renders the post-notify pill
+    // without waiting for a refetch.
+    ev.staffing_notified_at = resp.notified_at;
+    ev.staffing_notified_by = resp.notified_by || managerName;
+
+    // Audit log entry — captures the Resend message ID for forensics.
+    logAction(eventId, null, 'notified_staffing', {
+      recipient: 'staffing@camdenco.com',
+      cc: managerEmail || null,
+      note: note || null,
+      email_id: resp.email_id || null,
+      warning: resp.warning || null
+    });
+
+    closeNotifyStaffingModal();
+    showToast('Staffing notified ✓', 'success');
+    render();
+  }).catch(err => {
+    if (err.authFailed) { handleAuthFailure(); return; }
+    let msg = err.message || 'unknown error';
+    try {
+      const parsed = JSON.parse(msg);
+      if (parsed && parsed.error) msg = parsed.error;
+    } catch (e) { /* not JSON, use raw text */ }
+    errEl.textContent = 'Send failed: ' + msg;
+    errEl.classList.add('show');
+    sendBtn.disabled = false;
+    sendBtn.textContent = 'Send notification';
+  });
+}
+
+// Format event_date as "Tuesday, May 12, 2026" — used in the
+// Notify Staffing event-line and elsewhere where a long date is helpful.
+function fmtEventDateLong(iso) {
+  if (!iso) return '';
+  const parts = String(iso).split('-');
+  if (parts.length !== 3) return iso;
+  const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
+  });
+}
+
+// Format a timestamptz for the "✓ Notified" pill. Returns "May 11 at 3:53 PM".
+function fmtNotifiedAt(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
+    ' at ' +
+    d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
 // ---------- Multi-signup Assign Modal ----------
@@ -4123,9 +5278,30 @@ function openAuditLog(eventId) {
       const d = r.details || {};
       let desc = '';
       if (r.action === 'placed') desc = (d.staff_name || '?') + ' → ' + (d.stand || '?') + ' / ' + (d.role || '?') + (d.source ? ' (' + d.source + ')' : '') + (d.override ? ' ⚠ OVERRIDE' : '');
-      else if (r.action === 'removed') desc = (d.staff_name || '?') + ' from ' + (d.stand || '?') + ' / ' + (d.role || '?');
+      else if (r.action === 'removed') {
+        desc = (d.staff_name || '?') + ' from ' + (d.stand || '?') + ' / ' + (d.role || '?');
+        if (d.was_synced) desc += ' (was synced to 7shifts)';
+      }
       else if (r.action === 'moved') desc = (d.staff_name || '?') + ': ' + (d.from && d.from.stand) + ' / ' + (d.from && d.from.role) + ' → ' + (d.to && d.to.stand) + ' / ' + (d.to && d.to.role);
       else if (r.action === 'unlocked') desc = 'Manually unlocked';
+      else if (r.action === 'synced_7s') desc = (d.staff_name || '?') + ' marked synced to 7shifts at ' + (d.stand || '?') + ' / ' + (d.role || '?');
+      else if (r.action === 'unsynced_7s') {
+        const reasonLabel =
+          d.reason === 'manual_uncheck'         ? 'manually unmarked' :
+          d.reason === 'moved'                  ? 'auto-cleared (moved)' :
+          d.reason === 'role_changed'           ? 'auto-cleared (role changed)' :
+          d.reason === 'stand_changed'          ? 'auto-cleared (stand changed)' :
+          d.reason === 'event_changed'          ? 'auto-cleared (event changed)' :
+          d.reason === 'removed'                ? 'auto-cleared (removed from schedule)' :
+          d.reason === 'dismissed_after_release' ? 'dismissed (removed from 7shifts)' :
+          d.reason || 'cleared';
+        desc = (d.staff_name || '?') + ' — sync flag ' + reasonLabel;
+      }
+      else if (r.action === 'notified_staffing') {
+        desc = 'Staffing notified at ' + (d.recipient || 'staffing@camdenco.com');
+        if (d.cc) desc += ' (CC: ' + d.cc + ')';
+        if (d.note) desc += ' — Note: "' + d.note + '"';
+      }
       else desc = JSON.stringify(d);
       html += '<div class="log-entry">';
       html += '<span class="log-time">' + fmtDateTime(r.actor_at) + '</span>';
@@ -4150,13 +5326,61 @@ function openAuditLog(eventId) {
 document.addEventListener('click', e => {
   const t = e.target.closest('[data-close-modal]');
   if (t) {
-    document.getElementById(t.getAttribute('data-close-modal')).classList.remove('show');
+    const target = t.getAttribute('data-close-modal');
+    document.getElementById(target).classList.remove('show');
+    // Targeted state-cleanup for the modals that hold local state.
+    if (target === 'crew-card-modal') {
+      state.crewCardEmpId = null;
+      state.crewCardEmpName = null;
+      state.crewCardSourceVenue = null;
+      const box = document.getElementById('crew-card-modal-box');
+      if (box) box.innerHTML = '';
+    } else if (target === 'notify-staffing-modal') {
+      state.notifyStaffingEventId = null;
+    }
   }
 });
 document.querySelectorAll('.modal-backdrop').forEach(b => {
   b.addEventListener('click', e => {
-    if (e.target === b) b.classList.remove('show');
+    if (e.target === b) {
+      b.classList.remove('show');
+      // Same state-cleanup as above when the modal is closed by backdrop click.
+      if (b.id === 'crew-card-modal') {
+        state.crewCardEmpId = null;
+        state.crewCardEmpName = null;
+        state.crewCardSourceVenue = null;
+        const box = document.getElementById('crew-card-modal-box');
+        if (box) box.innerHTML = '';
+      } else if (b.id === 'notify-staffing-modal') {
+        state.notifyStaffingEventId = null;
+      }
+    }
   });
+});
+
+// Escape closes the topmost open modal. Order matters: most-recently-opened
+// stacks last, so we check in reverse priority. The notify-staffing modal
+// opens over the event card; the crew-card modal opens over a pill; both
+// can be open at the same time only if the user opens crew-card from the
+// notify modal (which doesn't happen — but the order below is defensive).
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  const notify = document.getElementById('notify-staffing-modal');
+  const crew = document.getElementById('crew-card-modal');
+  if (notify && notify.classList.contains('show')) {
+    notify.classList.remove('show');
+    state.notifyStaffingEventId = null;
+    return;
+  }
+  if (crew && crew.classList.contains('show')) {
+    crew.classList.remove('show');
+    state.crewCardEmpId = null;
+    state.crewCardEmpName = null;
+    state.crewCardSourceVenue = null;
+    const box = document.getElementById('crew-card-modal-box');
+    if (box) box.innerHTML = '';
+    return;
+  }
 });
 
 // ---------- Print menu (split-button dropdown) ----------
@@ -4176,7 +5400,8 @@ function openPrintMenu(anchorBtn, eventId) {
   menu.dataset.eventId = eventId;
   menu.innerHTML =
     '<button class="print-menu-item" data-menu-print="' + eventId + '">🖨 Print</button>' +
-    '<button class="print-menu-item" data-menu-email="' + eventId + '">✉ Email staff list</button>';
+    '<button class="print-menu-item" data-menu-email="' + eventId + '">✉ Email staff list</button>' +
+    '<button class="print-menu-item" data-menu-notify="' + eventId + '">📨 Notify staffing</button>';
 
   // Position the menu under the anchor button. Append to body so it isn't
   // clipped by event-row overflow.
@@ -4196,6 +5421,11 @@ function openPrintMenu(anchorBtn, eventId) {
     e.stopPropagation();
     menu.remove();
     openEmailModal(eventId);
+  });
+  menu.querySelector('[data-menu-notify]').addEventListener('click', e => {
+    e.stopPropagation();
+    menu.remove();
+    openNotifyStaffingModal(eventId);
   });
 
   // Close on next outside click.
@@ -4384,6 +5614,11 @@ function renderEmailStaffPreview(staffNames, jmacCount) {
 document.getElementById('email-send-btn').addEventListener('click', () => {
   if (!emailModalEventId) return;
   sendStaffListEmail();
+});
+
+// Notify staffing Send button — same pattern as the email-send wiring.
+document.getElementById('notify-staffing-send-btn').addEventListener('click', () => {
+  sendStaffingNotification();
 });
 
 function sendStaffListEmail() {
@@ -4788,11 +6023,10 @@ document.getElementById('managers-list').addEventListener('click', e => {
 // ---------- Init ----------
 function startApp(user) {
   state.user = user;
-  const el = document.getElementById('header-right');
-  if (el && user) {
-    el.innerHTML = '<span class="header-user">' + escapeHtml(user.display_name || user.email) + '</span>' +
-      '<button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
-  }
+  // Header user-name + sign-out is owned by pc-nav.js as of May 11, 2026.
+  // The legacy #header-right population is gone — pc-nav reads pcAuth and
+  // renders the user name into its own injected header bar.
+
   // Reveal admin-only Managers button. RLS still enforces admin on writes,
   // so this is just a visibility convenience — non-admins never see it.
   if (typeof pcAuth.isAdmin === 'function' && pcAuth.isAdmin()) {
