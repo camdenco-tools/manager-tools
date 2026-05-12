@@ -612,7 +612,7 @@ function renderSections() {
     byCat[catId].push(items[i]);
   }
 
-  var printOpts = '<button class="print-opt all-opt" onclick="doPrint(null)">Full venue (all categories)</button>';
+  var printOpts = '<button class="print-opt all-opt" onclick="doPrint(\'\')">Full venue (all categories)</button>';
   var sectionsHtml = '';
 
   for (var ci = 0; ci < pcCategories.length; ci++) {
@@ -1048,25 +1048,68 @@ async function saveNewItem() {
 
 function togglePrintPanel() {
   var p = document.getElementById('print-panel');
-  if (p) p.style.display = p.style.display === 'none' ? 'block' : 'none';
+  if (!p) return;
+  // Read computed style on first toggle so the inline style is initialized
+  // correctly even though the panel starts hidden via CSS rule (not inline).
+  var current = p.style.display || window.getComputedStyle(p).display;
+  p.style.display = (current === 'none') ? 'block' : 'none';
 }
 
 function doPrint(catId) {
-  var venueLabel = '';
-  for (var i = 0; i < VENUES.length; i++) { if (VENUES[i].code === currentVenue) { venueLabel = VENUES[i].label; break; } }
-  var monthLabel = getMonthLabel(currentMonth);
-  var catName = '';
-  if (catId) { var cat = getCatById(catId); catName = cat ? ' - ' + cat.name : ''; }
-  document.getElementById('print-title-text').textContent = venueLabel + ' - ' + monthLabel + catName;
-  document.getElementById('print-sub-text').textContent = 'Printed: ' + new Date().toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'});
-  if (catId) {
-    document.querySelectorAll('.cat-section').forEach(function(sec) {
-      sec.style.display = sec.id === 'catsec-' + catId.replace(/-/g, '') ? 'block' : 'none';
-    });
-  }
-  window.print();
-  if (catId) {
-    document.querySelectorAll('.cat-section').forEach(function(sec) { sec.style.display = 'block'; });
+  try {
+    // Normalize falsy catId values to a single sentinel — covers null, undefined,
+    // empty string, and the literal string "null" (in case of HTML-attribute oddity).
+    if (!catId || catId === 'null' || catId === 'undefined') catId = null;
+
+    var venueLabel = '';
+    for (var i = 0; i < VENUES.length; i++) {
+      if (VENUES[i].code === currentVenue) { venueLabel = VENUES[i].label; break; }
+    }
+    var monthLabel = getMonthLabel(currentMonth);
+    var catName = '';
+    if (catId) {
+      var cat = getCatById(catId);
+      catName = cat ? ' - ' + cat.name : '';
+    }
+    var titleEl = document.getElementById('print-title-text');
+    var subEl = document.getElementById('print-sub-text');
+    if (titleEl) titleEl.textContent = venueLabel + ' - ' + monthLabel + catName;
+    if (subEl) subEl.textContent = 'Printed: ' + new Date().toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'});
+
+    // For single-category print, hide all other cat-sections inline.
+    // For full-venue print, no hiding needed — print CSS handles non-content chrome.
+    if (catId) {
+      var targetId = 'catsec-' + catId.replace(/-/g, '');
+      var sections = document.querySelectorAll('.cat-section');
+      for (var s = 0; s < sections.length; s++) {
+        sections[s].style.display = (sections[s].id === targetId) ? 'block' : 'none';
+      }
+    }
+
+    // Close the print panel so it doesn't sit open behind the dialog
+    var panel = document.getElementById('print-panel');
+    if (panel) panel.style.display = 'none';
+
+    // Defer the actual print call so the panel-close repaint happens first.
+    // Also defensively wraps in a setTimeout so any browser that's picky about
+    // user-gesture context still works (this is a known quirk on some mobile
+    // browsers but harmless on desktop).
+    setTimeout(function() {
+      try {
+        window.print();
+      } catch(e) {
+        console.error('[ending-inventory] window.print failed:', e);
+        alert('Could not open the print dialog. ' + (e && e.message ? e.message : 'Try again.'));
+      }
+      // Always restore cat-sections after print, regardless of which path we took.
+      var allSections = document.querySelectorAll('.cat-section');
+      for (var r = 0; r < allSections.length; r++) {
+        allSections[r].style.display = '';
+      }
+    }, 50);
+  } catch(e) {
+    console.error('[ending-inventory] doPrint failed:', e);
+    alert('Could not prepare the print sheet. ' + (e && e.message ? e.message : 'Try again.'));
   }
 }
 
