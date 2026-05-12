@@ -15,19 +15,13 @@
 }
 body { background: var(--bg); font-family: var(--font); color: var(--primary); min-height: 100vh; }
 
-header { background: var(--card); border-bottom: 1px solid var(--border); padding: 0 32px; display: flex; align-items: center; justify-content: space-between; height: 64px; position: sticky; top: 0; z-index: 100; }
-.header-left { display: flex; align-items: center; gap: 16px; }
-.back-link { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--label); text-decoration: none; display: flex; align-items: center; gap: 6px; transition: color 0.15s; }
-.back-link:hover { color: var(--primary); }
-.header-divider { width: 1px; height: 20px; background: var(--border); }
-.header-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
-.header-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: var(--primary); color: white; padding: 3px 8px; border-radius: 20px; }
-.header-right { display: flex; align-items: center; gap: 12px; }
-.header-user { font-size: 12px; color: var(--label); font-weight: 600; }
-.sign-out-btn { font-size: 11px; font-weight: 700; color: var(--label); background: none; border: 1px solid var(--border); padding: 5px 12px; border-radius: 8px; cursor: pointer; font-family: var(--font); transition: all 0.15s; }
-.sign-out-btn:hover { color: var(--primary); border-color: var(--primary); }
+/* Legacy header styles removed — pc-nav.js injects its own */
 
-.main-content { max-width: 1100px; margin: 0 auto; padding: 32px 32px 80px; }
+.page-title-row { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+.page-title { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; color: var(--primary); }
+.page-title-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: var(--primary); color: white; padding: 3px 8px; border-radius: 20px; }
+
+.main-content { max-width: 1100px; margin: 0 auto; padding: 24px 32px 80px; }
 
 .stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 18px; }
 .stat-box { background: var(--card); border-radius: 12px; padding: 14px 16px; box-shadow: var(--shadow); }
@@ -174,17 +168,14 @@ header { background: var(--card); border-bottom: 1px solid var(--border); paddin
   </div>
 </div>
 
-<header>
-  <div class="header-left">
-    <a href="/" class="back-link">&#8592; Toolkit</a>
-    <div class="header-divider"></div>
-    <span class="header-title">Item Catalog</span>
-    <span class="header-badge">Admin</span>
-  </div>
-  <div class="header-right" id="header-right"></div>
-</header>
+<!-- Header injected by /pc-nav.js -->
 
 <div class="main-content">
+  <div class="page-title-row">
+    <h1 class="page-title">Item Catalog</h1>
+    <span class="page-title-badge">Admin</span>
+  </div>
+
   <div class="stat-row">
     <div class="stat-box"><div class="stat-label">Total items</div><div class="stat-val" id="stat-total">--</div></div>
     <div class="stat-box"><div class="stat-label">Active items</div><div class="stat-val" id="stat-active">--</div></div>
@@ -282,6 +273,7 @@ header { background: var(--card); border-bottom: 1px solid var(--border); paddin
 </div>
 
 <script src="/pc-auth.js"></script>
+<script src="/pc-nav.js"></script>
 <script>
 var SB_URL='https://aoazlttdjowhlfcksoyl.supabase.co';
 var VENUES=[{code:'Mann',label:'Mann Music Center'},{code:'FMP',label:'FMP'},{code:'Cure',label:'Cure Arena'},{code:'ACCC',label:'ACCC'},{code:'BWH',label:'Jim Whelan BWH'},{code:'DE',label:'DE Chase'},{code:'Subaru',label:'Subaru Park'},{code:'Villanova',label:'Villanova'},{code:'Montage',label:'Montage'},{code:'SATB',label:'SATB'},{code:'Kirkwood',label:'Kirkwood'}];
@@ -306,7 +298,21 @@ function updateStats(){var activeCount=0;for(var i=0;i<pcItems.length;i++){if(pc
 
 function renderPendingBanner(){var pending=[];for(var i=0;i<pcItems.length;i++){if(pcItems[i].status==='pending')pending.push(pcItems[i]);}var banner=document.getElementById('pending-banner');if(pending.length===0){banner.style.display='none';return;}banner.style.display='block';document.getElementById('pending-banner-title').textContent=pending.length+' item'+(pending.length!==1?'s':'')+' pending review';var html='';for(var i=0;i<pending.length;i++){var it=pending[i];html+='<div class="pending-item-row"><div><div class="pending-item-name">'+it.name+'</div><div class="pending-item-meta">';if(it.added_by_venue)html+='Added at '+it.added_by_venue;if(it.added_by_name)html+=' by '+it.added_by_name;if(it.vendor)html+=' &middot; '+it.vendor;html+=' &middot; '+fmt(it.case_cost)+'/case</div></div><button class="approve-btn" onclick="approveItem(\''+it.id+'\')">Approve</button><button class="merge-btn" onclick="openMerge(\''+it.id+'\')">Merge into existing</button></div>';}document.getElementById('pending-items-list').innerHTML=html;}
 
-async function approveItem(id){try{var hdrs=apiHeaders();hdrs['Prefer']='return=minimal';await fetch(SB_URL+'/rest/v1/inventory_items?id=eq.'+id,{method:'PATCH',headers:hdrs,body:JSON.stringify({status:'approved'})});await loadAll();}catch(e){alert('Could not approve. Try again.');}}
+async function approveItem(id){
+  try{
+    var hdrs=apiHeaders();
+    hdrs['Prefer']='return=minimal';
+    var res=await fetch(SB_URL+'/rest/v1/inventory_items?id=eq.'+id,{method:'PATCH',headers:hdrs,body:JSON.stringify({status:'approved'})});
+    if(!res.ok){
+      var msg=await res.text();
+      throw new Error('Approve failed ('+res.status+'): '+msg);
+    }
+    await loadAll();
+  }catch(e){
+    console.error('[item-catalog] approveItem error:',e);
+    alert('Could not approve. '+((e&&e.message)?e.message:'Try again.'));
+  }
+}
 
 function openMerge(pendingId){mergePendingId=pendingId;mergeTargetId=null;document.getElementById('merge-search-input').value='';document.getElementById('merge-results').style.display='none';document.getElementById('merge-results').innerHTML='';document.getElementById('selected-merge-item').style.display='none';document.getElementById('merge-confirm-btn').style.display='none';var pendingItem=null;for(var i=0;i<pcItems.length;i++){if(pcItems[i].id===pendingId){pendingItem=pcItems[i];break;}}if(pendingItem)document.getElementById('merge-desc').textContent='Merging "'+pendingItem.name+'" -- search for the existing item it should be combined with. Count submissions will be reassigned to the target item.';document.getElementById('merge-overlay').classList.add('open');setTimeout(function(){document.getElementById('merge-search-input').focus();},100);}
 function closeMerge(){document.getElementById('merge-overlay').classList.remove('open');mergePendingId=null;mergeTargetId=null;}
@@ -315,7 +321,37 @@ function onMergeSearch(query){var q=query.trim().toLowerCase();var resultsEl=doc
 
 function selectMergeTarget(id,name){mergeTargetId=id;var item=null;for(var i=0;i<pcItems.length;i++){if(pcItems[i].id===id){item=pcItems[i];break;}}var cat=item?getCatById(item.cos_category_id):null;document.getElementById('selected-merge-name').textContent=name;document.getElementById('selected-merge-meta').textContent=(cat?cat.name+' ':'')+' &middot; '+fmt(item?item.cost_per_unit:0)+'/'+(item?(item.unit_label||'each'):'each');document.getElementById('selected-merge-item').style.display='block';document.getElementById('merge-results').style.display='none';document.getElementById('merge-confirm-btn').style.display='block';document.getElementById('merge-confirm-btn').textContent='Merge into '+name;document.getElementById('merge-search-input').value='';}
 
-async function confirmMerge(){if(!mergePendingId||!mergeTargetId)return;var btn=document.getElementById('merge-confirm-btn');btn.disabled=true;btn.textContent='Merging...';try{var hdrs=apiHeaders();var patchHdrs=Object.assign({},hdrs);patchHdrs['Prefer']='return=minimal';await fetch(SB_URL+'/rest/v1/inventory_counts?item_id=eq.'+mergePendingId,{method:'PATCH',headers:patchHdrs,body:JSON.stringify({item_id:mergeTargetId})});await fetch(SB_URL+'/rest/v1/inventory_venue_profiles?item_id=eq.'+mergePendingId,{method:'PATCH',headers:patchHdrs,body:JSON.stringify({item_id:mergeTargetId})});await fetch(SB_URL+'/rest/v1/inventory_items?id=eq.'+mergePendingId,{method:'DELETE',headers:hdrs});closeMerge();await loadAll();}catch(e){alert('Merge failed. Please try again.');btn.disabled=false;btn.textContent='Merge into this item';}}
+async function confirmMerge(){
+  if(!mergePendingId||!mergeTargetId)return;
+  var btn=document.getElementById('merge-confirm-btn');
+  btn.disabled=true;
+  btn.textContent='Merging...';
+  try{
+    var hdrs=apiHeaders();
+    var patchHdrs=Object.assign({},hdrs);
+    patchHdrs['Prefer']='return=minimal';
+
+    // Reassign inventory counts from pending → target
+    var r1=await fetch(SB_URL+'/rest/v1/inventory_counts?item_id=eq.'+mergePendingId,{method:'PATCH',headers:patchHdrs,body:JSON.stringify({item_id:mergeTargetId})});
+    if(!r1.ok)throw new Error('Reassigning counts failed ('+r1.status+'): '+await r1.text());
+
+    // Reassign venue profiles from pending → target
+    var r2=await fetch(SB_URL+'/rest/v1/inventory_venue_profiles?item_id=eq.'+mergePendingId,{method:'PATCH',headers:patchHdrs,body:JSON.stringify({item_id:mergeTargetId})});
+    if(!r2.ok)throw new Error('Reassigning venue profiles failed ('+r2.status+'): '+await r2.text());
+
+    // Delete the now-empty pending item
+    var r3=await fetch(SB_URL+'/rest/v1/inventory_items?id=eq.'+mergePendingId,{method:'DELETE',headers:hdrs});
+    if(!r3.ok)throw new Error('Removing pending item failed ('+r3.status+'): '+await r3.text());
+
+    closeMerge();
+    await loadAll();
+  }catch(e){
+    console.error('[item-catalog] confirmMerge error:',e);
+    alert('Merge failed. '+((e&&e.message)?e.message:'Please try again.'));
+    btn.disabled=false;
+    btn.textContent='Merge into this item';
+  }
+}
 
 function populateCatFilter(){var sel=document.getElementById('cat-filter');sel.innerHTML='<option value="">All categories</option>';for(var i=0;i<pcCategories.length;i++){var opt=document.createElement('option');opt.value=pcCategories[i].id;opt.textContent=pcCategories[i].name;sel.appendChild(opt);}}
 function populateCatSelect(selectedId){var sel=document.getElementById('edit-category');sel.innerHTML='<option value="">Select category...</option>';for(var i=0;i<pcCategories.length;i++){var opt=document.createElement('option');opt.value=pcCategories[i].id;opt.textContent=pcCategories[i].name+' \u00b7 '+pcCategories[i].gl_code;if(pcCategories[i].id===selectedId)opt.selected=true;sel.appendChild(opt);}}
@@ -338,7 +374,84 @@ function renderVenueCheckboxes(itemId){var html='';for(var i=0;i<VENUES.length;i
 
 function toggleVenueLabel(cb,code){var lbl=document.getElementById('vl-'+code);if(!lbl)return;if(cb.checked)lbl.classList.add('checked');else lbl.classList.remove('checked');}
 
-async function saveItem(){var errEl=document.getElementById('panel-error');errEl.style.display='none';var name=document.getElementById('edit-name').value.trim();var catId=document.getElementById('edit-category').value;var vendor=document.getElementById('edit-vendor').value.trim();var vendorAlt=document.getElementById('edit-vendor-alt').value.trim();var caseCost=parseFloat(document.getElementById('edit-case-cost').value)||0;var units=parseFloat(document.getElementById('edit-units').value)||1;var purchaseUnit=document.getElementById('edit-purchase-unit').value.trim()||'each';var countUnit=document.getElementById('edit-count-unit').value;var active=document.getElementById('edit-active').checked;var cpu=units>0?caseCost/units:0;if(!name){errEl.textContent='Item name is required.';errEl.style.display='block';return;}if(!catId){errEl.textContent='Please select a category.';errEl.style.display='block';return;}var itemId=document.getElementById('edit-id').value;if(!itemId)itemId=crypto.randomUUID();var payload={id:itemId,name:name,cos_category_id:catId,vendor:vendor||null,vendor_alt:vendorAlt||null,case_cost:caseCost,units_per_case:units,unit_label:purchaseUnit,purchase_unit:purchaseUnit,count_unit:countUnit,cost_per_unit:cpu,active:active,status:'approved'};var btn=document.getElementById('save-btn');btn.disabled=true;btn.textContent='Saving...';try{var hdrs=apiHeaders();hdrs['Prefer']='return=minimal';var method=isNewItem?'POST':'PATCH';var url=isNewItem?SB_URL+'/rest/v1/inventory_items':SB_URL+'/rest/v1/inventory_items?id=eq.'+itemId;var bodyObj=isNewItem?payload:(function(){var o={};for(var k in payload){if(k!=='id')o[k]=payload[k];}return o;})();var res=await fetch(url,{method:method,headers:hdrs,body:JSON.stringify(bodyObj)});if(!res.ok)throw new Error(await res.text());var checkedVenues=[];var checks=document.querySelectorAll('#venue-checkboxes input[type=checkbox]');for(var i=0;i<checks.length;i++){if(checks[i].checked){var code=checks[i].parentElement.id.replace('vl-','');checkedVenues.push(code);}}var delHdrs=apiHeaders();await fetch(SB_URL+'/rest/v1/inventory_venue_profiles?item_id=eq.'+itemId,{method:'DELETE',headers:delHdrs});if(checkedVenues.length>0){var profileRows=[];for(var vi=0;vi<checkedVenues.length;vi++){profileRows.push({id:crypto.randomUUID(),venue:checkedVenues[vi],item_id:itemId});}var insHdrs=apiHeaders();insHdrs['Prefer']='return=minimal';await fetch(SB_URL+'/rest/v1/inventory_venue_profiles',{method:'POST',headers:insHdrs,body:JSON.stringify(profileRows)});}await loadAll();closePanel();}catch(e){errEl.textContent='Save failed. Please try again.';errEl.style.display='block';btn.disabled=false;btn.textContent=isNewItem?'Add item':'Save changes';}}
+async function saveItem(){
+  var errEl=document.getElementById('panel-error');
+  errEl.style.display='none';
+  var name=document.getElementById('edit-name').value.trim();
+  var catId=document.getElementById('edit-category').value;
+  var vendor=document.getElementById('edit-vendor').value.trim();
+  var vendorAlt=document.getElementById('edit-vendor-alt').value.trim();
+  var caseCost=parseFloat(document.getElementById('edit-case-cost').value)||0;
+  var units=parseFloat(document.getElementById('edit-units').value)||1;
+  var purchaseUnit=document.getElementById('edit-purchase-unit').value.trim()||'each';
+  var countUnit=document.getElementById('edit-count-unit').value;
+  var active=document.getElementById('edit-active').checked;
+  var cpu=units>0?caseCost/units:0;
+  if(!name){errEl.textContent='Item name is required.';errEl.style.display='block';return;}
+  if(!catId){errEl.textContent='Please select a category.';errEl.style.display='block';return;}
+  var itemId=document.getElementById('edit-id').value;
+  if(!itemId)itemId=crypto.randomUUID();
+  var payload={id:itemId,name:name,cos_category_id:catId,vendor:vendor||null,vendor_alt:vendorAlt||null,case_cost:caseCost,units_per_case:units,unit_label:purchaseUnit,purchase_unit:purchaseUnit,count_unit:countUnit,cost_per_unit:cpu,active:active,status:'approved'};
+  var btn=document.getElementById('save-btn');
+  btn.disabled=true;
+  btn.textContent='Saving...';
+  try{
+    // Step 1: save the item itself
+    var hdrs=apiHeaders();
+    hdrs['Prefer']='return=minimal';
+    var method=isNewItem?'POST':'PATCH';
+    var url=isNewItem?SB_URL+'/rest/v1/inventory_items':SB_URL+'/rest/v1/inventory_items?id=eq.'+itemId;
+    var bodyObj=isNewItem?payload:(function(){var o={};for(var k in payload){if(k!=='id')o[k]=payload[k];}return o;})();
+    var res=await fetch(url,{method:method,headers:hdrs,body:JSON.stringify(bodyObj)});
+    if(!res.ok){
+      var msg=await res.text();
+      throw new Error('Saving item failed ('+res.status+'): '+msg);
+    }
+
+    // Step 2: collect checked venues
+    var checkedVenues=[];
+    var checks=document.querySelectorAll('#venue-checkboxes input[type=checkbox]');
+    for(var i=0;i<checks.length;i++){
+      if(checks[i].checked){
+        var code=checks[i].parentElement.id.replace('vl-','');
+        checkedVenues.push(code);
+      }
+    }
+
+    // Step 3: clear existing venue mappings for this item
+    var delHdrs=apiHeaders();
+    var delRes=await fetch(SB_URL+'/rest/v1/inventory_venue_profiles?item_id=eq.'+itemId,{method:'DELETE',headers:delHdrs});
+    if(!delRes.ok){
+      var delMsg=await delRes.text();
+      throw new Error('Clearing old venue mappings failed ('+delRes.status+'): '+delMsg);
+    }
+
+    // Step 4: write the new venue mappings
+    if(checkedVenues.length>0){
+      var profileRows=[];
+      for(var vi=0;vi<checkedVenues.length;vi++){
+        profileRows.push({id:crypto.randomUUID(),venue:checkedVenues[vi],item_id:itemId});
+      }
+      var insHdrs=apiHeaders();
+      insHdrs['Prefer']='return=minimal';
+      var insRes=await fetch(SB_URL+'/rest/v1/inventory_venue_profiles',{method:'POST',headers:insHdrs,body:JSON.stringify(profileRows)});
+      if(!insRes.ok){
+        var insMsg=await insRes.text();
+        throw new Error('Saving venue mappings failed ('+insRes.status+'): '+insMsg);
+      }
+    }
+
+    await loadAll();
+    closePanel();
+  }catch(e){
+    console.error('[item-catalog] saveItem error:',e);
+    var detail=(e&&e.message)?e.message:'Save failed. Please try again.';
+    errEl.textContent=detail.length>200?detail.slice(0,200)+'...':detail;
+    errEl.style.display='block';
+    btn.disabled=false;
+    btn.textContent=isNewItem?'Add item':'Save changes';
+  }
+}
 
 function triggerDelete(id){
   if (!pcAuth.isAdmin()) {
@@ -348,21 +461,34 @@ function triggerDelete(id){
   confirmDelete(id);
 }
 
-async function confirmDelete(id){var item=null;for(var i=0;i<pcItems.length;i++){if(pcItems[i].id===id){item=pcItems[i];break;}}if(!confirm('Delete "'+(item?item.name:'this item')+'"?\n\nThis will remove all venue profiles and cannot be undone.'))return;try{var hdrs=apiHeaders();await fetch(SB_URL+'/rest/v1/inventory_items?id=eq.'+id,{method:'DELETE',headers:hdrs});if(selectedItemId===id)closePanel();await loadAll();}catch(e){alert('Delete failed. Please try again.');}}
+async function confirmDelete(id){
+  var item=null;
+  for(var i=0;i<pcItems.length;i++){if(pcItems[i].id===id){item=pcItems[i];break;}}
+  if(!confirm('Delete "'+(item?item.name:'this item')+'"?\n\nThis will remove all venue profiles and cannot be undone.'))return;
+  try{
+    var hdrs=apiHeaders();
+    var res=await fetch(SB_URL+'/rest/v1/inventory_items?id=eq.'+id,{method:'DELETE',headers:hdrs});
+    if(!res.ok){
+      var msg=await res.text();
+      throw new Error('Delete failed ('+res.status+'): '+msg);
+    }
+    if(selectedItemId===id)closePanel();
+    await loadAll();
+  }catch(e){
+    console.error('[item-catalog] confirmDelete error:',e);
+    alert('Delete failed. '+((e&&e.message)?e.message:'Please try again.')+'\n\nNote: items are typically deactivated rather than deleted. If you need to fully remove this item, contact an admin.');
+  }
+}
 
 function renderCatsTab(){var html='<table class="cat-table"><thead><tr><th>Category</th><th>GL code</th><th>Inventory rollup</th><th>Items</th></tr></thead><tbody>';for(var i=0;i<pcCategories.length;i++){var cat=pcCategories[i];var count=0;for(var j=0;j<pcItems.length;j++){if(pcItems[j].cos_category_id===cat.id)count++;}html+='<tr><td style="font-weight:600;">'+cat.name+'</td><td style="color:#888;font-family:monospace;">'+cat.gl_code+'</td><td><span class="rollup-pill">'+cat.inventory_rollup_label+' \u00b7 '+cat.inventory_rollup_gl+'</span></td><td style="color:#888;">'+count+'</td></tr>';}html+='</tbody></table>';document.getElementById('cats-content').innerHTML=html;}
 
 function switchTab(tab){document.getElementById('tab-items').classList.toggle('active',tab==='items');document.getElementById('tab-cats').classList.toggle('active',tab==='cats');document.getElementById('panel-items').style.display=tab==='items'?'block':'none';document.getElementById('panel-cats').style.display=tab==='cats'?'block':'none';}
 
 // Login gate — must sign in to access this page
+// (pc-nav.js handles the header bar including user name + sign out button)
 pcAuth.require({
   pageSlug: 'item-catalog',
   onReady: function(user) {
-    var el = document.getElementById('header-right');
-    if (el && user) {
-      el.innerHTML = '<span class="header-user">' + (user.display_name || user.email) + '</span>' +
-        '<button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
-    }
     loadAll();
   }
 });
