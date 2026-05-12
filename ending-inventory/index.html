@@ -8,24 +8,13 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f0ec; min-height: 100vh; }
 
-header {
-  background: #fff; border-bottom: 1px solid #e8e8e4;
-  padding: 0 32px; display: flex; align-items: center;
-  justify-content: space-between; height: 64px;
-  position: sticky; top: 0; z-index: 100;
-}
-.header-left { display: flex; align-items: center; gap: 16px; }
-.back-link { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #999; text-decoration: none; display: flex; align-items: center; gap: 6px; transition: color 0.15s; }
-.back-link:hover { color: #1a1a1a; }
-.hdivider { width: 1px; height: 20px; background: #e8e8e4; }
-.header-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
-.header-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: #1a1a1a; color: white; padding: 3px 8px; border-radius: 20px; }
-.header-right { display: flex; align-items: center; gap: 12px; }
-.header-user { font-size: 12px; color: #999; font-weight: 600; }
-.sign-out-btn { font-size: 11px; font-weight: 700; color: #999; background: none; border: 1px solid #e8e8e4; padding: 5px 12px; border-radius: 8px; cursor: pointer; font-family: inherit; transition: all 0.15s; }
-.sign-out-btn:hover { color: #1a1a1a; border-color: #1a1a1a; }
+/* Legacy header styles removed — pc-nav.js injects its own */
 
-.container { max-width: 860px; margin: 0 auto; padding: 20px 16px 60px; }
+.page-title-row { display: flex; align-items: center; gap: 12px; max-width: 860px; margin: 0 auto; padding: 20px 16px 0; }
+.page-title { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; color: #1a1a1a; }
+.page-title-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: #1a1a1a; color: white; padding: 3px 8px; border-radius: 20px; }
+
+.container { max-width: 860px; margin: 0 auto; padding: 12px 16px 60px; }
 
 .venue-picker { background: white; border-radius: 16px; padding: 20px; margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
 .venue-picker-title { font-size: 13px; font-weight: 700; color: #1a1a1a; margin-bottom: 14px; }
@@ -171,15 +160,12 @@ header {
 </head>
 <body>
 
-<header>
-  <div class="header-left">
-    <a href="/" class="back-link">&#8592; Toolkit</a>
-    <div class="hdivider"></div>
-    <span class="header-title">Inventory Counts</span>
-    <span class="header-badge">Manager</span>
-  </div>
-  <div class="header-right" id="header-right"></div>
-</header>
+<!-- Header injected by /pc-nav.js -->
+
+<div class="page-title-row">
+  <h1 class="page-title">Inventory Counts</h1>
+  <span class="page-title-badge">Manager</span>
+</div>
 
 <div class="modal-overlay" id="new-item-modal">
   <div class="modal">
@@ -270,6 +256,7 @@ header {
 </div>
 
 <script src="/pc-auth.js"></script>
+<script src="/pc-nav.js"></script>
 <script>
 var SUPA_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
 var SENTINEL_ID = 'e2bf5cd1-5f50-4b11-b4b3-30c06907bffc';
@@ -1026,9 +1013,21 @@ async function saveNewItem() {
   var insHdrs = Object.assign({}, hdrs);
   insHdrs['Prefer'] = 'return=minimal';
   try {
+    // Step 1: write the pending item
     var r = await fetch(SUPA_URL + '/rest/v1/inventory_items', {method:'POST', headers:insHdrs, body:JSON.stringify(itemPayload)});
-    if (!r.ok) throw new Error(await r.text());
-    await fetch(SUPA_URL + '/rest/v1/inventory_venue_profiles', {method:'POST', headers:insHdrs, body:JSON.stringify({id:crypto.randomUUID(), venue:currentVenue, item_id:itemId})});
+    if (!r.ok) {
+      var msg = await r.text();
+      throw new Error('Saving item failed (' + r.status + '): ' + msg);
+    }
+
+    // Step 2: write the venue-item profile so this venue counts the new item
+    var profileRes = await fetch(SUPA_URL + '/rest/v1/inventory_venue_profiles', {method:'POST', headers:insHdrs, body:JSON.stringify({id:crypto.randomUUID(), venue:currentVenue, item_id:itemId})});
+    if (!profileRes.ok) {
+      var profMsg = await profileRes.text();
+      throw new Error('Adding venue mapping failed (' + profileRes.status + '): ' + profMsg);
+    }
+
+    // Step 3: update local state and apply the count if entered
     pcAllItems.push(itemPayload);
     pcProfiles.push({venue:currentVenue, item_id:itemId});
     if (countVal > 0) {
@@ -1039,7 +1038,9 @@ async function saveNewItem() {
     await loadAll();
     await loadCount();
   } catch(e) {
-    errEl.textContent = 'Save failed. Please try again.';
+    console.error('[ending-inventory] saveNewItem error:', e);
+    var detail = (e && e.message) ? e.message : 'Save failed. Please try again.';
+    errEl.textContent = detail.length > 200 ? detail.slice(0, 200) + '...' : detail;
     errEl.style.display = 'block';
     if (btn) { btn.disabled = false; btn.textContent = 'Add item and count'; }
   }
@@ -1093,14 +1094,10 @@ function clearAllCounts() {
 }
 
 // Login gate — must sign in to access this page
+// (pc-nav.js handles the header bar including user name + sign out button)
 pcAuth.require({
   pageSlug: 'ending-inventory',
   onReady: function(user) {
-    var el = document.getElementById('header-right');
-    if (el && user) {
-      el.innerHTML = '<span class="header-user">' + (user.display_name || user.email) + '</span>' +
-        '<button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
-    }
     renderVenueTiles();
     loadAll();
   }
