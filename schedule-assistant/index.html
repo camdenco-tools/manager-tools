@@ -174,6 +174,47 @@ body {
 .event-row.not-submitted { background: var(--red-light); border-left-color: var(--red); }
 .event-row.expanded { box-shadow: var(--shadow-md); }
 
+/* ============================================================
+ * CANCELLED EVENT ROW — added May 13, 2026
+ * Cancelled events render as a muted, single-line row. No chevron,
+ * no expansion, no Print/Email/Notify buttons. Event name struck
+ * through. Cancel reason and meta line shown inline so a manager
+ * scanning the list sees context without needing to hover.
+ * ============================================================ */
+.event-row.cancelled-row {
+  background: #fdf6f5;
+  border-left-color: var(--red);
+  opacity: 0.85;
+}
+.event-row.cancelled-row:hover { box-shadow: var(--shadow-sm); }
+.event-row.cancelled-row .event-name {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  color: #999;
+}
+.event-row.cancelled-row .event-time {
+  text-decoration: line-through;
+  color: #bbb;
+}
+.event-row.cancelled-row .venue-badge {
+  opacity: 0.6;
+}
+.status-tag.cancelled-status-tag {
+  background: var(--red); color: white;
+}
+.cancelled-reason-inline {
+  font-size: 12px; color: var(--red);
+  font-style: italic;
+  display: inline-flex; align-items: center; gap: 4px;
+  max-width: 360px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cancelled-meta-inline {
+  font-size: 11px; color: var(--label);
+  font-style: italic;
+  white-space: nowrap;
+}
+
 .event-head {
   display: flex; align-items: center; gap: 12px;
   padding: 12px 14px; cursor: pointer; flex-wrap: wrap;
@@ -1888,6 +1929,31 @@ function isLocked(eventDateIso) {
   return new Date() >= lockTime;
 }
 
+// Cancellation helpers — added May 13, 2026.
+// An event is cancelled when its cancelled_at column is non-null. We treat
+// cancelled events as visible-but-inactive throughout this page:
+//   - Render struck-through in the day list, non-expandable
+//   - Excluded from day-level coverage stats (signups, filled, needed)
+//   - Hidden from the recent signups feed (signups still exist in the DB
+//     but the events no longer matter — placements were auto-released
+//     when the event was cancelled on the events-admin page)
+//   - Excluded from "Available to call" eligibility
+//   - Print, Email staff list, and Notify staffing buttons hidden
+function isCancelledEvent(ev) {
+  return ev && ev.cancelled_at;
+}
+// Format a cancellation timestamp for tooltips and inline meta lines.
+// Returns "May 13 at 3:53 PM" — same format used by events-admin and
+// event-planning so the language stays consistent across pages.
+function fmtCancelledAt(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
+    ' at ' +
+    d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
+
 // Initials from name
 function initials(name) {
   if (!name) return '?';
@@ -2267,7 +2333,8 @@ function loadAll() {
     state.recentSignupEvents = {};
     state.events.forEach(e => {
       state.recentSignupEvents[e.id] = {
-        id: e.id, event_name: e.event_name, venue: e.venue, event_date: e.event_date
+        id: e.id, event_name: e.event_name, venue: e.venue, event_date: e.event_date,
+        cancelled_at: e.cancelled_at
       };
     });
     const missingEventIds = [];
@@ -2280,7 +2347,7 @@ function loadAll() {
     if (missingEventIds.length > 0) {
       const missingInList = '(' + missingEventIds.map(id => '"' + id + '"').join(',') + ')';
       resolveMissingEvents = authFetch(
-        SUPABASE_URL + '/rest/v1/events?select=id,event_name,venue,event_date&id=in.' + missingInList,
+        SUPABASE_URL + '/rest/v1/events?select=id,event_name,venue,event_date,cancelled_at&id=in.' + missingInList,
         { headers: apiHeaders() }
       ).then(rows => {
         (rows || []).forEach(e => { state.recentSignupEvents[e.id] = e; });
@@ -2536,10 +2603,17 @@ function recentSignupsBuckets() {
 
 // Returns true if a recent-signup row should be visible given the current
 // venue filter. Resolves the row's event via state.recentSignupEvents.
+// Also filters out signups for cancelled events — the signup row still
+// exists in the DB but surfacing it on a forward-looking feed is noise.
 function recentSignupVenueMatches(row) {
-  if (!state.filters.venue) return true;
   const ev = state.recentSignupEvents[row.event_id];
+  // No event info → drop it from the feed (can't render context anyway).
   if (!ev) return false;
+  // Cancelled events never show up in the recent signups box, regardless
+  // of venue filter. The placement got auto-released when the event was
+  // cancelled; the surviving signup row is historical only.
+  if (ev.cancelled_at) return false;
+  if (!state.filters.venue) return true;
   return ev.venue === state.filters.venue;
 }
 
@@ -2677,7 +2751,15 @@ function render() {
   }
   let html = recentSignupsHtml;
   dates.forEach(date => {
-    const events = grouped[date];
+    const allEvents = grouped[date];
+    // Day-level stats are computed against LIVE events only. Cancelled
+    // events still render (struck through, non-expandable) but don't
+    // contribute to "X / Y people available" or unresolved multi-signup
+    // counts — those numbers represent active staffing capacity, not
+    // history. Cancelled events sort to the bottom of the day group.
+    const liveEvents = allEvents.filter(e => !isCancelledEvent(e));
+    const cancelledEvents = allEvents.filter(e => isCancelledEvent(e));
+    const events = liveEvents;
     const totalNeed = events.reduce((s, e) => s + Math.max(eventTotalNeeded(e.id), 0), 0);
 
     // Count distinct unique humans available across the day, multi-signup people only count once.
@@ -2717,14 +2799,25 @@ function render() {
 
     html += '<div class="day-group">';
     html += '<h2>' + fmtDayHeader(date) + '</h2>';
-    html += '<span class="day-pill-primary ' + pillCls + '">' +
-      availableHumans + ' / ' + totalNeed + ' people available</span>';
+    // Skip the "X / Y people available" pill entirely when the day has zero
+    // live events (all events cancelled). Otherwise the pill would read
+    // "0 / 0 people available" which is misleading.
+    if (events.length > 0) {
+      html += '<span class="day-pill-primary ' + pillCls + '">' +
+        availableHumans + ' / ' + totalNeed + ' people available</span>';
+    }
     html += '<span class="day-spacer"></span>';
     html += '<div class="day-pills-secondary">';
     if (unresolved > 0) html += '<span class="day-pill warn">⚠ ' + unresolved + ' unresolved multi-signup' + (unresolved === 1 ? '' : 's') + '</span>';
+    if (cancelledEvents.length > 0) {
+      html += '<span class="day-pill" style="background:#f0f0ec;color:#999;">' +
+        cancelledEvents.length + ' cancelled</span>';
+    }
     html += '</div></div>';
 
+    // Live events first, cancelled events at the bottom of the day group.
     events.forEach(ev => { html += renderEventRow(ev); });
+    cancelledEvents.forEach(ev => { html += renderEventRow(ev); });
   });
   root.innerHTML = html;
   attachEventHandlers();
@@ -2740,6 +2833,40 @@ function eventStatusClass(ev) {
 }
 
 function renderEventRow(ev) {
+  // CANCELLED EVENT BRANCH — added May 13, 2026.
+  // Cancelled events render as a simple, non-expandable row. No coverage
+  // meters, no Print/Email/Notify buttons, no chevron. The CANCELLED tag
+  // replaces the staffed/submitted/not-submitted status. Hovering the row
+  // surfaces the cancellation reason in the title attribute. We return
+  // early to skip all the active-event rendering below.
+  if (isCancelledEvent(ev)) {
+    const reportT = getReportTime(ev);
+    const time = reportT ? 'Report ' + fmtTime(reportT) +
+      (ev.estimated_end_time ? ' – ' + fmtTime(ev.estimated_end_time) : '') : '';
+    const cancelMetaParts = ['Cancelled ' + fmtCancelledAt(ev.cancelled_at)];
+    if (ev.cancelled_by) cancelMetaParts.push('by ' + ev.cancelled_by);
+    const cancelMeta = cancelMetaParts.join(' ');
+    const tipParts = ['CANCELLED'];
+    if (ev.cancellation_reason) tipParts.push(ev.cancellation_reason);
+    tipParts.push(cancelMeta);
+    const titleAttr = ' title="' + escapeAttr(tipParts.join(' \u2014 ')) + '"';
+    let h = '<div class="event-row cancelled-row" data-event-id="' + ev.id + '"' + titleAttr + '>';
+    h += '<div class="event-head" style="cursor:default;">';
+    h += '<span class="venue-badge">' + escapeHtml(ev.venue) + '</span>';
+    h += '<span class="event-name">' + escapeHtml(ev.event_name || '') + '</span>';
+    if (time) h += '<span class="event-time">' + escapeHtml(time) + '</span>';
+    h += '<span class="status-tag cancelled-status-tag">CANCELLED</span>';
+    if (ev.cancellation_reason) {
+      h += '<span class="cancelled-reason-inline">' +
+        '&#9888; ' + escapeHtml(ev.cancellation_reason) +
+        '</span>';
+    }
+    h += '<span class="event-spacer"></span>';
+    h += '<span class="cancelled-meta-inline">' + escapeHtml(cancelMeta) + '</span>';
+    h += '</div></div>';
+    return h;
+  }
+
   const isExpanded = state.expandedEvents.has(ev.id);
   const status = eventStatusClass(ev);
   const needed = eventTotalNeeded(ev.id);
@@ -3374,6 +3501,8 @@ function attachEventHandlers() {
     head.addEventListener('click', e => {
       if (e.target.closest('.btn') || e.target.closest('.audit-link') || e.target.closest('.notified-pill')) return;
       const row = head.closest('.event-row');
+      // Cancelled rows are not expandable — click does nothing.
+      if (row.classList.contains('cancelled-row')) return;
       const id = row.getAttribute('data-event-id');
       if (state.expandedEvents.has(id)) state.expandedEvents.delete(id);
       else state.expandedEvents.add(id);
@@ -4806,6 +4935,11 @@ function hexToRgba(hex, alpha) {
 function openNotifyStaffingModal(eventId) {
   const ev = state.events.find(e => e.id === eventId);
   if (!ev) return;
+  // Defense-in-depth: cancelled events cannot be notified.
+  if (isCancelledEvent(ev)) {
+    showToast('This event has been cancelled.', 'error');
+    return;
+  }
   state.notifyStaffingEventId = eventId;
 
   // Populate the event line
@@ -5153,6 +5287,11 @@ function openCallableModal(eventId) {
   _callableCurrentEventId = eventId;
   const ev = state.events.find(e => e.id === eventId);
   if (!ev) return;
+  // Defense-in-depth: cancelled events have no callable list.
+  if (isCancelledEvent(ev)) {
+    showToast('This event has been cancelled.', 'error');
+    return;
+  }
   const list = getCallableEmployees(ev);
 
   document.getElementById('callable-title').textContent = 'Available to call — ' + (ev.event_name || ev.venue);
@@ -5466,6 +5605,11 @@ let emailModalEventId = null;
 function openEmailModal(eventId) {
   const ev = state.events.find(e => e.id === eventId);
   if (!ev) return;
+  // Defense-in-depth: cancelled events cannot send a staff list email.
+  if (isCancelledEvent(ev)) {
+    showToast('This event has been cancelled.', 'error');
+    return;
+  }
 
   // Build the staff list now so we can show preview AND validate non-empty.
   const positions = positionsForEvent(eventId);
@@ -5784,6 +5928,11 @@ function sendStaffListEmail() {
 function printEvent(eventId) {
   const ev = state.events.find(e => e.id === eventId);
   if (!ev) return;
+  // Defense-in-depth: cancelled events cannot be printed.
+  if (isCancelledEvent(ev)) {
+    showToast('This event has been cancelled.', 'error');
+    return;
+  }
   const standGroups = standsForEvent(ev.id, ev.venue);
   if (!standGroups.length) {
     showToast('Nothing to print yet — no staffing requests for this event', 'error');
