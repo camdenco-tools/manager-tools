@@ -587,6 +587,109 @@ body {
 }
 .rv-prompt-text strong { font-weight: 700; }
 
+/* ============================================================
+   ALCOHOL TRAINING SECTION
+   Inline rows matching the Certifications cell density. Status
+   pills, action buttons, and notes all on a single line where
+   possible. Mutes for "no signal" rows so visual rhythm stays
+   even when one cert has data and the other doesn't.
+   ============================================================ */
+.alcohol-rows { display: flex; flex-direction: column; }
+.alcohol-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 0;
+  font-size: 13px;
+  gap: 8px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border-lt);
+}
+.alcohol-row:last-child { border-bottom: none; }
+.alcohol-row.alcohol-row-muted { opacity: 0.6; }
+.alc-name { font-weight: 600; flex-shrink: 0; }
+.alc-state-tag {
+  display: inline-block;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+  color: var(--muted); background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 2px 6px; border-radius: 4px;
+  margin-left: 6px;
+}
+.alc-right {
+  display: inline-flex; align-items: center; gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.alc-pill {
+  display: inline-block;
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 3px 9px; border-radius: 999px;
+  white-space: nowrap;
+}
+.alc-pill-amber { background: var(--amber-100); color: var(--amber-800); }
+.alc-pill-blue  { background: var(--blue-50);   color: var(--blue-600); }
+.alc-pill-green { background: var(--green-50);  color: var(--green-800); }
+.alc-note {
+  flex-basis: 100%;
+  font-size: 11px; color: var(--muted);
+  font-style: italic;
+  margin-top: 2px;
+  text-align: right;
+}
+.alc-empty {
+  font-size: 11px; color: var(--light);
+  font-style: italic;
+}
+.alc-link {
+  font-size: 11px; color: var(--blue-600);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.alc-link:hover { text-decoration: underline; }
+.alc-mark-contacted-btn {
+  font-size: 11px; font-weight: 600;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--text);
+}
+.alc-mark-contacted-btn:hover {
+  border-color: var(--muted);
+  background: var(--bg);
+}
+.alc-mark-contacted-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Questions text from onboarding submission, shown above Internal Notes */
+.onboarding-questions-block {
+  background: var(--blue-50);
+  border: 1px solid var(--blue-100);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+.onboarding-questions-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--blue-600);
+  margin-bottom: 4px;
+}
+.onboarding-questions-text {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* Performance Signals progress bar (cold-start state) */
 .ps-progress-track {
   height: 4px;
@@ -1653,7 +1756,16 @@ body {
     // Venue roster modal: which venue's modal is open (or null), and
     // whether to show inactive employees in that modal.
     rosterModalVenue: null,
-    rosterModalShowInactive: false
+    rosterModalShowInactive: false,
+    // Cache of cert URLs from onboarding submissions, keyed by
+    // employee_id. Populated lazily — only fetched the first time a
+    // manager clicks "View cert" on a card. Shape:
+    //   { <employee_id>: { team_cert_upload_url, ramp_cert_upload_url,
+    //                      questions_text, submitted_at } }
+    // Per the perf decision: we do NOT pull onboarding_submissions at
+    // boot. The four helper columns on employees drive section visibility;
+    // the actual submission row is fetched only when needed.
+    cardSubmissionByEmpId: {}
   };
 
   // -------------------------------------------------------------
@@ -1748,13 +1860,59 @@ body {
     return authFetch(url, { method: 'GET', headers: pcAuth.headers() });
   }
 
+  // -------------------------------------------------------------
+  // Lazy loader: most-recent onboarding submission for one employee.
+  //
+  // Only called when a card opens and the employee has any alcohol
+  // training state worth showing (drives "View cert" and questions_text
+  // display). Result is cached in state.cardSubmissionByEmpId so
+  // re-opening the same card in a session doesn't refetch.
+  //
+  // Returns the row or null. Never throws — callers can treat null as
+  // "no submission on file."
+  // -------------------------------------------------------------
+  function loadSubmissionForEmployee(empId) {
+    if (!empId) return Promise.resolve(null);
+    // Cache hit?
+    if (state.cardSubmissionByEmpId.hasOwnProperty(empId)) {
+      return Promise.resolve(state.cardSubmissionByEmpId[empId]);
+    }
+    var url = SUPABASE_URL +
+      '/rest/v1/onboarding_submissions' +
+      '?employee_id=eq.' + encodeURIComponent(empId) +
+      '&select=id,team_nj_choice,ramp_pa_choice,team_cert_upload_url,ramp_cert_upload_url,questions_text,submitted_at' +
+      '&order=submitted_at.desc&limit=1';
+    return authFetch(url, { method: 'GET', headers: pcAuth.headers() })
+      .then(function(rows) {
+        var row = (rows && rows[0]) || null;
+        state.cardSubmissionByEmpId[empId] = row;
+        return row;
+      })
+      .catch(function(err) {
+        if (err && err.authFailed) { handleAuthFailure(); return null; }
+        console.warn('Submission fetch failed (non-blocking):', err);
+        state.cardSubmissionByEmpId[empId] = null;
+        return null;
+      });
+  }
+
   function loadEmployees() {
     // Drop the is_active filter from the URL so we get everyone in one shot.
     // Tab toggle filters in memory.
     // shirt_size added May 5, 2026 — read it so the card can display it.
+    // Alcohol training columns added May 15, 2026 — drive the new Alcohol
+    // training card section without any extra fetches at boot. Visibility
+    // of that section is decided entirely from these columns on the
+    // employee row, per the perf decision to keep boot light.
     var url = SUPABASE_URL +
       '/rest/v1/employees' +
-      '?select=id,first_name,last_name,punch_id,phone,is_active,home_venue,shirt_size' +
+      '?select=id,first_name,last_name,punch_id,phone,is_active,home_venue,shirt_size,' +
+      'team_training_requested,team_training_requested_at,team_training_contacted,' +
+      'team_training_contacted_at,team_training_contacted_by,team_training_notes,' +
+      'team_self_reported_cert,team_eligible_at,' +
+      'ramp_training_requested,ramp_training_requested_at,ramp_training_contacted,' +
+      'ramp_training_contacted_at,ramp_training_contacted_by,ramp_training_notes,' +
+      'ramp_self_reported_cert,ramp_eligible_at' +
       '&order=last_name.asc,first_name.asc';
     return authFetch(url, { method: 'GET', headers: pcAuth.headers() });
   }
@@ -2804,6 +2962,22 @@ body {
         });
         if (r && r.coldStart) state.psSignalsOpen = true;
       } catch (e) { /* leave default */ }
+
+      // If this employee completed the onboarding form, lazy-load their
+      // submission row so the questions_text can render and cert URLs
+      // are ready when a manager clicks "View cert". Fires once per card
+      // open (cache prevents repeat fetches). Triggered only when the
+      // employee actually has a submission to fetch — i.e., their
+      // candidate row shows onboarding_training_complete = true.
+      var hasSubmission = cand && cand.onboarding_training_complete === true;
+      if (hasSubmission && !state.cardSubmissionByEmpId.hasOwnProperty(empId)) {
+        loadSubmissionForEmployee(empId).then(function() {
+          // Re-render so the questions_text block shows up. If the modal
+          // was closed before the fetch resolved (unlikely but possible),
+          // this is a no-op.
+          if (state.modalEmpId === empId) renderCardModal();
+        });
+      }
     }
     renderCardModal();
   }
@@ -2837,6 +3011,7 @@ body {
           renderHomeVenueSection(emp) +
           renderSignupsSection(emp) +
           renderRolesSection(emp, cand) +
+          renderAlcoholTrainingSection(emp) +
           renderNotesSection(emp, cand) +
           renderHistorySection(emp) +
           renderOnboardingSection(emp, cand) +
@@ -3703,14 +3878,183 @@ body {
     return null;
   }
 
+  // ============================================================
+  // ALCOHOL TRAINING SECTION
+  //
+  // Hidden entirely unless the employee row has at least one flag
+  // set on either TEAM or RAMP. Visibility is decided from columns
+  // already on the employee row — no extra fetches at boot. Cert
+  // URLs are loaded on demand when "View cert" is clicked.
+  //
+  // States per cert:
+  //   - requested (no contact yet): amber pill + "Mark contacted" btn
+  //   - contacted: blue pill with who/when + notes inline
+  //   - self_reported with cert upload: green pill + View + Verify links
+  //   - want_when_18 (minor): amber pill with eligibility date
+  //   - declined / no submission yet: muted italic line, only shown
+  //     if the OTHER cert has signal (mixed-state cards)
+  // ============================================================
+  function renderAlcoholTrainingSection(emp) {
+    // Decide visibility purely from employee-row columns.
+    var teamSignal = hasAlcoholSignal(emp, 'team');
+    var rampSignal = hasAlcoholSignal(emp, 'ramp');
+    if (!teamSignal && !rampSignal) return '';  // hidden entirely
+
+    var rows = '';
+    rows += renderAlcoholRow(emp, 'team');
+    rows += renderAlcoholRow(emp, 'ramp');
+
+    return '<div class="card-section">' +
+      '<div class="card-section-head">' +
+        '<span class="section-title">Alcohol training</span>' +
+      '</div>' +
+      '<div class="alcohol-rows">' + rows + '</div>' +
+    '</div>';
+  }
+
+  // Returns true if this cert kind has any state worth showing for this emp.
+  function hasAlcoholSignal(emp, kind) {
+    var p = kind + '_';  // 'team_' or 'ramp_'
+    return !!(
+      emp[p + 'training_requested'] ||
+      emp[p + 'training_contacted'] ||
+      emp[p + 'self_reported_cert'] ||
+      emp[p + 'eligible_at']
+    );
+  }
+
+  // Render one row (TEAM or RAMP). kind = 'team' or 'ramp'.
+  function renderAlcoholRow(emp, kind) {
+    var p = kind + '_';
+    var label = kind === 'team' ? 'TEAM' : 'RAMP';
+    var stateTag = kind === 'team' ? 'NJ' : 'PA';
+
+    var requested    = !!emp[p + 'training_requested'];
+    var contacted    = !!emp[p + 'training_contacted'];
+    var selfReported = !!emp[p + 'self_reported_cert'];
+    var eligibleAt   = emp[p + 'eligible_at'];
+    var hasSignal    = requested || contacted || selfReported || !!eligibleAt;
+
+    if (!hasSignal) {
+      // No signal — render a muted line so the row still appears in the
+      // pair, matching the layout. Better than uneven rows.
+      return '<div class="alcohol-row alcohol-row-muted">' +
+        '<span class="alc-name">' + label + ' <span class="alc-state-tag">' + stateTag + '</span></span>' +
+        '<span class="alc-empty">No submission on file</span>' +
+      '</div>';
+    }
+
+    // Priority order for what pill to show:
+    //   1. contacted     -> "Contacted M/D by X"
+    //   2. self-reported -> "Self-reported · cert uploaded"
+    //   3. eligible_at   -> "Eligible after 18 · M/D YYYY"
+    //   4. requested     -> "Requested M/D" + Mark contacted button
+    var rightHtml = '';
+    if (contacted) {
+      var contactedDate = emp[p + 'training_contacted_at']
+        ? formatDate(emp[p + 'training_contacted_at']) : '';
+      var contactedBy = emp[p + 'training_contacted_by'] || 'manager';
+      var notes = emp[p + 'training_notes'];
+      rightHtml = '<span class="alc-pill alc-pill-blue">Contacted ' + escapeHtml(contactedDate) +
+        ' by ' + escapeHtml(contactedBy) + '</span>';
+      if (notes) {
+        rightHtml += '<div class="alc-note">' + escapeHtml(notes) + '</div>';
+      }
+    } else if (selfReported) {
+      // Self-reported cert with upload. View + verify links.
+      rightHtml = '<span class="alc-pill alc-pill-green">Self-reported · cert uploaded</span>' +
+        '<a href="#" class="alc-link" data-view-cert="' + kind + '" data-emp-id="' + emp.id + '">View cert &#8599;</a>' +
+        '<a href="/certifications/?employee=' + encodeURIComponent(emp.id) + '" class="alc-link">Verify in Certifications &rarr;</a>';
+    } else if (eligibleAt) {
+      // Minor — eligible after 18.
+      rightHtml = '<span class="alc-pill alc-pill-amber">Eligible after 18 &middot; ' +
+        escapeHtml(formatDate(eligibleAt)) + '</span>';
+    } else if (requested) {
+      var reqDate = emp[p + 'training_requested_at']
+        ? formatDate(emp[p + 'training_requested_at']) : '';
+      rightHtml = '<span class="alc-pill alc-pill-amber">Requested ' + escapeHtml(reqDate) + '</span>' +
+        '<button class="alc-mark-contacted-btn" data-mark-contacted="' + kind + '" data-emp-id="' + emp.id + '">Mark contacted</button>';
+    }
+
+    return '<div class="alcohol-row">' +
+      '<span class="alc-name">' + label + ' <span class="alc-state-tag">' + stateTag + '</span></span>' +
+      '<span class="alc-right">' + rightHtml + '</span>' +
+    '</div>';
+  }
+
+  // Handler: "Mark contacted" — flip the contacted flag on the employee
+  // row + stamp who/when. Mirrors the home_venue write pattern. No
+  // confirmation dialog; one click writes and re-renders.
+  function markAlcoholContacted(emp, kind, btnEl) {
+    if (!emp || !emp.id) return;
+    if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Saving...'; }
+    var actor = (pcAuth.getUser && pcAuth.getUser()) || null;
+    var actorName = actor ? (actor.display_name || actor.email || 'Unknown') : 'Unknown';
+    var now = new Date().toISOString();
+    var body = {};
+    var prefix = kind + '_';
+    body[prefix + 'training_contacted'] = true;
+    body[prefix + 'training_contacted_at'] = now;
+    body[prefix + 'training_contacted_by'] = actorName;
+    body.updated_at = now;
+    patchEmployee(emp.id, body).then(function() {
+      // Update local employee row so the card re-renders with the new state.
+      Object.keys(body).forEach(function(k) {
+        if (k === 'updated_at') return;
+        emp[k] = body[k];
+      });
+      showToast(kind.toUpperCase() + ' marked as contacted', 'success');
+      renderCardModal();
+    }).catch(function(err) {
+      if (err && err.authFailed) { handleAuthFailure(); return; }
+      console.error('Mark contacted failed:', err);
+      if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'Mark contacted'; }
+      showToast('Save failed — try again', 'error');
+    });
+  }
+
+  // Handler: "View cert" — fetch the most-recent submission row (cached
+  // after first call), then open the matching cert URL in a new tab.
+  function viewAlcoholCert(emp, kind) {
+    if (!emp || !emp.id) return;
+    showToast('Loading cert...', null);
+    loadSubmissionForEmployee(emp.id).then(function(submission) {
+      if (!submission) {
+        showToast('No submission record found for this employee.', 'error');
+        return;
+      }
+      var url = kind === 'team'
+        ? submission.team_cert_upload_url
+        : submission.ramp_cert_upload_url;
+      if (!url) {
+        showToast('No cert file uploaded.', 'error');
+        return;
+      }
+      window.open(url, '_blank', 'noopener');
+    });
+  }
+
   // ---- Internal notes ----
   function renderNotesSection(emp, cand) {
     var c = cand || {};
     var notes = c.internal_notes || '';
+    // Pull the most-recent submission's questions_text, if cached.
+    // The submission is lazy-loaded in openCardModal() when the employee
+    // has onboarding_training_complete = true. Cache miss = render
+    // nothing here; the lazy load triggers a re-render once it lands.
+    var submission = state.cardSubmissionByEmpId[emp.id];
+    var questionsText = (submission && submission.questions_text) || '';
+    var questionsBlock = questionsText
+      ? '<div class="onboarding-questions-block">' +
+          '<div class="onboarding-questions-label">Questions from onboarding form</div>' +
+          '<div class="onboarding-questions-text">' + escapeHtml(questionsText) + '</div>' +
+        '</div>'
+      : '';
     return '<div class="card-section">' +
       '<div class="card-section-head">' +
         '<span class="section-title">Internal notes</span>' +
       '</div>' +
+      questionsBlock +
       '<textarea class="notes-textarea" data-notes-field placeholder="Add notes about this employee...">' + escapeHtml(notes) + '</textarea>' +
       '<div class="section-action-row">' +
         '<button class="btn btn-primary" data-notes-save>Save notes</button>' +
@@ -3728,6 +4072,7 @@ body {
     var i9v = !!c.i9_verified;
     var hb = !!c.handbook_complete;
     var wp = !!c.working_papers_complete;
+    var ob = !!c.onboarding_training_complete;
     return '<div class="card-section">' +
       '<div class="card-section-head">' +
         '<span class="section-title">Onboarding history</span>' +
@@ -3743,6 +4088,7 @@ body {
         renderChecklistRow('I-9 submitted', i9, c.i9_submitted_at) +
         renderChecklistRow('I-9 verified', i9v, c.i9_verified_at) +
         renderChecklistRow('Employee handbook', hb, c.handbook_completed_at) +
+        renderChecklistRow('Onboarding training', ob, c.onboarding_training_completed_at) +
         (c.is_minor ? renderChecklistRow('Working papers (minor)', wp, c.working_papers_uploaded_at) : '') +
       '</div>' +
     '</div>';
@@ -4282,6 +4628,24 @@ body {
     if (react) {
       react.addEventListener('click', function() {
         openReactivateModal(emp, cand);
+      });
+    }
+    // Alcohol training: "Mark contacted" buttons (TEAM and RAMP)
+    var markBtns = root.querySelectorAll('[data-mark-contacted]');
+    for (var mb = 0; mb < markBtns.length; mb++) {
+      markBtns[mb].addEventListener('click', function(ev) {
+        var kind = ev.currentTarget.getAttribute('data-mark-contacted');
+        markAlcoholContacted(emp, kind, ev.currentTarget);
+      });
+    }
+    // Alcohol training: "View cert" links — lazy-fetch submission row,
+    // then open the matching cert URL in a new tab.
+    var viewCertLinks = root.querySelectorAll('[data-view-cert]');
+    for (var vc2 = 0; vc2 < viewCertLinks.length; vc2++) {
+      viewCertLinks[vc2].addEventListener('click', function(ev) {
+        ev.preventDefault();
+        var kind = ev.currentTarget.getAttribute('data-view-cert');
+        viewAlcoholCert(emp, kind);
       });
     }
   }
