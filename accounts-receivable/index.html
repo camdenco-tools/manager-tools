@@ -1,0 +1,4164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Accounts Receivable — Admin · Popcorn Chez</title>
+
+<!-- DM Sans — matches the rest of the toolkit -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap">
+
+<!-- Auth must load BEFORE pc-nav (pc-nav reads pcAuth.getUser()) -->
+<script src="/pc-auth.js"></script>
+<script src="/pc-nav.js"></script>
+
+<style>
+  /* ========================================================================
+     RESET / BASE
+     ======================================================================== */
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #faf9f6;
+    color: #1a1a1a;
+    font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ========================================================================
+     PAGE-TITLE ROW
+     Sticky below the pc-nav header (64px) + ribbon (~42px). z-index 800.
+     ======================================================================== */
+  .page-title-row {
+    position: sticky;
+    top: 106px;
+    z-index: 800;
+    background: #faf9f6;
+    border-bottom: 1px solid #e8e8e4;
+    padding: 18px 22px 16px;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .page-title {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0;
+  }
+  .page-title-meta {
+    font-size: 12px;
+    color: #888;
+    font-weight: 500;
+  }
+
+  /* ========================================================================
+     CONTENT WRAPPER
+     ======================================================================== */
+  .page-body {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 18px 22px 80px;
+  }
+
+  /* ========================================================================
+     VIEW TOGGLE
+     ======================================================================== */
+  .view-toggle-wrap {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 22px;
+  }
+  .view-toggle-label {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #888;
+  }
+  .view-toggle {
+    display: inline-flex;
+    background: #f1f0eb;
+    border: 1px solid #e0dfd8;
+    border-radius: 8px;
+    padding: 3px;
+    gap: 2px;
+  }
+  .view-toggle button {
+    background: transparent;
+    border: 0;
+    color: #555;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 7px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+  }
+  .view-toggle button:hover { color: #1a1a1a; }
+  .view-toggle button.is-active {
+    background: #fff;
+    color: #1a1a1a;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+
+  /* ========================================================================
+     VIEW CONTAINERS
+     ======================================================================== */
+  .view-container { display: none; }
+  .view-container.is-active { display: block; }
+
+  /* ========================================================================
+     RECEIVABLES VIEW
+     ======================================================================== */
+
+  /* Top action bar — currently just the New Invoice button */
+  .ar-actions-row {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 12px;
+  }
+  .btn-primary {
+    background: #1a1a1a;
+    color: #fff;
+    border: 0;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 9px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.12s ease;
+  }
+  .btn-primary:hover { background: #2c2c2a; }
+  .btn-primary:disabled { background: #b4b2a9; cursor: not-allowed; }
+
+  /* Aging strip — 4 cards */
+  .ar-aging-strip {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+  .aging-card {
+    background: #fff;
+    border: 0.5px solid #e0dfd8;
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .aging-card.is-warning {
+    background: #fef6ec;
+    border-color: #f3d9a8;
+  }
+  .aging-card.is-danger {
+    background: #fceaea;
+    border-color: #f0a8a8;
+  }
+  .aging-card .aging-label {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #888;
+    margin-bottom: 6px;
+  }
+  .aging-card.is-warning .aging-label { color: #854F0B; }
+  .aging-card.is-danger  .aging-label { color: #791F1F; }
+  .aging-card .aging-amount {
+    font-size: 22px;
+    font-weight: 500;
+    color: #1a1a1a;
+    font-variant-numeric: tabular-nums;
+  }
+  .aging-card.is-warning .aging-amount { color: #633806; }
+  .aging-card.is-danger  .aging-amount { color: #501313; }
+  .aging-card .aging-meta {
+    font-size: 12px;
+    color: #888;
+    margin-top: 2px;
+  }
+  .aging-card.is-warning .aging-meta { color: #854F0B; }
+  .aging-card.is-danger  .aging-meta { color: #791F1F; }
+
+  /* Filter row */
+  .ar-filter-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+  .ar-filter-row select,
+  .ar-filter-row input[type="text"] {
+    font-family: inherit;
+    font-size: 13px;
+    padding: 7px 10px;
+    border: 1px solid #e0dfd8;
+    border-radius: 6px;
+    background: #fff;
+    color: #1a1a1a;
+  }
+  .ar-filter-row select:focus,
+  .ar-filter-row input[type="text"]:focus {
+    outline: none;
+    border-color: #1a1a1a;
+  }
+  .ar-filter-row input[type="text"] {
+    flex: 1;
+    min-width: 200px;
+  }
+
+  /* Invoice list */
+  .invoice-list-wrap {
+    background: #fff;
+    border: 0.5px solid #e0dfd8;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .invoice-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .invoice-table thead tr {
+    background: #f6f6f3;
+    border-bottom: 1px solid #e0dfd8;
+  }
+  .invoice-table th {
+    text-align: left;
+    padding: 10px 12px;
+    font-weight: 500;
+    color: #555;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+  .invoice-table th[data-sort] .sort-arrow {
+    opacity: 0;
+    margin-left: 4px;
+    font-size: 10px;
+  }
+  .invoice-table th.is-sorted .sort-arrow { opacity: 1; }
+  .invoice-table th.is-amount { text-align: right; }
+  .invoice-table tbody tr {
+    border-bottom: 1px solid #f0efe8;
+    cursor: pointer;
+    transition: background 0.08s ease;
+  }
+  .invoice-table tbody tr:hover { background: #fafaf6; }
+  .invoice-table tbody tr:last-child { border-bottom: 0; }
+  .invoice-table td {
+    padding: 11px 12px;
+    vertical-align: middle;
+  }
+  .invoice-table td.col-internal {
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+  }
+  .invoice-table td.col-clientref {
+    color: #777;
+    font-size: 12px;
+  }
+  .invoice-table td.col-eventdate { font-variant-numeric: tabular-nums; }
+  .invoice-table td.col-amount {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+  }
+  .invoice-table td.col-age { color: #555; }
+  .invoice-table td.col-age.is-over-30 {
+    color: #854F0B;
+    font-weight: 500;
+  }
+
+  /* Actions column — small ⋯ button in each row */
+  .invoice-table th.col-actions-h { width: 36px; }
+  .invoice-table td.col-actions {
+    width: 36px;
+    text-align: center;
+    padding: 4px 6px;
+  }
+  .row-menu-btn {
+    background: transparent;
+    border: 0;
+    color: #888;
+    font-size: 18px;
+    font-weight: 700;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    line-height: 1;
+  }
+  .row-menu-btn:hover { background: #f1f0eb; color: #1a1a1a; }
+  .row-menu-btn.is-open { background: #1a1a1a; color: #fff; }
+
+  /* Row-actions popover — anchored under the ⋯ button */
+  .row-menu-popover {
+    position: absolute;
+    z-index: 1400;
+    background: #fff;
+    border: 1px solid #e0dfd8;
+    border-radius: 8px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.14);
+    min-width: 180px;
+    padding: 6px 0;
+  }
+  .row-menu-popover button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: 0;
+    color: #1a1a1a;
+    font-family: inherit;
+    font-size: 13px;
+    padding: 8px 14px;
+    cursor: pointer;
+  }
+  .row-menu-popover button:hover { background: #f6f6f3; }
+  .row-menu-popover button.is-danger { color: #791F1F; }
+  .row-menu-popover button.is-danger:hover { background: #fceaea; }
+  .row-menu-popover button.is-restore { color: #27500A; }
+  .row-menu-popover button.is-restore:hover { background: #eaf3de; }
+  .row-menu-popover .row-menu-sep {
+    height: 1px;
+    background: #f0efe8;
+    margin: 4px 0;
+  }
+
+  /* Standalone status-change confirm modal (triggered from row menu) */
+  .status-confirm-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.36);
+    z-index: 1600;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 80px 16px 24px;
+    overflow-y: auto;
+  }
+  .status-confirm-card {
+    background: #fff;
+    border: 1px solid #e0dfd8;
+    border-radius: 12px;
+    padding: 22px 24px;
+    max-width: 460px;
+    width: 100%;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.18);
+  }
+
+  /* Status badges */
+  .status-badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 3px 8px;
+    border-radius: 4px;
+    text-transform: capitalize;
+  }
+  .status-badge.is-open           { background: #e6f1fb; color: #0C447C; }
+  .status-badge.is-partial        { background: #fef6ec; color: #854F0B; }
+  .status-badge.is-paid           { background: #eaf3de; color: #27500A; }
+  .status-badge.is-voided         { background: #f1f0eb; color: #444441; }
+  .status-badge.is-disputed       { background: #fceaea; color: #791F1F; }
+  .status-badge.is-overpaid       { background: #fef6ec; color: #854F0B; }
+
+  /* Empty + show-older states */
+  .list-empty {
+    padding: 50px 20px;
+    text-align: center;
+    color: #888;
+    font-size: 13px;
+  }
+  .show-older-wrap {
+    text-align: center;
+    padding: 12px;
+    border-top: 1px solid #f0efe8;
+    background: #fafaf6;
+  }
+  .btn-link {
+    background: transparent;
+    border: 0;
+    color: #555;
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    padding: 4px 8px;
+  }
+  .btn-link:hover { color: #1a1a1a; text-decoration: underline; }
+
+  /* List loading state */
+  .list-loading {
+    padding: 50px 20px;
+    text-align: center;
+    color: #aaa;
+    font-size: 13px;
+  }
+
+  /* ========================================================================
+     PLACEHOLDER CARD  (still used by Receive payment view)
+     ======================================================================== */
+  .placeholder-card {
+    background: #fff;
+    border: 1px dashed #d8d8d4;
+    border-radius: 12px;
+    padding: 60px 24px;
+    text-align: center;
+    color: #888;
+  }
+  .placeholder-card h2 {
+    margin: 0 0 8px;
+    font-size: 16px;
+    font-weight: 600;
+    color: #1a1a1a;
+  }
+  .placeholder-card p {
+    margin: 0;
+    font-size: 13px;
+    color: #666;
+  }
+  .placeholder-card .tag {
+    display: inline-block;
+    margin-top: 14px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    background: #f6f6f3;
+    color: #888;
+    padding: 4px 10px;
+    border-radius: 4px;
+    border: 1px solid #e8e8e4;
+  }
+
+  /* ========================================================================
+     NEW INVOICE MODAL  (Stage 2.2 — UI only, no save yet)
+     ======================================================================== */
+  .ar-modal-card {
+    background: #fff;
+    border-radius: 14px;
+    max-width: 720px;
+    width: 100%;
+    padding: 0;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.18);
+    color: #1a1a1a;
+    overflow: hidden;
+  }
+  .ar-modal-head {
+    padding: 20px 24px 14px;
+    border-bottom: 1px solid #f0efe8;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .ar-modal-title { font-size: 17px; font-weight: 600; }
+  .ar-modal-subtitle {
+    font-size: 12px;
+    color: #888;
+    margin-top: 2px;
+  }
+  .ar-modal-close {
+    background: transparent;
+    border: 0;
+    font-size: 22px;
+    color: #888;
+    cursor: pointer;
+    line-height: 1;
+    padding: 4px 8px;
+  }
+  .ar-modal-close:hover { color: #1a1a1a; }
+  .ar-modal-body { padding: 20px 24px; }
+  .ar-modal-footer {
+    padding: 14px 24px;
+    border-top: 1px solid #f0efe8;
+    background: #fafaf6;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+  }
+  .ar-modal-footer-left  { display: flex; gap: 10px; }
+  .ar-modal-footer-right { display: flex; gap: 10px; }
+  .ar-btn-void {
+    background: transparent;
+    border: 0;
+    color: #791F1F;
+    padding: 9px 8px;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    font-weight: 500;
+  }
+  .ar-btn-void:hover { color: #501313; background: #fceaea; border-radius: 6px; text-decoration: none; }
+  .ar-btn-void.is-restore { color: #27500A; }
+  .ar-btn-void.is-restore:hover { color: #173404; background: #eaf3de; }
+  .ar-btn-void[hidden] { display: none; }
+
+  /* Void confirm dialog — overlay on top of the form modal */
+  .ar-confirm-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(255,255,255,0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    border-radius: 14px;
+    z-index: 10;
+  }
+  .ar-confirm-card {
+    background: #fff;
+    border: 1px solid #e0dfd8;
+    border-radius: 12px;
+    padding: 22px 24px;
+    max-width: 460px;
+    width: 100%;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.12);
+  }
+  .ar-confirm-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .ar-confirm-desc {
+    font-size: 13px;
+    color: #555;
+    margin-bottom: 14px;
+    line-height: 1.5;
+  }
+  .ar-confirm-card label {
+    display: block;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #666;
+    margin-bottom: 5px;
+  }
+  .ar-confirm-card textarea {
+    width: 100%;
+    font-family: inherit;
+    font-size: 13px;
+    padding: 8px 10px;
+    border: 1px solid #e0dfd8;
+    border-radius: 6px;
+    background: #fff;
+    color: #1a1a1a;
+    resize: vertical;
+    min-height: 70px;
+  }
+  .ar-confirm-card textarea:focus { outline: none; border-color: #1a1a1a; }
+  .ar-confirm-card textarea.is-error { border-color: #791F1F; background: #fceaea; }
+  .ar-confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 14px;
+  }
+  .ar-btn-danger {
+    background: #791F1F;
+    color: #fff;
+    border: 0;
+  }
+  .ar-btn-danger:hover { background: #501313; }
+  .ar-btn-restore {
+    background: #27500A;
+    color: #fff;
+    border: 0;
+  }
+  .ar-btn-restore:hover { background: #173404; }
+
+  /* Modal-card needs relative positioning to host the overlay */
+  .ar-modal-card { position: relative; }
+
+  .ar-field-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px 16px;
+    margin-bottom: 18px;
+  }
+  .ar-field label.ar-label,
+  .ar-section-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #666;
+    margin-bottom: 5px;
+  }
+  .ar-label .req { color: #c33; }
+
+  .ar-field select,
+  .ar-field input[type="text"],
+  .ar-field input[type="date"],
+  .ar-field textarea {
+    width: 100%;
+    font-family: inherit;
+    font-size: 13px;
+    padding: 8px 10px;
+    border: 1px solid #e0dfd8;
+    border-radius: 6px;
+    background: #fff;
+    color: #1a1a1a;
+  }
+  .ar-field select:focus,
+  .ar-field input:focus,
+  .ar-field textarea:focus {
+    outline: none;
+    border-color: #1a1a1a;
+  }
+  .ar-field textarea { resize: vertical; }
+  .ar-field-hint {
+    font-size: 11px;
+    color: #888;
+    margin-top: 3px;
+  }
+
+  /* Lines section */
+  .ar-lines-head {
+    margin-bottom: 8px;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+  .ar-add-line {
+    background: transparent;
+    border: 0;
+    color: #555;
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    padding: 0;
+  }
+  .ar-add-line:hover { color: #1a1a1a; }
+  .ar-add-line-row {
+    padding: 6px 4px 0;
+    text-align: left;
+  }
+
+  .ar-lines-wrap {
+    background: #fafaf6;
+    border: 1px solid #e8e8e4;
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 14px;
+  }
+  .ar-line-header {
+    display: grid;
+    grid-template-columns: 2fr 60px 90px 110px 24px;
+    gap: 8px;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #888;
+    padding: 0 4px 6px;
+  }
+  .ar-line-header .col-amount,
+  .ar-line-header .col-qty,
+  .ar-line-header .col-price { text-align: right; }
+
+  .ar-line-row {
+    display: grid;
+    grid-template-columns: 2fr 60px 90px 110px 24px;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 4px;
+  }
+  .ar-line-row select,
+  .ar-line-row input[type="text"] {
+    font-family: inherit;
+    font-size: 13px;
+    padding: 6px 8px;
+    border: 1px solid #e0dfd8;
+    border-radius: 5px;
+    background: #fff;
+    color: #1a1a1a;
+  }
+  .ar-line-row input[type="text"] { text-align: right; }
+  .ar-line-row select { text-align: left; }
+  .ar-line-row .ar-amount-input {
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+  }
+  .ar-line-row .ar-amount-input.is-negative {
+    color: #791F1F;
+  }
+  .ar-line-row .ar-line-remove {
+    background: transparent;
+    border: 0;
+    color: #aaa;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+  }
+  .ar-line-row .ar-line-remove:hover { color: #791F1F; }
+  .ar-line-row input.is-error,
+  .ar-line-row select.is-error {
+    border-color: #791F1F;
+    background: #fceaea;
+  }
+
+  /* Per-line note */
+  .ar-line-note-wrap {
+    margin: 0 4px 8px;
+    font-size: 11px;
+  }
+  .ar-line-note-add {
+    background: transparent;
+    border: 0;
+    color: #888;
+    font-family: inherit;
+    font-size: 11px;
+    cursor: pointer;
+    padding: 0;
+  }
+  .ar-line-note-add:hover { color: #1a1a1a; }
+  .ar-line-note-display { color: #555; }
+  .ar-line-note-display .ar-note-action {
+    background: transparent;
+    border: 0;
+    color: #888;
+    font-family: inherit;
+    font-size: 11px;
+    cursor: pointer;
+    padding: 0 4px;
+  }
+  .ar-line-note-display .ar-note-action:hover { color: #1a1a1a; }
+  .ar-line-note-edit {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .ar-line-note-edit input {
+    flex: 1;
+    font-family: inherit;
+    font-size: 12px;
+    padding: 4px 8px;
+    border: 1px solid #e0dfd8;
+    border-radius: 4px;
+    background: #fff;
+  }
+  .ar-line-note-edit button {
+    background: transparent;
+    border: 1px solid #e0dfd8;
+    color: #555;
+    font-family: inherit;
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .ar-line-note-edit button.is-primary {
+    background: #1a1a1a;
+    color: #fff;
+    border-color: #1a1a1a;
+  }
+
+  /* Totals block */
+  .ar-totals-block {
+    background: #f6f6f3;
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 14px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    align-items: center;
+  }
+  .ar-totals-block .ar-total-label {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #666;
+    margin-bottom: 4px;
+  }
+  .ar-totals-block .ar-line-sum {
+    font-size: 17px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+  .ar-totals-block input.ar-net-input {
+    width: 100%;
+    font-family: inherit;
+    font-size: 17px;
+    font-weight: 500;
+    padding: 6px 10px;
+    border: 1px solid #e0dfd8;
+    border-radius: 6px;
+    background: #fff;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: #1a1a1a;
+  }
+  .ar-totals-block input.ar-net-input.is-mismatch {
+    border-color: #f3d9a8;
+    background: #fef6ec;
+    color: #633806;
+  }
+  .ar-totals-block input.ar-net-input.is-error {
+    border-color: #791F1F;
+    background: #fceaea;
+    color: #791F1F;
+  }
+
+  /* Mismatch warning strip */
+  .ar-mismatch-strip {
+    background: #fef6ec;
+    border: 1px solid #f3d9a8;
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin-bottom: 14px;
+    font-size: 12px;
+    color: #633806;
+  }
+  .ar-mismatch-strip strong { font-weight: 500; }
+  .ar-mismatch-strip[hidden] { display: none; }
+
+  /* Buttons */
+  .ar-btn {
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 9px 18px;
+    border-radius: 6px;
+    cursor: pointer;
+    border: 0;
+  }
+  .ar-btn-secondary {
+    background: transparent;
+    border: 1px solid #e0dfd8;
+    color: #555;
+  }
+  .ar-btn-secondary:hover { background: #f1f0eb; color: #1a1a1a; }
+  .ar-btn-primary {
+    background: #1a1a1a;
+    color: #fff;
+  }
+  .ar-btn-primary:hover { background: #2c2c2a; }
+  .ar-btn-primary:disabled,
+  .ar-btn-secondary:disabled {
+    background: #b4b2a9;
+    color: #fff;
+    cursor: not-allowed;
+    border-color: #b4b2a9;
+  }
+
+  /* ========================================================================
+     TOAST
+     ======================================================================== */
+  .pc-toast-host {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2000;
+    pointer-events: none;
+  }
+  .pc-toast {
+    background: #1a1a1a;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 11px 18px;
+    border-radius: 24px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.18s ease, transform 0.18s ease;
+  }
+  .pc-toast.is-shown { opacity: 1; transform: translateY(0); }
+
+  /* ========================================================================
+     MODAL SCAFFOLDING
+     ======================================================================== */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.36);
+    z-index: 1500;
+    display: none;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 60px 16px;
+    overflow-y: auto;
+  }
+  .modal-backdrop.is-open { display: flex; }
+  .modal-card {
+    background: #fff;
+    border-radius: 14px;
+    max-width: 720px;
+    width: 100%;
+    padding: 24px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.18);
+  }
+
+  /* ========================================================================
+     AUTH-GATE PRE-BODY
+     ======================================================================== */
+  body.pre-auth .page-body,
+  body.pre-auth .page-title-row { display: none; }
+</style>
+</head>
+
+<body class="pre-auth">
+
+  <!-- pc-nav.js injects its own <header> -->
+
+  <div class="page-title-row" aria-hidden="true">
+    <h1 class="page-title">Accounts Receivable</h1>
+    <span class="page-title-meta">Admin · v1 (manual entry)</span>
+  </div>
+
+  <main class="page-body">
+
+    <!-- VIEW TOGGLE ------------------------------------------------------ -->
+    <div class="view-toggle-wrap" role="tablist" aria-label="Accounts receivable view">
+      <span class="view-toggle-label">View</span>
+      <div class="view-toggle">
+        <button
+          type="button"
+          role="tab"
+          id="tab-receivables"
+          class="is-active"
+          aria-selected="true"
+          aria-controls="view-receivables"
+          data-view="receivables"
+        >Receivables</button>
+        <button
+          type="button"
+          role="tab"
+          id="tab-receive-payment"
+          aria-selected="false"
+          aria-controls="view-receive-payment"
+          data-view="receive-payment"
+        >Receive payment</button>
+      </div>
+    </div>
+
+    <!-- VIEW: RECEIVABLES ----------------------------------------------- -->
+    <section
+      id="view-receivables"
+      class="view-container is-active"
+      role="tabpanel"
+      aria-labelledby="tab-receivables"
+    >
+
+      <!-- Top action row -->
+      <div class="ar-actions-row">
+        <button type="button" id="btnNewInvoice" class="btn-primary">+ New invoice</button>
+      </div>
+
+      <!-- Aging strip -->
+      <div class="ar-aging-strip" id="agingStrip" aria-label="Aging buckets">
+        <div class="aging-card" data-bucket="current">
+          <div class="aging-label">Current</div>
+          <div class="aging-amount" id="agingAmount-current">$0</div>
+          <div class="aging-meta"   id="agingMeta-current">0 invoices · 0–30d</div>
+        </div>
+        <div class="aging-card" data-bucket="1-30">
+          <div class="aging-label">1–30</div>
+          <div class="aging-amount" id="agingAmount-1-30">$0</div>
+          <div class="aging-meta"   id="agingMeta-1-30">0 invoices · 31–60d</div>
+        </div>
+        <div class="aging-card" data-bucket="31-60">
+          <div class="aging-label">31–60</div>
+          <div class="aging-amount" id="agingAmount-31-60">$0</div>
+          <div class="aging-meta"   id="agingMeta-31-60">0 invoices · 61–90d</div>
+        </div>
+        <div class="aging-card" data-bucket="61-90+">
+          <div class="aging-label">61–90+</div>
+          <div class="aging-amount" id="agingAmount-61-90+">$0</div>
+          <div class="aging-meta"   id="agingMeta-61-90+">0 invoices · 91d+</div>
+        </div>
+      </div>
+
+      <!-- Filter row -->
+      <div class="ar-filter-row">
+        <select id="filterClient" aria-label="Filter by client">
+          <option value="all">All clients</option>
+        </select>
+        <select id="filterVenue" aria-label="Filter by venue">
+          <option value="all">All venues</option>
+        </select>
+        <select id="filterStatus" aria-label="Filter by status">
+          <option value="open+partial" selected>Open + partial</option>
+          <option value="open">Open only</option>
+          <option value="partially_paid">Partial only</option>
+          <option value="paid">Paid</option>
+          <option value="voided">Voided</option>
+          <option value="disputed">Disputed</option>
+          <option value="all">All statuses</option>
+        </select>
+        <input type="text" id="filterSearch" placeholder="Search invoice #, client ref, stand, amount…">
+      </div>
+
+      <!-- Invoice list -->
+      <div class="invoice-list-wrap" id="invoiceListWrap">
+        <table class="invoice-table">
+          <thead>
+            <tr>
+              <th data-sort="client_name">Client <span class="sort-arrow"></span></th>
+              <th data-sort="internal_invoice_number">Internal # <span class="sort-arrow"></span></th>
+              <th data-sort="client_reference">Client ref <span class="sort-arrow"></span></th>
+              <th data-sort="venue_stand">Venue · Stand <span class="sort-arrow"></span></th>
+              <th data-sort="period_start" class="is-sorted">Event date <span class="sort-arrow">↓</span></th>
+              <th data-sort="net_amount_due" class="is-amount">Amount <span class="sort-arrow"></span></th>
+              <th data-sort="age">Age <span class="sort-arrow"></span></th>
+              <th data-sort="status">Status <span class="sort-arrow"></span></th>
+              <th class="col-actions-h" aria-label="Actions"></th>
+            </tr>
+          </thead>
+          <tbody id="invoiceTableBody"></tbody>
+        </table>
+        <div class="list-loading" id="invoiceListLoading">Loading invoices…</div>
+        <div class="list-empty"   id="invoiceListEmpty" hidden></div>
+        <div class="show-older-wrap" id="showOlderWrap" hidden>
+          <button type="button" class="btn-link" id="btnShowOlder">Show older invoices →</button>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- VIEW: RECEIVE PAYMENT ------------------------------------------- -->
+    <section
+      id="view-receive-payment"
+      class="view-container"
+      role="tabpanel"
+      aria-labelledby="tab-receive-payment"
+      hidden
+    >
+      <div class="placeholder-card">
+        <h2>Receive payment</h2>
+        <p>
+          The payment batches list, "+ Record payment" button, and the allocation form land in Session 3.
+        </p>
+        <span class="tag">Stage 4 · page shell</span>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Toast host -->
+  <div class="pc-toast-host" id="pcToastHost" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- Modal backdrop -->
+  <div class="modal-backdrop" id="modalBackdrop" data-close-modal="backdrop"></div>
+
+
+<script>
+(function () {
+  'use strict';
+
+  // =====================================================================
+  // CONFIG
+  // =====================================================================
+  var SB_URL  = 'https://aoazlttdjowhlfcksoyl.supabase.co';
+  var SB_REST = SB_URL + '/rest/v1/';
+
+  // Reentry guard — used by handleSaveInvoice (Stage 2.3) to block
+  // double-submits while a save is in flight.
+  var pcSubmitting = false;
+
+  // =====================================================================
+  // STAGE 2.1 STATE  (module-private)
+  // =====================================================================
+  var state = {
+    invoices: [],            // currently loaded invoices (server-filtered by status + date)
+    clients: [],             // active ar_clients rows for filter dropdown
+    venues: [],              // canonical venue codes from venues table
+
+    filters: {
+      client: 'all',         // 'all' | <client_id uuid>
+      venue:  'all',         // 'all' | <venue code>
+      status: 'open+partial',// matches filterStatus values above
+      search: ''             // free-text, client-side filter only
+    },
+
+    sortBy:  'period_start', // matches data-sort values
+    sortDir: 'desc',         // 'asc' | 'desc'
+
+    // True = applying a 12-month window. False = "Show older" clicked (unbounded).
+    // Resets to true whenever any filter changes.
+    dateBoundActive: true,
+
+    initialFetchDone: false  // gate against concurrent re-fetches during boot
+  };
+
+  // =====================================================================
+  // UTILITIES
+  // =====================================================================
+
+  function pad2(n) { n = String(n); return n.length < 2 ? '0' + n : n; }
+
+  /** Today as 'YYYY-MM-DD' in local time. */
+  function todayIso() {
+    var d = new Date();
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+
+  /** Date N months ago, as 'YYYY-MM-DD'. */
+  function monthsAgoIso(months) {
+    var d = new Date();
+    d.setMonth(d.getMonth() - months);
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+
+  /** Days between two YYYY-MM-DD dates (b - a). Calendar days, local. */
+  function daysBetween(aIso, bIso) {
+    if (!aIso || !bIso) return 0;
+    var a = new Date(aIso + 'T00:00:00');
+    var b = new Date(bIso + 'T00:00:00');
+    return Math.round((b - a) / 86400000);
+  }
+
+  /** Format a YYYY-MM-DD date as 'May 14, 2026'. */
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    var parts = iso.split('-');
+    if (parts.length !== 3) return iso;
+    var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var m = months[parseInt(parts[1], 10) - 1] || '';
+    return m + ' ' + parseInt(parts[2], 10) + ', ' + parts[0];
+  }
+
+  /** Format a number as USD with two decimals. */
+  function fmtMoney(n) {
+    if (n == null || isNaN(n)) n = 0;
+    var sign = n < 0 ? '-' : '';
+    var abs = Math.abs(n);
+    return sign + '$' + abs.toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  }
+
+  /** Format an integer money value (whole dollars only) — used on aging cards. */
+  function fmtMoneyWhole(n) {
+    if (n == null || isNaN(n)) n = 0;
+    var sign = n < 0 ? '-' : '';
+    var abs = Math.round(Math.abs(n));
+    return sign + '$' + abs.toLocaleString('en-US');
+  }
+
+  /** HTML-escape a string for safe insertion. */
+  function esc(s) {
+    if (s == null) return '';
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  /** Pluralize 'invoice' / 'invoices'. */
+  function pluralInvoice(n) { return n === 1 ? '1 invoice' : (n + ' invoices'); }
+
+  // =====================================================================
+  // TOAST
+  // =====================================================================
+  function showToast(msg, ms) {
+    ms = ms || 2400;
+    var host = document.getElementById('pcToastHost');
+    if (!host) return;
+    var el = document.createElement('div');
+    el.className = 'pc-toast';
+    el.textContent = msg;
+    host.appendChild(el);
+    requestAnimationFrame(function () { el.classList.add('is-shown'); });
+    setTimeout(function () {
+      el.classList.remove('is-shown');
+      setTimeout(function () { el.remove(); }, 260);
+    }, ms);
+  }
+
+  // =====================================================================
+  // JWT EXPIRY PATTERN
+  // =====================================================================
+  function handleAuthFailure() {
+    try {
+      localStorage.removeItem('sb_access_token');
+      localStorage.removeItem('sb_refresh_token');
+    } catch (e) { /* ignore */ }
+    showToast('Session expired. Reloading to sign in again…', 1800);
+    setTimeout(function () { window.location.reload(); }, 1800);
+  }
+
+  function checkAuthError(res, text) {
+    if (res.status === 401 || (text && text.indexOf('JWT expired') !== -1)) {
+      var err = new Error('JWT expired');
+      err.authFailed = true;
+      return err;
+    }
+    return null;
+  }
+
+  function authFetch(url, options) {
+    return fetch(url, options).then(function (r) {
+      if (!r.ok) {
+        return r.text().then(function (t) {
+          var ae = checkAuthError(r, t);
+          if (ae) throw ae;
+          throw new Error(t || ('HTTP ' + r.status));
+        });
+      }
+      return r.text().then(function (t) {
+        if (!t) return [];
+        try { return JSON.parse(t); } catch (e) { return []; }
+      });
+    });
+  }
+
+  // Expose for Sessions 2 and 3.
+  window.AR = {
+    SB_URL: SB_URL,
+    SB_REST: SB_REST,
+    showToast: showToast,
+    authFetch: authFetch,
+    handleAuthFailure: handleAuthFailure
+  };
+
+  // =====================================================================
+  // VIEW TOGGLE
+  // =====================================================================
+  function activateView(viewName) {
+    if (!viewName) return;
+    var tabs = document.querySelectorAll('.view-toggle button[data-view]');
+    var containers = document.querySelectorAll('.view-container');
+
+    tabs.forEach(function (t) {
+      var isActive = t.getAttribute('data-view') === viewName;
+      t.classList.toggle('is-active', isActive);
+      t.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+    containers.forEach(function (c) {
+      var matchId = 'view-' + viewName;
+      var isActive = c.id === matchId;
+      c.classList.toggle('is-active', isActive);
+      if (isActive) c.removeAttribute('hidden'); else c.setAttribute('hidden', '');
+    });
+  }
+
+  function wireViewToggle() {
+    var tabs = document.querySelectorAll('.view-toggle button[data-view]');
+    tabs.forEach(function (t) {
+      t.addEventListener('click', function () {
+        activateView(t.getAttribute('data-view'));
+      });
+    });
+  }
+
+  // =====================================================================
+  // MODAL CLOSE
+  // =====================================================================
+  function closeAllModals() {
+    var bd = document.getElementById('modalBackdrop');
+    if (bd) {
+      bd.classList.remove('is-open');
+      bd.innerHTML = '';
+    }
+  }
+
+  /**
+   * Confirm-and-close for the AR new-invoice form. Used by Cancel/×.
+   * Skips the confirm prompt when the form is in its untouched state.
+   */
+  function closeARFormModal() {
+    if (formState && formState._dirty) {
+      var msg = formState._mode === 'edit'
+        ? 'Discard your changes? Unsaved edits will be lost.'
+        : 'Discard this invoice? Unsaved changes will be lost.';
+      var ok = window.confirm(msg);
+      if (!ok) return;
+    }
+    formState = null;
+    closeAllModals();
+  }
+
+  function wireModalClose() {
+    document.addEventListener('click', function (ev) {
+      var target = ev.target;
+      if (!target || !target.closest) return;
+      var trigger = target.closest('[data-close-modal]');
+      if (!trigger) return;
+
+      var closeType = trigger.getAttribute('data-close-modal');
+
+      // Is there an AR form modal currently open? If yes, route closes
+      // through the dirty-check helper. Backdrop clicks on the AR form
+      // modal are no-ops (form data is too valuable to lose to a misclick).
+      var bd = document.getElementById('modalBackdrop');
+      var hasARForm = bd && bd.querySelector('.ar-modal-card');
+
+      if (closeType === 'backdrop') {
+        // Backdrop closes only when the click was directly on the backdrop
+        // AND there is no AR form modal open. The AR form modal is
+        // immune to backdrop closing.
+        if (trigger !== target) return;
+        if (hasARForm) return;
+        closeAllModals();
+      } else if (closeType === 'modal') {
+        // Modal-internal close trigger (Cancel button, ×).
+        if (hasARForm) {
+          closeARFormModal();
+        } else {
+          closeAllModals();
+        }
+      }
+    });
+
+    // Esc — disabled when the AR form modal is open. Other modals (future)
+    // still use Esc unless they likewise opt out by being .ar-modal-card.
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Escape') return;
+      var bd = document.getElementById('modalBackdrop');
+      var hasARForm = bd && bd.querySelector('.ar-modal-card');
+      if (hasARForm) return;  // Esc is a no-op while the AR form is open
+      closeAllModals();
+    });
+  }
+
+  window.AR.closeAllModals = closeAllModals;
+
+  // =====================================================================
+  // STAGE 2.1 — FETCHES
+  //
+  // Lazy contract: page-open fetches only what the default Receivables view
+  // needs. Receive Payment, line items, events, ar_items are NOT fetched
+  // until the surfaces that need them are opened (Stage 2.2+).
+  // =====================================================================
+
+  /** ar_clients — small static table, fetched once on boot. */
+  function fetchClients() {
+    return AR.authFetch(
+      SB_REST + 'ar_clients?select=id,name,default_payment_terms_days,is_active' +
+      '&is_active=eq.true&order=name.asc',
+      { headers: pcAuth.headers() }
+    );
+  }
+
+  /** venues — canonical codes for the venue filter dropdown. */
+  function fetchVenues() {
+    return AR.authFetch(
+      SB_REST + 'venues?select=code,full_name,is_active,default_client_id&is_active=eq.true&order=code.asc',
+      { headers: pcAuth.headers() }
+    );
+  }
+
+  /**
+   * ar_invoices — server-filtered by status + date bound.
+   * Each row embeds ar_clients(name) and stands(stand_name) so the table
+   * renders without N+1 lookups. PostgREST resolves the FK relationships.
+   */
+  function fetchInvoices() {
+    var f = state.filters;
+
+    // Status filter → PostgREST `in.()` or eq.
+    var statusClause;
+    switch (f.status) {
+      case 'open+partial':
+        statusClause = 'status=in.(open,partially_paid)';
+        break;
+      case 'open':
+        statusClause = 'status=eq.open';
+        break;
+      case 'partially_paid':
+        statusClause = 'status=eq.partially_paid';
+        break;
+      case 'paid':
+        statusClause = 'status=eq.paid';
+        break;
+      case 'voided':
+        statusClause = 'status=eq.voided';
+        break;
+      case 'disputed':
+        statusClause = 'status=eq.disputed';
+        break;
+      case 'all':
+      default:
+        statusClause = '';
+        break;
+    }
+
+    // Client filter
+    var clientClause = (f.client && f.client !== 'all')
+      ? 'client_id=eq.' + encodeURIComponent(f.client)
+      : '';
+
+    // Venue filter
+    var venueClause = (f.venue && f.venue !== 'all')
+      ? 'venue_code=eq.' + encodeURIComponent(f.venue)
+      : '';
+
+    // Date bound — 12-month window when active.
+    var dateClause = state.dateBoundActive
+      ? 'period_start=gte.' + monthsAgoIso(12)
+      : '';
+
+    // Embedded select for client name + stand name.
+    var selectClause = 'select=' + [
+      'id',
+      'internal_invoice_number',
+      'client_reference',
+      'client_id',
+      'venue_code',
+      'stand_id',
+      'event_id',
+      'period_start',
+      'period_end',
+      'net_amount_due',
+      'status',
+      'origin',
+      'notes',
+      'created_at',
+      'created_by',
+      'ar_clients(name)',
+      'stands(stand_name)'
+    ].join(',');
+
+    var parts = [selectClause];
+    if (statusClause) parts.push(statusClause);
+    if (clientClause) parts.push(clientClause);
+    if (venueClause)  parts.push(venueClause);
+    if (dateClause)   parts.push(dateClause);
+    parts.push('order=period_start.desc');
+
+    var url = SB_REST + 'ar_invoices?' + parts.join('&');
+
+    return AR.authFetch(url, { headers: pcAuth.headers() });
+  }
+
+  // =====================================================================
+  // STAGE 2.1 — DERIVED VALUES
+  // =====================================================================
+
+  /** Sortable key for an invoice (denormalized). */
+  function invoiceSortKey(inv, sortBy) {
+    switch (sortBy) {
+      case 'client_name':
+        return (inv._client_name || '').toLowerCase();
+      case 'internal_invoice_number':
+        return inv.internal_invoice_number || '';
+      case 'client_reference':
+        return (inv.client_reference || '').toLowerCase();
+      case 'venue_stand':
+        return ((inv.venue_code || '') + ' ' + (inv._stand_name || '')).toLowerCase();
+      case 'period_start':
+        return inv.period_start || '';
+      case 'net_amount_due':
+        return Number(inv.net_amount_due || 0);
+      case 'age':
+        return inv._age_days || 0;
+      case 'status':
+        return inv.status || '';
+      default:
+        return inv.period_start || '';
+    }
+  }
+
+  /** Bucket label for an age-in-days value. */
+  function ageBucket(days) {
+    if (days <= 30) return 'current';
+    if (days <= 60) return '1-30';
+    if (days <= 90) return '31-60';
+    return '61-90+';
+  }
+
+  /**
+   * Denormalize an invoice row: pull embedded client + stand names out of
+   * the nested objects, compute age in days from period_start.
+   */
+  function denormalize(inv) {
+    var today = todayIso();
+    inv._client_name = inv.ar_clients && inv.ar_clients.name ? inv.ar_clients.name : '';
+    inv._stand_name  = inv.stands && inv.stands.stand_name ? inv.stands.stand_name : '';
+    inv._age_days    = daysBetween(inv.period_start, today);
+    inv._bucket      = ageBucket(inv._age_days);
+    return inv;
+  }
+
+  /**
+   * Apply client-side filters (search box only — client/venue/status are
+   * server-filtered). Returns a sorted array.
+   */
+  function visibleInvoices() {
+    var q = (state.filters.search || '').trim().toLowerCase();
+
+    var arr = state.invoices.filter(function (inv) {
+      if (!q) return true;
+      // Multi-field search: internal #, client ref, stand, venue, client name, amount partial.
+      var hay = [
+        inv.internal_invoice_number,
+        inv.client_reference,
+        inv._stand_name,
+        inv.venue_code,
+        inv._client_name,
+        String(inv.net_amount_due || '')
+      ].join(' ').toLowerCase();
+      return hay.indexOf(q) !== -1;
+    });
+
+    var sb = state.sortBy;
+    var dir = state.sortDir === 'asc' ? 1 : -1;
+    arr.sort(function (a, b) {
+      var ka = invoiceSortKey(a, sb);
+      var kb = invoiceSortKey(b, sb);
+      if (ka < kb) return -1 * dir;
+      if (ka > kb) return  1 * dir;
+      return 0;
+    });
+
+    return arr;
+  }
+
+  // =====================================================================
+  // STAGE 2.1 — RENDER
+  // =====================================================================
+
+  /** Populate Client and Venue filter dropdowns. */
+  function renderFilterDropdowns() {
+    var cSel = document.getElementById('filterClient');
+    var vSel = document.getElementById('filterVenue');
+    if (cSel) {
+      cSel.innerHTML = '<option value="all">All clients</option>' +
+        state.clients.map(function (c) {
+          return '<option value="' + esc(c.id) + '">' + esc(c.name) + '</option>';
+        }).join('');
+      cSel.value = state.filters.client;
+    }
+    if (vSel) {
+      vSel.innerHTML = '<option value="all">All venues</option>' +
+        state.venues.map(function (v) {
+          return '<option value="' + esc(v.code) + '">' + esc(v.code) + '</option>';
+        }).join('');
+      vSel.value = state.filters.venue;
+    }
+  }
+
+  /** Aging strip sums whatever is currently in state.invoices. */
+  function renderAgingStrip() {
+    // Only open + partially_paid count toward aging.
+    var buckets = { 'current': {a:0,n:0}, '1-30': {a:0,n:0}, '31-60': {a:0,n:0}, '61-90+': {a:0,n:0} };
+
+    state.invoices.forEach(function (inv) {
+      if (inv.status !== 'open' && inv.status !== 'partially_paid') return;
+      var b = buckets[inv._bucket];
+      if (!b) return;
+      b.a += Number(inv.net_amount_due || 0);
+      b.n += 1;
+    });
+
+    function setCard(key, amount, count, agePhrase) {
+      var amtEl  = document.getElementById('agingAmount-' + key);
+      var metaEl = document.getElementById('agingMeta-' + key);
+      var cardEl = document.querySelector('.aging-card[data-bucket="' + key + '"]');
+      if (amtEl)  amtEl.textContent  = fmtMoneyWhole(amount);
+      if (metaEl) metaEl.textContent = pluralInvoice(count) + ' · ' + agePhrase;
+      if (cardEl) {
+        // Tone: shade only buckets with non-zero amount, and only over-30.
+        cardEl.classList.remove('is-warning', 'is-danger');
+        if (amount > 0) {
+          if (key === '31-60') cardEl.classList.add('is-warning');
+          if (key === '61-90+') cardEl.classList.add('is-danger');
+          if (key === '1-30')  cardEl.classList.add('is-warning');
+        }
+      }
+    }
+
+    setCard('current', buckets['current'].a, buckets['current'].n, '0–30d');
+    setCard('1-30',    buckets['1-30'].a,    buckets['1-30'].n,    '31–60d');
+    setCard('31-60',   buckets['31-60'].a,   buckets['31-60'].n,   '61–90d');
+    setCard('61-90+',  buckets['61-90+'].a,  buckets['61-90+'].n,  '91d+');
+  }
+
+  /** Render the invoice table rows. */
+  function renderInvoiceTable() {
+    var tbody   = document.getElementById('invoiceTableBody');
+    var emptyEl = document.getElementById('invoiceListEmpty');
+    var olderEl = document.getElementById('showOlderWrap');
+    if (!tbody) return;
+
+    var rows = visibleInvoices();
+
+    if (rows.length === 0) {
+      tbody.innerHTML = '';
+      if (emptyEl) {
+        emptyEl.hidden = false;
+        emptyEl.textContent = state.dateBoundActive
+          ? 'No invoices match these filters in the last 12 months.'
+          : 'No invoices match these filters.';
+      }
+    } else {
+      if (emptyEl) emptyEl.hidden = true;
+
+      tbody.innerHTML = rows.map(function (inv) {
+        var venueStand = esc(inv.venue_code || '');
+        if (inv._stand_name) venueStand += ' · ' + esc(inv._stand_name);
+
+        var statusClass;
+        switch (inv.status) {
+          case 'open':           statusClass = 'is-open'; break;
+          case 'partially_paid': statusClass = 'is-partial'; break;
+          case 'paid':           statusClass = 'is-paid'; break;
+          case 'voided':         statusClass = 'is-voided'; break;
+          case 'disputed':       statusClass = 'is-disputed'; break;
+          case 'overpaid':       statusClass = 'is-overpaid'; break;
+          default:               statusClass = 'is-open';
+        }
+        var statusLabel = inv.status === 'partially_paid' ? 'partial' : (inv.status || 'open');
+
+        var ageClass = inv._age_days > 30 ? ' is-over-30' : '';
+
+        return '<tr data-invoice-id="' + esc(inv.id) + '">' +
+          '<td>' + esc(inv._client_name) + '</td>' +
+          '<td class="col-internal">' + esc(inv.internal_invoice_number) + '</td>' +
+          '<td class="col-clientref">' + (inv.client_reference ? esc(inv.client_reference) : '—') + '</td>' +
+          '<td>' + venueStand + '</td>' +
+          '<td class="col-eventdate">' + esc(fmtDate(inv.period_start)) + '</td>' +
+          '<td class="col-amount">' + esc(fmtMoney(Number(inv.net_amount_due || 0))) + '</td>' +
+          '<td class="col-age' + ageClass + '">' + inv._age_days + 'd</td>' +
+          '<td><span class="status-badge ' + statusClass + '">' + esc(statusLabel) + '</span></td>' +
+          '<td class="col-actions">' +
+            '<button type="button" class="row-menu-btn" ' +
+              'data-action="open-row-menu" data-invoice-id="' + esc(inv.id) + '" ' +
+              'data-invoice-status="' + esc(inv.status || 'open') + '" ' +
+              'data-invoice-number="' + esc(inv.internal_invoice_number || '') + '" ' +
+              'aria-label="Row actions">⋯</button>' +
+          '</td>' +
+          '</tr>';
+      }).join('');
+    }
+
+    // Show-older affordance — visible only when the 12-month bound is active.
+    if (olderEl) olderEl.hidden = !state.dateBoundActive;
+  }
+
+  /** Update the sort-arrow display in the header. */
+  function renderSortHeaders() {
+    var ths = document.querySelectorAll('.invoice-table th[data-sort]');
+    ths.forEach(function (th) {
+      var key = th.getAttribute('data-sort');
+      var arrow = th.querySelector('.sort-arrow');
+      if (key === state.sortBy) {
+        th.classList.add('is-sorted');
+        if (arrow) arrow.textContent = state.sortDir === 'asc' ? '↑' : '↓';
+      } else {
+        th.classList.remove('is-sorted');
+        if (arrow) arrow.textContent = '';
+      }
+    });
+  }
+
+  /** Toggle the loading state on the list. */
+  function setLoading(on) {
+    var l = document.getElementById('invoiceListLoading');
+    var tbody = document.getElementById('invoiceTableBody');
+    var emptyEl = document.getElementById('invoiceListEmpty');
+    var olderEl = document.getElementById('showOlderWrap');
+    if (l) l.hidden = !on;
+    if (on) {
+      if (tbody) tbody.innerHTML = '';
+      if (emptyEl) emptyEl.hidden = true;
+      if (olderEl) olderEl.hidden = true;
+    }
+  }
+
+  // =====================================================================
+  // STAGE 2.1 — WIRING
+  // =====================================================================
+
+  /** Re-fetch invoices with the current filter state, then re-render. */
+  function reloadInvoices() {
+    setLoading(true);
+    return fetchInvoices()
+      .then(function (rows) {
+        state.invoices = (rows || []).map(denormalize);
+        renderAgingStrip();
+        renderInvoiceTable();
+      })
+      .catch(function (e) {
+        if (e && e.authFailed) { handleAuthFailure(); return; }
+        showToast('Could not load invoices');
+        console.error('[AR] fetchInvoices failed:', e);
+        state.invoices = [];
+        renderAgingStrip();
+        renderInvoiceTable();
+      })
+      .then(function () { setLoading(false); });
+  }
+
+  function wireFilters() {
+    var cSel = document.getElementById('filterClient');
+    var vSel = document.getElementById('filterVenue');
+    var sSel = document.getElementById('filterStatus');
+    var srch = document.getElementById('filterSearch');
+
+    if (cSel) cSel.addEventListener('change', function () {
+      state.filters.client = cSel.value;
+      state.dateBoundActive = true;   // resetting any filter restores the 12-month bound
+      reloadInvoices();
+    });
+    if (vSel) vSel.addEventListener('change', function () {
+      state.filters.venue = vSel.value;
+      state.dateBoundActive = true;
+      reloadInvoices();
+    });
+    if (sSel) sSel.addEventListener('change', function () {
+      state.filters.status = sSel.value;
+      state.dateBoundActive = true;
+      reloadInvoices();
+    });
+
+    // Search is a client-side re-render only; no DB call.
+    if (srch) {
+      srch.addEventListener('input', function () {
+        state.filters.search = srch.value || '';
+        renderInvoiceTable();
+      });
+    }
+  }
+
+  function wireSorting() {
+    var ths = document.querySelectorAll('.invoice-table th[data-sort]');
+    ths.forEach(function (th) {
+      th.addEventListener('click', function () {
+        var key = th.getAttribute('data-sort');
+        if (!key) return;
+        if (state.sortBy === key) {
+          state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
+        } else {
+          state.sortBy = key;
+          // Sensible defaults per column type.
+          state.sortDir = (key === 'period_start' || key === 'net_amount_due' || key === 'age')
+            ? 'desc' : 'asc';
+        }
+        renderSortHeaders();
+        renderInvoiceTable();
+      });
+    });
+  }
+
+  function wireShowOlder() {
+    var btn = document.getElementById('btnShowOlder');
+    if (btn) {
+      btn.addEventListener('click', function () {
+        state.dateBoundActive = false;
+        reloadInvoices();
+      });
+    }
+  }
+
+  function wireNewInvoiceButton() {
+    var btn = document.getElementById('btnNewInvoice');
+    if (btn) {
+      btn.addEventListener('click', function () {
+        openNewInvoiceModal();
+      });
+    }
+  }
+
+  // Row click — Stage 2.4 will hook this into the edit modal. For now,
+  // wire the listener but no-op so the cursor/hover styles read as
+  // intentional rather than dead.
+  function wireRowClicks() {
+    var tbody = document.getElementById('invoiceTableBody');
+    if (!tbody) return;
+    tbody.addEventListener('click', function (ev) {
+      // Ignore clicks on the row-menu button or any element inside it —
+      // those have their own handler and shouldn't trigger the edit modal.
+      if (ev.target && ev.target.closest && ev.target.closest('.row-menu-btn')) return;
+      var row = ev.target && ev.target.closest ? ev.target.closest('tr[data-invoice-id]') : null;
+      if (!row) return;
+      var invoiceId = row.getAttribute('data-invoice-id');
+      if (invoiceId) openEditInvoiceModal(invoiceId);
+    });
+  }
+
+  // =====================================================================
+  // STAGE 2.2 — MATH EVALUATOR
+  //
+  // Accepts simple arithmetic expressions: + - * / and parentheses.
+  // Returns a Number (rounded to 2 decimal places) or NaN on failure.
+  // Implemented as a hand-rolled shunting-yard so we never call eval().
+  // =====================================================================
+  function evalMath(expr) {
+    if (expr == null) return NaN;
+    var s = String(expr).trim();
+    if (!s) return NaN;
+
+    // Strip $ , whitespace. Allow leading -.
+    s = s.replace(/[\$,\s]/g, '');
+
+    // Sanity gate: only digits, dot, operators, parens, minus.
+    if (!/^[0-9.+\-*/()]+$/.test(s)) return NaN;
+
+    // If it's just a plain number, fast-path.
+    if (/^-?\d+(\.\d+)?$/.test(s)) {
+      var n = Number(s);
+      return isFinite(n) ? Math.round(n * 100) / 100 : NaN;
+    }
+
+    // Tokenize.
+    var tokens = [];
+    var i = 0;
+    while (i < s.length) {
+      var ch = s[i];
+      if (ch === '(' || ch === ')') {
+        tokens.push(ch);
+        i++;
+      } else if ('+-*/'.indexOf(ch) !== -1) {
+        // Handle unary minus: minus is unary if it's at the start, or
+        // immediately after another operator or open-paren.
+        var prev = tokens.length ? tokens[tokens.length - 1] : null;
+        var isUnary = (ch === '-' || ch === '+') && (
+          prev === null || prev === '(' ||
+          (typeof prev === 'string' && '+-*/'.indexOf(prev) !== -1)
+        );
+        if (isUnary) {
+          // Absorb the sign into the next number literal.
+          var sign = ch === '-' ? -1 : 1;
+          i++;
+          var startN = i;
+          while (i < s.length && /[0-9.]/.test(s[i])) i++;
+          if (startN === i) return NaN;
+          var nv = Number(s.substring(startN, i));
+          if (!isFinite(nv)) return NaN;
+          tokens.push(sign * nv);
+        } else {
+          tokens.push(ch);
+          i++;
+        }
+      } else if (/[0-9.]/.test(ch)) {
+        var start = i;
+        while (i < s.length && /[0-9.]/.test(s[i])) i++;
+        var num = Number(s.substring(start, i));
+        if (!isFinite(num)) return NaN;
+        tokens.push(num);
+      } else {
+        return NaN;
+      }
+    }
+    if (tokens.length === 0) return NaN;
+
+    // Shunting-yard → RPN.
+    var prec = { '+': 1, '-': 1, '*': 2, '/': 2 };
+    var output = [];
+    var ops = [];
+    for (var t = 0; t < tokens.length; t++) {
+      var tok = tokens[t];
+      if (typeof tok === 'number') {
+        output.push(tok);
+      } else if (tok === '(') {
+        ops.push(tok);
+      } else if (tok === ')') {
+        while (ops.length && ops[ops.length - 1] !== '(') output.push(ops.pop());
+        if (!ops.length) return NaN;
+        ops.pop();
+      } else if (prec[tok]) {
+        while (ops.length && ops[ops.length - 1] !== '(' && prec[ops[ops.length - 1]] >= prec[tok]) {
+          output.push(ops.pop());
+        }
+        ops.push(tok);
+      } else {
+        return NaN;
+      }
+    }
+    while (ops.length) {
+      var o = ops.pop();
+      if (o === '(' || o === ')') return NaN;
+      output.push(o);
+    }
+
+    // Evaluate RPN.
+    var stack = [];
+    for (var k = 0; k < output.length; k++) {
+      var x = output[k];
+      if (typeof x === 'number') {
+        stack.push(x);
+      } else {
+        if (stack.length < 2) return NaN;
+        var b = stack.pop();
+        var a = stack.pop();
+        var r;
+        switch (x) {
+          case '+': r = a + b; break;
+          case '-': r = a - b; break;
+          case '*': r = a * b; break;
+          case '/': r = b === 0 ? NaN : a / b; break;
+          default: return NaN;
+        }
+        if (!isFinite(r)) return NaN;
+        stack.push(r);
+      }
+    }
+    if (stack.length !== 1) return NaN;
+    return Math.round(stack[0] * 100) / 100;
+  }
+
+  // =====================================================================
+  // STAGE 2.2 — NEW INVOICE MODAL STATE
+  //
+  // Form-local state, rebuilt each time the modal opens. Cleared on close.
+  // =====================================================================
+  var formState = null;
+  var formCache = {
+    items:  null,  // ar_items rows, fetched on first modal open
+    events: {}     // events by venue code; lazily fetched per venue
+  };
+
+  /** Build a fresh form-state shape. */
+  function newFormState() {
+    return {
+      _mode: 'new',             // 'new' | 'edit'
+      _editing_id: null,        // ar_invoices.id when editing
+      _original: null,          // snapshot of the original invoice + lines (for diff)
+      _created_at: null,        // for subtitle display in edit mode
+      _created_by: null,
+      _status: 'open',          // read-only display in edit mode
+      client_id: '',
+      _default_client_id: '',  // remembers the venue's default so we know if user overrode it
+      client_reference: '',
+      venue_code: '',
+      stand_id: '',
+      event_id: '',           // FK when an event is linked
+      event_text: '',         // current text in the event field
+      period_start: todayIso(),
+      net_amount_due: '',     // user-entered (or pre-filled from line sum)
+      net_amount_due_dirty: false, // true once the user has typed in net field
+      notes: '',
+      lines: [],              // array of {id?, item_id, qty, unit_price, amount, note, _line_id_seq}
+      _dirty: false           // any user input has happened — used for close confirm
+    };
+  }
+
+  var lineSeq = 0;
+  function newLine() {
+    lineSeq += 1;
+    return {
+      _line_id_seq: lineSeq,    // form-local id for DOM keys
+      id: null,                 // ar_invoice_lines.id when loaded from DB (null = new line)
+      item_id: '',
+      qty: '1',
+      unit_price: '',
+      amount: '',
+      note: ''
+    };
+  }
+
+  // =====================================================================
+  // STAGE 2.2 — FETCHES (lazy, on modal open)
+  // =====================================================================
+
+  /** ar_items — fetched once per page session. */
+  function fetchItems() {
+    if (formCache.items) return Promise.resolve(formCache.items);
+    return AR.authFetch(
+      SB_REST + 'ar_items?select=id,name,income_category,default_sign,default_unit_price,sort_order,is_active' +
+      '&is_active=eq.true&order=sort_order.asc,name.asc',
+      { headers: pcAuth.headers() }
+    ).then(function (rows) {
+      formCache.items = rows || [];
+      return formCache.items;
+    });
+  }
+
+  /** stands — for the stand dropdown on the form. Cached after first call. */
+  function fetchStands() {
+    if (formCache.stands) return Promise.resolve(formCache.stands);
+    return AR.authFetch(
+      SB_REST + 'stands?select=id,venue_code,stand_name,is_active' +
+      '&is_active=eq.true&order=venue_code.asc,stand_name.asc',
+      { headers: pcAuth.headers() }
+    ).then(function (rows) {
+      formCache.stands = rows || [];
+      return formCache.stands;
+    });
+  }
+
+  /** events for a given venue — cached per venue. Past events only. */
+  function fetchEventsForVenue(venueCode) {
+    if (!venueCode) return Promise.resolve([]);
+    if (formCache.events[venueCode]) return Promise.resolve(formCache.events[venueCode]);
+    return AR.authFetch(
+      SB_REST + 'events?select=id,event_name,event_date,venue' +
+      '&venue=eq.' + encodeURIComponent(venueCode) +
+      '&event_date=lte.' + todayIso() +
+      '&order=event_date.desc',
+      { headers: pcAuth.headers() }
+    ).then(function (rows) {
+      formCache.events[venueCode] = rows || [];
+      return formCache.events[venueCode];
+    });
+  }
+
+  // =====================================================================
+  // STAGE 2.2 — MODAL BUILDERS
+  // =====================================================================
+
+  /** Returns the static modal markup with empty containers ready to fill. */
+  function modalMarkup() {
+    return '' +
+      '<div class="ar-modal-card" role="dialog" aria-labelledby="arModalTitle">' +
+        '<div class="ar-modal-head">' +
+          '<div>' +
+            '<div class="ar-modal-title" id="arModalTitle">New invoice</div>' +
+            '<div class="ar-modal-subtitle" id="arModalSubtitle">Internal # · auto-generated on save</div>' +
+          '</div>' +
+          '<button type="button" class="ar-modal-close" data-close-modal="modal" aria-label="Close">×</button>' +
+        '</div>' +
+        '<div class="ar-modal-body">' +
+
+          '<div class="ar-field-grid">' +
+            '<div class="ar-field">' +
+              '<label class="ar-label">Venue <span class="req">*</span></label>' +
+              '<select id="arfVenue"><option value="">Select venue…</option></select>' +
+            '</div>' +
+            '<div class="ar-field">' +
+              '<label class="ar-label">Client <span class="req">*</span></label>' +
+              '<select id="arfClient"><option value="">Select client…</option></select>' +
+              '<div class="ar-field-hint" id="arfClientHint">Pick a venue first</div>' +
+            '</div>' +
+            '<div class="ar-field">' +
+              '<label class="ar-label">Stand</label>' +
+              '<select id="arfStand"><option value="">— no stand —</option></select>' +
+            '</div>' +
+            '<div class="ar-field">' +
+              '<label class="ar-label">Event</label>' +
+              '<input type="text" id="arfEvent" list="arfEventList" placeholder="Pick an event or type free text">' +
+              '<datalist id="arfEventList"></datalist>' +
+              '<div class="ar-field-hint" id="arfEventHint">No event linked</div>' +
+            '</div>' +
+            '<div class="ar-field">' +
+              '<label class="ar-label">Invoice date <span class="req">*</span></label>' +
+              '<input type="date" id="arfPeriodStart">' +
+            '</div>' +
+            '<div class="ar-field">' +
+              '<label class="ar-label">Client reference</label>' +
+              '<input type="text" id="arfClientRef" placeholder="MANN-05.14.26-CS">' +
+            '</div>' +
+          '</div>' +
+
+          '<div class="ar-lines-head">' +
+            '<div class="ar-section-label">Lines</div>' +
+          '</div>' +
+          '<div class="ar-lines-wrap">' +
+            '<div class="ar-line-header">' +
+              '<div>Item</div>' +
+              '<div class="col-qty">Qty</div>' +
+              '<div class="col-price">Unit price</div>' +
+              '<div class="col-amount">Amount</div>' +
+              '<div></div>' +
+            '</div>' +
+            '<div id="arfLines"></div>' +
+            '<div class="ar-add-line-row">' +
+              '<button type="button" class="ar-add-line" id="arfAddLine">+ Add line</button>' +
+            '</div>' +
+          '</div>' +
+
+          '<div class="ar-totals-block">' +
+            '<div>' +
+              '<div class="ar-total-label">Line sum</div>' +
+              '<div class="ar-line-sum" id="arfLineSum">$0.00</div>' +
+            '</div>' +
+            '<div>' +
+              '<label class="ar-total-label" for="arfNetAmount">Net amount due <span class="req">*</span></label>' +
+              '<input type="text" id="arfNetAmount" class="ar-net-input" value="$0.00">' +
+            '</div>' +
+          '</div>' +
+          '<div class="ar-mismatch-strip" id="arfMismatch" hidden></div>' +
+
+          '<div class="ar-field">' +
+            '<label class="ar-label">Notes</label>' +
+            '<textarea id="arfNotes" rows="2" placeholder="Optional"></textarea>' +
+          '</div>' +
+
+        '</div>' +
+        '<div class="ar-modal-footer">' +
+          '<div class="ar-modal-footer-left">' +
+            '<button type="button" class="ar-btn ar-btn-void" id="arfVoid" hidden>Void invoice</button>' +
+          '</div>' +
+          '<div class="ar-modal-footer-right">' +
+            '<button type="button" class="ar-btn ar-btn-secondary" data-close-modal="modal">Cancel</button>' +
+            '<button type="button" class="ar-btn ar-btn-primary" id="arfSave">Save invoice</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+  }
+
+  /** Populate Venue dropdown. Client is populated on venue change. */
+  function populateModalStatics() {
+    var vSel = document.getElementById('arfVenue');
+    if (vSel) {
+      vSel.innerHTML = '<option value="">Select venue…</option>' +
+        state.venues.map(function (v) {
+          return '<option value="' + esc(v.code) + '" data-default-client="' + esc(v.default_client_id || '') + '">' + esc(v.code) + '</option>';
+        }).join('');
+    }
+    var ps = document.getElementById('arfPeriodStart');
+    if (ps) ps.value = formState.period_start;
+    // Client dropdown initialized empty until venue picked.
+    refreshClientDropdown();
+  }
+
+  /** Populate the Client dropdown, defaulting to the venue's default client. */
+  function refreshClientDropdown() {
+    var cSel = document.getElementById('arfClient');
+    var hint = document.getElementById('arfClientHint');
+    if (!cSel) return;
+    cSel.innerHTML = '<option value="">Select client…</option>' +
+      state.clients.map(function (c) {
+        return '<option value="' + esc(c.id) + '">' + esc(c.name) + '</option>';
+      }).join('');
+    if (formState.client_id) cSel.value = formState.client_id;
+    if (hint) {
+      if (!formState.venue_code) {
+        hint.textContent = 'Pick a venue first';
+      } else if (formState.client_id && formState.client_id === formState._default_client_id) {
+        hint.textContent = 'Default for this venue · editable';
+      } else if (formState.client_id) {
+        hint.textContent = 'Overriding the venue default';
+      } else {
+        hint.textContent = 'No default for this venue · pick a client';
+      }
+    }
+  }
+
+  /** Re-populate the Stand dropdown based on the currently picked venue. */
+  function refreshStandDropdown() {
+    var sSel = document.getElementById('arfStand');
+    if (!sSel) return;
+    var stands = (formCache.stands || []).filter(function (s) {
+      return s.venue_code === formState.venue_code;
+    });
+    sSel.innerHTML = '<option value="">— no stand —</option>' +
+      stands.map(function (s) {
+        return '<option value="' + esc(s.id) + '">' + esc(s.stand_name) + '</option>';
+      }).join('');
+    sSel.value = formState.stand_id || '';
+    sSel.disabled = !formState.venue_code;
+  }
+
+  /** Re-populate the Event datalist based on currently picked venue. */
+  function refreshEventDatalist() {
+    var dl = document.getElementById('arfEventList');
+    if (!dl) return;
+    var events = formCache.events[formState.venue_code] || [];
+    dl.innerHTML = events.map(function (e) {
+      var label = e.event_name + ' · ' + fmtDate(e.event_date);
+      return '<option value="' + esc(label) + '" data-id="' + esc(e.id) + '" data-date="' + esc(e.event_date) + '">';
+    }).join('');
+  }
+
+  /** Try to match the current event text to an event in the cached list. */
+  function syncEventFromText() {
+    var input = document.getElementById('arfEvent');
+    var hint  = document.getElementById('arfEventHint');
+    var ps    = document.getElementById('arfPeriodStart');
+    if (!input) return;
+    var txt = input.value || '';
+    formState.event_text = txt;
+
+    var events = formCache.events[formState.venue_code] || [];
+    var match = null;
+    for (var i = 0; i < events.length; i++) {
+      var label = events[i].event_name + ' · ' + fmtDate(events[i].event_date);
+      if (label === txt) { match = events[i]; break; }
+    }
+    if (match) {
+      formState.event_id = match.id;
+      formState.period_start = match.event_date;
+      if (ps) ps.value = match.event_date;
+      if (hint) hint.textContent = 'Event linked · clear field to unlink';
+    } else {
+      formState.event_id = '';
+      if (hint) hint.textContent = txt ? 'Free text · not linked to an event' : 'No event linked';
+    }
+  }
+
+  // =====================================================================
+  // STAGE 2.2 — LINE RENDERING
+  // =====================================================================
+
+  /** Lookup an item by id from the cache. */
+  function itemById(id) {
+    var items = formCache.items || [];
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].id === id) return items[i];
+    }
+    return null;
+  }
+
+  /** Build the <option> list for the Item dropdown. */
+  function itemOptionsHtml(selectedId) {
+    var items = formCache.items || [];
+    return '<option value="">Select item…</option>' +
+      items.map(function (it) {
+        var sel = it.id === selectedId ? ' selected' : '';
+        return '<option value="' + esc(it.id) + '"' + sel + '>' + esc(it.name) + '</option>';
+      }).join('');
+  }
+
+  /**
+   * Display formatter for the Amount input. Takes the stored magnitude
+   * (always positive in formState) plus the item's default_sign and
+   * returns the user-facing string with leading minus where applicable.
+   */
+  function displayAmount(line) {
+    var n = evalMath(line.amount);
+    if (isNaN(n)) return line.amount;  // pass through expression while typing
+    var item = itemById(line.item_id);
+    var negative = item && item.default_sign === 'negative';
+    var abs = Math.abs(n);
+    var formatted = '$' + abs.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return (negative ? '−' : '') + formatted;
+  }
+
+  /** Re-render the full lines list from formState. */
+  function renderLines() {
+    var host = document.getElementById('arfLines');
+    if (!host) return;
+
+    host.innerHTML = formState.lines.map(function (line, idx) {
+      var noteBlockHtml;
+      if (line.note) {
+        noteBlockHtml = '<div class="ar-line-note-wrap">' +
+          '<span class="ar-line-note-display">' +
+            esc(line.note) + ' ' +
+            '<button type="button" class="ar-note-action" data-line-idx="' + idx + '" data-action="edit-note">edit</button>' +
+            '<button type="button" class="ar-note-action" data-line-idx="' + idx + '" data-action="remove-note">remove</button>' +
+          '</span>' +
+        '</div>';
+      } else {
+        noteBlockHtml = '<div class="ar-line-note-wrap">' +
+          '<button type="button" class="ar-line-note-add" data-line-idx="' + idx + '" data-action="add-note">+ note</button>' +
+        '</div>';
+      }
+
+      // Amount cell — display formatted value when not focused, raw expression when focused.
+      var amountVal = (typeof line._amount_focused !== 'undefined' && line._amount_focused)
+        ? line.amount
+        : displayAmount(line);
+
+      var item = itemById(line.item_id);
+      var isNeg = item && item.default_sign === 'negative';
+
+      return '<div class="ar-line-row" data-line-idx="' + idx + '">' +
+        '<select class="ar-line-item" data-line-idx="' + idx + '">' + itemOptionsHtml(line.item_id) + '</select>' +
+        '<input type="text" class="ar-line-qty" data-line-idx="' + idx + '" value="' + esc(line.qty) + '">' +
+        '<input type="text" class="ar-line-price" data-line-idx="' + idx + '" value="' + esc(line.unit_price) + '" placeholder="—">' +
+        '<input type="text" class="ar-line-amount ar-amount-input' + (isNeg ? ' is-negative' : '') + '" data-line-idx="' + idx + '" value="' + esc(amountVal) + '">' +
+        '<button type="button" class="ar-line-remove" data-line-idx="' + idx + '" data-action="remove-line" aria-label="Remove line">×</button>' +
+      '</div>' +
+      noteBlockHtml;
+    }).join('');
+
+    refreshTotals();
+  }
+
+  /** Recompute line sum, update display, evaluate mismatch. */
+  function refreshTotals() {
+    var sumEl = document.getElementById('arfLineSum');
+    var netEl = document.getElementById('arfNetAmount');
+    var strip = document.getElementById('arfMismatch');
+
+    // Line sum: sum of evaluated amounts, applying sign from item.default_sign.
+    var lineSum = 0;
+    formState.lines.forEach(function (line) {
+      var n = evalMath(line.amount);
+      if (isNaN(n)) return;
+      var item = itemById(line.item_id);
+      var negative = item && item.default_sign === 'negative';
+      lineSum += (negative ? -1 : 1) * Math.abs(n);
+    });
+    lineSum = Math.round(lineSum * 100) / 100;
+
+    if (sumEl) sumEl.textContent = fmtMoney(lineSum);
+
+    // Auto-fill net amount due IF the user hasn't touched it yet.
+    if (!formState.net_amount_due_dirty) {
+      formState.net_amount_due = String(lineSum.toFixed(2));
+      if (netEl) netEl.value = fmtMoney(lineSum);
+    }
+
+    // Mismatch check.
+    var netN = evalMath(formState.net_amount_due);
+    if (netEl) {
+      netEl.classList.remove('is-mismatch', 'is-error');
+      if (isNaN(netN)) {
+        netEl.classList.add('is-error');
+      } else if (Math.abs(netN - lineSum) > 0.005) {
+        netEl.classList.add('is-mismatch');
+      }
+    }
+    if (strip) {
+      if (!isNaN(netN) && Math.abs(netN - lineSum) > 0.005) {
+        var diff = Math.round((netN - lineSum) * 100) / 100;
+        var sign = diff > 0 ? '+' : '−';
+        strip.hidden = false;
+        strip.innerHTML = '<strong>⚠ Net amount due differs from line sum by ' +
+          sign + fmtMoney(Math.abs(diff)).replace('-', '') + '.</strong> ' +
+          'Save will record both — the line sum stays as detail, net amount due is what the client billed.';
+      } else {
+        strip.hidden = true;
+        strip.innerHTML = '';
+      }
+    }
+  }
+
+  // =====================================================================
+  // STAGE 2.2 — EVENT WIRING (inside modal)
+  // =====================================================================
+
+  function wireModalEvents() {
+    // Mark dirty on any user input.
+    var bodyEl = document.querySelector('.ar-modal-card');
+    if (bodyEl) {
+      bodyEl.addEventListener('input', function () { formState._dirty = true; });
+      bodyEl.addEventListener('change', function () { formState._dirty = true; });
+    }
+
+    // Venue — triggers client auto-fill, stand refresh, event refresh
+    var vSel = document.getElementById('arfVenue');
+    if (vSel) vSel.addEventListener('change', function () {
+      formState.venue_code = vSel.value;
+      // Read the default client from the data attribute on the picked <option>.
+      var opt = vSel.options[vSel.selectedIndex];
+      var defaultClient = opt ? (opt.getAttribute('data-default-client') || '') : '';
+      formState._default_client_id = defaultClient;
+      // Auto-fill client only if user hasn't already picked one OR if they are
+      // accepting a new venue change (we always reset to the new default on
+      // venue change — they can re-override after).
+      formState.client_id = defaultClient;
+
+      // Reset stand and event whenever venue changes (different venue = different lists).
+      formState.stand_id = '';
+      formState.event_id = '';
+      formState.event_text = '';
+      var evtInput = document.getElementById('arfEvent');
+      if (evtInput) evtInput.value = '';
+      var hint = document.getElementById('arfEventHint');
+      if (hint) hint.textContent = 'No event linked';
+
+      refreshClientDropdown();
+      refreshStandDropdown();
+
+      if (formState.venue_code) {
+        fetchEventsForVenue(formState.venue_code)
+          .then(refreshEventDatalist)
+          .catch(function (e) {
+            if (e && e.authFailed) { handleAuthFailure(); return; }
+            console.error('[AR] fetchEventsForVenue failed:', e);
+          });
+      } else {
+        refreshEventDatalist();
+      }
+    });
+
+    // Client
+    var cSel = document.getElementById('arfClient');
+    if (cSel) cSel.addEventListener('change', function () {
+      formState.client_id = cSel.value;
+      // Update the hint to reflect whether user is overriding the default.
+      var hint = document.getElementById('arfClientHint');
+      if (hint && formState.venue_code) {
+        if (formState.client_id === formState._default_client_id) {
+          hint.textContent = 'Default for this venue · editable';
+        } else if (formState.client_id) {
+          hint.textContent = 'Overriding the venue default';
+        } else {
+          hint.textContent = 'No client selected';
+        }
+      }
+    });
+
+    // Client reference
+    var cRef = document.getElementById('arfClientRef');
+    if (cRef) cRef.addEventListener('input', function () {
+      formState.client_reference = cRef.value;
+    });
+
+    // Stand
+    var sSel = document.getElementById('arfStand');
+    if (sSel) sSel.addEventListener('change', function () {
+      formState.stand_id = sSel.value;
+    });
+
+    // Event input — typing or picking from datalist
+    var evtInput = document.getElementById('arfEvent');
+    if (evtInput) evtInput.addEventListener('input', syncEventFromText);
+
+    // Invoice date (was period_start)
+    var ps = document.getElementById('arfPeriodStart');
+    if (ps) ps.addEventListener('change', function () {
+      formState.period_start = ps.value;
+    });
+
+    // Notes
+    var notes = document.getElementById('arfNotes');
+    if (notes) notes.addEventListener('input', function () {
+      formState.notes = notes.value;
+    });
+
+    // Add line
+    var addBtn = document.getElementById('arfAddLine');
+    if (addBtn) addBtn.addEventListener('click', function () {
+      formState.lines.push(newLine());
+      renderLines();
+    });
+
+    // Net amount due — math-evaluated on blur; user-dirty flag set on input
+    var netEl = document.getElementById('arfNetAmount');
+    if (netEl) {
+      netEl.addEventListener('focus', function () {
+        netEl.value = formState.net_amount_due || '';
+        netEl.select();
+      });
+      netEl.addEventListener('input', function () {
+        formState.net_amount_due_dirty = true;
+        formState.net_amount_due = netEl.value;
+        refreshTotals();
+      });
+      netEl.addEventListener('blur', function () {
+        var n = evalMath(netEl.value);
+        if (!isNaN(n)) {
+          formState.net_amount_due = String(n.toFixed(2));
+          netEl.value = fmtMoney(n);
+        }
+        refreshTotals();
+      });
+      netEl.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter') { ev.preventDefault(); netEl.blur(); }
+      });
+    }
+
+    // Save — Stage 2.3 wiring
+    var save = document.getElementById('arfSave');
+    if (save) save.addEventListener('click', handleSaveInvoice);
+
+    // Delegated handler for line-row interactions
+    var linesHost = document.getElementById('arfLines');
+    if (linesHost) {
+      linesHost.addEventListener('click', function (ev) {
+        var t = ev.target;
+        if (!t || !t.closest) return;
+        var actionEl = t.closest('[data-action]');
+        if (!actionEl) return;
+        var action = actionEl.getAttribute('data-action');
+        var idx = parseInt(actionEl.getAttribute('data-line-idx'), 10);
+        if (isNaN(idx)) return;
+
+        if (action === 'remove-line') {
+          formState.lines.splice(idx, 1);
+          // Always keep at least one line in the form.
+          if (formState.lines.length === 0) formState.lines.push(newLine());
+          renderLines();
+        } else if (action === 'add-note') {
+          openNoteEditor(idx, '');
+        } else if (action === 'edit-note') {
+          openNoteEditor(idx, formState.lines[idx].note || '');
+        } else if (action === 'remove-note') {
+          formState.lines[idx].note = '';
+          renderLines();
+        }
+      });
+
+      // Per-line input changes
+      linesHost.addEventListener('change', function (ev) {
+        var t = ev.target;
+        if (!t || !t.classList) return;
+        var idx = parseInt(t.getAttribute('data-line-idx'), 10);
+        if (isNaN(idx)) return;
+        var line = formState.lines[idx];
+        if (!line) return;
+
+        if (t.classList.contains('ar-line-item')) {
+          line.item_id = t.value;
+          var it = itemById(line.item_id);
+          if (it && it.default_unit_price != null) {
+            if (!line.unit_price) {
+              line.unit_price = String(it.default_unit_price);
+            }
+          }
+          renderLines();
+        }
+      });
+
+      // Math evaluation on blur for qty / unit_price / amount
+      linesHost.addEventListener('focusin', function (ev) {
+        var t = ev.target;
+        if (!t || !t.classList) return;
+        var idx = parseInt(t.getAttribute('data-line-idx'), 10);
+        if (isNaN(idx)) return;
+        var line = formState.lines[idx];
+        if (!line) return;
+
+        if (t.classList.contains('ar-line-amount')) {
+          line._amount_focused = true;
+          t.value = line.amount || '';
+          t.select();
+        } else if (t.classList.contains('ar-line-qty') || t.classList.contains('ar-line-price')) {
+          if (t.classList.contains('ar-line-qty')) t.value = line.qty;
+          else t.value = line.unit_price;
+          t.select();
+        }
+      });
+
+      linesHost.addEventListener('input', function (ev) {
+        var t = ev.target;
+        if (!t || !t.classList) return;
+        var idx = parseInt(t.getAttribute('data-line-idx'), 10);
+        if (isNaN(idx)) return;
+        var line = formState.lines[idx];
+        if (!line) return;
+
+        if (t.classList.contains('ar-line-qty')) line.qty = t.value;
+        else if (t.classList.contains('ar-line-price')) line.unit_price = t.value;
+        else if (t.classList.contains('ar-line-amount')) line.amount = t.value;
+      });
+
+      linesHost.addEventListener('focusout', function (ev) {
+        var t = ev.target;
+        if (!t || !t.classList) return;
+        var idx = parseInt(t.getAttribute('data-line-idx'), 10);
+        if (isNaN(idx)) return;
+        var line = formState.lines[idx];
+        if (!line) return;
+
+        if (t.classList.contains('ar-line-qty')) {
+          var qn = evalMath(line.qty);
+          if (!isNaN(qn)) line.qty = String(qn);
+          if (line.unit_price) {
+            var pn = evalMath(line.unit_price);
+            if (!isNaN(pn) && !isNaN(qn)) {
+              line.amount = String(Math.round(qn * pn * 100) / 100);
+            }
+          }
+          renderLines();
+        } else if (t.classList.contains('ar-line-price')) {
+          var pn2 = evalMath(line.unit_price);
+          if (!isNaN(pn2)) line.unit_price = String(pn2);
+          var qn2 = evalMath(line.qty);
+          if (!isNaN(qn2) && !isNaN(pn2)) {
+            line.amount = String(Math.round(qn2 * pn2 * 100) / 100);
+          }
+          renderLines();
+        } else if (t.classList.contains('ar-line-amount')) {
+          line._amount_focused = false;
+          var an = evalMath(line.amount);
+          if (!isNaN(an)) line.amount = String(an);
+          // AUTO-ADD BLANK LINE: if this line now has a real numeric amount
+          // AND an item picked, AND it's the last line in the list, append
+          // a fresh empty line for the user to continue typing into.
+          var amtOk = !isNaN(an) && Math.abs(an) > 0;
+          var hasItem = !!line.item_id;
+          var isLast = (idx === formState.lines.length - 1);
+          if (amtOk && hasItem && isLast) {
+            formState.lines.push(newLine());
+          }
+          renderLines();
+        }
+      });
+
+      // Enter key triggers blur on numeric fields → math evaluation
+      linesHost.addEventListener('keydown', function (ev) {
+        if (ev.key !== 'Enter') return;
+        var t = ev.target;
+        if (!t || !t.classList) return;
+        if (t.classList.contains('ar-line-qty') ||
+            t.classList.contains('ar-line-price') ||
+            t.classList.contains('ar-line-amount')) {
+          ev.preventDefault();
+          t.blur();
+        }
+      });
+    }
+  }
+
+  /** Open the inline note editor for a given line. */
+  function openNoteEditor(idx, currentText) {
+    var rows = document.querySelectorAll('#arfLines .ar-line-row');
+    var target = rows[idx];
+    if (!target) return;
+    // The note wrap is the next sibling div after the row.
+    var noteWrap = target.nextElementSibling;
+    if (!noteWrap || !noteWrap.classList.contains('ar-line-note-wrap')) return;
+
+    noteWrap.innerHTML = '<div class="ar-line-note-edit">' +
+      '<input type="text" id="arfNoteEdit-' + idx + '" value="' + esc(currentText) + '" placeholder="Note for this line…">' +
+      '<button type="button" class="is-primary" data-line-idx="' + idx + '" data-action="save-note">Save</button>' +
+      '<button type="button" data-line-idx="' + idx + '" data-action="cancel-note">Cancel</button>' +
+    '</div>';
+
+    var inp = document.getElementById('arfNoteEdit-' + idx);
+    if (inp) {
+      inp.focus();
+      inp.select();
+    }
+
+    // Delegated handler captures these — set up dedicated handlers here for
+    // save / cancel since they aren't on a permanent element.
+    var saveBtn   = noteWrap.querySelector('[data-action="save-note"]');
+    var cancelBtn = noteWrap.querySelector('[data-action="cancel-note"]');
+    if (saveBtn) saveBtn.addEventListener('click', function () {
+      formState.lines[idx].note = (inp && inp.value || '').trim();
+      renderLines();
+    });
+    if (cancelBtn) cancelBtn.addEventListener('click', function () {
+      renderLines();
+    });
+    if (inp) inp.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Enter') {
+        formState.lines[idx].note = inp.value.trim();
+        renderLines();
+      } else if (ev.key === 'Escape') {
+        renderLines();
+      }
+    });
+  }
+
+  // =====================================================================
+  // STAGE 2.2 — MODAL OPEN
+  // =====================================================================
+  function openNewInvoiceModal() {
+    var bd = document.getElementById('modalBackdrop');
+    if (!bd) return;
+
+    // Fresh form state, fresh modal.
+    formState = newFormState();
+    formState.lines.push(newLine());  // start with one empty line
+
+    bd.innerHTML = modalMarkup();
+    bd.classList.add('is-open');
+
+    // Load items + stands (cached after first call), then populate.
+    Promise.all([fetchItems(), fetchStands()])
+      .then(function () {
+        populateModalStatics();
+        refreshStandDropdown();
+        refreshEventDatalist();
+        renderLines();
+        wireModalEvents();
+      })
+      .catch(function (e) {
+        if (e && e.authFailed) { handleAuthFailure(); return; }
+        console.error('[AR] modal load failed:', e);
+        showToast('Could not load form data');
+      });
+  }
+
+  // =====================================================================
+  // STAGE 2.4a — EDIT MODE: fetch + populate
+  // =====================================================================
+
+  /** Fetch one invoice with embedded lines + client name. */
+  function fetchInvoiceWithLines(invoiceId) {
+    var selectClause = 'select=' + [
+      'id',
+      'internal_invoice_number',
+      'client_reference',
+      'client_id',
+      'venue_code',
+      'stand_id',
+      'event_id',
+      'period_start',
+      'net_amount_due',
+      'status',
+      'origin',
+      'notes',
+      'created_at',
+      'created_by',
+      'ar_invoice_lines(id,item_id,description,amount,quantity,unit_price,sort_order)',
+      'ar_clients(name)'
+    ].join(',');
+    return AR.authFetch(
+      SB_REST + 'ar_invoices?id=eq.' + encodeURIComponent(invoiceId) + '&' + selectClause,
+      { headers: pcAuth.headers() }
+    );
+  }
+
+  /**
+   * Convert a fetched invoice + lines into a form-ready state object.
+   * Stores an _original snapshot for later diffing on save.
+   */
+  function formStateFromInvoice(invoice) {
+    var state = newFormState();
+    state._mode        = 'edit';
+    state._editing_id  = invoice.id;
+    state._status      = invoice.status || 'open';
+    state._created_at  = invoice.created_at || null;
+    state._created_by  = invoice.created_by || null;
+    state.client_id        = invoice.client_id || '';
+    state.client_reference = invoice.client_reference || '';
+    state.venue_code       = invoice.venue_code || '';
+    state.stand_id         = invoice.stand_id || '';
+    state.event_id         = invoice.event_id || '';
+    state.period_start     = invoice.period_start || todayIso();
+    state.net_amount_due   = invoice.net_amount_due != null ? String(invoice.net_amount_due) : '';
+    // Dirty flag only set if the saved net differs from the computed line sum.
+    // Matching net → leave dirty=false so future line edits auto-track.
+    // Mismatched net → set dirty=true so the legitimate override is preserved.
+    state.net_amount_due_dirty = false;  // resolved after lines load, below
+    state.notes            = invoice.notes || '';
+
+    // Lines — denormalize signed amounts back to user-typed magnitudes for display.
+    var fetchedLines = (invoice.ar_invoice_lines || []).slice().sort(function (a, b) {
+      return (a.sort_order || 0) - (b.sort_order || 0);
+    });
+
+    state.lines = fetchedLines.map(function (l) {
+      var ln = newLine();
+      ln.id        = l.id;
+      ln.item_id   = l.item_id || '';
+      ln.qty       = l.quantity != null ? String(l.quantity) : '1';
+      ln.unit_price = l.unit_price != null ? String(l.unit_price) : '';
+      // Display amount in magnitude (positive); sign reapplied on save via item.default_sign.
+      ln.amount    = l.amount != null ? String(Math.abs(Number(l.amount))) : '';
+      ln.note      = l.description || '';
+      return ln;
+    });
+
+    // Always keep at least one line visible.
+    if (state.lines.length === 0) state.lines.push(newLine());
+
+    // Resolve the dirty flag: dirty IF the saved net differs from line sum.
+    var savedNet = Number(state.net_amount_due);
+    var lineSum = 0;
+    state.lines.forEach(function (l) {
+      var n = Number(l.amount);
+      if (isNaN(n)) return;
+      var it = null;
+      for (var i = 0; i < (formCache.items || []).length; i++) {
+        if (formCache.items[i].id === l.item_id) { it = formCache.items[i]; break; }
+      }
+      var neg = it && it.default_sign === 'negative';
+      lineSum += (neg ? -1 : 1) * Math.abs(n);
+    });
+    lineSum = Math.round(lineSum * 100) / 100;
+    if (!isNaN(savedNet) && Math.abs(savedNet - lineSum) > 0.005) {
+      state.net_amount_due_dirty = true;  // preserve the mismatch
+    }
+
+    // Snapshot for diff. Deep-clone via JSON to avoid reference traps.
+    state._original = JSON.parse(JSON.stringify({
+      client_id:        state.client_id,
+      client_reference: state.client_reference,
+      venue_code:       state.venue_code,
+      stand_id:         state.stand_id,
+      event_id:         state.event_id,
+      period_start:     state.period_start,
+      net_amount_due:   state.net_amount_due,
+      notes:            state.notes,
+      status:           state._status,
+      lines: state.lines.map(function (l) {
+        return {
+          id:        l.id,
+          item_id:   l.item_id,
+          qty:       l.qty,
+          unit_price: l.unit_price,
+          amount:    l.amount,
+          note:      l.note
+        };
+      })
+    }));
+
+    return state;
+  }
+
+  function openEditInvoiceModal(invoiceId) {
+    var bd = document.getElementById('modalBackdrop');
+    if (!bd) return;
+
+    // Build the shell first with a "Loading…" placeholder, then populate.
+    formState = newFormState();
+    formState._mode = 'edit';
+    bd.innerHTML = modalMarkup();
+    bd.classList.add('is-open');
+
+    // Modal-card content is in place; wire close handlers immediately so
+    // user can cancel even if fetch is slow.
+    var sub = document.getElementById('arModalSubtitle');
+    if (sub) sub.textContent = 'Loading invoice…';
+    var title = document.getElementById('arModalTitle');
+    if (title) title.textContent = 'Edit invoice';
+
+    // Disable inputs while loading.
+    var saveBtn = document.getElementById('arfSave');
+    if (saveBtn) saveBtn.disabled = true;
+
+    Promise.all([fetchItems(), fetchStands(), fetchInvoiceWithLines(invoiceId)])
+      .then(function (results) {
+        var invoiceRows = results[2] || [];
+        if (invoiceRows.length === 0) {
+          throw new Error('Invoice not found');
+        }
+        var invoice = invoiceRows[0];
+
+        // Build form state from fetched data.
+        formState = formStateFromInvoice(invoice);
+
+        // Make sure the events for the saved venue are loaded so the
+        // event field renders correctly. (No-op if already cached.)
+        var eventsPromise = formState.venue_code
+          ? fetchEventsForVenue(formState.venue_code)
+          : Promise.resolve([]);
+
+        return eventsPromise.then(function () {
+          // Now populate the DOM with formState values.
+          populateModalStatics();
+          refreshStandDropdown();
+          refreshEventDatalist();
+          renderLines();
+          wireModalEvents();
+          paintEditMode(invoice);
+
+          // Set form field values from formState.
+          syncFormFieldsFromState();
+
+          // Re-enable save now that we're loaded.
+          if (saveBtn) saveBtn.disabled = false;
+
+          // Form starts NOT dirty even though we set values programmatically.
+          formState._dirty = false;
+        });
+      })
+      .catch(function (e) {
+        if (e && e.authFailed) { handleAuthFailure(); return; }
+        console.error('[AR] open-edit failed:', e);
+        showToast('Could not load invoice');
+        closeAllModals();
+        formState = null;
+      });
+  }
+
+  /** Update the subtitle and reveal/hide edit-only UI. */
+  function paintEditMode(invoice) {
+    var title = document.getElementById('arModalTitle');
+    var sub   = document.getElementById('arModalSubtitle');
+    if (title) title.textContent = 'Edit invoice ' + (invoice.internal_invoice_number || '');
+    if (sub) {
+      var who = invoice.created_by ? ('by ' + esc(invoice.created_by)) : '';
+      var when = invoice.created_at ? fmtDate(invoice.created_at.substring(0, 10)) : '';
+      var status = invoice.status || 'open';
+      var statusLabel = status === 'partially_paid' ? 'partial' : status;
+      var bits = [];
+      bits.push('Entered ' + esc(when));
+      if (who) bits.push(esc(who));
+      bits.push('Status: <span style="text-transform: capitalize;">' + esc(statusLabel) + '</span>');
+      sub.innerHTML = bits.join(' · ');
+    }
+    // Reveal void/restore button based on status.
+    paintVoidButton(invoice.status || 'open');
+
+    // Wire the void button click — done here because the button only
+    // becomes interactive once edit mode is established.
+    var voidBtn = document.getElementById('arfVoid');
+    if (voidBtn && !voidBtn._wired) {
+      voidBtn._wired = true;
+      voidBtn.addEventListener('click', openVoidConfirm);
+    }
+  }
+
+  /** Write formState values into the DOM inputs (used by edit-mode open). */
+  function syncFormFieldsFromState() {
+    var vSel = document.getElementById('arfVenue');
+    var cSel = document.getElementById('arfClient');
+    var sSel = document.getElementById('arfStand');
+    var evt  = document.getElementById('arfEvent');
+    var cref = document.getElementById('arfClientRef');
+    var ps   = document.getElementById('arfPeriodStart');
+    var nts  = document.getElementById('arfNotes');
+    var net  = document.getElementById('arfNetAmount');
+
+    if (vSel) vSel.value = formState.venue_code || '';
+    if (cSel) cSel.value = formState.client_id || '';
+    if (sSel) sSel.value = formState.stand_id || '';
+    if (cref) cref.value = formState.client_reference || '';
+    if (ps)   ps.value   = formState.period_start || '';
+    if (nts)  nts.value  = formState.notes || '';
+
+    // Net amount due — format with currency.
+    var nN = evalMath(formState.net_amount_due);
+    if (net) net.value = isNaN(nN) ? (formState.net_amount_due || '') : fmtMoney(nN);
+
+    // Event field — find the label matching event_id, fall back to blank.
+    if (evt) {
+      if (formState.event_id) {
+        var events = formCache.events[formState.venue_code] || [];
+        var match = null;
+        for (var i = 0; i < events.length; i++) {
+          if (events[i].id === formState.event_id) { match = events[i]; break; }
+        }
+        if (match) {
+          evt.value = match.event_name + ' · ' + fmtDate(match.event_date);
+        } else {
+          evt.value = '';
+        }
+      } else {
+        evt.value = '';
+      }
+      var hint = document.getElementById('arfEventHint');
+      if (hint) {
+        hint.textContent = formState.event_id
+          ? 'Event linked · clear field to unlink'
+          : (evt.value ? 'Free text · not linked to an event' : 'No event linked');
+      }
+    }
+
+    // Client hint reflects venue default vs override.
+    var chnt = document.getElementById('arfClientHint');
+    if (chnt) {
+      // Look up the venue's default client from state.venues.
+      var defaultClient = '';
+      for (var v = 0; v < state.venues.length; v++) {
+        if (state.venues[v].code === formState.venue_code) {
+          defaultClient = state.venues[v].default_client_id || '';
+          formState._default_client_id = defaultClient;
+          break;
+        }
+      }
+      if (!formState.venue_code) {
+        chnt.textContent = 'Pick a venue first';
+      } else if (formState.client_id === defaultClient) {
+        chnt.textContent = 'Default for this venue · editable';
+      } else if (formState.client_id) {
+        chnt.textContent = 'Overriding the venue default';
+      } else {
+        chnt.textContent = 'No default for this venue · pick a client';
+      }
+    }
+
+    refreshTotals();
+  }
+
+  // =====================================================================
+  // STAGE 2.3 — AUDIT LOG HELPER
+  //
+  // Composite-on-create pattern: one ar_audit_log row per high-level
+  // operation (e.g., "invoice_entered"), with full payload in context.
+  // Stage 2.4 (edits) will use per-field rows instead.
+  // =====================================================================
+  function writeAuditLog(entry) {
+    var actor = '';
+    try {
+      if (typeof pcAuth !== 'undefined' && pcAuth.getUser) {
+        var u = pcAuth.getUser();
+        actor = (u && u.display_name) || (u && u.email) || 'unknown';
+      }
+    } catch (e) { actor = 'unknown'; }
+
+    var row = {
+      table_name:   entry.table_name,
+      record_id:    entry.record_id,
+      action:       entry.action,
+      field_name:   entry.field_name || null,
+      old_value:    entry.old_value != null ? String(entry.old_value) : null,
+      new_value:    entry.new_value != null ? String(entry.new_value) : null,
+      performed_by: actor,
+      context:      entry.context || null
+    };
+
+    var hdrs = Object.assign(
+      {},
+      pcAuth.headers(),
+      { 'Content-Type': 'application/json', 'Prefer': 'return=minimal' }
+    );
+
+    return AR.authFetch(SB_REST + 'ar_audit_log', {
+      method: 'POST',
+      headers: hdrs,
+      body: JSON.stringify(row)
+    });
+  }
+
+  window.AR.writeAuditLog = writeAuditLog;
+
+  // =====================================================================
+  // STAGE 2.3 — FORM VALIDATION
+  //
+  // Returns an object: { valid: bool, errors: [strings], completeLines: [...] }
+  // completeLines are lines with BOTH an item AND a non-zero amount.
+  // Incomplete lines are silently dropped on save.
+  // =====================================================================
+  function validateForm() {
+    var errors = [];
+
+    if (!formState.venue_code) errors.push('Pick a venue');
+    if (!formState.client_id)  errors.push('Pick a client');
+    if (!formState.period_start) errors.push('Set the invoice date');
+
+    // Filter to lines with both item AND a numeric non-zero amount.
+    var complete = formState.lines.filter(function (line) {
+      if (!line.item_id) return false;
+      var n = evalMath(line.amount);
+      if (isNaN(n) || Math.abs(n) < 0.005) return false;
+      return true;
+    });
+
+    if (complete.length === 0) {
+      errors.push('Add at least one line with an item and an amount');
+    }
+
+    // Net amount due must parse to a finite number.
+    var netN = evalMath(formState.net_amount_due);
+    if (isNaN(netN)) {
+      errors.push('Net amount due is not a valid number');
+    }
+
+    return {
+      valid:         errors.length === 0,
+      errors:        errors,
+      completeLines: complete,
+      netAmount:     netN
+    };
+  }
+
+  // =====================================================================
+  // STAGE 2.3 — SAVE HANDLER
+  //
+  // Strategy: PostgREST embedded insert. One POST to ar_invoices with
+  // ar_invoice_lines nested in the payload — the whole thing is one DB
+  // transaction. Lines fail → invoice rollback. No orphan rows possible.
+  //
+  // After success: audit log write, full form reset, indicator update.
+  // Modal stays open for batch entry.
+  // =====================================================================
+  function buildInvoicePayload(validated) {
+    var lines = validated.completeLines.map(function (line, idx) {
+      var item = itemById(line.item_id);
+      var rawAmount = evalMath(line.amount);
+      // Apply sign from item.default_sign — user typed magnitudes.
+      var signedAmount = (item && item.default_sign === 'negative')
+        ? -Math.abs(rawAmount)
+        : Math.abs(rawAmount);
+
+      var qtyN   = evalMath(line.qty);
+      var priceN = evalMath(line.unit_price);
+
+      var lineRow = {
+        // invoice_id is added per-line after the parent invoice is created
+        item_id:     line.item_id,
+        description: line.note || null,
+        amount:      Math.round(signedAmount * 100) / 100,
+        sort_order:  idx,
+        quantity:    isNaN(qtyN) ? 1 : qtyN
+      };
+      // unit_price is nullable; only include when user actually entered one.
+      if (!isNaN(priceN) && line.unit_price !== '') {
+        lineRow.unit_price = priceN;
+      } else {
+        lineRow.unit_price = null;
+      }
+      return lineRow;
+    });
+
+    var actor = '';
+    try {
+      if (typeof pcAuth !== 'undefined' && pcAuth.getUser) {
+        var u = pcAuth.getUser();
+        actor = (u && u.display_name) || (u && u.email) || 'unknown';
+      }
+    } catch (e) { actor = 'unknown'; }
+
+    // Header row only — no embedded lines.
+    var invoice = {
+      // internal_invoice_number omitted — DB DEFAULT generates YYMMDD-NNNN
+      client_reference: formState.client_reference || null,
+      client_id:        formState.client_id,
+      venue_code:       formState.venue_code,
+      stand_id:         formState.stand_id || null,
+      event_id:         formState.event_id || null,
+      period_start:     formState.period_start,
+      net_amount_due:   Math.round(validated.netAmount * 100) / 100,
+      status:           'open',
+      origin:           'client_statement',
+      notes:            formState.notes || null,
+      created_by:       actor
+    };
+
+    return { invoice: invoice, lines: lines };
+  }
+
+  function handleSaveInvoice() {
+    if (pcSubmitting) return;  // reentry guard
+    if (!formState) return;
+    if (formState._mode === 'edit') {
+      handleSaveEditInvoice();
+    } else {
+      handleSaveNewInvoice();
+    }
+  }
+
+  /**
+   * New-invoice save — two sequential POSTs with compensating delete.
+   *
+   *   Step 1: POST ar_invoices (header only) → capture new id + invoice #.
+   *   Step 2: POST ar_invoice_lines (bulk) with invoice_id stamped on each.
+   *   Step 2 failure → DELETE the orphan invoice row.
+   *
+   * This pattern is robust against PostgREST configurations that don't
+   * accept embedded inserts to child resources. Orphan risk is bounded:
+   * step 2 failure triggers a clean-up DELETE. If THAT delete fails too
+   * (rare — network drop during the same request flight), an orphan
+   * invoice is logged loudly so it's caught in the audit log.
+   */
+  function handleSaveNewInvoice() {
+    var validated = validateForm();
+    if (!validated.valid) {
+      showToast(validated.errors[0], 2400);
+      return;
+    }
+
+    pcSubmitting = true;
+    var saveBtn = document.getElementById('arfSave');
+    if (saveBtn) {
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving…';
+    }
+
+    var payload = buildInvoicePayload(validated);
+
+    var hdrsHeader = Object.assign(
+      {},
+      pcAuth.headers(),
+      { 'Content-Type': 'application/json', 'Prefer': 'return=representation' }
+    );
+    var hdrsLines = Object.assign(
+      {},
+      pcAuth.headers(),
+      { 'Content-Type': 'application/json', 'Prefer': 'return=minimal' }
+    );
+
+    var savedInvoice = null;
+
+    // ----- Step 1: insert the invoice header -----
+    AR.authFetch(SB_REST + 'ar_invoices', {
+      method:  'POST',
+      headers: hdrsHeader,
+      body:    JSON.stringify(payload.invoice)
+    })
+    .then(function (rows) {
+      var inv = (rows && rows[0]) || null;
+      if (!inv || !inv.id) {
+        throw new Error('Invoice insert returned no row');
+      }
+      savedInvoice = inv;
+
+      // No lines to insert? (Shouldn't happen given validation, but guard.)
+      if (payload.lines.length === 0) return;
+
+      // ----- Step 2: insert lines with the new invoice_id stamped -----
+      var linesWithFk = payload.lines.map(function (line) {
+        var copy = {};
+        for (var k in line) if (Object.prototype.hasOwnProperty.call(line, k)) copy[k] = line[k];
+        copy.invoice_id = savedInvoice.id;
+        return copy;
+      });
+
+      return AR.authFetch(SB_REST + 'ar_invoice_lines', {
+        method:  'POST',
+        headers: hdrsLines,
+        body:    JSON.stringify(linesWithFk)
+      })
+      .catch(function (linesErr) {
+        // ----- Compensating delete: lines failed, drop the orphan header -----
+        console.error('[AR] line insert failed for invoice ' +
+          savedInvoice.id + ' — attempting compensating delete:', linesErr);
+
+        return AR.authFetch(
+          SB_REST + 'ar_invoices?id=eq.' + encodeURIComponent(savedInvoice.id),
+          { method: 'DELETE', headers: hdrsLines }
+        )
+        .then(function () {
+          // Compensating delete succeeded — original line error is still the
+          // user-facing failure, so re-throw.
+          throw linesErr;
+        })
+        .catch(function (compErr) {
+          // Both line insert and compensating delete failed → loud orphan log.
+          if (compErr === linesErr) throw linesErr;  // re-throw the original
+          console.error('[AR] CRITICAL — orphan invoice not cleaned up. ' +
+            'Invoice ID: ' + savedInvoice.id + ' (no lines, manual cleanup required):',
+            compErr);
+          throw linesErr;
+        });
+      });
+    })
+    .then(function () {
+      // ----- Step 3: audit log (composite create row) -----
+      return writeAuditLog({
+        table_name: 'ar_invoices',
+        record_id:  savedInvoice.id,
+        action:     'create',
+        context: {
+          internal_invoice_number: savedInvoice.internal_invoice_number,
+          client_id:               savedInvoice.client_id,
+          venue_code:              savedInvoice.venue_code,
+          stand_id:                savedInvoice.stand_id,
+          event_id:                savedInvoice.event_id,
+          period_start:            savedInvoice.period_start,
+          net_amount_due:          savedInvoice.net_amount_due,
+          client_reference:        savedInvoice.client_reference,
+          notes:                   savedInvoice.notes,
+          line_count:              payload.lines.length,
+          lines:                   payload.lines
+        }
+      })
+      .catch(function (auditErr) {
+        // Audit failure is logged but not fatal — invoice + lines saved.
+        console.error('[AR] audit log write failed for invoice ' +
+          savedInvoice.id + ':', auditErr);
+      });
+    })
+    .then(function () {
+      setLastSaved(savedInvoice.internal_invoice_number);
+      reloadInvoices();
+      resetFormForBatch();
+      showToast('Saved ' + savedInvoice.internal_invoice_number, 2000);
+    })
+    .catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      console.error('[AR] save failed:', e);
+      var msg = (e && e.message) ? e.message : 'Save failed';
+      if (msg.length > 140) msg = msg.substring(0, 140) + '…';
+      showToast('Save failed · ' + msg, 4000);
+    })
+    .then(function () {
+      pcSubmitting = false;
+      var btn = document.getElementById('arfSave');
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Save invoice';
+      }
+    });
+  }
+
+  // =====================================================================
+  // STAGE 2.4a — EDIT MODE SAVE
+  //
+  // Strategy:
+  //   1. Compute diff between formState and formState._original.
+  //   2. If no changes, toast "No changes" and stay open.
+  //   3. Otherwise:
+  //      - PATCH ar_invoices for changed header fields.
+  //      - For lines:
+  //        - Unchanged → no write.
+  //        - Edited    → PATCH ar_invoice_lines.
+  //        - New       → POST ar_invoice_lines.
+  //        - Removed   → DELETE ar_invoice_lines.
+  //      - Audit log rows:
+  //        - One per-field row per changed header field.
+  //        - One whole-line snapshot row per line add or delete.
+  //        - One per-field row per changed line field.
+  //
+  // Operations run sequentially via Promise.all where independent.
+  // Audit writes are fire-and-log-on-failure — never block the save.
+  // =====================================================================
+
+  /** Build the line-write payload (signed amount applied). */
+  function lineToWritePayload(line, sortOrder, invoiceId) {
+    var item = itemById(line.item_id);
+    var rawAmount = evalMath(line.amount);
+    var signedAmount = (item && item.default_sign === 'negative')
+      ? -Math.abs(rawAmount)
+      : Math.abs(rawAmount);
+    var qtyN = evalMath(line.qty);
+    var priceN = evalMath(line.unit_price);
+    var row = {
+      item_id:    line.item_id,
+      description: line.note || null,
+      amount:     Math.round(signedAmount * 100) / 100,
+      sort_order: sortOrder,
+      quantity:   isNaN(qtyN) ? 1 : qtyN
+    };
+    if (!isNaN(priceN) && line.unit_price !== '') {
+      row.unit_price = priceN;
+    } else {
+      row.unit_price = null;
+    }
+    if (invoiceId) row.invoice_id = invoiceId;
+    return row;
+  }
+
+  /**
+   * Build a diff between original and current state.
+   * Returns { headerChanges, linesToAdd, linesToUpdate, linesToDelete, hasAny }.
+   */
+  function buildEditDiff(validated) {
+    var orig = formState._original;
+    var headerChanges = {};
+    var headerFields = [
+      'client_id', 'client_reference', 'venue_code', 'stand_id',
+      'event_id', 'period_start', 'notes'
+    ];
+    headerFields.forEach(function (f) {
+      var origVal = orig[f];
+      var curVal  = formState[f];
+      // Normalize nulls/empties so '' and null compare equal.
+      var oNorm = (origVal === '' || origVal == null) ? null : origVal;
+      var cNorm = (curVal  === '' || curVal  == null) ? null : curVal;
+      if (oNorm !== cNorm) {
+        headerChanges[f] = { old: oNorm, new: cNorm };
+      }
+    });
+
+    // Net amount due — compare numerically.
+    var origNet = Number(orig.net_amount_due);
+    var curNet  = validated.netAmount;
+    if (!isNaN(origNet) && !isNaN(curNet) && Math.abs(origNet - curNet) > 0.005) {
+      headerChanges.net_amount_due = {
+        old: Math.round(origNet * 100) / 100,
+        new: Math.round(curNet * 100) / 100
+      };
+    }
+
+    // Lines diff.
+    var linesToAdd    = [];
+    var linesToUpdate = [];
+    var linesToDelete = [];
+
+    // Lines that have an id and are still in the current set are candidates
+    // for update. Lines without an id are adds. Lines in original but not
+    // current are deletes.
+    var currentIds = {};
+    var current = validated.completeLines.slice();  // only complete lines save
+
+    current.forEach(function (line, idx) {
+      if (line.id) {
+        currentIds[line.id] = true;
+        // Find the original snapshot of this line.
+        var origLine = null;
+        for (var i = 0; i < orig.lines.length; i++) {
+          if (orig.lines[i].id === line.id) { origLine = orig.lines[i]; break; }
+        }
+        if (!origLine) {
+          // ID present but original missing — treat as add (safety).
+          linesToAdd.push({ line: line, sort_order: idx });
+        } else {
+          // Compute per-field diff for this line.
+          var fieldDiff = {};
+          if (origLine.item_id !== line.item_id) {
+            fieldDiff.item_id = { old: origLine.item_id, new: line.item_id };
+          }
+          var oAmtN = Number(origLine.amount);
+          var cAmtN = Math.abs(evalMath(line.amount));
+          if (!isNaN(oAmtN) && !isNaN(cAmtN) && Math.abs(oAmtN - cAmtN) > 0.005) {
+            fieldDiff.amount = { old: oAmtN, new: cAmtN };
+          }
+          var oQ = Number(origLine.qty);
+          var cQ = evalMath(line.qty);
+          if (!isNaN(oQ) && !isNaN(cQ) && Math.abs(oQ - cQ) > 0.005) {
+            fieldDiff.quantity = { old: oQ, new: cQ };
+          }
+          var oP = origLine.unit_price === '' ? null : Number(origLine.unit_price);
+          var cP = line.unit_price === '' ? null : evalMath(line.unit_price);
+          if (cP != null && isNaN(cP)) cP = null;
+          if (oP !== cP) {
+            // Only flag when truly different — both null = same.
+            if (!(oP == null && cP == null)) {
+              fieldDiff.unit_price = { old: oP, new: cP };
+            }
+          }
+          var oNote = origLine.note || '';
+          var cNote = line.note || '';
+          if (oNote !== cNote) {
+            fieldDiff.description = { old: oNote, new: cNote };
+          }
+          // Sort order — silent if changed (cosmetic).
+          if (Object.keys(fieldDiff).length > 0) {
+            linesToUpdate.push({ line: line, fieldDiff: fieldDiff, sort_order: idx });
+          }
+        }
+      } else {
+        linesToAdd.push({ line: line, sort_order: idx });
+      }
+    });
+
+    // Deletes: original lines whose id is not in current.
+    orig.lines.forEach(function (origLine) {
+      if (origLine.id && !currentIds[origLine.id]) {
+        linesToDelete.push(origLine);
+      }
+    });
+
+    var hasAny = Object.keys(headerChanges).length > 0 ||
+                 linesToAdd.length > 0 ||
+                 linesToUpdate.length > 0 ||
+                 linesToDelete.length > 0;
+
+    return {
+      headerChanges: headerChanges,
+      linesToAdd:    linesToAdd,
+      linesToUpdate: linesToUpdate,
+      linesToDelete: linesToDelete,
+      hasAny:        hasAny
+    };
+  }
+
+  function handleSaveEditInvoice() {
+    var validated = validateForm();
+    if (!validated.valid) {
+      showToast(validated.errors[0], 2400);
+      return;
+    }
+
+    var diff = buildEditDiff(validated);
+
+    if (!diff.hasAny) {
+      showToast('No changes', 1600);
+      return;
+    }
+
+    pcSubmitting = true;
+    var saveBtn = document.getElementById('arfSave');
+    if (saveBtn) {
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving…';
+    }
+
+    var invoiceId = formState._editing_id;
+    var invoiceNum = '';  // pulled from refresh
+    var jsonHdrs = Object.assign({}, pcAuth.headers(), {
+      'Content-Type': 'application/json', 'Prefer': 'return=minimal'
+    });
+
+    // ----- Step 1: PATCH header (if changed) -----
+    var headerPromise;
+    if (Object.keys(diff.headerChanges).length > 0) {
+      var patchBody = {};
+      Object.keys(diff.headerChanges).forEach(function (f) {
+        patchBody[f] = diff.headerChanges[f].new;
+      });
+      headerPromise = AR.authFetch(
+        SB_REST + 'ar_invoices?id=eq.' + encodeURIComponent(invoiceId),
+        { method: 'PATCH', headers: jsonHdrs, body: JSON.stringify(patchBody) }
+      );
+    } else {
+      headerPromise = Promise.resolve();
+    }
+
+    headerPromise
+      .then(function () {
+        // ----- Step 2: line operations (run in parallel) -----
+        var ops = [];
+
+        diff.linesToDelete.forEach(function (origLine) {
+          ops.push(AR.authFetch(
+            SB_REST + 'ar_invoice_lines?id=eq.' + encodeURIComponent(origLine.id),
+            { method: 'DELETE', headers: jsonHdrs }
+          ));
+        });
+
+        diff.linesToUpdate.forEach(function (u) {
+          var body = lineToWritePayload(u.line, u.sort_order, null);
+          // Strip invoice_id — never patch it.
+          delete body.invoice_id;
+          ops.push(AR.authFetch(
+            SB_REST + 'ar_invoice_lines?id=eq.' + encodeURIComponent(u.line.id),
+            { method: 'PATCH', headers: jsonHdrs, body: JSON.stringify(body) }
+          ));
+        });
+
+        if (diff.linesToAdd.length > 0) {
+          var addBodies = diff.linesToAdd.map(function (a) {
+            return lineToWritePayload(a.line, a.sort_order, invoiceId);
+          });
+          ops.push(AR.authFetch(
+            SB_REST + 'ar_invoice_lines',
+            { method: 'POST', headers: jsonHdrs, body: JSON.stringify(addBodies) }
+          ));
+        }
+
+        return Promise.all(ops);
+      })
+      .then(function () {
+        // ----- Step 3: audit log writes (fire-and-forget per row) -----
+        var auditPromises = [];
+
+        Object.keys(diff.headerChanges).forEach(function (f) {
+          var ch = diff.headerChanges[f];
+          auditPromises.push(writeAuditLog({
+            table_name: 'ar_invoices',
+            record_id:  invoiceId,
+            action:     'update',
+            field_name: f,
+            old_value:  ch.old,
+            new_value:  ch.new
+          }).catch(function (e) {
+            console.error('[AR] audit write failed for ' + f + ':', e);
+          }));
+        });
+
+        diff.linesToAdd.forEach(function (a) {
+          auditPromises.push(writeAuditLog({
+            table_name: 'ar_invoice_lines',
+            record_id:  invoiceId,  // we don't have the new line's UUID; use parent id, line snapshot in context
+            action:     'create',
+            context: {
+              parent_invoice_id: invoiceId,
+              line: lineToWritePayload(a.line, a.sort_order, invoiceId)
+            }
+          }).catch(function (e) {
+            console.error('[AR] audit write failed for line add:', e);
+          }));
+        });
+
+        diff.linesToUpdate.forEach(function (u) {
+          Object.keys(u.fieldDiff).forEach(function (f) {
+            var ch = u.fieldDiff[f];
+            auditPromises.push(writeAuditLog({
+              table_name: 'ar_invoice_lines',
+              record_id:  u.line.id,
+              action:     'update',
+              field_name: f,
+              old_value:  ch.old,
+              new_value:  ch.new,
+              context:    { parent_invoice_id: invoiceId }
+            }).catch(function (e) {
+              console.error('[AR] audit write failed for line update:', e);
+            }));
+          });
+        });
+
+        diff.linesToDelete.forEach(function (origLine) {
+          auditPromises.push(writeAuditLog({
+            table_name: 'ar_invoice_lines',
+            record_id:  origLine.id,
+            action:     'delete',
+            context: {
+              parent_invoice_id: invoiceId,
+              line_snapshot: origLine
+            }
+          }).catch(function (e) {
+            console.error('[AR] audit write failed for line delete:', e);
+          }));
+        });
+
+        return Promise.all(auditPromises);
+      })
+      .then(function () {
+        // Capture the invoice number from the original snapshot for the toast.
+        // (We don't refetch — the user closes the modal and the list refresh handles freshness.)
+        // Pull from the modal title which is "Edit invoice 260515-3007".
+        var title = document.getElementById('arModalTitle');
+        if (title) {
+          var match = title.textContent.match(/(\d{6}-\d+)/);
+          if (match) invoiceNum = match[1];
+        }
+        reloadInvoices();
+        formState = null;
+        closeAllModals();
+        showToast(invoiceNum ? ('Updated ' + invoiceNum) : 'Updated', 2000);
+      })
+      .catch(function (e) {
+        if (e && e.authFailed) { handleAuthFailure(); return; }
+        console.error('[AR] edit save failed:', e);
+        var msg = (e && e.message) ? e.message : 'Save failed';
+        if (msg.length > 140) msg = msg.substring(0, 140) + '…';
+        showToast('Save failed · ' + msg, 4000);
+      })
+      .then(function () {
+        pcSubmitting = false;
+        var btn = document.getElementById('arfSave');
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'Save invoice';
+        }
+      });
+  }
+
+  // =====================================================================
+  // STAGE 2.4b — VOID / RESTORE
+  //
+  // Available only in edit mode. Button at footer-left flips between
+  // "Void invoice" (when status is anything other than 'voided') and
+  // "Restore to open" (when status is 'voided').
+  //
+  // Click → small confirm overlay inside the modal asking for a reason.
+  // Confirm → PATCH status, write audit row (status_change), close modal,
+  // refresh list, toast.
+  // =====================================================================
+
+  /** Paint the void button based on current invoice status. */
+  function paintVoidButton(status) {
+    var btn = document.getElementById('arfVoid');
+    if (!btn) return;
+    if (status === 'voided') {
+      btn.textContent = 'Restore to open';
+      btn.classList.add('is-restore');
+    } else {
+      btn.textContent = 'Void invoice';
+      btn.classList.remove('is-restore');
+    }
+    btn.hidden = false;
+  }
+
+  /** Open the void / restore confirm dialog inside the modal. */
+  function openVoidConfirm() {
+    if (!formState || formState._mode !== 'edit' || !formState._editing_id) return;
+    var card = document.querySelector('.ar-modal-card');
+    if (!card) return;
+
+    var isRestore = formState._status === 'voided';
+    var invoiceNumber = '';
+    var title = document.getElementById('arModalTitle');
+    if (title) {
+      var match = title.textContent.match(/(\d{6}-\d+)/);
+      if (match) invoiceNumber = match[1];
+    }
+
+    var heading = isRestore
+      ? ('Restore invoice ' + invoiceNumber + ' to open?')
+      : ('Void invoice ' + invoiceNumber + '?');
+    var desc = isRestore
+      ? 'The invoice will move back to open status and reappear in the active receivables list. The reason will be saved to the audit log.'
+      : 'The invoice stays in the database for the audit record but will be excluded from aging totals and the default open list. The reason will be saved to the audit log.';
+    var actionLabel = isRestore ? 'Confirm restore' : 'Confirm void';
+    var actionClass = isRestore ? 'ar-btn-restore' : 'ar-btn-danger';
+
+    var overlay = document.createElement('div');
+    overlay.className = 'ar-confirm-overlay';
+    overlay.id = 'arfVoidConfirm';
+    overlay.innerHTML = '' +
+      '<div class="ar-confirm-card" role="dialog" aria-labelledby="arfVoidConfirmTitle">' +
+        '<div class="ar-confirm-title" id="arfVoidConfirmTitle">' + esc(heading) + '</div>' +
+        '<div class="ar-confirm-desc">' + esc(desc) + '</div>' +
+        '<label for="arfVoidReason">Reason <span style="color:#c33;">*</span></label>' +
+        '<textarea id="arfVoidReason" placeholder="' +
+          (isRestore ? 'Why are you restoring this invoice?' : 'Why are you voiding this invoice?') +
+        '"></textarea>' +
+        '<div class="ar-confirm-actions">' +
+          '<button type="button" class="ar-btn ar-btn-secondary" id="arfVoidCancel">Cancel</button>' +
+          '<button type="button" class="ar-btn ' + actionClass + '" id="arfVoidConfirmBtn">' + esc(actionLabel) + '</button>' +
+        '</div>' +
+      '</div>';
+
+    card.appendChild(overlay);
+
+    var reason = document.getElementById('arfVoidReason');
+    if (reason) reason.focus();
+
+    var cancelBtn  = document.getElementById('arfVoidCancel');
+    var confirmBtn = document.getElementById('arfVoidConfirmBtn');
+
+    if (cancelBtn) cancelBtn.addEventListener('click', function () {
+      overlay.parentNode && overlay.parentNode.removeChild(overlay);
+    });
+
+    if (confirmBtn) confirmBtn.addEventListener('click', function () {
+      var txt = reason ? (reason.value || '').trim() : '';
+      if (!txt) {
+        if (reason) reason.classList.add('is-error');
+        showToast('Reason is required', 2000);
+        if (reason) reason.focus();
+        return;
+      }
+      handleVoidConfirm(txt, isRestore, invoiceNumber, overlay, confirmBtn);
+    });
+
+    // ESC closes the confirm overlay (not the whole modal) — this is the
+    // one place we override the modal's "Esc does nothing" rule, because
+    // the confirm is itself a discardable dialog.
+    overlay.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape') {
+        ev.stopPropagation();
+        overlay.parentNode && overlay.parentNode.removeChild(overlay);
+      }
+    });
+  }
+
+  /** Execute the void/restore: PATCH status + audit + refresh + close. */
+  function handleVoidConfirm(reasonText, isRestore, invoiceNumber, overlay, confirmBtn) {
+    if (pcSubmitting) return;
+    pcSubmitting = true;
+
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = isRestore ? 'Restoring…' : 'Voiding…';
+
+    var invoiceId = formState._editing_id;
+    var oldStatus = formState._status || 'open';
+    var newStatus = isRestore ? 'open' : 'voided';
+
+    var jsonHdrs = Object.assign({}, pcAuth.headers(), {
+      'Content-Type': 'application/json',
+      'Prefer':       'return=minimal'
+    });
+
+    AR.authFetch(
+      SB_REST + 'ar_invoices?id=eq.' + encodeURIComponent(invoiceId),
+      {
+        method:  'PATCH',
+        headers: jsonHdrs,
+        body:    JSON.stringify({ status: newStatus })
+      }
+    )
+    .then(function () {
+      return writeAuditLog({
+        table_name: 'ar_invoices',
+        record_id:  invoiceId,
+        action:     'status_change',
+        field_name: 'status',
+        old_value:  oldStatus,
+        new_value:  newStatus,
+        context: {
+          reason:        reasonText,
+          previous_status: oldStatus,
+          voided_via:    isRestore ? 'edit_modal_restore' : 'edit_modal'
+        }
+      }).catch(function (auditErr) {
+        console.error('[AR] audit write failed for status_change on invoice ' +
+          invoiceId + ':', auditErr);
+      });
+    })
+    .then(function () {
+      reloadInvoices();
+      formState = null;
+      closeAllModals();
+      var verb = isRestore ? 'Restored' : 'Voided';
+      showToast(verb + ' ' + (invoiceNumber || ''), 2000);
+    })
+    .catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      console.error('[AR] void/restore failed:', e);
+      var msg = (e && e.message) ? e.message : 'Action failed';
+      if (msg.length > 140) msg = msg.substring(0, 140) + '…';
+      showToast('Failed · ' + msg, 4000);
+      // Restore the confirm button so the user can retry.
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = isRestore ? 'Confirm restore' : 'Confirm void';
+    })
+    .then(function () {
+      pcSubmitting = false;
+    });
+  }
+
+  /** Show / update the "Last saved: …" indicator in the modal header. */
+  function setLastSaved(invoiceNumber) {
+    var sub = document.getElementById('arModalSubtitle');
+    if (sub) {
+      sub.innerHTML = 'Internal # · auto-generated on save  ·  ' +
+        '<span style="color: #27500A; font-weight: 500;">Last saved: ' +
+        esc(invoiceNumber) + '</span>';
+    }
+  }
+
+  /** Reset the form for the next invoice in a batch-entry session. */
+  function resetFormForBatch() {
+    // Capture the current modal-card to clear and re-render fields. The
+    // last-saved indicator stays because we leave the subtitle alone.
+    var keepLastSavedHtml = null;
+    var sub = document.getElementById('arModalSubtitle');
+    if (sub) keepLastSavedHtml = sub.innerHTML;
+
+    // Fresh state.
+    formState = newFormState();
+    formState.lines.push(newLine());
+
+    // Reset visible inputs.
+    var vSel = document.getElementById('arfVenue');
+    var cSel = document.getElementById('arfClient');
+    var sSel = document.getElementById('arfStand');
+    var evt  = document.getElementById('arfEvent');
+    var ehnt = document.getElementById('arfEventHint');
+    var chnt = document.getElementById('arfClientHint');
+    var cref = document.getElementById('arfClientRef');
+    var ps   = document.getElementById('arfPeriodStart');
+    var nts  = document.getElementById('arfNotes');
+    var net  = document.getElementById('arfNetAmount');
+
+    if (vSel) vSel.value = '';
+    if (cSel) {
+      cSel.innerHTML = '<option value="">Select client…</option>' +
+        state.clients.map(function (c) {
+          return '<option value="' + esc(c.id) + '">' + esc(c.name) + '</option>';
+        }).join('');
+      cSel.value = '';
+    }
+    if (chnt) chnt.textContent = 'Pick a venue first';
+    if (sSel) { sSel.innerHTML = '<option value="">— no stand —</option>'; sSel.disabled = true; }
+    if (evt)  evt.value = '';
+    if (ehnt) ehnt.textContent = 'No event linked';
+    if (cref) cref.value = '';
+    if (ps)   ps.value = formState.period_start;
+    if (nts)  nts.value = '';
+    if (net)  net.value = fmtMoney(0);
+
+    // Reset the event datalist (no venue picked = no events).
+    var dl = document.getElementById('arfEventList');
+    if (dl) dl.innerHTML = '';
+
+    // Re-render the line editor.
+    renderLines();
+
+    // Restore last-saved indicator (we cleared formState but the subtitle
+    // text we already set should persist visually — fix here if needed).
+    if (sub && keepLastSavedHtml) sub.innerHTML = keepLastSavedHtml;
+  }
+
+  // =====================================================================
+  // STAGE 2.5 — ROW-MENU POPOVER + STANDALONE STATUS CHANGE
+  //
+  // Each row has a ⋯ button that opens a small popover anchored beneath
+  // it. The popover offers quick-action transitions:
+  //
+  //   Edit            (always)
+  //   Mark disputed   (when status is open / partially_paid)
+  //   Mark voided     (when status is anything except 'voided')
+  //   Restore to open (when status is 'voided' or 'disputed')
+  //
+  // Clicking a status-change action opens a small standalone confirm
+  // modal asking for a reason, then PATCHes the status, writes an audit
+  // row, and refreshes the list. No edit modal involvement.
+  // =====================================================================
+
+  var openRowMenu = null;  // currently-open popover element, if any
+
+  /** Close any open row-menu popover. */
+  function closeRowMenu() {
+    if (openRowMenu && openRowMenu.parentNode) {
+      openRowMenu.parentNode.removeChild(openRowMenu);
+    }
+    openRowMenu = null;
+    // Un-highlight any ⋯ button.
+    var active = document.querySelector('.row-menu-btn.is-open');
+    if (active) active.classList.remove('is-open');
+  }
+
+  /** Open the row-menu popover anchored to a ⋯ button. */
+  function openRowMenuFor(button) {
+    if (!button) return;
+    // If clicking the already-open button, just close.
+    if (button.classList.contains('is-open')) {
+      closeRowMenu();
+      return;
+    }
+    closeRowMenu();
+
+    var invoiceId = button.getAttribute('data-invoice-id');
+    var status    = button.getAttribute('data-invoice-status') || 'open';
+    var invNum    = button.getAttribute('data-invoice-number') || '';
+
+    var html = '<button type="button" data-row-action="edit">Edit invoice</button>';
+
+    // Mark disputed — only for open / partially_paid.
+    if (status === 'open' || status === 'partially_paid') {
+      html += '<button type="button" data-row-action="dispute" class="is-danger">Mark disputed</button>';
+    }
+    // Mark voided — for anything that isn't already voided.
+    if (status !== 'voided') {
+      html += '<button type="button" data-row-action="void" class="is-danger">Mark voided</button>';
+    }
+    // Restore — for voided or disputed.
+    if (status === 'voided' || status === 'disputed') {
+      if (html.indexOf('<button') !== -1) html += '<div class="row-menu-sep"></div>';
+      html += '<button type="button" data-row-action="restore" class="is-restore">Restore to open</button>';
+    }
+
+    var pop = document.createElement('div');
+    pop.className = 'row-menu-popover';
+    pop.innerHTML = html;
+    pop.setAttribute('data-invoice-id', invoiceId);
+    pop.setAttribute('data-invoice-status', status);
+    pop.setAttribute('data-invoice-number', invNum);
+
+    // Position the popover below the ⋯ button. Use viewport coords +
+    // pageXOffset/pageYOffset so it works regardless of scroll position.
+    var rect = button.getBoundingClientRect();
+    document.body.appendChild(pop);
+    var popWidth = pop.offsetWidth;
+    var leftPos = rect.right - popWidth + window.pageXOffset;
+    if (leftPos < 8 + window.pageXOffset) leftPos = 8 + window.pageXOffset;
+    pop.style.top  = (rect.bottom + 4 + window.pageYOffset) + 'px';
+    pop.style.left = leftPos + 'px';
+
+    button.classList.add('is-open');
+    openRowMenu = pop;
+  }
+
+  /** Wire global dismissal: outside-click and ESC close the popover. */
+  function wireRowMenuDismissal() {
+    document.addEventListener('click', function (ev) {
+      if (!openRowMenu) return;
+      var t = ev.target;
+      if (!t || !t.closest) return;
+      // Click inside the popover or on the ⋯ button → let other handlers run.
+      if (t.closest('.row-menu-popover')) return;
+      if (t.closest('.row-menu-btn')) return;
+      closeRowMenu();
+    });
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape' && openRowMenu) closeRowMenu();
+    });
+  }
+
+  /** Delegated handler for clicks on popover items. */
+  function wireRowMenuActions() {
+    document.addEventListener('click', function (ev) {
+      var t = ev.target;
+      if (!t || !t.closest) return;
+      var btn = t.closest('[data-row-action]');
+      if (!btn) return;
+      var pop = btn.closest('.row-menu-popover');
+      if (!pop) return;
+
+      var invoiceId = pop.getAttribute('data-invoice-id');
+      var status    = pop.getAttribute('data-invoice-status') || 'open';
+      var invNum    = pop.getAttribute('data-invoice-number') || '';
+      var action    = btn.getAttribute('data-row-action');
+
+      closeRowMenu();
+
+      if (action === 'edit') {
+        openEditInvoiceModal(invoiceId);
+      } else if (action === 'void') {
+        openStatusConfirm({ invoiceId: invoiceId, invoiceNumber: invNum, oldStatus: status, newStatus: 'voided' });
+      } else if (action === 'dispute') {
+        openStatusConfirm({ invoiceId: invoiceId, invoiceNumber: invNum, oldStatus: status, newStatus: 'disputed' });
+      } else if (action === 'restore') {
+        openStatusConfirm({ invoiceId: invoiceId, invoiceNumber: invNum, oldStatus: status, newStatus: 'open' });
+      }
+    });
+
+    // Also wire the ⋯ button itself (delegated).
+    document.addEventListener('click', function (ev) {
+      var t = ev.target;
+      if (!t || !t.closest) return;
+      var btn = t.closest('[data-action="open-row-menu"]');
+      if (!btn) return;
+      ev.stopPropagation();  // don't trigger the row click → edit modal
+      openRowMenuFor(btn);
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // Standalone status-change confirm modal
+  // ---------------------------------------------------------------------
+
+  var statusConfirmEl = null;
+  var statusConfirmSubmitting = false;
+
+  function closeStatusConfirm() {
+    if (statusConfirmEl && statusConfirmEl.parentNode) {
+      statusConfirmEl.parentNode.removeChild(statusConfirmEl);
+    }
+    statusConfirmEl = null;
+    statusConfirmSubmitting = false;
+  }
+
+  /**
+   * Open the confirm dialog. ctx = {invoiceId, invoiceNumber, oldStatus, newStatus}.
+   * newStatus is one of 'voided' / 'disputed' / 'open' (for restore).
+   */
+  function openStatusConfirm(ctx) {
+    var verb, heading, desc, actionLabel, actionClass;
+
+    if (ctx.newStatus === 'voided') {
+      verb = 'Void';
+      heading = 'Void invoice ' + ctx.invoiceNumber + '?';
+      desc = 'The invoice stays in the database for the audit record but will be excluded from aging totals and the default open list. The reason will be saved to the audit log.';
+      actionLabel = 'Confirm void';
+      actionClass = 'ar-btn-danger';
+    } else if (ctx.newStatus === 'disputed') {
+      verb = 'Dispute';
+      heading = 'Mark invoice ' + ctx.invoiceNumber + ' as disputed?';
+      desc = 'Disputed invoices are excluded from the default open list and aging totals but stay available for payment allocation. The reason will be saved to the audit log.';
+      actionLabel = 'Confirm dispute';
+      actionClass = 'ar-btn-danger';
+    } else {
+      verb = 'Restore';
+      heading = 'Restore invoice ' + ctx.invoiceNumber + ' to open?';
+      desc = 'The invoice will move back to open status and reappear in the active receivables list. The reason will be saved to the audit log.';
+      actionLabel = 'Confirm restore';
+      actionClass = 'ar-btn-restore';
+    }
+
+    var backdrop = document.createElement('div');
+    backdrop.className = 'status-confirm-backdrop';
+    backdrop.innerHTML = '' +
+      '<div class="status-confirm-card" role="dialog" aria-labelledby="statusConfirmTitle">' +
+        '<div class="ar-confirm-title" id="statusConfirmTitle">' + esc(heading) + '</div>' +
+        '<div class="ar-confirm-desc">' + esc(desc) + '</div>' +
+        '<label for="statusConfirmReason">Reason <span style="color:#c33;">*</span></label>' +
+        '<textarea id="statusConfirmReason" placeholder="Why are you changing this invoice\u2019s status?"></textarea>' +
+        '<div class="ar-confirm-actions">' +
+          '<button type="button" class="ar-btn ar-btn-secondary" id="statusConfirmCancel">Cancel</button>' +
+          '<button type="button" class="ar-btn ' + actionClass + '" id="statusConfirmGo">' + esc(actionLabel) + '</button>' +
+        '</div>' +
+      '</div>';
+
+    document.body.appendChild(backdrop);
+    statusConfirmEl = backdrop;
+
+    var reason = document.getElementById('statusConfirmReason');
+    if (reason) reason.focus();
+
+    var cancelBtn  = document.getElementById('statusConfirmCancel');
+    var confirmBtn = document.getElementById('statusConfirmGo');
+
+    if (cancelBtn) cancelBtn.addEventListener('click', closeStatusConfirm);
+
+    if (confirmBtn) confirmBtn.addEventListener('click', function () {
+      var txt = reason ? (reason.value || '').trim() : '';
+      if (!txt) {
+        if (reason) reason.classList.add('is-error');
+        showToast('Reason is required', 2000);
+        if (reason) reason.focus();
+        return;
+      }
+      submitStatusChange(ctx, txt, confirmBtn);
+    });
+
+    // Backdrop click closes (status confirm is dismissable — unlike the
+    // edit form modal which is too important to lose to a misclick).
+    backdrop.addEventListener('click', function (ev) {
+      if (ev.target === backdrop) closeStatusConfirm();
+    });
+
+    // ESC closes.
+    backdrop.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape') {
+        ev.stopPropagation();
+        closeStatusConfirm();
+      }
+    });
+    document.addEventListener('keydown', function escOnce(ev) {
+      if (ev.key === 'Escape' && statusConfirmEl) {
+        closeStatusConfirm();
+        document.removeEventListener('keydown', escOnce);
+      }
+    });
+  }
+
+  /** Execute the status change: PATCH + audit + refresh + close. */
+  function submitStatusChange(ctx, reasonText, confirmBtn) {
+    if (statusConfirmSubmitting) return;
+    statusConfirmSubmitting = true;
+    confirmBtn.disabled = true;
+    var origLabel = confirmBtn.textContent;
+    confirmBtn.textContent = 'Working…';
+
+    var jsonHdrs = Object.assign({}, pcAuth.headers(), {
+      'Content-Type': 'application/json',
+      'Prefer':       'return=minimal'
+    });
+
+    AR.authFetch(
+      SB_REST + 'ar_invoices?id=eq.' + encodeURIComponent(ctx.invoiceId),
+      {
+        method:  'PATCH',
+        headers: jsonHdrs,
+        body:    JSON.stringify({ status: ctx.newStatus })
+      }
+    )
+    .then(function () {
+      return writeAuditLog({
+        table_name: 'ar_invoices',
+        record_id:  ctx.invoiceId,
+        action:     'status_change',
+        field_name: 'status',
+        old_value:  ctx.oldStatus,
+        new_value:  ctx.newStatus,
+        context: {
+          reason:           reasonText,
+          previous_status:  ctx.oldStatus,
+          voided_via:       'row_menu_' + ctx.newStatus
+        }
+      }).catch(function (auditErr) {
+        console.error('[AR] audit write failed for row-menu status_change on invoice ' +
+          ctx.invoiceId + ':', auditErr);
+      });
+    })
+    .then(function () {
+      reloadInvoices();
+      closeStatusConfirm();
+      var label = 'Updated';
+      if (ctx.newStatus === 'voided')   label = 'Voided';
+      if (ctx.newStatus === 'disputed') label = 'Marked disputed';
+      if (ctx.newStatus === 'open')     label = 'Restored';
+      showToast(label + ' ' + (ctx.invoiceNumber || ''), 2000);
+    })
+    .catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      console.error('[AR] status change failed:', e);
+      var msg = (e && e.message) ? e.message : 'Action failed';
+      if (msg.length > 140) msg = msg.substring(0, 140) + '…';
+      showToast('Failed · ' + msg, 4000);
+      // Re-enable for retry.
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = origLabel;
+      statusConfirmSubmitting = false;
+    });
+  }
+
+  // =====================================================================
+  // BOOT — gated by pcAuth.require()
+  // =====================================================================
+  function onAuthReady(user) {
+    document.body.classList.remove('pre-auth');
+
+    wireViewToggle();
+    wireModalClose();
+    wireFilters();
+    wireSorting();
+    wireShowOlder();
+    wireNewInvoiceButton();
+    wireRowClicks();
+    wireRowMenuDismissal();
+    wireRowMenuActions();
+    renderSortHeaders();
+
+    // Initial load: clients + venues for filter dropdowns, then the
+    // first invoice fetch with the default filter (open+partial, 12mo).
+    setLoading(true);
+    Promise.all([fetchClients(), fetchVenues()])
+      .then(function (results) {
+        state.clients = results[0] || [];
+        state.venues  = results[1] || [];
+        renderFilterDropdowns();
+        return reloadInvoices();
+      })
+      .catch(function (e) {
+        if (e && e.authFailed) { handleAuthFailure(); return; }
+        showToast('Could not load page data');
+        console.error('[AR] initial load failed:', e);
+        setLoading(false);
+      })
+      .then(function () { state.initialFetchDone = true; });
+
+    void user;
+  }
+
+  if (typeof pcAuth === 'undefined' || !pcAuth.require) {
+    document.body.innerHTML =
+      '<div style="padding:60px 22px;font-family:DM Sans,sans-serif;">' +
+      '<h1>Authentication unavailable</h1>' +
+      '<p>pc-auth.js failed to load. Check the network tab and ensure ' +
+      'the script is reachable at <code>/pc-auth.js</code>.</p>' +
+      '</div>';
+  } else {
+    pcAuth.require({
+      pageSlug: 'accounts-receivable',
+      onReady:  onAuthReady
+    });
+  }
+
+})();
+</script>
+
+</body>
+</html>
