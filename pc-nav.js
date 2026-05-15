@@ -56,6 +56,7 @@
     // Dashboards is a single direct link, not a dropdown.
     dashboards: { label: 'Staffing dashboard', href: '/dashboard/', slug: 'dashboard' },
     admin: [
+      { label: 'Accounts receivable',            href: '/accounts-receivable/',    slug: 'accounts-receivable' },
       { label: 'Event master list',              href: '/events-admin/',           slug: 'events-admin' },
       { label: 'User access',                    href: '/user-access/',            slug: 'user-access' },
       { label: 'Par levels',                     href: '/par-levels/',             slug: 'par-levels' },
@@ -63,8 +64,7 @@
       { label: 'Commission tracker',             href: '/commission-tracker/',     slug: 'commission-tracker' },
       { label: 'Item catalog',                   href: '/item-catalog/',           slug: 'item-catalog' },
       { label: 'Venue item profiles',            href: '/venue-item-profiles/',    slug: 'venue-item-profiles' },
-      { label: 'Bank review',          href: '/bank-review/',          slug: 'bank-review' },
-{ label: 'Venue roles',          href: '/manage-venue-roles/',   slug: 'manage-venue-roles' }
+      { label: 'Bank review',                    href: '/bank-review/',            slug: 'bank-review' }
     ]
   };
 
