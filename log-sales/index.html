@@ -4,20 +4,21 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Popcorn Chez — Log Sales</title>
+<!-- pc-auth.js MUST load before pc-nav.js per global-navigation-standards.md.
+     pc-nav.js owns the toolkit header bar, ribbon, and back-to-top button —
+     the legacy in-page <header> has been removed. -->
+<script src="/pc-auth.js"></script>
+<script src="/pc-nav.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f0ec; min-height: 100vh; }
-header { background: #fff; border-bottom: 1px solid #e8e8e4; padding: 0 32px; display: flex; align-items: center; justify-content: space-between; height: 64px; position: sticky; top: 0; z-index: 100; }
-.header-left { display: flex; align-items: center; gap: 16px; }
-.back-link { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #999; text-decoration: none; display: flex; align-items: center; gap: 6px; transition: color 0.15s; }
-.back-link:hover { color: #1a1a1a; }
-.hdivider { width: 1px; height: 20px; background: #e8e8e4; }
-.header-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
-.header-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: #1a1a1a; color: white; padding: 3px 8px; border-radius: 20px; }
-.header-right { display: flex; align-items: center; gap: 12px; }
-.header-user { font-size: 12px; color: #999; font-weight: 600; }
-.sign-out-btn { font-size: 11px; font-weight: 700; color: #999; background: none; border: 1px solid #e8e8e4; padding: 5px 12px; border-radius: 8px; cursor: pointer; font-family: inherit; transition: all 0.15s; }
-.sign-out-btn:hover { color: #1a1a1a; border-color: #1a1a1a; }
+
+/* Page-specific title strip — sits inside .page-body, below the global header+ribbon
+   injected by pc-nav.js. Replaces the legacy in-page <header>. */
+.page-title-bar { padding: 18px 4px 14px; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.page-title-bar h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+.page-title-bar .sub { font-size: 12px; color: #999; }
+.nightly-tag { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: #1a1a1a; color: white; padding: 3px 8px; border-radius: 20px; }
 
 .page-body { padding: 20px 16px 60px; }
 .container { max-width: 560px; margin: 0 auto; }
@@ -55,6 +56,23 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
 .photo-add-more:hover { border-color: #888; color: #888; }
 .photo-error-msg { font-size: 11px; color: #c0392b; margin-top: 4px; display: none; }
 .signin-note { font-size: 11px; color: #7A5C00; background: #FFFBEA; border: 1px solid #F5C400; border-radius: 7px; padding: 6px 10px; margin-top: 6px; }
+
+/* ============================================================
+ * DUAL CAPTURE BUTTONS — added May 15, 2026
+ * ------------------------------------------------------------
+ * Each photo section now exposes two explicit upload paths:
+ *   - "Take photo" button → opens camera directly (capture="environment")
+ *   - "Choose from library" button → opens native picker (no capture attr)
+ * The drop zone itself still opens the camera by default to preserve the
+ * one-tap fast path for venue staff at-the-stand. Managers receiving
+ * texted photos use the "Choose from library" button instead.
+ * ============================================================ */
+.capture-row { display: flex; gap: 8px; margin-top: 8px; }
+.capture-btn { flex: 1; padding: 9px 10px; background: white; border: 1px solid #ddd; border-radius: 9px; font-size: 12px; font-weight: 600; color: #333; cursor: pointer; font-family: inherit; display: flex; align-items: center; justify-content: center; gap: 6px; transition: all 0.15s; }
+.capture-btn:hover { border-color: #1a1a1a; color: #1a1a1a; background: #fafafa; }
+.capture-btn-icon { font-size: 14px; line-height: 1; }
+.capture-btn-camera { /* same neutral style as library; no special tint */ }
+.capture-btn-library { /* same neutral style as camera; no special tint */ }
 
 /* Edit submission modal */
 .em-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 1000; align-items: flex-start; justify-content: center; padding: 24px; overflow-y: auto; }
@@ -233,25 +251,27 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
 .no-event-warning { display: none; background: #FFFBEA; border: 1px solid #F5C400; border-radius: 10px; padding: 10px 13px; font-size: 12px; color: #7A5C00; margin-bottom: 13px; }
 
 @media (max-width: 600px) {
-  header { padding: 0 16px; height: auto; flex-wrap: wrap; padding: 12px 16px; gap: 10px; }
+  .capture-row { flex-direction: column; }
+  .capture-btn { padding: 11px 10px; }
 }
 </style>
 </head>
 <body>
 
-<header>
-  <div class="header-left">
-    <a href="/" class="back-link">&#8592; Toolkit</a>
-    <div class="hdivider"></div>
-    <span class="header-title">Log Sales</span>
-    <span class="header-badge">Nightly</span>
-  </div>
-  <div class="header-right" id="header-right"></div>
-</header>
+<!-- In-page <header> removed May 15, 2026. pc-nav.js injects the global
+     header bar (logo + MANAGER TOOLKIT pill on left, user + sign-out on
+     right) and the sticky People/Operations/Dashboards/Admin ribbon.
+     Page-specific title heading moves into .page-body below. -->
 
 <div class="page-body">
   <div class="container">
     <div class="left-col">
+      <div class="page-title-bar">
+        <h1>Log Sales</h1>
+        <span class="nightly-tag">Nightly</span>
+        <span class="sub">Register, units, and sign-in sheet for each stand</span>
+      </div>
+
       <div class="card" id="form-card">
         <div class="card-title">Log a sale</div>
         <div class="field">
@@ -292,6 +312,11 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
           <div class="field-note" style="font-size:11px;color:#aaa;margin-top:4px;">At least 1 required — include everyone who worked this stand</div>
         </div>
 
+        <!-- ============================================================
+             REGISTER PHOTOS — dual capture (camera + library)
+             The drop zone keeps the fast camera path; explicit buttons
+             below give managers the library option.
+             ============================================================ -->
         <div class="photo-section">
           <div class="photo-section-label">Register total photos <span>JPG or PNG only</span></div>
           <div class="photo-drop-zone" id="dz-register" onclick="dzClick('register')">
@@ -299,10 +324,22 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
             <div class="dz-prompt">Tap to add register photo</div>
             <div class="photo-previews" id="prev-register"></div>
           </div>
+          <div class="capture-row">
+            <button type="button" class="capture-btn capture-btn-camera" onclick="captureClick('register','camera')">
+              <span class="capture-btn-icon">&#128247;</span> Take photo
+            </button>
+            <button type="button" class="capture-btn capture-btn-library" onclick="captureClick('register','library')">
+              <span class="capture-btn-icon">&#128194;</span> Choose from library
+            </button>
+          </div>
           <div class="photo-error-msg" id="err-register"></div>
-          <input type="file" id="file-register" accept="image/*" capture="environment" multiple style="display:none;" onchange="handlePhotoSelect(this,'register')">
+          <!-- Two paired inputs: camera (capture="environment") and library (no capture attr).
+               Both share the same onchange handler so all queueing/preview logic is unchanged. -->
+          <input type="file" id="file-register-camera" accept="image/*" capture="environment" multiple style="display:none;" onchange="handlePhotoSelect(this,'register')">
+          <input type="file" id="file-register-library" accept="image/*" multiple style="display:none;" onchange="handlePhotoSelect(this,'register')">
         </div>
 
+        <!-- ============================================================ UNITS PHOTOS ============================================================ -->
         <div class="photo-section">
           <div class="photo-section-label">Units sold photos <span>Optional</span></div>
           <div class="photo-drop-zone" id="dz-units" onclick="dzClick('units')">
@@ -310,10 +347,20 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
             <div class="dz-prompt">Tap to add units sold photo</div>
             <div class="photo-previews" id="prev-units"></div>
           </div>
+          <div class="capture-row">
+            <button type="button" class="capture-btn capture-btn-camera" onclick="captureClick('units','camera')">
+              <span class="capture-btn-icon">&#128247;</span> Take photo
+            </button>
+            <button type="button" class="capture-btn capture-btn-library" onclick="captureClick('units','library')">
+              <span class="capture-btn-icon">&#128194;</span> Choose from library
+            </button>
+          </div>
           <div class="photo-error-msg" id="err-units"></div>
-          <input type="file" id="file-units" accept="image/*" capture="environment" multiple style="display:none;" onchange="handlePhotoSelect(this,'units')">
+          <input type="file" id="file-units-camera" accept="image/*" capture="environment" multiple style="display:none;" onchange="handlePhotoSelect(this,'units')">
+          <input type="file" id="file-units-library" accept="image/*" multiple style="display:none;" onchange="handlePhotoSelect(this,'units')">
         </div>
 
+        <!-- ============================================================ SIGN-IN SHEET ============================================================ -->
         <div class="photo-section">
           <div class="photo-section-label">Sign-in sheet <span>Enables AI staff matching</span></div>
           <div class="photo-drop-zone" id="dz-signin" onclick="dzClick('signin')">
@@ -321,9 +368,18 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
             <div class="dz-prompt">Tap to add sign-in sheet photo</div>
             <div class="photo-previews" id="prev-signin"></div>
           </div>
+          <div class="capture-row">
+            <button type="button" class="capture-btn capture-btn-camera" onclick="captureClick('signin','camera')">
+              <span class="capture-btn-icon">&#128247;</span> Take photo
+            </button>
+            <button type="button" class="capture-btn capture-btn-library" onclick="captureClick('signin','library')">
+              <span class="capture-btn-icon">&#128194;</span> Choose from library
+            </button>
+          </div>
           <div class="photo-error-msg" id="err-signin"></div>
           <div class="signin-note">Upload the sign-in sheet so staff names can be matched to tip shares</div>
-          <input type="file" id="file-signin" accept="image/*" capture="environment" multiple style="display:none;" onchange="handlePhotoSelect(this,'signin')">
+          <input type="file" id="file-signin-camera" accept="image/*" capture="environment" multiple style="display:none;" onchange="handlePhotoSelect(this,'signin')">
+          <input type="file" id="file-signin-library" accept="image/*" multiple style="display:none;" onchange="handlePhotoSelect(this,'signin')">
         </div>
 
         <div class="error-msg" id="error-msg"></div>
@@ -346,10 +402,11 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
         </div>
       </div>
 
-      <!-- Hidden file input used by the scoreboard's "Retake photo" / "Add sign-in photo"
-           buttons. Single shared input — pendingRetakeSaleId tracks which stand we're
-           replacing/adding for. -->
-      <input type="file" id="file-signin-retake" accept="image/*" capture="environment" style="display:none;" onchange="handleSigninRetakeSelect(this)">
+      <!-- Hidden file inputs for the scoreboard's "Retake photo" / "Add sign-in photo"
+           buttons. Two inputs: camera and library. pendingRetakeSaleId tracks which
+           stand we're replacing/adding for. -->
+      <input type="file" id="file-signin-retake-camera" accept="image/*" capture="environment" style="display:none;" onchange="handleSigninRetakeSelect(this)">
+      <input type="file" id="file-signin-retake-library" accept="image/*" style="display:none;" onchange="handleSigninRetakeSelect(this)">
     </div>
 
     <div class="right-col">
@@ -371,7 +428,6 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
   </div>
 </div>
 
-<script src="/pc-auth.js"></script>
 <script>
 var SUPA_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
 var EDGE_URL = SUPA_URL + '/functions/v1/parse-signin-sheet';
@@ -443,8 +499,26 @@ function isBlockedFile(file) {
   return ext === 'heic' || ext === 'heif' || mime.indexOf('heic') !== -1 || mime.indexOf('heif') !== -1;
 }
 
+/* ============================================================
+ * DROP ZONE / CAPTURE CLICK HANDLERS
+ * ------------------------------------------------------------
+ * dzClick() — tapping the big drop area defaults to camera. Same
+ *   behavior as before so venue staff one-tap workflow is preserved.
+ * captureClick(type, mode) — explicit button paths.
+ *   mode='camera'  → opens camera (capture="environment")
+ *   mode='library' → opens native picker (no capture attr)
+ * ============================================================ */
 function dzClick(type) {
-  if (photoQueues[type].length === 0) document.getElementById('file-' + type).click();
+  if (photoQueues[type].length === 0) {
+    document.getElementById('file-' + type + '-camera').click();
+  }
+}
+
+function captureClick(type, mode) {
+  // 'camera' or 'library' — picks the appropriate hidden input.
+  var inputId = 'file-' + type + '-' + mode;
+  var el = document.getElementById(inputId);
+  if (el) el.click();
 }
 
 function handlePhotoSelect(input, type) {
@@ -482,9 +556,11 @@ function renderPreviews(type) {
     thumb.appendChild(img); thumb.appendChild(btn);
     prevEl.appendChild(thumb);
   });
+  // The "+" plus-thumb defaults to camera. Library remains accessible via the
+  // explicit "Choose from library" button outside the drop zone.
   var addBtn = document.createElement('div');
   addBtn.className = 'photo-add-more'; addBtn.innerHTML = '+';
-  addBtn.onclick = function(e) { e.stopPropagation(); document.getElementById('file-' + type).click(); };
+  addBtn.onclick = function(e) { e.stopPropagation(); document.getElementById('file-' + type + '-camera').click(); };
   prevEl.appendChild(addBtn);
 }
 
@@ -539,7 +615,6 @@ async function fetchRoster() {
 // remove in a future cleanup pass.
 async function fetchAvailability(eventDate, venue) {
   try {
-    // Get event id for this date/venue
     var evRes = await fetch(SUPA_URL + '/rest/v1/events?event_date=eq.' + eventDate + '&venue=eq.' + venue + '&select=id&limit=1', { headers: apiHeaders() });
     var evRows = await evRes.json();
     if (!Array.isArray(evRows) || !evRows.length) return [];
@@ -550,19 +625,6 @@ async function fetchAvailability(eventDate, venue) {
   } catch(e) { return []; }
 }
 
-// Fetches the names placed at this stand for this event from position_assignments.
-// These are the employees Brian/Meg dragged into stand+role slots via the Position
-// Board. The AI uses these as the priority match pool for sign-in sheet reading,
-// which dramatically tightens confidence (matching against ~10 names known to be
-// at the stand vs. matching against 200+ active employees venue-wide).
-//
-// Returns an array of staff names. Empty array if no placements exist for this
-// stand — in which case the edge function falls back to the full-roster pool
-// (legacy behavior, no breaking change for stands that aren't on the Position
-// Board yet).
-//
-// Query joins through events!inner so we can filter by event_date, since
-// position_assignments uses event_id but we have date+venue+stand from the form.
 async function fetchExpectedNames(eventDate, venue, stand) {
   if (!eventDate || !venue || !stand) return [];
   try {
@@ -576,8 +638,6 @@ async function fetchExpectedNames(eventDate, venue, stand) {
     if (!res.ok) return [];
     var rows = await res.json();
     if (!Array.isArray(rows)) return [];
-    // Dedupe by name — same person at same stand twice is theoretically possible
-    // (different roles) but for AI matching purposes one entry suffices.
     var seen = {};
     var names = [];
     rows.forEach(function(r) {
@@ -586,22 +646,16 @@ async function fetchExpectedNames(eventDate, venue, stand) {
     });
     return names;
   } catch(e) {
-    // Non-blocking — if this fetch fails, we proceed without the priority pool.
-    // The edge function will use full-roster matching as a fallback.
     return [];
   }
 }
 
 async function parseSigninSheet(saleId, signinUrl, venue, tipAmount, staffCount, eventDate, stand) {
-  // Mark as processing immediately for UI feedback
   signinStatus[saleId] = { level: 'processing', label: 'Reading...' };
   updateSigninPill(saleId);
 
   try {
     var fetchedRoster = await fetchRoster();
-    // Fetch the priority match pool (people placed at this stand via the
-    // Position Board). When stand is missing or the stand has no placements,
-    // expectedNames is [] and the edge function falls back to full-roster.
     var expectedNames = await fetchExpectedNames(eventDate, venue, stand);
 
     var res = await fetch(EDGE_URL, {
@@ -634,39 +688,32 @@ async function parseSigninSheet(saleId, signinUrl, venue, tipAmount, staffCount,
   }
 
   updateSigninPill(saleId);
-  // Refresh full scoreboard after parse completes so finalize section updates too
   loadScoreboard();
 }
 
 // Tracks which sale_id the scoreboard's retake/add-signin button is currently
-// uploading for. The hidden input #file-signin-retake is shared across all stand
-// rows in the scoreboard, and pendingRetakeSaleId tells handleSigninRetakeSelect
-// which sale to attach the new photo to.
+// uploading for. Two shared inputs (camera + library) — pendingRetakeSaleId
+// tells handleSigninRetakeSelect which sale to attach the new photo to.
 var pendingRetakeSaleId = null;
 
-// Called by the "Add sign-in photo" / "Retake photo" buttons inside a stand-row
-// detail panel. Warns if there are existing verified/edited assignment rows that
-// would be wiped, opens the file picker, and stashes saleId for the onchange handler.
-function startSigninRetake(saleId) {
+function startSigninRetake(saleId, mode) {
+  // mode defaults to 'library' on May 15, 2026 — most scoreboard retakes happen
+  // away from the venue where library access matters more than camera. Drop zone
+  // and inline buttons still expose both options explicitly.
+  mode = mode || 'library';
   var existing = sbAssignments[saleId] || [];
-  // Any verified row indicates a manager confirmed it (either by accepting the AI
-  // read or by editing+saving). Re-parsing wipes everything, so warn first.
   var hasVerified = existing.some(function(a) { return a.verified; });
   if (hasVerified) {
     var confirmed = confirm('Re-reading this sign-in sheet will replace ALL existing names for this stand, including any manual edits or confirmations. Continue?');
     if (!confirmed) return;
   }
   pendingRetakeSaleId = saleId;
-  var input = document.getElementById('file-signin-retake');
-  // Reset value so the same file can be re-selected if needed
+  var inputId = 'file-signin-retake-' + mode;
+  var input = document.getElementById(inputId);
   input.value = '';
   input.click();
 }
 
-// Onchange handler for the shared retake file input. Validates the file, uploads
-// it to storage, writes a new sale_photos row, and re-fires parseSigninSheet
-// against the new URL. The edge function deletes existing assignments for the
-// sale_id and re-inserts, so previous AI rows are cleaned up automatically.
 async function handleSigninRetakeSelect(input) {
   if (!input.files || !input.files.length) return;
   var saleId = pendingRetakeSaleId;
@@ -674,39 +721,31 @@ async function handleSigninRetakeSelect(input) {
   if (!saleId) return;
   var file = input.files[0];
 
-  // HEIC block (matches the existing rule for the main upload form)
   if (isBlockedFile(file)) {
     alert('HEIC not supported — use JPG or PNG.');
     return;
   }
 
-  // Show inline "uploading" state in the stand-detail panel
   var detailEl = document.getElementById('sd-' + saleId);
   if (detailEl) {
     detailEl.innerHTML = '<div class="nr-loading"><span class="spinner"></span>Uploading new sign-in sheet...</div>';
   }
 
   try {
-    // Fetch the sale row — we need venue/tip_amount/staff_count/event_date for parseSigninSheet
     var sRes = await fetch(SUPA_URL + '/rest/v1/sales?id=eq.' + saleId + '&select=venue,tip_amount,staff_count,event_date,stand&limit=1', { headers: apiHeaders() });
     var sRows = await sRes.json();
     if (!Array.isArray(sRows) || !sRows.length) throw new Error('Sale not found');
     var sale = sRows[0];
 
-    // Upload the new file to storage
     var ext = file.name.split('.').pop();
     var path = saleId + '/signin_retake_' + Date.now() + '.' + ext;
     var newUrl = await uploadPhoto(file, path);
     if (!newUrl) throw new Error('Upload failed');
 
-    // Write a new sale_photos row (we leave any existing signin rows in place as
-    // audit trail — the edge function reads only the URL we pass it)
     await writeSalePhotos(saleId, 'signin', [newUrl]);
 
-    // Clear local cache so renderStandDetail re-fetches after parse completes
     delete sbAssignments[saleId];
 
-    // Show "reading" state, then fire the edge function
     if (detailEl) {
       detailEl.innerHTML = '<div class="nr-loading"><span class="spinner"></span>Reading sign-in sheet...</div>';
     }
@@ -719,9 +758,6 @@ async function handleSigninRetakeSelect(input) {
       sale.stand
     );
 
-    // parseSigninSheet calls loadScoreboard() at the end which redraws the row.
-    // Re-fetch and render the detail panel with the fresh assignments. The newly
-    // rebuilt scoreboard has the panel collapsed by default, so open it explicitly.
     var newDetailEl = document.getElementById('sd-' + saleId);
     if (newDetailEl) {
       newDetailEl.style.display = 'block';
@@ -730,7 +766,10 @@ async function handleSigninRetakeSelect(input) {
   } catch(e) {
     if (detailEl) {
       detailEl.innerHTML = '<div style="font-size:12px;color:#a00;">Error: ' + (e.message || String(e)) + '</div>' +
-        '<div class="stand-detail-action"><button class="sd-btn sd-btn-amber" onclick="event.stopPropagation();startSigninRetake(\'' + saleId + '\')">Try again</button></div>';
+        '<div class="stand-detail-action">' +
+        '<button class="sd-btn sd-btn-amber" onclick="event.stopPropagation();startSigninRetake(\'' + saleId + '\',\'camera\')">Try camera</button> ' +
+        '<button class="sd-btn sd-btn-blue" onclick="event.stopPropagation();startSigninRetake(\'' + saleId + '\',\'library\')">Try library</button>' +
+        '</div>';
     }
   }
 }
@@ -776,15 +815,11 @@ async function submitSale() {
     errEl.style.display = 'block'; return;
   }
 
-  // Race-safe duplicate re-check: another manager may have submitted in the
-  // last few seconds. Don't trust the cached existingSaleForStand; re-query.
   var btn = document.getElementById('submit-btn');
   btn.disabled = true;
   btn.textContent = 'Checking for duplicates...';
   await checkDuplicateStand(date, venue, stand);
   if (existingSaleForStand) {
-    // Warning is now visible. checkDuplicateStand already disabled the button
-    // and changed its label. No further action needed — manager must use Edit.
     return;
   }
 
@@ -818,7 +853,6 @@ async function submitSale() {
     await writeSalePhotos(saleId, 'units', unitsUrls);
     await writeSalePhotos(saleId, 'signin', signinUrls);
 
-    // Show success
     document.getElementById('form-card').style.display = 'none';
     document.getElementById('success-card').style.display = 'block';
     lastSubmittedSaleId = saleId;
@@ -830,11 +864,9 @@ async function submitSale() {
     var photoNote = photoSummary.length ? ' — ' + photoSummary.join(', ') : '';
     document.getElementById('success-detail').textContent = stand + ' at ' + (VENUE_LABELS[venue] || venue) + ' — $' + amount.toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 }) + photoNote;
 
-    // Trigger AI parse if sign-in sheet was uploaded — runs in background
     if (signinUrls.length > 0) {
       var aiEl = document.getElementById('ai-status');
       aiEl.textContent = 'Reading sign-in sheet...';
-      // Parse the first sign-in sheet photo (additional sheets handled in Tips Report)
       parseSigninSheet(saleId, signinUrls[0], venue, tipAmount, staffCount, date, stand).then(function() {
         var status = signinStatus[saleId];
         if (aiEl && status) {
@@ -875,7 +907,9 @@ function resetForm() {
   photoQueues = { register: [], units: [], signin: [] };
   ['register','units','signin'].forEach(function(t) {
     renderPreviews(t);
-    document.getElementById('file-' + t).value = '';
+    // Clear both camera and library inputs since the dual-capture refactor (May 15, 2026)
+    document.getElementById('file-' + t + '-camera').value = '';
+    document.getElementById('file-' + t + '-library').value = '';
     document.getElementById('err-' + t).style.display = 'none';
   });
   handleDateChange();
@@ -890,7 +924,6 @@ async function handleDateChange() {
   document.getElementById('event-auto').style.display = 'none';
   document.getElementById('stand-sel').innerHTML = '<option value="">Select venue first...</option>';
   eventsOnDate = [];
-  // Date change invalidates any active duplicate warning since stand selection resets
   clearDupWarning();
   if (!date) { document.getElementById('no-event-warning').style.display = 'none'; return; }
   noteEl.textContent = 'Loading events...';
@@ -939,13 +972,9 @@ function handleVenueChange() {
       }
     }
   }
-  // Venue change resets stand selection, so clear any existing dup warning
   clearDupWarning();
 }
 
-// Triggered when the stand dropdown changes. Queries the sales table for an existing
-// row matching date+venue+stand. If found, surfaces the duplicate-warning banner and
-// disables submit. If not, clears the warning.
 async function handleStandChange() {
   var date = document.getElementById('evt-date').value;
   var venue = document.getElementById('venue-sel').value;
@@ -954,7 +983,6 @@ async function handleStandChange() {
   await checkDuplicateStand(date, venue, stand);
 }
 
-// Core lookup. Sets existingSaleForStand and updates the warning UI accordingly.
 async function checkDuplicateStand(date, venue, stand) {
   try {
     var url = SUPA_URL + '/rest/v1/sales?event_date=eq.' + encodeURIComponent(date) +
@@ -970,7 +998,6 @@ async function checkDuplicateStand(date, venue, stand) {
       clearDupWarning();
     }
   } catch(e) {
-    // On error, clear the warning rather than block submit on a transient network blip
     clearDupWarning();
   }
 }
@@ -984,7 +1011,6 @@ function showDupWarning(sale, date, venue, stand) {
   var subAt = sale.submitted_at ? new Date(sale.submitted_at).toLocaleString() : '';
   var amount = parseFloat(sale.amount) || 0;
   metaEl.innerHTML = 'By ' + (sale.submitted_by || 'unknown') + (subAt ? ' &middot; ' + subAt : '') + ' &middot; $' + Math.round(amount).toLocaleString();
-  // Hide the edit button if the user can't edit (out of window, not admin)
   var canEdit = (pcAuth.isAdmin && pcAuth.isAdmin()) || (function() {
     var msPerDay = 86400000;
     var t = new Date(todayLocal() + 'T00:00:00').getTime();
@@ -1001,7 +1027,6 @@ function showDupWarning(sale, date, venue, stand) {
     metaEl.innerHTML += '<br><span style="color:#7A1A1A;">This sale is more than 4 days old. Only an admin can edit it.</span>';
   }
   document.getElementById('dup-warning').classList.add('show');
-  // Hard-block submit
   var submitBtn = document.getElementById('submit-btn');
   submitBtn.disabled = true;
   submitBtn.textContent = 'Already submitted — edit instead';
@@ -1011,15 +1036,12 @@ function clearDupWarning() {
   existingSaleForStand = null;
   document.getElementById('dup-warning').classList.remove('show');
   var submitBtn = document.getElementById('submit-btn');
-  // Only re-enable if the button isn't currently in a "saving" state from an active submit
   if (submitBtn.textContent === 'Already submitted — edit instead' || submitBtn.textContent === 'Submit Sale') {
     submitBtn.disabled = false;
     submitBtn.textContent = 'Submit Sale';
   }
 }
 
-// Called by the duplicate-warning's "Edit existing" button. Opens the edit modal
-// against the sale that's blocking the current submission.
 function openExistingFromDupWarning() {
   if (!existingSaleForStand) return;
   openEditModal(existingSaleForStand.id);
@@ -1039,21 +1061,24 @@ function siPillHtml(saleId, hasSigning) {
 }
 
 // Per-stand assignment state for scoreboard inline review
-var sbAssignments = {}; // saleId -> array of assignment objects
-var sbRemoved = {};     // assignmentId -> bool
-var sbEditing = {};     // saleId -> assignmentId being edited
-var sbAdding = {};      // saleId -> bool
-var sbPending = {};     // assignmentId -> {text, empId}
-var sbAddPending = {};  // saleId -> {text, empId}
+var sbAssignments = {};
+var sbRemoved = {};
+var sbEditing = {};
+var sbAdding = {};
+var sbPending = {};
+var sbAddPending = {};
 
 async function loadStandDetail(saleId, hasSigning) {
   var detailEl = document.getElementById('sd-' + saleId);
   if (!detailEl) return;
 
-  // If no sign-in sheet, show add photo prompt
   if (!hasSigning) {
+    // No sign-in sheet — surface both camera and library options.
     detailEl.innerHTML = '<div style="font-size:12px;color:#aaa;">No sign-in sheet uploaded.</div>' +
-      '<div class="stand-detail-action"><button class="sd-btn sd-btn-blue" onclick="event.stopPropagation();startSigninRetake(\'' + saleId + '\')">Add sign-in photo</button></div>';
+      '<div class="stand-detail-action">' +
+      '<button class="sd-btn sd-btn-blue" onclick="event.stopPropagation();startSigninRetake(\'' + saleId + '\',\'camera\')">Take photo</button> ' +
+      '<button class="sd-btn sd-btn-blue" onclick="event.stopPropagation();startSigninRetake(\'' + saleId + '\',\'library\')">Choose from library</button>' +
+      '</div>';
     return;
   }
 
@@ -1063,7 +1088,6 @@ async function loadStandDetail(saleId, hasSigning) {
     return;
   }
 
-  // Load assignments if not cached
   if (!sbAssignments[saleId]) {
     detailEl.innerHTML = '<div class="nr-loading">Loading names...</div>';
     try {
@@ -1078,7 +1102,6 @@ async function loadStandDetail(saleId, hasSigning) {
     }
   }
 
-  // Ensure roster is loaded for autocomplete
   if (!roster.length) {
     roster = await fetchRoster();
   }
@@ -1097,7 +1120,10 @@ function renderStandDetail(saleId) {
     var status = signinStatus[saleId];
     detailEl.innerHTML = '<div style="font-size:12px;color:#aaa;">' +
       (status && status.level === 'error' ? 'Could not read sign-in sheet — photo may be too blurry.' : 'No names found on sign-in sheet.') +
-      '</div><div class="stand-detail-action"><button class="sd-btn sd-btn-amber" onclick="event.stopPropagation();startSigninRetake(\'' + saleId + '\')">Retake photo</button></div>';
+      '</div><div class="stand-detail-action">' +
+      '<button class="sd-btn sd-btn-amber" onclick="event.stopPropagation();startSigninRetake(\'' + saleId + '\',\'camera\')">Retake photo</button> ' +
+      '<button class="sd-btn sd-btn-blue" onclick="event.stopPropagation();startSigninRetake(\'' + saleId + '\',\'library\')">Choose from library</button>' +
+      '</div>';
     return;
   }
 
@@ -1139,7 +1165,6 @@ function renderStandDetail(saleId) {
 
   html += '</div>';
 
-  // Add person row
   if (sbAdding[saleId]) {
     html += '<div class="nr-edit-panel">';
     html += '<input class="nr-input" id="nradd-' + saleId + '" placeholder="Search roster or type name..." oninput="sbOnAddInput(\'' + saleId + '\',this.value)" autocomplete="off">';
@@ -1152,7 +1177,6 @@ function renderStandDetail(saleId) {
     html += '<div class="nr-add-row" onclick="sbStartAdd(\'' + saleId + '\',event)"><div class="nr-add-icon">+</div>Add person</div>';
   }
 
-  // Confirm button
   if (!allVerified) {
     html += '<button class="nr-confirm-btn" onclick="sbConfirmAll(\'' + saleId + '\',event)">Confirm names &amp; save</button>';
   } else {
@@ -1161,7 +1185,6 @@ function renderStandDetail(saleId) {
 
   detailEl.innerHTML = html;
 
-  // Focus edit input if editing
   if (sbEditing[saleId]) {
     setTimeout(function() {
       var inp = document.getElementById('nrepi-' + sbEditing[saleId]);
@@ -1321,7 +1344,6 @@ function sbShowAc(acId, val, onSelect, onFree) {
   if (!ac) return;
   var q = val.trim().toLowerCase();
   if (!q) { ac.style.display = 'none'; return; }
-  // Tiered ranking: first-name prefix (0) > last-name prefix (1) > word-prefix anywhere (2) > substring (3)
   var scored = [];
   roster.forEach(function(r) {
     var fn = (r.first_name || '').toLowerCase();
@@ -1354,18 +1376,15 @@ function sbShowAc(acId, val, onSelect, onFree) {
 }
 
 function standDetailHtml(r, hasSigning) {
-  // Returns placeholder — actual content loaded async when stand row is tapped
   return '<div class="nr-loading" id="sd-inner-' + r.id + '">Tap to load names...</div>';
 }
 
-// Roles that should NOT count toward "stand" totals — these are virtual/cross-cutting
 var EXCLUDED_STANDS = ['Support Staff', 'Client Staffing Needs', 'Non-Event Labor'];
 
 async function fetchEventForecast(eventDate, venue) {
   var key = eventDate + '||' + venue;
   if (eventForecasts[key]) return eventForecasts[key];
   try {
-    // First find the event id
     var evRes = await fetch(
       SUPA_URL + '/rest/v1/events?event_date=eq.' + eventDate + '&venue=eq.' + venue + '&select=id&limit=1',
       { headers: apiHeaders() }
@@ -1385,7 +1404,6 @@ async function fetchEventForecast(eventDate, venue) {
       eventForecasts[key] = { hasForecast: false, byStand: {}, totalForecast: 0, totalStaff: 0, standsForecast: 0 };
       return eventForecasts[key];
     }
-    // Aggregate by stand: sum headcount, take any non-null sales_forecast
     var byStand = {};
     srRows.forEach(function(r) {
       if (!byStand[r.stand]) byStand[r.stand] = { staff: 0, forecast: null };
@@ -1394,7 +1412,6 @@ async function fetchEventForecast(eventDate, venue) {
         byStand[r.stand].forecast = parseFloat(r.sales_forecast) || 0;
       }
     });
-    // Compute venue totals — exclude virtual stands from staff count and stand count
     var totalForecast = 0, totalStaff = 0, standsForecast = 0;
     Object.keys(byStand).forEach(function(s) {
       if (byStand[s].forecast != null) totalForecast += byStand[s].forecast;
@@ -1432,7 +1449,6 @@ function renderRecapBlock(venue, eventDate, eventName, stands, forecast) {
   var existing = document.getElementById(blockId);
   if (!existing) return;
 
-  // Filter out excluded stands from logged-side counts
   var loggedStands = stands.filter(function(s) { return EXCLUDED_STANDS.indexOf(s.stand) === -1; });
   var actualSales = stands.reduce(function(s, r) { return s + (parseFloat(r.amount) || 0); }, 0);
   var actualStaff = loggedStands.reduce(function(s, r) { return s + (parseInt(r.staff_count) || 0); }, 0);
@@ -1441,7 +1457,6 @@ function renderRecapBlock(venue, eventDate, eventName, stands, forecast) {
   var hasForecast = forecast.hasForecast;
   var label = VENUE_LABELS[venue] || venue;
 
-  // Build subtitle line — event name + stand comparison
   var sub = '';
   if (eventName) sub += eventName;
   if (hasForecast && forecast.standsForecast > 0) {
@@ -1452,7 +1467,6 @@ function renderRecapBlock(venue, eventDate, eventName, stands, forecast) {
     sub += (sub ? ' · ' : '') + actualStandCount + ' stand' + (actualStandCount !== 1 ? 's' : '') + ' logged';
   }
 
-  // Build header right side
   var headRight = '<div class="recap-actual">$' + Math.round(actualSales).toLocaleString() + '</div>';
   if (hasForecast && forecast.totalForecast > 0) {
     var pctTxt = fmtVarPct(actualSales, forecast.totalForecast);
@@ -1473,10 +1487,8 @@ function renderRecapBlock(venue, eventDate, eventName, stands, forecast) {
   html += '<div class="recap-chev" id="rb-ch-' + venue + '">&#9654;</div>';
   html += '</div></div>';
 
-  // Body — only meaningful if we have any forecast data, else show actuals only
   html += '<div class="recap-body" id="rb-body-' + venue + '">';
   if (hasForecast) {
-    // Sales row
     if (forecast.totalForecast > 0) {
       var salesVarCls = actualSales >= forecast.totalForecast ? 'recap-var-up' : 'recap-var-down';
       html += '<div class="recap-row">';
@@ -1488,7 +1500,6 @@ function renderRecapBlock(venue, eventDate, eventName, stands, forecast) {
       html += '<div class="recap-cell"><div class="recap-cell-label">Actual</div><div class="recap-cell-val">$' + Math.round(actualSales).toLocaleString() + '</div></div>';
       html += '</div></div>';
     }
-    // Labor row
     if (forecast.totalStaff > 0) {
       var laborDiff = actualStaff - forecast.totalStaff;
       var laborVarCls = laborDiff === 0 ? 'recap-var-up' : 'recap-var-down';
@@ -1502,10 +1513,8 @@ function renderRecapBlock(venue, eventDate, eventName, stands, forecast) {
       html += '<div class="recap-cell"><div class="recap-cell-label">Logged</div><div class="recap-cell-val">' + actualStaff + ' staff</div></div>';
       html += '</div></div>';
     }
-    // Per-stand breakdown
     html += '<div class="recap-stands">';
     html += '<div class="recap-stands-label">By stand</div>';
-    // Build a unified set of stand names from both forecast and actuals
     var allStandNames = {};
     Object.keys(forecast.byStand).forEach(function(s) {
       if (EXCLUDED_STANDS.indexOf(s) !== -1) return;
@@ -1558,7 +1567,6 @@ function renderRecapBlock(venue, eventDate, eventName, stands, forecast) {
     }
     html += '</div>';
   } else {
-    // No forecast at all — just show what we have
     html += '<div style="font-size:12px;color:#888;padding:6px 0;">No forecast was submitted in Event Planning for this venue. Showing actuals only:</div>';
     html += '<div class="recap-cells" style="margin-top:8px;">';
     html += '<div class="recap-cell"><div class="recap-cell-label">Actual sales</div><div class="recap-cell-val">$' + Math.round(actualSales).toLocaleString() + '</div></div>';
@@ -1620,7 +1628,6 @@ async function loadScoreboard() {
       return;
     }
 
-    // Fetch sign-in photo presence
     var saleIds = rows.map(function(r) { return r.id; });
     var signinHas = {};
     try {
@@ -1643,7 +1650,6 @@ async function loadScoreboard() {
     if (grandTips > 0) evtText += (evtText ? ' — ' : '') + 'Tips: $' + Math.round(grandTips).toLocaleString();
     document.getElementById('scoreboard-event').textContent = evtText;
 
-    // Group by venue
     var byVenue = {};
     rows.forEach(function(r) {
       if (!byVenue[r.venue]) byVenue[r.venue] = [];
@@ -1689,7 +1695,6 @@ async function loadScoreboard() {
         html += '<div class="stand-row-name">' + r.stand + '</div>';
         if (staffLabel) html += '<div class="stand-row-meta">' + staffLabel + '</div>';
         if (r.submitted_by) html += '<div class="stand-row-submitter">by ' + r.submitted_by + '</div>';
-        // Edit link — visible if user can edit (4-day window for managers, anytime for admins)
         var canEdit = (pcAuth.isAdmin && pcAuth.isAdmin()) || (function() {
           if (!r.event_date) return false;
           var msPerDay = 86400000;
@@ -1717,7 +1722,6 @@ async function loadScoreboard() {
 
     document.getElementById('scoreboard-venues').innerHTML = html;
 
-    // Build recap section (forecast vs actual)
     var recapHtml = '';
     venueEntries.forEach(function(entry) {
       recapHtml += '<div class="recap-block" id="rb-' + entry[0] + '"></div>';
@@ -1725,7 +1729,6 @@ async function loadScoreboard() {
     document.getElementById('recap-blocks').innerHTML = recapHtml;
     document.getElementById('recap-section').style.display = 'block';
 
-    // Fetch forecasts and render each block (DOM elements now exist in the document)
     venueEntries.forEach(function(entry) {
       var venue = entry[0];
       var stands = entry[1];
@@ -1743,11 +1746,9 @@ async function loadScoreboard() {
 pcAuth.require({
   pageSlug: 'log-sales',
   onReady: function(user) {
-    var el = document.getElementById('header-right');
-    if (el && user) {
-      el.innerHTML = '<span class="header-user">' + (user.display_name || user.email) + '</span>' +
-        '<button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
-    }
+    // Header user-name and sign-out are now owned by pc-nav.js. The legacy
+    // #header-right population is gone — pc-nav reads pcAuth and renders the
+    // user name into its own injected header bar.
     document.getElementById('evt-date').value = todayLocal();
     handleDateChange();
     loadScoreboard();
@@ -1760,7 +1761,8 @@ pcAuth.require({
      from the success card. Lets a manager modify amount/tips/staff/event_name and
      add/remove photos in any of the three categories. Re-fires the AI parse if a
      new sign-in sheet photo was added. Gated by 4-day calendar window for managers,
-     unlimited for admins. -->
+     unlimited for admins.
+     z-index: 1000 — sits above pc-nav.js header (z-index: 900). Verified May 15. -->
 <div class="em-overlay" id="em-overlay" onclick="emOverlayClick(event)">
   <div class="em-modal" onclick="event.stopPropagation()">
     <div class="em-head">
@@ -1773,7 +1775,6 @@ pcAuth.require({
 
     <div id="em-window-warn-row"></div>
 
-    <!-- Read-only context (date, venue, stand) — these aren't editable here -->
     <div class="em-readonly" id="em-context"></div>
 
     <div id="em-form" style="display:none;">
@@ -1794,41 +1795,56 @@ pcAuth.require({
         <div class="field-note">At least 1 required</div>
       </div>
 
-      <!-- Register photos -->
+      <!-- Register photos — dual capture -->
       <div class="photo-section">
         <div class="photo-section-label">Register total photos <span>JPG or PNG only</span></div>
         <div class="em-photos-existing" id="em-photos-register"></div>
-        <div class="photo-drop-zone" id="em-dz-register" onclick="document.getElementById('em-file-register').click()">
-          <div class="dz-icon">+</div>
-          <div class="dz-prompt">Tap to add register photo</div>
+        <div class="capture-row">
+          <button type="button" class="capture-btn capture-btn-camera" onclick="document.getElementById('em-file-register-camera').click()">
+            <span class="capture-btn-icon">&#128247;</span> Take photo
+          </button>
+          <button type="button" class="capture-btn capture-btn-library" onclick="document.getElementById('em-file-register-library').click()">
+            <span class="capture-btn-icon">&#128194;</span> Choose from library
+          </button>
         </div>
         <div class="photo-error-msg" id="em-err-register"></div>
-        <input type="file" id="em-file-register" accept="image/*" capture="environment" multiple style="display:none;" onchange="emHandlePhotoSelect(this,'register')">
+        <input type="file" id="em-file-register-camera" accept="image/*" capture="environment" multiple style="display:none;" onchange="emHandlePhotoSelect(this,'register')">
+        <input type="file" id="em-file-register-library" accept="image/*" multiple style="display:none;" onchange="emHandlePhotoSelect(this,'register')">
       </div>
 
-      <!-- Units photos -->
+      <!-- Units photos — dual capture -->
       <div class="photo-section">
         <div class="photo-section-label">Units sold photos <span>Optional</span></div>
         <div class="em-photos-existing" id="em-photos-units"></div>
-        <div class="photo-drop-zone" id="em-dz-units" onclick="document.getElementById('em-file-units').click()">
-          <div class="dz-icon">+</div>
-          <div class="dz-prompt">Tap to add units photo</div>
+        <div class="capture-row">
+          <button type="button" class="capture-btn capture-btn-camera" onclick="document.getElementById('em-file-units-camera').click()">
+            <span class="capture-btn-icon">&#128247;</span> Take photo
+          </button>
+          <button type="button" class="capture-btn capture-btn-library" onclick="document.getElementById('em-file-units-library').click()">
+            <span class="capture-btn-icon">&#128194;</span> Choose from library
+          </button>
         </div>
         <div class="photo-error-msg" id="em-err-units"></div>
-        <input type="file" id="em-file-units" accept="image/*" capture="environment" multiple style="display:none;" onchange="emHandlePhotoSelect(this,'units')">
+        <input type="file" id="em-file-units-camera" accept="image/*" capture="environment" multiple style="display:none;" onchange="emHandlePhotoSelect(this,'units')">
+        <input type="file" id="em-file-units-library" accept="image/*" multiple style="display:none;" onchange="emHandlePhotoSelect(this,'units')">
       </div>
 
-      <!-- Sign-in photos -->
+      <!-- Sign-in photos — dual capture -->
       <div class="photo-section">
         <div class="photo-section-label">Sign-in sheet <span id="em-signin-warn"></span></div>
         <div class="em-photos-existing" id="em-photos-signin"></div>
-        <div class="photo-drop-zone" id="em-dz-signin" onclick="document.getElementById('em-file-signin').click()">
-          <div class="dz-icon">+</div>
-          <div class="dz-prompt">Tap to add sign-in photo</div>
+        <div class="capture-row">
+          <button type="button" class="capture-btn capture-btn-camera" onclick="document.getElementById('em-file-signin-camera').click()">
+            <span class="capture-btn-icon">&#128247;</span> Take photo
+          </button>
+          <button type="button" class="capture-btn capture-btn-library" onclick="document.getElementById('em-file-signin-library').click()">
+            <span class="capture-btn-icon">&#128194;</span> Choose from library
+          </button>
         </div>
         <div class="photo-error-msg" id="em-err-signin"></div>
         <div class="signin-note">Adding a new sign-in sheet will re-read names with AI and replace any existing parsed names for this stand.</div>
-        <input type="file" id="em-file-signin" accept="image/*" capture="environment" multiple style="display:none;" onchange="emHandlePhotoSelect(this,'signin')">
+        <input type="file" id="em-file-signin-camera" accept="image/*" capture="environment" multiple style="display:none;" onchange="emHandlePhotoSelect(this,'signin')">
+        <input type="file" id="em-file-signin-library" accept="image/*" multiple style="display:none;" onchange="emHandlePhotoSelect(this,'signin')">
       </div>
 
       <div class="error-msg" id="em-error-msg"></div>
@@ -1845,21 +1861,17 @@ pcAuth.require({
 
 <script>
 // ── Edit submission modal ───────────────────────────────────────────────────
-// State for the edit modal. Populated by openEditModal, cleared by closeEditModal.
 var emState = {
-  saleId: null,           // the sale being edited
-  sale: null,             // the sale row from sales table
-  originalPhotos: { register: [], units: [], signin: [] },  // sale_photos rows as fetched
-  photosToDelete: {},     // map of sale_photos.id -> true (marked for deletion on save)
-  photosToAdd: { register: [], units: [], signin: [] }      // File objects queued for upload
+  saleId: null,
+  sale: null,
+  originalPhotos: { register: [], units: [], signin: [] },
+  photosToDelete: {},
+  photosToAdd: { register: [], units: [], signin: [] }
 };
 
-// Helper: is the current user allowed to edit this sale?
-// Admins always can. Managers can within 4 calendar days of event_date.
 function emCanEdit(eventDate) {
   if (pcAuth.isAdmin && pcAuth.isAdmin()) return true;
   if (!eventDate) return false;
-  // Compare calendar days, not millis — both expressed as YYYY-MM-DD
   var today = todayLocal();
   var msPerDay = 86400000;
   var t = new Date(today + 'T00:00:00').getTime();
@@ -1870,7 +1882,6 @@ function emCanEdit(eventDate) {
 }
 
 async function openEditModal(saleId) {
-  // Reset state
   emState.saleId = saleId;
   emState.sale = null;
   emState.originalPhotos = { register: [], units: [], signin: [] };
@@ -1886,14 +1897,12 @@ async function openEditModal(saleId) {
   document.getElementById('em-subtitle').textContent = '';
 
   try {
-    // Fetch the sale row
     var sRes = await fetch(SUPA_URL + '/rest/v1/sales?id=eq.' + saleId + '&select=*&limit=1', { headers: apiHeaders() });
     var sRows = await sRes.json();
     if (!Array.isArray(sRows) || !sRows.length) throw new Error('Sale not found');
     var sale = sRows[0];
     emState.sale = sale;
 
-    // Edit window check
     if (!emCanEdit(sale.event_date)) {
       document.getElementById('em-context').innerHTML = 'Editing is locked for this sale.';
       document.getElementById('em-blocked-row').innerHTML =
@@ -1902,7 +1911,6 @@ async function openEditModal(saleId) {
       return;
     }
 
-    // Show a soft warning if we're inside the window but close to the edge
     var today = todayLocal();
     var msPerDay = 86400000;
     var t = new Date(today + 'T00:00:00').getTime();
@@ -1914,7 +1922,6 @@ async function openEditModal(saleId) {
         (4 - days) + ' more day' + (4 - days === 1 ? '' : 's') + '.</div>';
     }
 
-    // Fetch the photos
     var pRes = await fetch(SUPA_URL + '/rest/v1/sale_photos?sale_id=eq.' + saleId + '&select=*&order=photo_type,sort_order', { headers: apiHeaders() });
     var pRows = await pRes.json();
     if (Array.isArray(pRows)) {
@@ -1922,8 +1929,6 @@ async function openEditModal(saleId) {
         if (emState.originalPhotos[p.photo_type]) emState.originalPhotos[p.photo_type].push(p);
       });
     }
-    // Backward compat: if no rows in sale_photos but legacy photo_url / units_photo_url exist,
-    // surface them as pseudo-rows. Marking them for delete will set the column to null.
     if (emState.originalPhotos.register.length === 0 && sale.photo_url) {
       emState.originalPhotos.register.push({ id: 'legacy-register', photo_url: sale.photo_url, photo_type: 'register', _legacy: true });
     }
@@ -1931,7 +1936,6 @@ async function openEditModal(saleId) {
       emState.originalPhotos.units.push({ id: 'legacy-units', photo_url: sale.units_photo_url, photo_type: 'units', _legacy: true });
     }
 
-    // Populate form
     var dateStr = sale.event_date ? (function(){ var p=sale.event_date.split('-'); return p[1]+'/'+p[2]+'/'+p[0]; })() : '';
     document.getElementById('em-subtitle').textContent = (VENUE_LABELS[sale.venue] || sale.venue) + ' · ' + sale.stand + ' · ' + dateStr;
     document.getElementById('em-context').innerHTML =
@@ -1951,25 +1955,24 @@ async function openEditModal(saleId) {
 
 function closeEditModal() {
   document.getElementById('em-overlay').classList.remove('open');
-  // Clear queued file inputs so reopening is clean
+  // Clear all six edit-modal file inputs (camera + library × 3 types) — dual-capture refactor (May 15, 2026)
   ['register','units','signin'].forEach(function(t) {
-    var input = document.getElementById('em-file-' + t);
-    if (input) input.value = '';
+    var cam = document.getElementById('em-file-' + t + '-camera');
+    var lib = document.getElementById('em-file-' + t + '-library');
+    if (cam) cam.value = '';
+    if (lib) lib.value = '';
   });
   emState.saleId = null;
 }
 
 function emOverlayClick(evt) {
-  // Click on backdrop (outside the modal) closes it
   if (evt.target.id === 'em-overlay') closeEditModal();
 }
 
-// Render existing photo thumbs + queued-add thumbs for all three categories
 function emRenderPhotos() {
   ['register','units','signin'].forEach(function(type) {
     var container = document.getElementById('em-photos-' + type);
     var html = '';
-    // Existing photos (from sale_photos or legacy columns)
     emState.originalPhotos[type].forEach(function(p) {
       var marked = !!emState.photosToDelete[p.id];
       html += '<div class="em-photo-thumb' + (marked ? ' marked-delete' : '') + '">';
@@ -1981,7 +1984,6 @@ function emRenderPhotos() {
       }
       html += '</div>';
     });
-    // Queued additions (File objects, render as object URL previews)
     emState.photosToAdd[type].forEach(function(file, idx) {
       var url = URL.createObjectURL(file);
       html += '<div class="em-photo-thumb">';
@@ -1991,7 +1993,6 @@ function emRenderPhotos() {
     });
     container.innerHTML = html;
   });
-  // Sign-in warning if any signin photos are queued for addition or marked-delete affects parse
   var signinChange = emState.photosToAdd.signin.length > 0;
   document.getElementById('em-signin-warn').textContent = signinChange ? 'New photo will trigger AI re-read' : '';
 }
@@ -2037,7 +2038,6 @@ async function submitEdit() {
   var saleId = emState.saleId;
   if (!saleId || !sale) return;
 
-  // Validate
   var amountRaw = document.getElementById('em-amount').value;
   var tipAmountRaw = document.getElementById('em-tip-amount').value;
   var staffCountRaw = document.getElementById('em-staff-count').value;
@@ -2056,7 +2056,6 @@ async function submitEdit() {
     errEl.textContent = 'Staff count is required (at least 1).'; errEl.style.display = 'block'; return;
   }
 
-  // Re-check the edit window in case the user kept the modal open across midnight
   if (!emCanEdit(sale.event_date)) {
     errEl.textContent = 'Edit window has expired (>4 days from event date). Only an admin can edit now.';
     errEl.style.display = 'block';
@@ -2068,7 +2067,6 @@ async function submitEdit() {
   btn.textContent = 'Saving...';
 
   try {
-    // ── 1. Upload any queued new photos ──────────────────────────────────
     var newUrlsByType = { register: [], units: [], signin: [] };
     for (var type of ['register','units','signin']) {
       var files = emState.photosToAdd[type];
@@ -2080,9 +2078,7 @@ async function submitEdit() {
       }
     }
 
-    // ── 2. Delete photos marked for removal ──────────────────────────────
-    // Real sale_photos rows: DELETE by id. Legacy photos: handled in step 3 (PATCH columns to null).
-    var legacyClears = {}; // { photo_url: null, units_photo_url: null }
+    var legacyClears = {};
     var idsToDelete = [];
     Object.keys(emState.photosToDelete).forEach(function(pid) {
       if (pid === 'legacy-register') legacyClears.photo_url = null;
@@ -2090,7 +2086,6 @@ async function submitEdit() {
       else idsToDelete.push(pid);
     });
     if (idsToDelete.length > 0) {
-      // Delete in bulk via id=in.()
       var delHdrs = apiHeaders();
       delHdrs['Prefer'] = 'return=minimal';
       await fetch(SUPA_URL + '/rest/v1/sale_photos?id=in.(' + idsToDelete.join(',') + ')', {
@@ -2098,7 +2093,6 @@ async function submitEdit() {
       });
     }
 
-    // ── 3. PATCH the sales row ──────────────────────────────────────────
     var patchBody = {
       amount: amount,
       tip_amount: tipAmount,
@@ -2113,19 +2107,13 @@ async function submitEdit() {
     });
     if (!patchRes.ok) throw new Error('Failed to save: ' + (await patchRes.text()));
 
-    // ── 4. Insert new sale_photos rows ──────────────────────────────────
     for (var type2 of ['register','units','signin']) {
       if (newUrlsByType[type2].length > 0) {
         await writeSalePhotos(saleId, type2, newUrlsByType[type2]);
       }
     }
 
-    // ── 5. Re-fire AI parse if a new sign-in sheet was added ─────────────
-    // Run in background — same pattern as submitSale. Closing the modal
-    // immediately gives the user feedback faster, and the scoreboard's
-    // signin pill will update as the parse completes.
     if (newUrlsByType.signin.length > 0) {
-      // Clear assignments cache so the scoreboard reloads fresh
       delete sbAssignments[saleId];
       parseSigninSheet(saleId, newUrlsByType.signin[0], sale.venue, tipAmount, staffCount, sale.event_date, sale.stand)
         .catch(function() { /* swallow — UI shows status pill */ });
