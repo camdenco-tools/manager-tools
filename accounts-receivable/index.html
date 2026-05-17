@@ -32,12 +32,10 @@
 
   /* ========================================================================
      PAGE-TITLE ROW
-     Sticky below the pc-nav header (64px) + ribbon (~42px). z-index 800.
+     NOTE: previously sticky — removed so it scrolls with the content.
+     The pc-nav injected header + ribbon remain sticky on their own.
      ======================================================================== */
   .page-title-row {
-    position: sticky;
-    top: 106px;
-    z-index: 800;
     background: #faf9f6;
     border-bottom: 1px solid #e8e8e4;
     padding: 18px 22px 16px;
@@ -142,52 +140,153 @@
   .btn-primary:hover { background: #2c2c2a; }
   .btn-primary:disabled { background: #b4b2a9; cursor: not-allowed; }
 
-  /* Aging strip — 4 cards */
-  .ar-aging-strip {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 10px;
-    margin-bottom: 18px;
-  }
-  .aging-card {
+  /* ========================================================================
+     AGING MATRIX
+     Rows = clients with non-zero open/partial balance, columns = buckets,
+     plus a TOTAL column and TOTAL row. Clicking a dollar amount filters
+     the invoice table below to that client + bucket.
+     ======================================================================== */
+  .aging-matrix-wrap {
     background: #fff;
     border: 0.5px solid #e0dfd8;
     border-radius: 10px;
-    padding: 14px 16px;
+    overflow: hidden;
+    margin-bottom: 14px;
   }
-  .aging-card.is-warning {
-    background: #fef6ec;
-    border-color: #f3d9a8;
+  .aging-matrix-head {
+    padding: 12px 16px;
+    border-bottom: 1px solid #f0efe8;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
   }
-  .aging-card.is-danger {
-    background: #fceaea;
-    border-color: #f0a8a8;
-  }
-  .aging-card .aging-label {
-    font-size: 11px;
-    font-weight: 500;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: #888;
-    margin-bottom: 6px;
-  }
-  .aging-card.is-warning .aging-label { color: #854F0B; }
-  .aging-card.is-danger  .aging-label { color: #791F1F; }
-  .aging-card .aging-amount {
-    font-size: 22px;
-    font-weight: 500;
+  .aging-matrix-title {
+    font-size: 13px;
+    font-weight: 600;
     color: #1a1a1a;
-    font-variant-numeric: tabular-nums;
   }
-  .aging-card.is-warning .aging-amount { color: #633806; }
-  .aging-card.is-danger  .aging-amount { color: #501313; }
-  .aging-card .aging-meta {
+  .aging-matrix-subtitle {
     font-size: 12px;
     color: #888;
-    margin-top: 2px;
   }
-  .aging-card.is-warning .aging-meta { color: #854F0B; }
-  .aging-card.is-danger  .aging-meta { color: #791F1F; }
+  .aging-matrix-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .aging-matrix-table thead tr {
+    background: #f6f6f3;
+    border-bottom: 1px solid #e0dfd8;
+  }
+  .aging-matrix-table th {
+    padding: 10px 14px;
+    font-weight: 500;
+    color: #555;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    text-align: right;
+    white-space: nowrap;
+  }
+  .aging-matrix-table th.col-client { text-align: left; }
+  .aging-matrix-table th.col-total  { color: #1a1a1a; }
+  .aging-matrix-table th.is-warning { color: #854F0B; }
+  .aging-matrix-table th.is-danger  { color: #791F1F; }
+
+  .aging-matrix-table tbody tr {
+    border-bottom: 1px solid #f0efe8;
+  }
+  .aging-matrix-table tbody tr:last-child { border-bottom: 0; }
+  .aging-matrix-table tbody tr.is-total-row {
+    background: #f6f6f3;
+    border-top: 2px solid #1a1a1a;
+    font-weight: 700;
+  }
+  .aging-matrix-table tbody tr.is-total-row td,
+  .aging-matrix-table tbody tr.is-total-row .aging-cell-btn {
+    font-weight: 700;
+  }
+  .aging-matrix-table td {
+    padding: 11px 14px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .aging-matrix-table td.col-client {
+    text-align: left;
+    font-weight: 500;
+    color: #1a1a1a;
+  }
+  .aging-matrix-table td.is-zero { color: #c8c6bd; }
+  .aging-matrix-table td.col-total { font-weight: 600; color: #1a1a1a; }
+
+  /* Clickable cell button — flush styling so the cell reads as a number,
+     but with a hover affordance to make it discoverable. */
+  .aging-cell-btn {
+    background: transparent;
+    border: 0;
+    font-family: inherit;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    color: inherit;
+    padding: 2px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.12s ease;
+  }
+  .aging-cell-btn:hover {
+    background: #e6f1fb;
+    color: #0C447C;
+  }
+  .aging-cell-btn:disabled {
+    cursor: default;
+    opacity: 1;
+  }
+  .aging-cell-btn:disabled:hover {
+    background: transparent;
+    color: inherit;
+  }
+  .aging-cell-btn.is-warning:hover { background: #fef6ec; color: #633806; }
+  .aging-cell-btn.is-danger:hover  { background: #fceaea; color: #501313; }
+
+  .aging-empty {
+    padding: 40px 20px;
+    text-align: center;
+    color: #888;
+    font-size: 13px;
+  }
+
+  /* Drill-down pill — shows when a cell click has filtered the table */
+  .ar-drilldown-pill-wrap {
+    margin-bottom: 12px;
+  }
+  .ar-drilldown-pill-wrap[hidden] { display: none; }
+  .ar-drilldown-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #e6f1fb;
+    color: #0C447C;
+    border: 1px solid #b9d6f0;
+    border-radius: 20px;
+    padding: 6px 8px 6px 14px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .ar-drilldown-pill strong { font-weight: 600; }
+  .ar-drilldown-clear {
+    background: transparent;
+    border: 0;
+    color: #0C447C;
+    font-size: 16px;
+    line-height: 1;
+    padding: 2px 6px;
+    border-radius: 50%;
+    cursor: pointer;
+  }
+  .ar-drilldown-clear:hover { background: #cfe1f3; }
 
   /* Filter row */
   .ar-filter-row {
@@ -964,28 +1063,41 @@
         <button type="button" id="btnNewInvoice" class="btn-primary">+ New invoice</button>
       </div>
 
-      <!-- Aging strip -->
-      <div class="ar-aging-strip" id="agingStrip" aria-label="Aging buckets">
-        <div class="aging-card" data-bucket="current">
-          <div class="aging-label">Current</div>
-          <div class="aging-amount" id="agingAmount-current">$0</div>
-          <div class="aging-meta"   id="agingMeta-current">0 invoices · 0–30d</div>
+      <!-- Aging matrix — replaces the 4-bubble strip -->
+      <div class="aging-matrix-wrap" id="agingMatrixWrap" aria-label="A/R aging by client">
+        <div class="aging-matrix-head">
+          <div>
+            <div class="aging-matrix-title">A/R aging by client</div>
+            <div class="aging-matrix-subtitle" id="agingMatrixSubtitle">Loading…</div>
+          </div>
+          <div class="aging-matrix-subtitle">Click any amount to filter the list below</div>
         </div>
-        <div class="aging-card" data-bucket="1-30">
-          <div class="aging-label">1–30</div>
-          <div class="aging-amount" id="agingAmount-1-30">$0</div>
-          <div class="aging-meta"   id="agingMeta-1-30">0 invoices · 31–60d</div>
+        <table class="aging-matrix-table" id="agingMatrixTable">
+          <thead>
+            <tr>
+              <th class="col-client">Client</th>
+              <th>Current</th>
+              <th class="is-warning">1–30</th>
+              <th class="is-warning">31–60</th>
+              <th class="is-danger">61–90+</th>
+              <th class="col-total">Total</th>
+            </tr>
+          </thead>
+          <tbody id="agingMatrixBody"></tbody>
+        </table>
+        <div class="aging-empty" id="agingMatrixEmpty" hidden>
+          No open or partially-paid invoices.
         </div>
-        <div class="aging-card" data-bucket="31-60">
-          <div class="aging-label">31–60</div>
-          <div class="aging-amount" id="agingAmount-31-60">$0</div>
-          <div class="aging-meta"   id="agingMeta-31-60">0 invoices · 61–90d</div>
-        </div>
-        <div class="aging-card" data-bucket="61-90+">
-          <div class="aging-label">61–90+</div>
-          <div class="aging-amount" id="agingAmount-61-90+">$0</div>
-          <div class="aging-meta"   id="agingMeta-61-90+">0 invoices · 91d+</div>
-        </div>
+      </div>
+
+      <!-- Drill-down filter pill (shown when a matrix cell is clicked) -->
+      <div class="ar-drilldown-pill-wrap" id="drilldownPillWrap" hidden>
+        <span class="ar-drilldown-pill">
+          Showing <strong id="drilldownClientLabel">All clients</strong>
+          <span>·</span>
+          <strong id="drilldownBucketLabel">Current</strong>
+          <button type="button" class="ar-drilldown-clear" id="drilldownClear" aria-label="Clear filter">×</button>
+        </span>
       </div>
 
       <!-- Filter row -->
@@ -1097,7 +1209,20 @@
     // Resets to true whenever any filter changes.
     dateBoundActive: true,
 
-    initialFetchDone: false  // gate against concurrent re-fetches during boot
+    initialFetchDone: false, // gate against concurrent re-fetches during boot
+
+    // Aging-matrix drill-down state. When a cell is clicked:
+    //   - drilldown.clientId is set (or 'all' for total-row clicks)
+    //   - drilldown.bucket is one of 'current' | '1-30' | '31-60' | '61-90+' | 'total'
+    //   - filterClient + filterStatus are updated to scope the list
+    //   - the small pill shows so the user can clear back to defaults
+    drilldown: {
+      active: false,
+      clientId: 'all',
+      bucket:   'total',
+      clientLabel: 'All clients',
+      bucketLabel: 'Total'
+    }
   };
 
   // =====================================================================
@@ -1148,7 +1273,7 @@
     });
   }
 
-  /** Format an integer money value (whole dollars only) — used on aging cards. */
+  /** Format an integer money value (whole dollars only). */
   function fmtMoneyWhole(n) {
     if (n == null || isNaN(n)) n = 0;
     var sign = n < 0 ? '-' : '';
@@ -1480,6 +1605,16 @@
     return '61-90+';
   }
 
+  /** Human label for a bucket key. */
+  function bucketLabel(bucket) {
+    if (bucket === 'current') return 'Current';
+    if (bucket === '1-30')    return '1–30';
+    if (bucket === '31-60')   return '31–60';
+    if (bucket === '61-90+')  return '61–90+';
+    if (bucket === 'total')   return 'Total';
+    return bucket;
+  }
+
   /**
    * Denormalize an invoice row: pull embedded client + stand names out of
    * the nested objects, compute age in days from period_start.
@@ -1494,13 +1629,20 @@
   }
 
   /**
-   * Apply client-side filters (search box only — client/venue/status are
-   * server-filtered). Returns a sorted array.
+   * Apply client-side filters (search box + drill-down bucket) and sort.
+   * Server-side handles client/venue/status; drill-down adds an in-memory
+   * bucket filter on top.
    */
   function visibleInvoices() {
     var q = (state.filters.search || '').trim().toLowerCase();
+    var dd = state.drilldown;
 
     var arr = state.invoices.filter(function (inv) {
+      // Drill-down bucket filter — only when active and not 'total'.
+      if (dd.active && dd.bucket !== 'total') {
+        if (inv.status !== 'open' && inv.status !== 'partially_paid') return false;
+        if (inv._bucket !== dd.bucket) return false;
+      }
       if (!q) return true;
       // Multi-field search: internal #, client ref, stand, venue, client name, amount partial.
       var hay = [
@@ -1551,40 +1693,133 @@
     }
   }
 
-  /** Aging strip sums whatever is currently in state.invoices. */
-  function renderAgingStrip() {
-    // Only open + partially_paid count toward aging.
-    var buckets = { 'current': {a:0,n:0}, '1-30': {a:0,n:0}, '31-60': {a:0,n:0}, '61-90+': {a:0,n:0} };
+  /**
+   * Build the aging matrix data: per-client row totals across the 4
+   * buckets, plus a grand-total row. Only includes clients with a
+   * non-zero open/partial balance. Returns { rows, totals }.
+   *
+   *   rows = [{ clientId, clientName, current, '1-30', '31-60', '61-90+', total }, ...]
+   *   totals = { current, '1-30', '31-60', '61-90+', total }
+   */
+  function buildAgingMatrix() {
+    var byClient = {};   // client_id -> { name, current, '1-30', '31-60', '61-90+', total }
+    var totals = {
+      'current': 0, '1-30': 0, '31-60': 0, '61-90+': 0, 'total': 0
+    };
 
     state.invoices.forEach(function (inv) {
       if (inv.status !== 'open' && inv.status !== 'partially_paid') return;
-      var b = buckets[inv._bucket];
-      if (!b) return;
-      b.a += Number(inv.net_amount_due || 0);
-      b.n += 1;
+      var amt = Number(inv.net_amount_due || 0);
+      if (!isFinite(amt)) return;
+      var cid = inv.client_id || '__unknown__';
+      if (!byClient[cid]) {
+        byClient[cid] = {
+          clientId:   cid,
+          clientName: inv._client_name || '(unknown client)',
+          'current':  0,
+          '1-30':     0,
+          '31-60':    0,
+          '61-90+':   0,
+          'total':    0
+        };
+      }
+      var b = inv._bucket;
+      if (byClient[cid][b] != null) {
+        byClient[cid][b] += amt;
+      }
+      byClient[cid].total += amt;
+      if (totals[b] != null) totals[b] += amt;
+      totals.total += amt;
     });
 
-    function setCard(key, amount, count, agePhrase) {
-      var amtEl  = document.getElementById('agingAmount-' + key);
-      var metaEl = document.getElementById('agingMeta-' + key);
-      var cardEl = document.querySelector('.aging-card[data-bucket="' + key + '"]');
-      if (amtEl)  amtEl.textContent  = fmtMoneyWhole(amount);
-      if (metaEl) metaEl.textContent = pluralInvoice(count) + ' · ' + agePhrase;
-      if (cardEl) {
-        // Tone: shade only buckets with non-zero amount, and only over-30.
-        cardEl.classList.remove('is-warning', 'is-danger');
-        if (amount > 0) {
-          if (key === '31-60') cardEl.classList.add('is-warning');
-          if (key === '61-90+') cardEl.classList.add('is-danger');
-          if (key === '1-30')  cardEl.classList.add('is-warning');
-        }
-      }
+    // Drop zero-only clients (shouldn't happen, but defensive).
+    var rows = Object.keys(byClient)
+      .map(function (k) { return byClient[k]; })
+      .filter(function (r) { return Math.abs(r.total) > 0.005; });
+
+    // Sort by total descending (biggest balance first — most actionable).
+    rows.sort(function (a, b) { return b.total - a.total; });
+
+    return { rows: rows, totals: totals };
+  }
+
+  /** Render the aging matrix table. */
+  function renderAgingMatrix() {
+    var body = document.getElementById('agingMatrixBody');
+    var empty = document.getElementById('agingMatrixEmpty');
+    var sub = document.getElementById('agingMatrixSubtitle');
+    if (!body) return;
+
+    var data = buildAgingMatrix();
+    var rows = data.rows;
+    var totals = data.totals;
+
+    // Subtitle: count of open/partial invoices feeding the matrix.
+    var openCount = state.invoices.filter(function (inv) {
+      return inv.status === 'open' || inv.status === 'partially_paid';
+    }).length;
+    if (sub) {
+      sub.textContent = pluralInvoice(openCount) + ' open or partial · ' +
+        rows.length + ' ' + (rows.length === 1 ? 'client' : 'clients');
     }
 
-    setCard('current', buckets['current'].a, buckets['current'].n, '0–30d');
-    setCard('1-30',    buckets['1-30'].a,    buckets['1-30'].n,    '31–60d');
-    setCard('31-60',   buckets['31-60'].a,   buckets['31-60'].n,   '61–90d');
-    setCard('61-90+',  buckets['61-90+'].a,  buckets['61-90+'].n,  '91d+');
+    if (rows.length === 0) {
+      body.innerHTML = '';
+      if (empty) empty.hidden = false;
+      return;
+    }
+    if (empty) empty.hidden = true;
+
+    /** Build one cell button. */
+    function cellHtml(clientId, clientName, bucket, amount, isTotalCol, isTotalRow) {
+      var isZero = Math.abs(amount) < 0.005;
+      var classes = ['aging-cell-btn'];
+      if (bucket === '1-30' || bucket === '31-60') classes.push('is-warning');
+      if (bucket === '61-90+') classes.push('is-danger');
+      var tdClasses = [];
+      if (isZero) tdClasses.push('is-zero');
+      if (isTotalCol) tdClasses.push('col-total');
+      var displayVal = isZero ? '0.00' : fmtMoney(amount).replace('$', '');
+      // For client cells, show "$" with the value; for zero, show "—" to declutter.
+      var visible = isZero ? '—' : fmtMoney(amount);
+      // Make cells clickable; disabled when zero (no invoices to show).
+      var disabledAttr = isZero ? ' disabled' : '';
+      return '<td class="' + tdClasses.join(' ') + '">' +
+        '<button type="button" class="' + classes.join(' ') + '" ' +
+          'data-client-id="' + esc(clientId) + '" ' +
+          'data-client-name="' + esc(clientName) + '" ' +
+          'data-bucket="' + esc(bucket) + '"' +
+          disabledAttr + '>' +
+          esc(visible) +
+        '</button>' +
+      '</td>';
+    }
+
+    var html = '';
+
+    // Per-client rows
+    rows.forEach(function (r) {
+      html += '<tr>' +
+        '<td class="col-client">' + esc(r.clientName) + '</td>' +
+        cellHtml(r.clientId, r.clientName, 'current', r['current'], false, false) +
+        cellHtml(r.clientId, r.clientName, '1-30',    r['1-30'],    false, false) +
+        cellHtml(r.clientId, r.clientName, '31-60',   r['31-60'],   false, false) +
+        cellHtml(r.clientId, r.clientName, '61-90+',  r['61-90+'],  false, false) +
+        cellHtml(r.clientId, r.clientName, 'total',   r['total'],   true,  false) +
+      '</tr>';
+    });
+
+    // Grand total row
+    html += '<tr class="is-total-row">' +
+      '<td class="col-client">TOTAL</td>' +
+      cellHtml('all', 'All clients', 'current', totals['current'], false, true) +
+      cellHtml('all', 'All clients', '1-30',    totals['1-30'],    false, true) +
+      cellHtml('all', 'All clients', '31-60',   totals['31-60'],   false, true) +
+      cellHtml('all', 'All clients', '61-90+',  totals['61-90+'],  false, true) +
+      cellHtml('all', 'All clients', 'total',   totals['total'],   true,  true) +
+    '</tr>';
+
+    body.innerHTML = html;
   }
 
   /** Render the invoice table rows. */
@@ -1665,6 +1900,21 @@
     });
   }
 
+  /** Render the drill-down pill if active, hide otherwise. */
+  function renderDrilldownPill() {
+    var wrap = document.getElementById('drilldownPillWrap');
+    var clientLbl = document.getElementById('drilldownClientLabel');
+    var bucketLbl = document.getElementById('drilldownBucketLabel');
+    if (!wrap) return;
+    if (!state.drilldown.active) {
+      wrap.hidden = true;
+      return;
+    }
+    wrap.hidden = false;
+    if (clientLbl) clientLbl.textContent = state.drilldown.clientLabel;
+    if (bucketLbl) bucketLbl.textContent = state.drilldown.bucketLabel;
+  }
+
   /** Toggle the loading state on the list. */
   function setLoading(on) {
     var l = document.getElementById('invoiceListLoading');
@@ -1689,7 +1939,8 @@
     return fetchInvoices()
       .then(function (rows) {
         state.invoices = (rows || []).map(denormalize);
-        renderAgingStrip();
+        renderAgingMatrix();
+        renderDrilldownPill();
         renderInvoiceTable();
       })
       .catch(function (e) {
@@ -1697,10 +1948,88 @@
         showToast('Could not load invoices');
         console.error('[AR] fetchInvoices failed:', e);
         state.invoices = [];
-        renderAgingStrip();
+        renderAgingMatrix();
+        renderDrilldownPill();
         renderInvoiceTable();
       })
       .then(function () { setLoading(false); });
+  }
+
+  /**
+   * Clear the drill-down filter back to defaults and restore filter UI.
+   * Returns true if a drill-down was cleared (so caller knows to reload).
+   */
+  function clearDrilldown() {
+    var was = state.drilldown.active;
+    state.drilldown.active = false;
+    state.drilldown.clientId = 'all';
+    state.drilldown.bucket = 'total';
+    state.drilldown.clientLabel = 'All clients';
+    state.drilldown.bucketLabel = 'Total';
+    // Reset filter UI: client back to "all", status back to open+partial.
+    state.filters.client = 'all';
+    state.filters.status = 'open+partial';
+    var cSel = document.getElementById('filterClient');
+    var sSel = document.getElementById('filterStatus');
+    if (cSel) cSel.value = 'all';
+    if (sSel) sSel.value = 'open+partial';
+    return was;
+  }
+
+  /** Handle a click on an aging-matrix cell. */
+  function onAgingCellClick(btn) {
+    if (!btn || btn.disabled) return;
+    var clientId   = btn.getAttribute('data-client-id') || 'all';
+    var clientName = btn.getAttribute('data-client-name') || 'All clients';
+    var bucket     = btn.getAttribute('data-bucket') || 'total';
+
+    state.drilldown.active = true;
+    state.drilldown.clientId = clientId;
+    state.drilldown.bucket = bucket;
+    state.drilldown.clientLabel = clientName;
+    state.drilldown.bucketLabel = bucketLabel(bucket);
+
+    // Set the filter dropdowns to match. Always force open+partial since
+    // the matrix only counts those, and the drill-down should only show
+    // what's in the matrix.
+    state.filters.client = clientId === 'all' ? 'all' : clientId;
+    state.filters.status = 'open+partial';
+    state.dateBoundActive = true;
+
+    var cSel = document.getElementById('filterClient');
+    var sSel = document.getElementById('filterStatus');
+    if (cSel) cSel.value = state.filters.client;
+    if (sSel) sSel.value = state.filters.status;
+
+    // Reload from server with client/status applied; bucket filter is
+    // applied client-side inside visibleInvoices().
+    reloadInvoices().then(function () {
+      // Scroll the invoice list into view so the result is visible.
+      var listWrap = document.getElementById('invoiceListWrap');
+      if (listWrap && listWrap.scrollIntoView) {
+        listWrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  }
+
+  function wireAgingMatrix() {
+    var body = document.getElementById('agingMatrixBody');
+    if (!body) return;
+    body.addEventListener('click', function (ev) {
+      var t = ev.target;
+      if (!t || !t.closest) return;
+      var btn = t.closest('.aging-cell-btn');
+      if (!btn) return;
+      onAgingCellClick(btn);
+    });
+  }
+
+  function wireDrilldownClear() {
+    var clear = document.getElementById('drilldownClear');
+    if (!clear) return;
+    clear.addEventListener('click', function () {
+      if (clearDrilldown()) reloadInvoices();
+    });
   }
 
   function wireFilters() {
@@ -1712,16 +2041,30 @@
     if (cSel) cSel.addEventListener('change', function () {
       state.filters.client = cSel.value;
       state.dateBoundActive = true;   // resetting any filter restores the 12-month bound
+      // Manual filter change clears the drill-down pill (the pill reflects
+      // the matrix click, not arbitrary user filter state).
+      if (state.drilldown.active) {
+        state.drilldown.active = false;
+        renderDrilldownPill();
+      }
       reloadInvoices();
     });
     if (vSel) vSel.addEventListener('change', function () {
       state.filters.venue = vSel.value;
       state.dateBoundActive = true;
+      if (state.drilldown.active) {
+        state.drilldown.active = false;
+        renderDrilldownPill();
+      }
       reloadInvoices();
     });
     if (sSel) sSel.addEventListener('change', function () {
       state.filters.status = sSel.value;
       state.dateBoundActive = true;
+      if (state.drilldown.active) {
+        state.drilldown.active = false;
+        renderDrilldownPill();
+      }
       reloadInvoices();
     });
 
@@ -4120,6 +4463,8 @@
     wireRowClicks();
     wireRowMenuDismissal();
     wireRowMenuActions();
+    wireAgingMatrix();
+    wireDrilldownClear();
     renderSortHeaders();
 
     // Initial load: clients + venues for filter dropdowns, then the
