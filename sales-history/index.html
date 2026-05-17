@@ -1,3 +1,14 @@
+<!--
+  Popcorn Chez — Sales History
+  Netlify: /sales-history/index.html → tools.camdenco.com/sales-history/
+  Updated: May 17, 2026
+    - Replaced hand-rolled header with pc-nav.js shared header + ribbon
+    - Default load now scopes to the most recent event day with data (lighter query)
+    - Added quick-range chip row: Last event day / Today / This week / Last week /
+      This fiscal month / Last fiscal month / All time
+    - Summary tiles changed from (Total / Tips / Submissions) to
+      (Total / Tips / Sales per person) — only rows with staff_count > 0 count
+-->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -8,22 +19,11 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f0ec; min-height: 100vh; }
 
-header {
-  background: #fff; border-bottom: 1px solid #e8e8e4;
-  padding: 0 32px; display: flex; align-items: center;
-  justify-content: space-between; height: 64px;
-  position: sticky; top: 0; z-index: 100;
-}
-.header-left { display: flex; align-items: center; gap: 16px; }
-.back-link { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #999; text-decoration: none; display: flex; align-items: center; gap: 6px; transition: color 0.15s; }
-.back-link:hover { color: #1a1a1a; }
-.hdivider { width: 1px; height: 20px; background: #e8e8e4; }
-.header-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
-.header-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: #1a1a1a; color: white; padding: 3px 8px; border-radius: 20px; }
-.header-right { display: flex; align-items: center; gap: 12px; }
-.header-user { font-size: 12px; color: #999; font-weight: 600; }
-.sign-out-btn { font-size: 11px; font-weight: 700; color: #999; background: none; border: 1px solid #e8e8e4; padding: 5px 12px; border-radius: 8px; cursor: pointer; font-family: inherit; transition: all 0.15s; }
-.sign-out-btn:hover { color: #1a1a1a; border-color: #1a1a1a; }
+/* page header (pc-nav.js injects the toolkit header + ribbon above; this is the page-title row) */
+.page-title-row { background: #fff; border-bottom: 1px solid #e8e8e4; padding: 12px 22px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.page-title-left { display: flex; align-items: center; gap: 12px; }
+.page-title-h { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; color: #1a1a1a; }
+.page-title-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: #1a1a1a; color: white; padding: 3px 8px; border-radius: 20px; }
 
 .page-body { padding: 20px 16px 60px; }
 .container { max-width: 800px; margin: 0 auto; }
@@ -33,12 +33,25 @@ header {
 label { display: block; font-size: 13px; font-weight: 500; color: #555; margin-bottom: 4px; }
 select, input[type=text], input[type=number], input[type=date], input[type=password] { width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 10px; font-size: 15px; color: #1a1a1a; background: #fafafa; appearance: none; -webkit-appearance: none; font-family: inherit; transition: border-color 0.15s; }
 select:focus, input:focus { outline: none; border-color: #1a1a1a; background: white; }
+
+/* quick-range chip row */
+.qr-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 12px; }
+.qr-label { font-size: 10px; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 0.08em; margin-right: 4px; }
+.qr-chip { font-size: 12px; padding: 6px 11px; border-radius: 18px; background: #f5f5f5; border: 1px solid #e0e0e0; color: #555; cursor: pointer; font-family: inherit; transition: all 0.15s; user-select: none; }
+.qr-chip:hover { border-color: #aaa; }
+.qr-chip.on { background: #1a1a1a; color: white; border-color: #1a1a1a; }
+.qr-chip.disabled { opacity: 0.45; cursor: not-allowed; }
+.qr-chip.disabled:hover { border-color: #e0e0e0; }
+.qr-showing { font-size: 12px; color: #555; margin-left: auto; padding: 6px 0; }
+
 .search-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
-.search-btn { width: 100%; padding: 11px; background: #1a1a1a; color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; margin-bottom: 14px; }
+.search-btn { width: 100%; padding: 11px; background: #1a1a1a; color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; margin-bottom: 14px; font-family: inherit; }
 .summary-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
 .summary-box { background: #f8f8f8; border-radius: 12px; padding: 12px; text-align: center; }
 .summary-box .s-label { font-size: 10px; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
 .summary-box .s-val { font-size: 20px; font-weight: 700; color: #1a1a1a; }
+.summary-box .s-val.dim { color: #ccc; font-weight: 400; }
+.summary-box .s-sub { font-size: 10px; color: #bbb; margin-top: 2px; }
 .result-venue { border: 1px solid #eee; border-radius: 12px; overflow: hidden; margin-bottom: 10px; }
 .result-venue-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; background: #fafafa; cursor: pointer; }
 .result-venue-name { font-size: 15px; font-weight: 600; color: #1a1a1a; }
@@ -52,10 +65,10 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
 .amt-cell { font-weight: 700; color: #1a1a1a; text-align: right; }
 .photo-link { font-size: 11px; background: #EAF3DE; color: #27500A; padding: 3px 7px; border-radius: 6px; text-decoration: none; font-weight: 600; margin-right: 3px; display: inline-block; }
 .no-photo { font-size: 11px; color: #ddd; }
-.export-btn { float: right; padding: 6px 12px; background: #f5f5f5; color: #555; border: 1px solid #ddd; border-radius: 8px; font-size: 12px; cursor: pointer; }
-.edit-btn { font-size: 11px; background: #E6F1FB; color: #0C447C; padding: 3px 8px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; margin-right: 3px; }
+.export-btn { float: right; padding: 6px 12px; background: #f5f5f5; color: #555; border: 1px solid #ddd; border-radius: 8px; font-size: 12px; cursor: pointer; font-family: inherit; }
+.edit-btn { font-size: 11px; background: #E6F1FB; color: #0C447C; padding: 3px 8px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; margin-right: 3px; font-family: inherit; }
 .edit-btn.locked { background: #f0f0f0; color: #aaa; cursor: default; }
-.del-btn { font-size: 11px; background: #FCEBEB; color: #A32D2D; padding: 3px 8px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; }
+.del-btn { font-size: 11px; background: #FCEBEB; color: #A32D2D; padding: 3px 8px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; font-family: inherit; }
 .empty-state { text-align: center; padding: 24px 0; font-size: 14px; color: #ccc; }
 .loading-state { text-align: center; padding: 16px; font-size: 13px; color: #ccc; }
 
@@ -70,19 +83,20 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
 .modal-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .photo-action { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: #f8f8f8; border-radius: 8px; margin-bottom: 8px; }
 .photo-action span { font-size: 12px; color: #666; flex: 1; }
-.photo-clear-btn { font-size: 11px; background: #FCEBEB; color: #A32D2D; padding: 2px 8px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; }
-.photo-upload-btn { font-size: 11px; background: #E6F1FB; color: #0C447C; padding: 2px 8px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; }
+.photo-clear-btn { font-size: 11px; background: #FCEBEB; color: #A32D2D; padding: 2px 8px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; font-family: inherit; }
+.photo-upload-btn { font-size: 11px; background: #E6F1FB; color: #0C447C; padding: 2px 8px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; font-family: inherit; }
 .modal-actions { display: flex; gap: 10px; margin-top: 16px; }
-.modal-save { flex: 1; padding: 11px; background: #1a1a1a; color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; }
-.modal-cancel { padding: 11px 16px; background: #f5f5f5; color: #555; border: 1px solid #ddd; border-radius: 10px; font-size: 14px; cursor: pointer; }
+.modal-save { flex: 1; padding: 11px; background: #1a1a1a; color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.modal-cancel { padding: 11px 16px; background: #f5f5f5; color: #555; border: 1px solid #ddd; border-radius: 10px; font-size: 14px; cursor: pointer; font-family: inherit; }
 .modal-error { color: #c0392b; font-size: 12px; margin-top: 8px; display: none; }
 .window-notice { background: #FFFBEA; border: 1px solid #F5C400; border-radius: 8px; padding: 8px 12px; font-size: 12px; color: #7A5C00; margin-bottom: 12px; }
 
 @media (max-width: 600px) {
-  header { padding: 0 16px; height: auto; flex-wrap: wrap; padding: 12px 16px; gap: 10px; }
+  .page-title-row { padding: 10px 16px; }
   .search-grid { grid-template-columns: 1fr; }
   .summary-row { grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
   .result-stand-table th, .result-stand-table td { padding: 6px 8px; font-size: 12px; }
+  .qr-showing { margin-left: 0; width: 100%; padding-top: 0; }
 }
 </style>
 </head>
@@ -143,28 +157,38 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
   </div>
 </div>
 
-<header>
-  <div class="header-left">
-    <a href="/" class="back-link">&#8592; Toolkit</a>
-    <div class="hdivider"></div>
-    <span class="header-title">Sales History</span>
-    <span class="header-badge">Search</span>
+<div class="page-title-row">
+  <div class="page-title-left">
+    <span class="page-title-h">Sales History</span>
+    <span class="page-title-badge">Search</span>
   </div>
-  <div class="header-right" id="header-right"></div>
-</header>
+</div>
 
 <div class="page-body">
   <div class="container">
     <div class="card">
       <div class="card-title">Search past sales</div>
+
+      <div class="qr-row" id="qr-row">
+        <span class="qr-label">Quick ranges</span>
+        <button class="qr-chip" data-qr="last-event" onclick="applyQuickRange('last-event')">Last event day</button>
+        <button class="qr-chip" data-qr="today" onclick="applyQuickRange('today')">Today</button>
+        <button class="qr-chip" data-qr="this-week" onclick="applyQuickRange('this-week')">This week</button>
+        <button class="qr-chip" data-qr="last-week" onclick="applyQuickRange('last-week')">Last week</button>
+        <button class="qr-chip" data-qr="this-fiscal" onclick="applyQuickRange('this-fiscal')">This fiscal month</button>
+        <button class="qr-chip" data-qr="last-fiscal" onclick="applyQuickRange('last-fiscal')">Last fiscal month</button>
+        <button class="qr-chip" data-qr="all-time" onclick="applyQuickRange('all-time')">All time</button>
+        <span class="qr-showing" id="qr-showing"></span>
+      </div>
+
       <div class="search-grid">
         <div class="field" style="margin-bottom:0;">
           <label>From date</label>
-          <input type="date" id="s-from">
+          <input type="date" id="s-from" onchange="onManualDateChange()">
         </div>
         <div class="field" style="margin-bottom:0;">
           <label>To date</label>
-          <input type="date" id="s-to">
+          <input type="date" id="s-to" onchange="onManualDateChange()">
         </div>
       </div>
       <div class="search-grid" style="margin-top:10px;">
@@ -194,9 +218,11 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
 </div>
 
 <script src="/pc-auth.js"></script>
+<script src="/pc-nav.js"></script>
 <script>
 var SUPA_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
 var EDIT_WINDOW_DAYS = 4;
+var ALL_TIME_START = '2023-01-01';
 
 var VENUE_LABELS = {
   'Mann':'Mann Music Center','FMP':'FMP','ACCC':'ACCC','BWH':'Boardwalk Hall',
@@ -218,7 +244,34 @@ var STANDS = {
   'Kirkwood':['Stand 1','Hawking','Support Staff']
 };
 
+/*
+ * FISCAL_PERIODS — 4-4-5 retail fiscal calendar.
+ *
+ * SOURCE OF TRUTH: /cos-labor/index.html (FISCAL_PERIODS array, ~line 270).
+ * This is a verbatim copy. Until extracted to /pc-fiscal.js, BOTH FILES must
+ * be updated together when adding future years or correcting period boundaries.
+ *
+ * Periods cover calendar year 2026 only as of this writing. If today's date
+ * falls outside the range, the fiscal-month chips disable themselves rather
+ * than silently returning wrong dates — see resolveFiscalPeriod() below.
+ */
+var FISCAL_PERIODS = [
+  {name:'January 2026',start:'2026-01-05',end:'2026-02-01',weeks:4},
+  {name:'February 2026',start:'2026-02-02',end:'2026-03-01',weeks:4},
+  {name:'March 2026',start:'2026-03-02',end:'2026-03-29',weeks:4},
+  {name:'April 2026',start:'2026-04-06',end:'2026-05-03',weeks:4},
+  {name:'May 2026',start:'2026-05-04',end:'2026-05-31',weeks:4},
+  {name:'June 2026',start:'2026-06-01',end:'2026-06-28',weeks:4},
+  {name:'July 2026',start:'2026-06-29',end:'2026-08-02',weeks:5},
+  {name:'August 2026',start:'2026-08-03',end:'2026-08-30',weeks:4},
+  {name:'September 2026',start:'2026-08-31',end:'2026-09-27',weeks:4},
+  {name:'October 2026',start:'2026-09-28',end:'2026-11-01',weeks:5},
+  {name:'November 2026',start:'2026-11-02',end:'2026-11-29',weeks:4},
+  {name:'December 2026',start:'2026-11-30',end:'2027-01-03',weeks:5}
+];
+
 var currentSearchData = [];
+var currentQuickRange = null; // 'last-event' | 'today' | 'this-week' | 'last-week' | 'this-fiscal' | 'last-fiscal' | 'all-time' | null (custom)
 var editRegisterFile = null;
 var editUnitsFile = null;
 var editRegClear = false;
@@ -233,6 +286,43 @@ function todayLocal() {
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
 
+/* Date math helpers — all work in YYYY-MM-DD strings to avoid TZ drift. */
+function addDays(isoDate, days) {
+  var parts = isoDate.split('-');
+  var d = new Date(parseInt(parts[0]), parseInt(parts[1])-1, parseInt(parts[2]));
+  d.setDate(d.getDate() + days);
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function startOfWeekMonday(isoDate) {
+  var parts = isoDate.split('-');
+  var d = new Date(parseInt(parts[0]), parseInt(parts[1])-1, parseInt(parts[2]));
+  var dow = d.getDay(); // 0=Sun, 1=Mon...
+  var offset = (dow === 0) ? -6 : (1 - dow); // shift to Monday
+  d.setDate(d.getDate() + offset);
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function fmtMonthDay(iso) {
+  if (!iso) return '';
+  var p = iso.split('-');
+  return parseInt(p[1]) + '/' + parseInt(p[2]) + '/' + p[0];
+}
+
+/* Fiscal period resolution — returns the period containing the given date, or null if outside the defined range. */
+function resolveFiscalPeriod(isoDate) {
+  for (var i = 0; i < FISCAL_PERIODS.length; i++) {
+    if (isoDate >= FISCAL_PERIODS[i].start && isoDate <= FISCAL_PERIODS[i].end) {
+      return { idx: i, period: FISCAL_PERIODS[i] };
+    }
+  }
+  return null;
+}
+function getCurrentFiscalPeriod() { return resolveFiscalPeriod(todayLocal()); }
+function getPriorFiscalPeriod() {
+  var cur = getCurrentFiscalPeriod();
+  if (!cur || cur.idx === 0) return null;
+  return { idx: cur.idx - 1, period: FISCAL_PERIODS[cur.idx - 1] };
+}
+
 function isWithinEditWindow(eventDate) {
   var today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -244,6 +334,110 @@ function isWithinEditWindow(eventDate) {
 function canEdit(eventDate) {
   if (pcAuth.isAdmin()) return true;
   return isWithinEditWindow(eventDate);
+}
+
+/*
+ * Find the most recent event date with at least one sales row, clamped to today
+ * so a typo'd future date doesn't hijack the default. Returns null if no rows.
+ *
+ * Tiny query (1 row), runs on initial page load instead of pulling the full archive.
+ */
+async function fetchLatestEventDate() {
+  var today = todayLocal();
+  var url = SUPA_URL + '/rest/v1/sales?select=event_date&event_date=lte.' + today + '&order=event_date.desc&limit=1';
+  try {
+    var res = await fetch(url, { headers: apiHeaders() });
+    if (!res.ok) return null;
+    var rows = await res.json();
+    if (Array.isArray(rows) && rows.length > 0) return rows[0].event_date;
+    return null;
+  } catch (e) {
+    console.error('[sales-history] fetchLatestEventDate failed:', e);
+    return null;
+  }
+}
+
+/* Quick-range chip behavior */
+function setQuickRangeUI(key, showingLabel) {
+  currentQuickRange = key;
+  var chips = document.querySelectorAll('.qr-chip');
+  for (var i = 0; i < chips.length; i++) {
+    chips[i].classList.toggle('on', chips[i].getAttribute('data-qr') === key);
+  }
+  var showing = document.getElementById('qr-showing');
+  if (showing) showing.textContent = showingLabel ? 'Showing: ' + showingLabel : '';
+}
+
+function clearQuickRangeUI() {
+  currentQuickRange = null;
+  var chips = document.querySelectorAll('.qr-chip');
+  for (var i = 0; i < chips.length; i++) chips[i].classList.remove('on');
+  var showing = document.getElementById('qr-showing');
+  if (showing) showing.textContent = 'Showing: custom range';
+}
+
+/* Disable fiscal chips if today falls outside the defined fiscal calendar */
+function updateFiscalChipAvailability() {
+  var cur = getCurrentFiscalPeriod();
+  var prior = getPriorFiscalPeriod();
+  var thisChip = document.querySelector('.qr-chip[data-qr="this-fiscal"]');
+  var lastChip = document.querySelector('.qr-chip[data-qr="last-fiscal"]');
+  if (thisChip) {
+    if (!cur) { thisChip.classList.add('disabled'); thisChip.title = 'Current date is outside the defined fiscal calendar'; }
+    else { thisChip.classList.remove('disabled'); thisChip.title = cur.period.name; }
+  }
+  if (lastChip) {
+    if (!prior) { lastChip.classList.add('disabled'); lastChip.title = 'No prior fiscal period available'; }
+    else { lastChip.classList.remove('disabled'); lastChip.title = prior.period.name; }
+  }
+}
+
+async function applyQuickRange(key) {
+  var today = todayLocal();
+  var fromDate = null;
+  var toDate = null;
+  var showingLabel = '';
+
+  if (key === 'last-event') {
+    var latest = await fetchLatestEventDate();
+    if (!latest) {
+      // No sales rows at all — fall back to today, surface this in the label.
+      fromDate = today; toDate = today; showingLabel = 'today (no past sales found)';
+    } else {
+      fromDate = latest; toDate = latest;
+      showingLabel = (latest === today) ? 'today' : fmtMonthDay(latest);
+    }
+  } else if (key === 'today') {
+    fromDate = today; toDate = today; showingLabel = 'today';
+  } else if (key === 'this-week') {
+    fromDate = startOfWeekMonday(today); toDate = addDays(fromDate, 6);
+    showingLabel = 'this week (' + fmtMonthDay(fromDate) + ' – ' + fmtMonthDay(toDate) + ')';
+  } else if (key === 'last-week') {
+    var thisMon = startOfWeekMonday(today);
+    fromDate = addDays(thisMon, -7); toDate = addDays(thisMon, -1);
+    showingLabel = 'last week (' + fmtMonthDay(fromDate) + ' – ' + fmtMonthDay(toDate) + ')';
+  } else if (key === 'this-fiscal') {
+    var cur = getCurrentFiscalPeriod();
+    if (!cur) { alert('Current date is outside the defined fiscal calendar.\n\nUpdate FISCAL_PERIODS in /cos-labor/ and /sales-history/ to extend it.'); return; }
+    fromDate = cur.period.start; toDate = cur.period.end; showingLabel = cur.period.name;
+  } else if (key === 'last-fiscal') {
+    var prior = getPriorFiscalPeriod();
+    if (!prior) { alert('No prior fiscal period defined before the current one.'); return; }
+    fromDate = prior.period.start; toDate = prior.period.end; showingLabel = prior.period.name;
+  } else if (key === 'all-time') {
+    fromDate = ALL_TIME_START; toDate = today; showingLabel = 'all time';
+  }
+
+  if (!fromDate || !toDate) return;
+  document.getElementById('s-from').value = fromDate;
+  document.getElementById('s-to').value = toDate;
+  setQuickRangeUI(key, showingLabel);
+  await searchHistory();
+}
+
+function onManualDateChange() {
+  // User edited the date pickers directly — drop the "active chip" highlight.
+  clearQuickRangeUI();
 }
 
 async function searchHistory() {
@@ -273,10 +467,25 @@ async function searchHistory() {
     var grandTotal = rows.reduce(function(s,r) { return s+parseFloat(r.amount); }, 0);
     var grandTips = rows.reduce(function(s,r) { return s+(parseFloat(r.tip_amount)||0); }, 0);
 
+    // Sales per person — only count rows with staff_count > 0 (cleanest math).
+    var staffedRows = rows.filter(function(r) { return r.staff_count && parseInt(r.staff_count) > 0; });
+    var staffedSales = staffedRows.reduce(function(s,r) { return s+parseFloat(r.amount); }, 0);
+    var staffedHeadcount = staffedRows.reduce(function(s,r) { return s+parseInt(r.staff_count); }, 0);
+    var salesPerPerson = (staffedHeadcount > 0) ? (staffedSales / staffedHeadcount) : null;
+    var spExcluded = rows.length - staffedRows.length;
+
     var html = '<div class="summary-row">';
     html += '<div class="summary-box"><div class="s-label">Total sales</div><div class="s-val">$' + Math.round(grandTotal).toLocaleString() + '</div></div>';
     html += '<div class="summary-box"><div class="s-label">Tips</div><div class="s-val">$' + Math.round(grandTips).toLocaleString() + '</div></div>';
-    html += '<div class="summary-box"><div class="s-label">Submissions</div><div class="s-val">' + rows.length + '</div></div>';
+    if (salesPerPerson !== null) {
+      html += '<div class="summary-box"><div class="s-label">Sales / person</div><div class="s-val">$' + Math.round(salesPerPerson).toLocaleString() + '</div>';
+      if (spExcluded > 0) {
+        html += '<div class="s-sub">' + spExcluded + ' row' + (spExcluded !== 1 ? 's' : '') + ' w/o staff count excluded</div>';
+      }
+      html += '</div>';
+    } else {
+      html += '<div class="summary-box"><div class="s-label">Sales / person</div><div class="s-val dim">--</div><div class="s-sub">No staff counts entered</div></div>';
+    }
     html += '</div>';
     html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
     html += '<div style="font-size:11px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:0.06em;">By event</div>';
@@ -309,7 +518,6 @@ async function searchHistory() {
       var staffMeta = hasStaff ? ' - ' + totalStaff + ' staff' + evtPerPerson : '';
       var tipsMeta = eventTips > 0 ? ' - Tips: $' + Math.round(eventTips).toLocaleString() : '';
       var venueLabel = VENUE_LABELS[evtVenue] || evtVenue;
-      var withinWindow = isWithinEditWindow(evtDate);
 
       html += '<div class="result-venue">';
       html += '<div class="result-venue-header" onclick="toggleResult(\'' + id + '\',\'rch' + i + '\')">';
@@ -354,6 +562,7 @@ async function searchHistory() {
 
     resultsEl.innerHTML = html;
   } catch(e) {
+    console.error('[sales-history] searchHistory failed:', e);
     resultsEl.innerHTML = '<div class="empty-state" style="padding:16px;">Error loading results.</div>';
   }
 }
@@ -586,13 +795,9 @@ function exportCSV() {
 pcAuth.require({
   pageSlug: 'sales-history',
   onReady: function(user) {
-    var el = document.getElementById('header-right');
-    if (el && user) {
-      el.innerHTML = '<span class="header-user">' + (user.display_name || user.email) + '</span>' +
-        '<button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
-    }
-    document.getElementById('s-from').value = '2023-01-01';
-    document.getElementById('s-to').value = todayLocal();
+    updateFiscalChipAvailability();
+    // Default: scope to the last event day with sales (lighter than pulling all-time).
+    applyQuickRange('last-event');
   }
 });
 </script>
