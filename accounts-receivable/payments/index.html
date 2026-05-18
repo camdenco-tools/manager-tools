@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Receive Payment — Admin · Popcorn Chez</title>
+
+<!-- DM Sans — matches the rest of the toolkit -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap">
+
+<!-- Auth must load BEFORE pc-nav (pc-nav reads pcAuth.getUser()) -->
+<script src="/pc-auth.js"></script>
+<script src="/pc-nav.js"></script>
+
+<style>
+  /* ========================================================================
+     RESET / BASE
+     ======================================================================== */
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #faf9f6;
+    color: #1a1a1a;
+    font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ========================================================================
+     PAGE-TITLE ROW
+     ======================================================================== */
+  .page-title-row {
+    background: #faf9f6;
+    border-bottom: 1px solid #e8e8e4;
+    padding: 18px 22px 16px;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .page-title {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0;
+  }
+  .page-title-meta {
+    font-size: 12px;
+    color: #888;
+    font-weight: 500;
+  }
+
+  /* ========================================================================
+     CONTENT WRAPPER
+     ======================================================================== */
+  .page-body {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 18px 22px 80px;
+  }
+
+  /* ========================================================================
+     VIEW TOGGLE  (link-based; mirrors index.html exactly)
+     ======================================================================== */
+  .view-toggle-wrap {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 22px;
+  }
+  .view-toggle-label {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #888;
+  }
+  .view-toggle {
+    display: inline-flex;
+    background: #f1f0eb;
+    border: 1px solid #e0dfd8;
+    border-radius: 8px;
+    padding: 3px;
+    gap: 2px;
+  }
+  .view-toggle a {
+    background: transparent;
+    border: 0;
+    color: #555;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 7px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+    transition: background 0.12s ease, color 0.12s ease;
+  }
+  .view-toggle a:hover { color: #1a1a1a; }
+  .view-toggle a.is-active {
+    background: #fff;
+    color: #1a1a1a;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+
+  /* ========================================================================
+     ACTION ROW
+     ======================================================================== */
+  .ar-actions-row {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 12px;
+  }
+  .btn-primary {
+    background: #1a1a1a;
+    color: #fff;
+    border: 0;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 9px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.12s ease;
+  }
+  .btn-primary:hover { background: #2c2c2a; }
+  .btn-primary:disabled {
+    background: #b4b2a9;
+    cursor: not-allowed;
+  }
+
+  /* ========================================================================
+     FILTER ROW
+     ======================================================================== */
+  .ar-filter-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+  .ar-filter-row select,
+  .ar-filter-row input[type="text"] {
+    font-family: inherit;
+    font-size: 13px;
+    padding: 7px 10px;
+    border: 1px solid #e0dfd8;
+    border-radius: 6px;
+    background: #fff;
+    color: #1a1a1a;
+  }
+  .ar-filter-row select:focus,
+  .ar-filter-row input[type="text"]:focus {
+    outline: none;
+    border-color: #1a1a1a;
+  }
+  .ar-filter-row input[type="text"] {
+    flex: 1;
+    min-width: 220px;
+  }
+
+  /* ========================================================================
+     BATCHES LIST
+     ======================================================================== */
+  .batches-list-wrap {
+    background: #fff;
+    border: 0.5px solid #e0dfd8;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .batches-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .batches-table thead tr {
+    background: #f6f6f3;
+    border-bottom: 1px solid #e0dfd8;
+  }
+  .batches-table th {
+    text-align: left;
+    padding: 10px 12px;
+    font-weight: 500;
+    color: #555;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+  .batches-table th[data-sort] .sort-arrow {
+    opacity: 0;
+    margin-left: 4px;
+    font-size: 10px;
+  }
+  .batches-table th.is-sorted .sort-arrow { opacity: 1; }
+  .batches-table th.is-amount { text-align: right; }
+  .batches-table tbody tr {
+    border-bottom: 1px solid #f0efe8;
+    cursor: pointer;
+    transition: background 0.08s ease;
+  }
+  .batches-table tbody tr:hover { background: #fafaf6; }
+  .batches-table tbody tr:last-child { border-bottom: 0; }
+  .batches-table td {
+    padding: 11px 12px;
+    vertical-align: middle;
+  }
+  .batches-table td.col-advice {
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+  }
+  .batches-table td.col-advice.is-blank { color: #aaa; font-style: italic; font-weight: 400; }
+  .batches-table td.col-date { font-variant-numeric: tabular-nums; }
+  .batches-table td.col-amount,
+  .batches-table td.col-allocated {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+  }
+  .batches-table td.col-allocated {
+    color: #555;
+    font-weight: 400;
+  }
+  .batches-table td.col-remaining {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: #555;
+  }
+  .batches-table td.col-remaining.has-remaining {
+    color: #854F0B;
+    font-weight: 500;
+  }
+  .batches-table td.col-remaining.is-fully {
+    color: #c8c6bd;
+  }
+  .batches-table td.col-age { color: #555; font-variant-numeric: tabular-nums; }
+
+  /* Status badges — mirrored from invoice list with payment-specific keys */
+  .status-badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 3px 8px;
+    border-radius: 4px;
+    text-transform: capitalize;
+  }
+  .status-badge.is-unallocated         { background: #fceaea; color: #791F1F; }
+  .status-badge.is-partially-allocated { background: #fef6ec; color: #854F0B; }
+  .status-badge.is-fully-allocated     { background: #eaf3de; color: #27500A; }
+
+  /* Empty + show-older states */
+  .list-empty {
+    padding: 50px 20px;
+    text-align: center;
+    color: #888;
+    font-size: 13px;
+  }
+  .list-loading {
+    padding: 50px 20px;
+    text-align: center;
+    color: #aaa;
+    font-size: 13px;
+  }
+  .show-older-wrap {
+    text-align: center;
+    padding: 12px;
+    border-top: 1px solid #f0efe8;
+    background: #fafaf6;
+  }
+  .btn-link {
+    background: transparent;
+    border: 0;
+    color: #555;
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    padding: 4px 8px;
+  }
+  .btn-link:hover { color: #1a1a1a; text-decoration: underline; }
+
+  /* ========================================================================
+     SUMMARY STRIP (above the table — small at-a-glance for batches)
+     ======================================================================== */
+  .summary-strip {
+    background: #fff;
+    border: 0.5px solid #e0dfd8;
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-bottom: 14px;
+    display: flex;
+    gap: 28px;
+    flex-wrap: wrap;
+    align-items: baseline;
+  }
+  .summary-cell-label {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #888;
+    margin-bottom: 2px;
+    display: block;
+  }
+  .summary-cell-value {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1a1a1a;
+    font-variant-numeric: tabular-nums;
+  }
+  .summary-cell-value.is-warning { color: #854F0B; }
+  .summary-cell-value.is-success { color: #27500A; }
+  .summary-cell-value.is-muted { color: #888; }
+
+  /* ========================================================================
+     TOAST
+     ======================================================================== */
+  .pc-toast-host {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2000;
+    pointer-events: none;
+  }
+  .pc-toast {
+    background: #1a1a1a;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 11px 18px;
+    border-radius: 24px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.18s ease, transform 0.18s ease;
+  }
+  .pc-toast.is-shown { opacity: 1; transform: translateY(0); }
+
+  /* ========================================================================
+     MODAL SCAFFOLDING  (used by Stage 3.2)
+     ======================================================================== */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.36);
+    z-index: 1500;
+    display: none;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 60px 16px;
+    overflow-y: auto;
+  }
+  .modal-backdrop.is-open { display: flex; }
+
+  /* ========================================================================
+     AUTH-GATE PRE-BODY
+     ======================================================================== */
+  body.pre-auth .page-body,
+  body.pre-auth .page-title-row { display: none; }
+</style>
+</head>
+
+<body class="pre-auth">
+
+  <!-- pc-nav.js injects its own <header> -->
+
+  <div class="page-title-row" aria-hidden="true">
+    <h1 class="page-title">Receive Payment</h1>
+    <span class="page-title-meta">Admin · v1 (manual entry)</span>
+  </div>
+
+  <main class="page-body">
+
+    <!-- VIEW TOGGLE  (links to sibling page; mirrors index.html exactly) -->
+    <div class="view-toggle-wrap" aria-label="Accounts receivable view">
+      <span class="view-toggle-label">View</span>
+      <div class="view-toggle">
+        <a href="/accounts-receivable/">Receivables</a>
+        <a href="/accounts-receivable/payments/" class="is-active" aria-current="page">Receive payment</a>
+      </div>
+    </div>
+
+    <!-- Top action row -->
+    <div class="ar-actions-row">
+      <!-- Disabled in Stage 3.1; wired in Stage 3.2. Tooltip is a hint, not a -->
+      <!-- final UX promise — once 3.2 ships, this disable + tooltip come off. -->
+      <button
+        type="button"
+        id="btnRecordPayment"
+        class="btn-primary"
+        disabled
+        title="Coming next stage — the record-payment form is built in Session 3 stage 2."
+      >+ Record payment</button>
+    </div>
+
+    <!-- Summary strip — shows totals across the currently-loaded batches -->
+    <div class="summary-strip" id="summaryStrip">
+      <div>
+        <span class="summary-cell-label">Batches</span>
+        <span class="summary-cell-value" id="summaryCount">—</span>
+      </div>
+      <div>
+        <span class="summary-cell-label">Received total</span>
+        <span class="summary-cell-value" id="summaryReceived">—</span>
+      </div>
+      <div>
+        <span class="summary-cell-label">Allocated</span>
+        <span class="summary-cell-value is-success" id="summaryAllocated">—</span>
+      </div>
+      <div>
+        <span class="summary-cell-label">Awaiting allocation</span>
+        <span class="summary-cell-value is-warning" id="summaryRemaining">—</span>
+      </div>
+    </div>
+
+    <!-- Filter row -->
+    <div class="ar-filter-row">
+      <select id="filterClient" aria-label="Filter by client">
+        <option value="all">All clients</option>
+      </select>
+      <select id="filterStatus" aria-label="Filter by status">
+        <option value="open" selected>Needs allocation</option>
+        <option value="unallocated">Unallocated only</option>
+        <option value="partially_allocated">Partial only</option>
+        <option value="fully_allocated">Fully allocated</option>
+        <option value="all">All statuses</option>
+      </select>
+      <input type="text" id="filterSearch" placeholder="Search advice #, client, amount, notes…">
+    </div>
+
+    <!-- Batches list -->
+    <div class="batches-list-wrap">
+      <table class="batches-table">
+        <thead>
+          <tr>
+            <th data-sort="client_name">Client <span class="sort-arrow"></span></th>
+            <th data-sort="advice_number">Advice # <span class="sort-arrow"></span></th>
+            <th data-sort="payment_date" class="is-sorted">Payment date <span class="sort-arrow">↓</span></th>
+            <th data-sort="payment_amount" class="is-amount">Amount received <span class="sort-arrow"></span></th>
+            <th data-sort="allocated_amount" class="is-amount">Allocated <span class="sort-arrow"></span></th>
+            <th data-sort="remaining" class="is-amount">Remaining <span class="sort-arrow"></span></th>
+            <th data-sort="age">Age <span class="sort-arrow"></span></th>
+            <th data-sort="status">Status <span class="sort-arrow"></span></th>
+          </tr>
+        </thead>
+        <tbody id="batchesTableBody"></tbody>
+      </table>
+      <div class="list-loading" id="batchesListLoading">Loading payments…</div>
+      <div class="list-empty"   id="batchesListEmpty" hidden></div>
+      <div class="show-older-wrap" id="showOlderWrap" hidden>
+        <button type="button" class="btn-link" id="btnShowOlder">Show older payments →</button>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Toast host -->
+  <div class="pc-toast-host" id="pcToastHost" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- Modal backdrop (used by Stage 3.2) -->
+  <div class="modal-backdrop" id="modalBackdrop" data-close-modal="backdrop"></div>
+
+
+<script>
+(function () {
+  'use strict';
+
+  // =====================================================================
+  // CONFIG
+  // =====================================================================
+  var SB_URL  = 'https://aoazlttdjowhlfcksoyl.supabase.co';
+  var SB_REST = SB_URL + '/rest/v1/';
+
+  // =====================================================================
+  // PAGE STATE  (module-private)
+  //
+  // Mirrors the shape of /accounts-receivable/index.html's `state` object so
+  // patterns transfer cleanly. Filters are server-applied where possible
+  // (client_id, status, date bound); search is client-side over the loaded
+  // window.
+  // =====================================================================
+  var state = {
+    batches: [],          // currently loaded payment batches (denormalized)
+    clients: [],          // active ar_clients rows for filter dropdown
+
+    filters: {
+      client: 'all',      // 'all' | <client_id uuid>
+      status: 'open',     // 'open' (unallocated+partial) | 'unallocated' | 'partially_allocated' | 'fully_allocated' | 'all'
+      search: ''          // free-text, client-side filter only
+    },
+
+    sortBy:  'payment_date',
+    sortDir: 'desc',
+
+    dateBoundActive: true, // 12-month window unless "Show older" clicked
+    initialFetchDone: false
+  };
+
+  // =====================================================================
+  // UTILITIES
+  // =====================================================================
+
+  function pad2(n) { n = String(n); return n.length < 2 ? '0' + n : n; }
+
+  function todayIso() {
+    var d = new Date();
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+
+  function monthsAgoIso(months) {
+    var d = new Date();
+    d.setMonth(d.getMonth() - months);
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+
+  function daysBetween(aIso, bIso) {
+    if (!aIso || !bIso) return 0;
+    var a = new Date(aIso + 'T00:00:00');
+    var b = new Date(bIso + 'T00:00:00');
+    return Math.round((b - a) / 86400000);
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    var parts = iso.split('-');
+    if (parts.length !== 3) return iso;
+    var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var m = months[parseInt(parts[1], 10) - 1] || '';
+    return m + ' ' + parseInt(parts[2], 10) + ', ' + parts[0];
+  }
+
+  function fmtMoney(n) {
+    if (n == null || isNaN(n)) n = 0;
+    var sign = n < 0 ? '-' : '';
+    var abs = Math.abs(n);
+    return sign + '$' + abs.toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  }
+
+  function esc(s) {
+    if (s == null) return '';
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function pluralBatch(n) { return n === 1 ? '1 batch' : (n + ' batches'); }
+
+  // =====================================================================
+  // TOAST
+  // =====================================================================
+  function showToast(msg, ms) {
+    ms = ms || 2400;
+    var host = document.getElementById('pcToastHost');
+    if (!host) return;
+    var el = document.createElement('div');
+    el.className = 'pc-toast';
+    el.textContent = msg;
+    host.appendChild(el);
+    requestAnimationFrame(function () { el.classList.add('is-shown'); });
+    setTimeout(function () {
+      el.classList.remove('is-shown');
+      setTimeout(function () { el.remove(); }, 260);
+    }, ms);
+  }
+
+  // =====================================================================
+  // JWT EXPIRY PATTERN  (mirrored from index.html)
+  // =====================================================================
+  function handleAuthFailure() {
+    try {
+      localStorage.removeItem('sb_access_token');
+      localStorage.removeItem('sb_refresh_token');
+    } catch (e) { /* ignore */ }
+    showToast('Session expired. Reloading to sign in again…', 1800);
+    setTimeout(function () { window.location.reload(); }, 1800);
+  }
+
+  function checkAuthError(res, text) {
+    if (res.status === 401 || (text && text.indexOf('JWT expired') !== -1)) {
+      var err = new Error('JWT expired');
+      err.authFailed = true;
+      return err;
+    }
+    return null;
+  }
+
+  function authFetch(url, options) {
+    return fetch(url, options).then(function (r) {
+      if (!r.ok) {
+        return r.text().then(function (t) {
+          var ae = checkAuthError(r, t);
+          if (ae) throw ae;
+          throw new Error(t || ('HTTP ' + r.status));
+        });
+      }
+      return r.text().then(function (t) {
+        if (!t) return [];
+        try { return JSON.parse(t); } catch (e) { return []; }
+      });
+    });
+  }
+
+  // Expose for Stages 3.2 / 3.3.
+  window.ARP = {
+    SB_URL: SB_URL,
+    SB_REST: SB_REST,
+    showToast: showToast,
+    authFetch: authFetch,
+    handleAuthFailure: handleAuthFailure
+  };
+
+  // =====================================================================
+  // FETCHES
+  //
+  // Lazy contract: only what the default list needs is fetched on page-open.
+  // Allocations, invoices, audit log — all deferred until Stage 3.2 / 3.3.
+  // =====================================================================
+
+  function fetchClients() {
+    return ARP.authFetch(
+      SB_REST + 'ar_clients?select=id,name,is_active' +
+      '&is_active=eq.true&order=name.asc',
+      { headers: pcAuth.headers() }
+    );
+  }
+
+  function fetchPaymentBatches() {
+    var f = state.filters;
+
+    var statusClause;
+    switch (f.status) {
+      case 'open':
+        statusClause = 'status=in.(unallocated,partially_allocated)';
+        break;
+      case 'unallocated':
+        statusClause = 'status=eq.unallocated';
+        break;
+      case 'partially_allocated':
+        statusClause = 'status=eq.partially_allocated';
+        break;
+      case 'fully_allocated':
+        statusClause = 'status=eq.fully_allocated';
+        break;
+      case 'all':
+      default:
+        statusClause = '';
+        break;
+    }
+
+    var clientClause = (f.client && f.client !== 'all')
+      ? 'client_id=eq.' + encodeURIComponent(f.client)
+      : '';
+
+    var dateClause = state.dateBoundActive
+      ? 'payment_date=gte.' + monthsAgoIso(12)
+      : '';
+
+    var selectClause = 'select=' + [
+      'id',
+      'client_id',
+      'advice_number',
+      'payment_date',
+      'payment_amount',
+      'allocated_amount',
+      'status',
+      'notes',
+      'created_at',
+      'created_by',
+      'ar_clients(name)'
+    ].join(',');
+
+    var parts = [selectClause];
+    if (statusClause) parts.push(statusClause);
+    if (clientClause) parts.push(clientClause);
+    if (dateClause)   parts.push(dateClause);
+    parts.push('order=payment_date.desc');
+
+    var url = SB_REST + 'ar_payment_batches?' + parts.join('&');
+    return ARP.authFetch(url, { headers: pcAuth.headers() });
+  }
+
+  // =====================================================================
+  // DERIVED VALUES
+  // =====================================================================
+
+  function denormalize(batch) {
+    var today = todayIso();
+    batch._client_name = batch.ar_clients && batch.ar_clients.name ? batch.ar_clients.name : '';
+    batch._age_days    = daysBetween(batch.payment_date, today);
+    var paid = Number(batch.payment_amount || 0);
+    var alloc = Number(batch.allocated_amount || 0);
+    batch._remaining = Math.round((paid - alloc) * 100) / 100;
+    return batch;
+  }
+
+  function batchSortKey(b, sortBy) {
+    switch (sortBy) {
+      case 'client_name':      return (b._client_name || '').toLowerCase();
+      case 'advice_number':    return (b.advice_number || '').toLowerCase();
+      case 'payment_date':     return b.payment_date || '';
+      case 'payment_amount':   return Number(b.payment_amount || 0);
+      case 'allocated_amount': return Number(b.allocated_amount || 0);
+      case 'remaining':        return b._remaining || 0;
+      case 'age':              return b._age_days || 0;
+      case 'status':           return b.status || '';
+      default:                 return b.payment_date || '';
+    }
+  }
+
+  function visibleBatches() {
+    var q = (state.filters.search || '').trim().toLowerCase();
+    var arr = state.batches.filter(function (b) {
+      if (!q) return true;
+      var hay = [
+        b.advice_number,
+        b._client_name,
+        String(b.payment_amount || ''),
+        b.notes
+      ].join(' ').toLowerCase();
+      return hay.indexOf(q) !== -1;
+    });
+
+    var sb = state.sortBy;
+    var dir = state.sortDir === 'asc' ? 1 : -1;
+    arr.sort(function (a, b) {
+      var ka = batchSortKey(a, sb);
+      var kb = batchSortKey(b, sb);
+      if (ka < kb) return -1 * dir;
+      if (ka > kb) return  1 * dir;
+      return 0;
+    });
+    return arr;
+  }
+
+  // =====================================================================
+  // RENDER
+  // =====================================================================
+
+  function renderFilterDropdowns() {
+    var cSel = document.getElementById('filterClient');
+    if (!cSel) return;
+    cSel.innerHTML = '<option value="all">All clients</option>' +
+      state.clients.map(function (c) {
+        return '<option value="' + esc(c.id) + '">' + esc(c.name) + '</option>';
+      }).join('');
+    cSel.value = state.filters.client;
+  }
+
+  function renderSummaryStrip() {
+    var rows = state.batches; // strip reflects everything loaded (pre-search filter)
+    var totalReceived = 0, totalAllocated = 0, totalRemaining = 0;
+    rows.forEach(function (b) {
+      totalReceived  += Number(b.payment_amount || 0);
+      totalAllocated += Number(b.allocated_amount || 0);
+      totalRemaining += Number(b._remaining || 0);
+    });
+    var countEl  = document.getElementById('summaryCount');
+    var recvEl   = document.getElementById('summaryReceived');
+    var allocEl  = document.getElementById('summaryAllocated');
+    var remainEl = document.getElementById('summaryRemaining');
+    if (countEl)  countEl.textContent  = String(rows.length);
+    if (recvEl)   recvEl.textContent   = fmtMoney(totalReceived);
+    if (allocEl)  allocEl.textContent  = fmtMoney(totalAllocated);
+    if (remainEl) {
+      remainEl.textContent = fmtMoney(totalRemaining);
+      // Muted when remaining is zero (everything reconciled).
+      if (Math.abs(totalRemaining) < 0.005) {
+        remainEl.classList.remove('is-warning');
+        remainEl.classList.add('is-muted');
+      } else {
+        remainEl.classList.add('is-warning');
+        remainEl.classList.remove('is-muted');
+      }
+    }
+  }
+
+  function renderBatchesTable() {
+    var tbody   = document.getElementById('batchesTableBody');
+    var emptyEl = document.getElementById('batchesListEmpty');
+    var olderEl = document.getElementById('showOlderWrap');
+    if (!tbody) return;
+
+    var rows = visibleBatches();
+
+    if (rows.length === 0) {
+      tbody.innerHTML = '';
+      if (emptyEl) {
+        emptyEl.hidden = false;
+        emptyEl.textContent = state.dateBoundActive
+          ? 'No payments match these filters in the last 12 months.'
+          : 'No payments match these filters.';
+      }
+    } else {
+      if (emptyEl) emptyEl.hidden = true;
+
+      tbody.innerHTML = rows.map(function (b) {
+        var statusKey, statusLabel;
+        switch (b.status) {
+          case 'unallocated':         statusKey = 'is-unallocated';         statusLabel = 'unallocated'; break;
+          case 'partially_allocated': statusKey = 'is-partially-allocated'; statusLabel = 'partial'; break;
+          case 'fully_allocated':     statusKey = 'is-fully-allocated';     statusLabel = 'allocated'; break;
+          default:                    statusKey = 'is-unallocated';         statusLabel = b.status || 'unallocated';
+        }
+
+        var adviceCell = b.advice_number
+          ? '<td class="col-advice">' + esc(b.advice_number) + '</td>'
+          : '<td class="col-advice is-blank">—</td>';
+
+        var remClass = 'col-remaining';
+        if (b._remaining > 0.005) remClass += ' has-remaining';
+        else if (Math.abs(b._remaining) < 0.005 && b.status === 'fully_allocated') remClass += ' is-fully';
+
+        return '<tr data-batch-id="' + esc(b.id) + '">' +
+          '<td>' + esc(b._client_name) + '</td>' +
+          adviceCell +
+          '<td class="col-date">' + esc(fmtDate(b.payment_date)) + '</td>' +
+          '<td class="col-amount">' + esc(fmtMoney(Number(b.payment_amount || 0))) + '</td>' +
+          '<td class="col-allocated">' + esc(fmtMoney(Number(b.allocated_amount || 0))) + '</td>' +
+          '<td class="' + remClass + '">' + esc(fmtMoney(Number(b._remaining || 0))) + '</td>' +
+          '<td class="col-age">' + b._age_days + 'd</td>' +
+          '<td><span class="status-badge ' + statusKey + '">' + esc(statusLabel) + '</span></td>' +
+        '</tr>';
+      }).join('');
+    }
+
+    if (olderEl) olderEl.hidden = !state.dateBoundActive;
+  }
+
+  function renderSortHeaders() {
+    var ths = document.querySelectorAll('.batches-table th[data-sort]');
+    ths.forEach(function (th) {
+      var key = th.getAttribute('data-sort');
+      var arrow = th.querySelector('.sort-arrow');
+      if (key === state.sortBy) {
+        th.classList.add('is-sorted');
+        if (arrow) arrow.textContent = state.sortDir === 'asc' ? '↑' : '↓';
+      } else {
+        th.classList.remove('is-sorted');
+        if (arrow) arrow.textContent = '';
+      }
+    });
+  }
+
+  function setLoading(on) {
+    var l = document.getElementById('batchesListLoading');
+    var tbody = document.getElementById('batchesTableBody');
+    var emptyEl = document.getElementById('batchesListEmpty');
+    var olderEl = document.getElementById('showOlderWrap');
+    if (l) l.hidden = !on;
+    if (on) {
+      if (tbody) tbody.innerHTML = '';
+      if (emptyEl) emptyEl.hidden = true;
+      if (olderEl) olderEl.hidden = true;
+    }
+  }
+
+  // =====================================================================
+  // WIRING
+  // =====================================================================
+
+  function reloadBatches() {
+    setLoading(true);
+    return fetchPaymentBatches()
+      .then(function (rows) {
+        state.batches = (rows || []).map(denormalize);
+        renderSummaryStrip();
+        renderBatchesTable();
+      })
+      .catch(function (e) {
+        if (e && e.authFailed) { handleAuthFailure(); return; }
+        showToast('Could not load payments');
+        console.error('[ARP] fetchPaymentBatches failed:', e);
+        state.batches = [];
+        renderSummaryStrip();
+        renderBatchesTable();
+      })
+      .then(function () { setLoading(false); });
+  }
+
+  function wireFilters() {
+    var cSel = document.getElementById('filterClient');
+    var sSel = document.getElementById('filterStatus');
+    var srch = document.getElementById('filterSearch');
+
+    if (cSel) cSel.addEventListener('change', function () {
+      state.filters.client = cSel.value;
+      state.dateBoundActive = true;
+      reloadBatches();
+    });
+    if (sSel) sSel.addEventListener('change', function () {
+      state.filters.status = sSel.value;
+      state.dateBoundActive = true;
+      reloadBatches();
+    });
+    if (srch) srch.addEventListener('input', function () {
+      state.filters.search = srch.value || '';
+      renderBatchesTable();
+    });
+  }
+
+  function wireSorting() {
+    var ths = document.querySelectorAll('.batches-table th[data-sort]');
+    ths.forEach(function (th) {
+      th.addEventListener('click', function () {
+        var key = th.getAttribute('data-sort');
+        if (!key) return;
+        if (state.sortBy === key) {
+          state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
+        } else {
+          state.sortBy = key;
+          state.sortDir = (key === 'payment_date' ||
+                           key === 'payment_amount' ||
+                           key === 'allocated_amount' ||
+                           key === 'remaining' ||
+                           key === 'age') ? 'desc' : 'asc';
+        }
+        renderSortHeaders();
+        renderBatchesTable();
+      });
+    });
+  }
+
+  function wireShowOlder() {
+    var btn = document.getElementById('btnShowOlder');
+    if (btn) {
+      btn.addEventListener('click', function () {
+        state.dateBoundActive = false;
+        reloadBatches();
+      });
+    }
+  }
+
+  // Row-click → Stage 3.2 wires this to open the edit/view modal. For now,
+  // wire the listener and toast a placeholder so the cursor/hover styles
+  // don't read as broken.
+  function wireRowClicks() {
+    var tbody = document.getElementById('batchesTableBody');
+    if (!tbody) return;
+    tbody.addEventListener('click', function (ev) {
+      var row = ev.target && ev.target.closest ? ev.target.closest('tr[data-batch-id]') : null;
+      if (!row) return;
+      showToast('Edit / view payment lands in Stage 3.2', 1800);
+    });
+  }
+
+  // =====================================================================
+  // BOOT — gated by pcAuth.require()
+  // =====================================================================
+  function onAuthReady(user) {
+    document.body.classList.remove('pre-auth');
+
+    wireFilters();
+    wireSorting();
+    wireShowOlder();
+    wireRowClicks();
+    renderSortHeaders();
+
+    setLoading(true);
+    Promise.all([fetchClients()])
+      .then(function (results) {
+        state.clients = results[0] || [];
+        renderFilterDropdowns();
+        return reloadBatches();
+      })
+      .catch(function (e) {
+        if (e && e.authFailed) { handleAuthFailure(); return; }
+        showToast('Could not load page data');
+        console.error('[ARP] initial load failed:', e);
+        setLoading(false);
+      })
+      .then(function () { state.initialFetchDone = true; });
+
+    void user;
+  }
+
+  if (typeof pcAuth === 'undefined' || !pcAuth.require) {
+    document.body.innerHTML =
+      '<div style="padding:60px 22px;font-family:DM Sans,sans-serif;">' +
+      '<h1>Authentication unavailable</h1>' +
+      '<p>pc-auth.js failed to load.</p>' +
+      '</div>';
+  } else {
+    pcAuth.require({
+      pageSlug: 'accounts-receivable',
+      onReady:  onAuthReady
+    });
+  }
+
+})();
+</script>
+
+</body>
+</html>
