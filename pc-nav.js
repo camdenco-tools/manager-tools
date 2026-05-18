@@ -64,7 +64,8 @@
       { label: 'Commission tracker',             href: '/commission-tracker/',     slug: 'commission-tracker' },
       { label: 'Item catalog',                   href: '/item-catalog/',           slug: 'item-catalog' },
       { label: 'Venue item profiles',            href: '/venue-item-profiles/',    slug: 'venue-item-profiles' },
-      { label: 'Bank review',                    href: '/bank-review/',            slug: 'bank-review' }
+      { label: 'Bank review',                    href: '/bank-review/',            slug: 'bank-review' },
+      { label: 'Activity heartbeat',             href: '/activity-heartbeat/',     slug: 'activity-heartbeat' }
     ]
   };
 
