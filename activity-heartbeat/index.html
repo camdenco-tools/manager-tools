@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Activity Heartbeat · Popcorn Chez</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f7f7f5;
+    --card: #ffffff;
+    --ink: #1a1a1a;
+    --ink-soft: #5a5a5a;
+    --ink-faint: #8a8a8a;
+    --border: #e6e6e2;
+    --border-soft: #f0f0ec;
+    --accent: #c8511f;
+    --green: #2d8a4a;
+    --amber: #b78a1a;
+    --red: #b83a2e;
+    --pill-bg: #f0f0ec;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  .page-wrap {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 24px 20px 80px;
+  }
+  .title-row {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin: 8px 0 4px;
+    flex-wrap: wrap;
+  }
+  .title-row h1 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .title-row .badge {
+    display: inline-block;
+    padding: 3px 10px;
+    background: var(--ink);
+    color: #fff;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .subtitle {
+    color: var(--ink-soft);
+    font-size: 14px;
+    margin: 0 0 24px;
+  }
+
+  /* Controls */
+  .controls {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 20px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    align-items: center;
+  }
+  .control-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .control-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .chip {
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    color: var(--ink);
+    transition: all 0.12s ease;
+    font-family: inherit;
+  }
+  .chip:hover { border-color: var(--ink-faint); }
+  .chip.active {
+    background: var(--ink);
+    color: #fff;
+    border-color: var(--ink);
+  }
+  .search-input {
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 13px;
+    font-family: inherit;
+    min-width: 220px;
+    background: var(--card);
+    color: var(--ink);
+  }
+  .search-input:focus { outline: none; border-color: var(--ink); }
+  .refresh-btn {
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    color: var(--ink);
+    font-family: inherit;
+  }
+  .refresh-btn:hover { border-color: var(--ink-faint); }
+
+  /* Summary band */
+  .summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .summary-tile {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 14px;
+  }
+  .summary-tile .label {
+    font-size: 11px;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+  }
+  .summary-tile .value {
+    font-size: 22px;
+    font-weight: 700;
+    margin-top: 4px;
+    letter-spacing: -0.01em;
+  }
+
+  /* Person cards */
+  .people-list { display: flex; flex-direction: column; gap: 12px; }
+
+  .person-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .person-header {
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .person-header:hover { background: var(--border-soft); }
+  .person-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--ink);
+    flex: 1;
+    min-width: 0;
+  }
+  .person-meta {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    font-size: 13px;
+    color: var(--ink-soft);
+    flex-wrap: wrap;
+  }
+  .person-meta .meta-num {
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .recency-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .recency-dot.green { background: var(--green); }
+  .recency-dot.amber { background: var(--amber); }
+  .recency-dot.red { background: var(--red); }
+  .recency-dot.gray { background: var(--ink-faint); }
+
+  .caret {
+    color: var(--ink-faint);
+    font-size: 12px;
+    transition: transform 0.15s ease;
+    flex-shrink: 0;
+  }
+  .caret.open { transform: rotate(90deg); }
+
+  .pages-table {
+    border-top: 1px solid var(--border-soft);
+    padding: 4px 16px 14px;
+  }
+  .pages-table table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .pages-table th {
+    text-align: left;
+    font-weight: 600;
+    font-size: 11px;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 10px 8px 6px;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .pages-table th.num, .pages-table td.num { text-align: right; }
+  .pages-table td {
+    padding: 8px;
+    border-bottom: 1px solid var(--border-soft);
+    vertical-align: middle;
+  }
+  .pages-table tr:last-child td { border-bottom: none; }
+  .page-slug {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    background: var(--pill-bg);
+    padding: 2px 8px;
+    border-radius: 6px;
+    display: inline-block;
+  }
+  .empty-state {
+    background: var(--card);
+    border: 1px dashed var(--border);
+    border-radius: 12px;
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--ink-soft);
+    font-size: 14px;
+  }
+  .loading {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--ink-soft);
+    font-size: 14px;
+  }
+  .error-box {
+    background: #fdf2f0;
+    border: 1px solid #e8c4be;
+    border-radius: 12px;
+    padding: 14px 16px;
+    color: #7a2418;
+    font-size: 14px;
+    margin-bottom: 20px;
+  }
+  .footnote {
+    margin-top: 24px;
+    font-size: 12px;
+    color: var(--ink-faint);
+    text-align: center;
+  }
+  @media (max-width: 600px) {
+    .person-meta { gap: 10px; font-size: 12px; }
+    .person-name { font-size: 15px; }
+    .pages-table { padding: 4px 8px 12px; }
+    .pages-table th, .pages-table td { padding: 6px 4px; font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Header + ribbon + back-to-top injected by pc-nav.js -->
+<!-- Activity tracking (page_load / heartbeat / page_unload) handled by pc-activity.js -->
+
+<div class="page-wrap">
+  <div class="title-row">
+    <h1>Activity Heartbeat</h1>
+    <span class="badge">Admin</span>
+  </div>
+  <p class="subtitle">Who used what page recently. Click a person to see their pages.</p>
+
+  <div class="controls">
+    <div class="control-group">
+      <span class="control-label">Window</span>
+      <button class="chip" data-range="1h">1h</button>
+      <button class="chip active" data-range="24h">24h</button>
+      <button class="chip" data-range="3d">3 days</button>
+      <button class="chip" data-range="7d">7 days</button>
+      <button class="chip" data-range="14d">14 days</button>
+    </div>
+    <div class="control-group" style="margin-left:auto;">
+      <input type="text" id="search-input" class="search-input" placeholder="Search name or page…">
+      <button class="refresh-btn" id="refresh-btn">Refresh</button>
+    </div>
+  </div>
+
+  <div id="summary" class="summary"></div>
+
+  <div id="content">
+    <div class="loading">Loading activity…</div>
+  </div>
+
+  <div class="footnote">
+    Data from <code>activity_events</code> · refreshes on demand · 75-day retention.
+  </div>
+</div>
+
+<script src="/pc-auth.js"></script>
+<script src="/pc-nav.js"></script>
+<script src="/pc-activity.js"></script>
+<script>
+(function() {
+  'use strict';
+
+  // ──────────────────────────────────────────────────────────────
+  // Config
+  // ──────────────────────────────────────────────────────────────
+  var SUPABASE_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
+  var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvYXpsdHRkam93aGxmY2tzb3lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzM5NjY5MDcsImV4cCI6MjA0OTU0MjkwN30.W5GBL4cf-3J8avhmTujwQXAv5IhwAEgaFy8MV4P3z_4';
+
+  var RANGE_HOURS = {
+    '1h': 1,
+    '24h': 24,
+    '3d': 72,
+    '7d': 168,
+    '14d': 336
+  };
+
+  var state = {
+    range: '24h',
+    rows: [],
+    expanded: {}, // display_name -> bool
+    search: '',
+    loading: false
+  };
+
+  // ──────────────────────────────────────────────────────────────
+  // Auth gate
+  // ──────────────────────────────────────────────────────────────
+  pcAuth.require({
+    pageSlug: 'activity-heartbeat',
+    onReady: function(user) {
+      pcActivity.init('activity-heartbeat');
+
+      if (!pcAuth.isAdmin()) {
+        document.getElementById('content').innerHTML =
+          '<div class="error-box">This page is admin-only. Your account does not have access.</div>';
+        return;
+      }
+
+      wireControls();
+      loadData();
+    }
+  });
+
+  // ──────────────────────────────────────────────────────────────
+  // Data fetch
+  // ──────────────────────────────────────────────────────────────
+  function loadData() {
+    state.loading = true;
+    renderLoading();
+
+    var hours = RANGE_HOURS[state.range] || 24;
+    var since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+
+    // Fetch raw events in the window. Pull display_name, page_slug, event_type, occurred_at.
+    // Bound by Supabase default 1000-row cap. For 14d in a busy week this could approach
+    // the cap; if it does, add pagination later. For now this is the simple version.
+    var url = SUPABASE_URL + '/rest/v1/activity_events' +
+      '?select=display_name,page_slug,event_type,occurred_at' +
+      '&occurred_at=gte.' + encodeURIComponent(since) +
+      '&order=occurred_at.desc' +
+      '&limit=10000';
+
+    var headers = pcAuth.headers();
+    headers['Accept'] = 'application/json';
+
+    fetch(url, { headers: headers })
+      .then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function(data) {
+        state.rows = aggregate(data || []);
+        state.loading = false;
+        render();
+      })
+      .catch(function(err) {
+        state.loading = false;
+        document.getElementById('content').innerHTML =
+          '<div class="error-box">Failed to load activity: ' + escapeHtml(err.message) +
+          '</div>';
+      });
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // Aggregation: events -> rows of (person, page, visits, active_min, last_seen)
+  // ──────────────────────────────────────────────────────────────
+  function aggregate(events) {
+    var bucket = {}; // key: name||slug
+
+    for (var i = 0; i < events.length; i++) {
+      var e = events[i];
+      var name = e.display_name || '(unknown)';
+      var slug = e.page_slug || '(unknown)';
+      var key = name + '||' + slug;
+
+      if (!bucket[key]) {
+        bucket[key] = {
+          display_name: name,
+          page_slug: slug,
+          visits: 0,
+          heartbeats: 0,
+          last_seen: null
+        };
+      }
+      var row = bucket[key];
+      if (e.event_type === 'page_load') row.visits++;
+      if (e.event_type === 'heartbeat') row.heartbeats++;
+
+      var t = new Date(e.occurred_at).getTime();
+      if (!row.last_seen || t > row.last_seen) row.last_seen = t;
+    }
+
+    var out = [];
+    for (var k in bucket) {
+      if (bucket.hasOwnProperty(k)) {
+        bucket[k].active_minutes = bucket[k].heartbeats; // 1 heartbeat ≈ 1 active minute
+        out.push(bucket[k]);
+      }
+    }
+    return out;
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // Group rows by person for "By person" view
+  // ──────────────────────────────────────────────────────────────
+  function groupByPerson(rows) {
+    var people = {};
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      if (!people[r.display_name]) {
+        people[r.display_name] = {
+          display_name: r.display_name,
+          pages: [],
+          total_visits: 0,
+          total_active: 0,
+          last_seen: null
+        };
+      }
+      var p = people[r.display_name];
+      p.pages.push(r);
+      p.total_visits += r.visits;
+      p.total_active += r.active_minutes;
+      if (!p.last_seen || r.last_seen > p.last_seen) p.last_seen = r.last_seen;
+    }
+
+    var arr = [];
+    for (var n in people) {
+      if (people.hasOwnProperty(n)) {
+        // Sort each person's pages by recency
+        people[n].pages.sort(function(a, b) { return b.last_seen - a.last_seen; });
+        arr.push(people[n]);
+      }
+    }
+    // Sort people by most recent activity
+    arr.sort(function(a, b) { return b.last_seen - a.last_seen; });
+    return arr;
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // Rendering
+  // ──────────────────────────────────────────────────────────────
+  function render() {
+    var people = groupByPerson(state.rows);
+
+    // Apply search filter
+    if (state.search) {
+      var q = state.search.toLowerCase();
+      people = people.filter(function(p) {
+        if (p.display_name.toLowerCase().indexOf(q) !== -1) return true;
+        for (var i = 0; i < p.pages.length; i++) {
+          if (p.pages[i].page_slug.toLowerCase().indexOf(q) !== -1) return true;
+        }
+        return false;
+      });
+    }
+
+    renderSummary(people);
+    renderPeople(people);
+  }
+
+  function renderSummary(people) {
+    var totalPeople = people.length;
+    var totalVisits = 0;
+    var totalActive = 0;
+    var activeNow = 0;
+    var nowMs = Date.now();
+    for (var i = 0; i < people.length; i++) {
+      totalVisits += people[i].total_visits;
+      totalActive += people[i].total_active;
+      if (nowMs - people[i].last_seen < 5 * 60 * 1000) activeNow++; // active in last 5 min
+    }
+
+    var html =
+      tile('People', totalPeople) +
+      tile('Active now', activeNow, 'within last 5 min') +
+      tile('Page loads', totalVisits) +
+      tile('Active minutes', totalActive);
+    document.getElementById('summary').innerHTML = html;
+  }
+
+  function tile(label, value, sublabel) {
+    return '<div class="summary-tile">' +
+      '<div class="label">' + escapeHtml(label) + '</div>' +
+      '<div class="value">' + escapeHtml(String(value)) + '</div>' +
+      (sublabel ? '<div class="label" style="margin-top:2px;text-transform:none;font-weight:400;">' +
+        escapeHtml(sublabel) + '</div>' : '') +
+      '</div>';
+  }
+
+  function renderPeople(people) {
+    var content = document.getElementById('content');
+    if (people.length === 0) {
+      content.innerHTML = '<div class="empty-state">No activity in the selected window.</div>';
+      return;
+    }
+
+    var html = '<div class="people-list">';
+    for (var i = 0; i < people.length; i++) {
+      html += renderPersonCard(people[i]);
+    }
+    html += '</div>';
+    content.innerHTML = html;
+
+    // Wire expand/collapse
+    var headers = content.querySelectorAll('[data-person-header]');
+    for (var j = 0; j < headers.length; j++) {
+      headers[j].addEventListener('click', function(e) {
+        var name = this.getAttribute('data-person-header');
+        state.expanded[name] = !state.expanded[name];
+        render();
+      });
+    }
+  }
+
+  function renderPersonCard(p) {
+    var expanded = !!state.expanded[p.display_name];
+    var dotClass = recencyClass(p.last_seen);
+    var html = '<div class="person-card">';
+
+    html += '<div class="person-header" data-person-header="' + escapeAttr(p.display_name) + '">';
+    html += '<span class="recency-dot ' + dotClass + '"></span>';
+    html += '<span class="person-name">' + escapeHtml(p.display_name) + '</span>';
+    html += '<span class="person-meta">';
+    html += '<span><span class="meta-num">' + p.pages.length + '</span> page' + (p.pages.length === 1 ? '' : 's') + '</span>';
+    html += '<span><span class="meta-num">' + p.total_visits + '</span> visits</span>';
+    html += '<span><span class="meta-num">' + p.total_active + '</span> active min</span>';
+    html += '<span>last seen <span class="meta-num">' + relativeTime(p.last_seen) + '</span></span>';
+    html += '</span>';
+    html += '<span class="caret ' + (expanded ? 'open' : '') + '">▶</span>';
+    html += '</div>';
+
+    if (expanded) {
+      html += '<div class="pages-table">';
+      html += '<table>';
+      html += '<thead><tr><th>Page</th><th class="num">Visits</th><th class="num">Active min</th><th>Last seen</th></tr></thead>';
+      html += '<tbody>';
+      for (var i = 0; i < p.pages.length; i++) {
+        var pg = p.pages[i];
+        html += '<tr>';
+        html += '<td><span class="page-slug">' + escapeHtml(pg.page_slug) + '</span></td>';
+        html += '<td class="num">' + pg.visits + '</td>';
+        html += '<td class="num">' + pg.active_minutes + '</td>';
+        html += '<td>' + relativeTime(pg.last_seen) + '</td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table></div>';
+    }
+
+    html += '</div>';
+    return html;
+  }
+
+  function renderLoading() {
+    document.getElementById('content').innerHTML = '<div class="loading">Loading activity…</div>';
+    document.getElementById('summary').innerHTML = '';
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // Helpers
+  // ──────────────────────────────────────────────────────────────
+  function recencyClass(ms) {
+    if (!ms) return 'gray';
+    var diff = Date.now() - ms;
+    if (diff < 5 * 60 * 1000) return 'green';        // <5 min
+    if (diff < 60 * 60 * 1000) return 'amber';       // <1 hr
+    if (diff < 24 * 60 * 60 * 1000) return 'red';    // <24 hr
+    return 'gray';                                    // older
+  }
+
+  function relativeTime(ms) {
+    if (!ms) return 'never';
+    var diff = Date.now() - ms;
+    var sec = Math.floor(diff / 1000);
+    if (sec < 60) return sec + ' sec ago';
+    var min = Math.floor(sec / 60);
+    if (min < 60) return min + ' min ago';
+    var hr = Math.floor(min / 60);
+    if (hr < 24) return hr + ' hr ago';
+    var day = Math.floor(hr / 24);
+    if (day < 7) return day + 'd ago';
+    return new Date(ms).toLocaleDateString();
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function(c) {
+      return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c];
+    });
+  }
+  function escapeAttr(s) { return escapeHtml(s); }
+
+  // ──────────────────────────────────────────────────────────────
+  // Wire controls
+  // ──────────────────────────────────────────────────────────────
+  function wireControls() {
+    var chips = document.querySelectorAll('.chip[data-range]');
+    for (var i = 0; i < chips.length; i++) {
+      chips[i].addEventListener('click', function() {
+        var r = this.getAttribute('data-range');
+        if (r === state.range) return;
+        for (var j = 0; j < chips.length; j++) chips[j].classList.remove('active');
+        this.classList.add('active');
+        state.range = r;
+        loadData();
+      });
+    }
+
+    var refreshBtn = document.getElementById('refresh-btn');
+    refreshBtn.addEventListener('click', function() { loadData(); });
+
+    var searchInput = document.getElementById('search-input');
+    searchInput.addEventListener('input', function() {
+      state.search = this.value || '';
+      render();
+    });
+  }
+
+})();
+</script>
+
+</body>
+</html>
