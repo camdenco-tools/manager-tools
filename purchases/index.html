@@ -407,15 +407,8 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: #1a1a1a
   </div>
 </div>
 
-<header>
-  <div class="header-left">
-    <a href="/" class="back-link">&#8592; Toolkit</a>
-    <div class="hdivider"></div>
-    <span class="header-title">Purchases &amp; Transfers</span>
-    <span class="header-badge">Expenses</span>
-  </div>
-  <div class="header-right" id="header-right"></div>
-</header>
+<!-- Header + ribbon + back-to-top injected by pc-nav.js -->
+<!-- Activity tracking (page_load / heartbeat / page_unload) handled by pc-activity.js -->
 
 <div class="page-body">
   <div class="container">
@@ -537,6 +530,8 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: #1a1a1a
 </div>
 
 <script src="/pc-auth.js"></script>
+<script src="/pc-nav.js"></script>
+<script src="/pc-activity.js"></script>
 <script>
 var SUPA_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
 var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvYXpsdHRkam93aGxmY2tzb3lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNzU4MjMsImV4cCI6MjA5MDg1MTgyM30.tagP_88g7R3d_p7a4Kp0NirnJgkAR5AQQImCt414SJg';
@@ -565,16 +560,7 @@ function apiHeaders() {
   return { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY };
 }
 
-function setupHeader() {
-  var el = document.getElementById('header-right');
-  if (!el) return;
-  if (typeof pcAuth !== 'undefined') {
-    var u = pcAuth.getUser();
-    if (u) {
-      el.innerHTML = '<span class="header-user">' + u.display_name + '</span><button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
-    }
-  }
-}
+// Header + user pill now painted by pc-nav.js — no setupHeader needed.
 
 function isAdmin() {
   return typeof pcAuth !== 'undefined' && pcAuth.isAdmin();
@@ -1415,12 +1401,17 @@ function init() {
   document.getElementById('s-to').value = todayLocal();
   document.getElementById('summary-month').value = thisMonth();
 
-  setupHeader();
   loadMonthlySummary();
   loadReconCharges();
 }
 
-pcAuth.init(function() { init(); });
+pcAuth.require({
+  pageSlug: 'purchases',
+  onReady: function (user) {
+    pcActivity.init('purchases');
+    init();
+  }
+});
 </script>
 </body>
 </html>
