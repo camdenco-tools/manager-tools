@@ -560,6 +560,13 @@ header {
       <label>Statement month</label>
       <input type="month" id="batch-month">
     </div>
+    <div class="field" style="margin-bottom:14px;">
+      <label style="font-size:13px;font-weight:500;color:#555;display:block;margin-bottom:4px;">
+        Note to managers <span style="color:#c0392b;">*</span>
+      </label>
+      <textarea id="batch-note" placeholder='e.g., "This is the bank account attached to the card for Delaware" or "On the bank that has the card Ryan uses -- DE runs unless otherwise noted"' style="width:100%;padding:10px 12px;border:1px solid #e0e0e0;border-radius:10px;font-size:14px;color:#1a1a1a;background:#fafafa;font-family:inherit;resize:vertical;min-height:70px;"></textarea>
+      <div id="batch-note-error" style="display:none;color:#c0392b;font-size:12px;margin-top:6px;"></div>
+    </div>
     <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()">
       <p>Drop a CSV, Excel, or screenshot here</p>
       <p class="sub">or click to browse</p>
@@ -789,6 +796,17 @@ function handleFileUpload(input) {
 async function processFile(file) {
   var batchMonth = document.getElementById('batch-month').value;
   if (!batchMonth) { alert('Please select a statement month first.'); return; }
+
+  // Validate batch note — required field, enforced in app code (DB column is nullable)
+  var batchNote = document.getElementById('batch-note').value.trim();
+  var noteErrEl = document.getElementById('batch-note-error');
+  noteErrEl.style.display = 'none';
+  if (!batchNote) {
+    noteErrEl.textContent = 'Please add a note so managers know what this batch is about.';
+    noteErrEl.style.display = 'block';
+    document.getElementById('batch-note').focus();
+    return;
+  }
 
   document.getElementById('upload-card').style.display = 'none';
   document.getElementById('processing-card').style.display = 'block';
@@ -1088,6 +1106,9 @@ async function matchCharges(lines, batchMonth, fileName, fileType) {
   var TRANSFER_PATTERNS = /online transfer|transfer to|transfer from|xfer to|xfer from|wire transfer|online payment thank you|payment thank you/i;
   var DEPOSIT_PATTERNS = /ach paymen|ach credit|ach deposit|direct dep|payroll dep/i;
 
+  // Read the batch note from the upload card (already validated in processFile)
+  var batchNote = (document.getElementById('batch-note').value || '').trim();
+
   var filteredCount = 0;
   var filtered = [];
   for (var f = 0; f < lines.length; f++) {
@@ -1234,7 +1255,7 @@ async function matchCharges(lines, batchMonth, fileName, fileType) {
           raw_description: wc.raw_description, amount: wc.amount,
           vendor_name: wc.vendor_name, category_id: wc.category_id,
           status: wc.status, matched_purchase_id: wc.matched_purchase_id,
-          batch_month: wc.batch_month,
+          batch_month: wc.batch_month, batch_note: batchNote,
           uploaded_by: wc.uploaded_by, uploaded_at: new Date().toISOString()
         })
       });
@@ -1250,7 +1271,7 @@ async function matchCharges(lines, batchMonth, fileName, fileType) {
       headers: Object.assign({}, hdrs(), {'Content-Type': 'application/json', 'Prefer': 'return=minimal'}),
       body: JSON.stringify({
         id: currentBatchId, file_name: fileName, file_type: fileType,
-        batch_month: batchMonth, total_charges: deduped.length,
+        batch_month: batchMonth, batch_note: batchNote, total_charges: deduped.length,
         total_amount: deduped.reduce(function(s,c) { return s + c.amount; }, 0),
         matched_count: matchedCount, expense_count: expCount, pending_count: foodCount,
         uploaded_by: currentUser ? currentUser.display_name : 'admin', status: 'reviewed'
@@ -1263,6 +1284,7 @@ async function matchCharges(lines, batchMonth, fileName, fileType) {
 
   document.getElementById('processing-card').style.display = 'none';
   document.getElementById('upload-card').style.display = 'block';
+  document.getElementById('batch-note').value = '';  // Clear for next upload — no persistence
   await loadPendingCharges();
   await loadReturned();
   await loadTrash();
