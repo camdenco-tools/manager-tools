@@ -59,6 +59,7 @@
       { label: 'Accounts receivable',            href: '/accounts-receivable/',    slug: 'accounts-receivable' },
       { label: 'Event master list',              href: '/events-admin/',           slug: 'events-admin' },
       { label: 'User access',                    href: '/user-access/',            slug: 'user-access' },
+      { label: 'Venue roles',                    href: '/manage-venue-roles/',     slug: 'manage-venue-roles' },
       { label: 'Par levels',                     href: '/par-levels/',             slug: 'par-levels' },
       { label: 'Deal structure',                 href: '/deal-structure/',         slug: 'deal-structure' },
       { label: 'Commission tracker',             href: '/commission-tracker/',     slug: 'commission-tracker' },
