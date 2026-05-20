@@ -255,6 +255,19 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: #1a1a1a
   grid-column: 2 / -1;
   margin-top: 2px;
 }
+.recon-batch-note {
+  grid-row: 3;
+  grid-column: 1 / -1;
+  margin-top: 8px;
+  padding: 7px 10px;
+  background: #FFF7E8;
+  border-left: 3px solid #EF9F27;
+  border-radius: 4px;
+  font-size: 12px;
+  font-style: italic;
+  color: #854F0B;
+  line-height: 1.4;
+}
 .recon-venue-sel.assigned {
   background: #E6F1FB;
   border-color: #85B7EB;
@@ -1051,7 +1064,7 @@ function toggleReconBar() {
 async function loadReconCharges() {
   try {
     var hdrs = apiHeaders();
-    var res = await fetch(SUPA_URL + '/rest/v1/bank_charges?status=eq.pending_venue&select=id,charge_date,vendor_name,amount,batch_month,category_id&order=charge_date.asc', {
+    var res = await fetch(SUPA_URL + '/rest/v1/bank_charges?status=eq.pending_venue&select=id,charge_date,vendor_name,amount,batch_month,category_id,batch_note&order=charge_date.asc', {
       headers: hdrs
     });
     if (!res.ok) return;
@@ -1122,6 +1135,11 @@ function renderReconList() {
       html += '<option value="' + VENUE_OPTIONS[v] + '"' + (selVal === VENUE_OPTIONS[v] ? ' selected' : '') + '>' + VENUE_OPTIONS[v] + '</option>';
     }
     html += '</select>';
+    // Batch note from admin upload — only renders if note exists (legacy rows skip this)
+    if (c.batch_note) {
+      var safeNote = String(c.batch_note).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+      html += '<div class="recon-batch-note">&ldquo;' + safeNote + '&rdquo;</div>';
+    }
     html += '</div>';
   }
   listEl.innerHTML = html;
