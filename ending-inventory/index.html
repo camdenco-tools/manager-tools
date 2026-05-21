@@ -255,6 +255,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   <div id="success-wrap"></div>
 </div>
 
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="/pc-auth.js"></script>
 <script src="/pc-nav.js"></script>
 <script src="/pc-activity.js"></script>
@@ -710,7 +711,7 @@ function renderSections() {
   }
   html += '<div id="stats-el"></div>';
   html += '<div id="progress-el"></div>';
-  html += '<div class="actions-row"><button class="print-btn" onclick="togglePrintPanel()">Print count sheets</button></div>';
+  html += '<div class="actions-row" style="gap:8px;"><button class="print-btn" onclick="togglePrintPanel()">Print count sheets</button><button class="print-btn" onclick="exportQuoteSheet()">Export to Excel</button></div>';
   html += '<div class="print-panel" id="print-panel"><div class="print-panel-title">Choose what to print -- ' + venueLabel + '</div><div class="print-options">' + printOpts + '</div></div>';
   html += sectionsHtml;
 
@@ -1113,6 +1114,78 @@ function doPrint(catId) {
   } catch(e) {
     console.error('[ending-inventory] doPrint failed:', e);
     alert('Could not prepare the print sheet. ' + (e && e.message ? e.message : 'Try again.'));
+  }
+}
+
+function exportQuoteSheet() {
+  if (!currentVenue) { alert('Select a venue first.'); return; }
+  if (typeof XLSX === 'undefined') { alert('Excel library not loaded. Refresh the page and try again.'); return; }
+  try {
+    var venueLabel = '';
+    for (var i = 0; i < VENUES.length; i++) {
+      if (VENUES[i].code === currentVenue) { venueLabel = VENUES[i].label; break; }
+    }
+    var monthLabel = getMonthLabel(currentMonth);
+    var items = getVenueItems();
+    if (items.length === 0) { alert('No items profiled for this venue yet.'); return; }
+
+    // Sort: category sort_order, then item name
+    var catOrder = {};
+    for (var i = 0; i < pcCategories.length; i++) catOrder[pcCategories[i].id] = pcCategories[i].sort_order || 999;
+    items.sort(function(a, b) {
+      var ao = catOrder[a.cos_category_id] || 999;
+      var bo = catOrder[b.cos_category_id] || 999;
+      if (ao !== bo) return ao - bo;
+      return a.name.localeCompare(b.name);
+    });
+
+    var rows = [];
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      var cat = getCatById(it.cos_category_id);
+      rows.push({
+        'Category': cat ? cat.name : '',
+        'Item': it.name,
+        'Current Vendor': it.vendor || '',
+        'Purchase Unit': it.purchase_unit || 'each',
+        'Units/Case': parseFloat(it.units_per_case) || 1,
+        'Current Case Cost': parseFloat(it.case_cost) || 0,
+        'New Case Cost': '',
+        'Switch Source?': '',
+        'Notes': ''
+      });
+    }
+
+    var ws = XLSX.utils.json_to_sheet(rows);
+
+    // Column widths (chars)
+    ws['!cols'] = [
+      {wch: 22}, // Category
+      {wch: 38}, // Item
+      {wch: 20}, // Current Vendor
+      {wch: 14}, // Purchase Unit
+      {wch: 11}, // Units/Case
+      {wch: 17}, // Current Case Cost
+      {wch: 16}, // New Case Cost
+      {wch: 16}, // Switch Source?
+      {wch: 30}  // Notes
+    ];
+
+    // Format Current Case Cost as currency
+    var range = XLSX.utils.decode_range(ws['!ref']);
+    for (var R = range.s.r + 1; R <= range.e.r; R++) {
+      var cellAddr = XLSX.utils.encode_cell({r: R, c: 5}); // col F = Current Case Cost
+      if (ws[cellAddr]) ws[cellAddr].z = '"$"#,##0.00';
+    }
+
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Quote Sheet');
+
+    var fname = currentVenue + '_quote_sheet_' + currentMonth + '.xlsx';
+    XLSX.writeFile(wb, fname);
+  } catch (e) {
+    console.error('[ending-inventory] exportQuoteSheet failed:', e);
+    alert('Could not export. ' + (e && e.message ? e.message : 'Try again.'));
   }
 }
 
