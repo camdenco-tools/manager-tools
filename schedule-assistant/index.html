@@ -2518,6 +2518,16 @@ function eventTotalNeeded(eventId) {
 function eventTotalFilled(eventId) {
   return positionsForEvent(eventId).length;
 }
+// Counts placements that are "done" from a 7shifts perspective:
+// either explicitly marked synced, or JMAC (which never goes into 7shifts).
+// Used by eventStatusClass to decide between "Filled" (pills placed but
+// Meg still has 7shifts work) and "Staffed" (no further action required).
+function eventTotalSynced(eventId) {
+  return positionsForEvent(eventId).filter(p =>
+    p.source === 'jmac' || p.seven_shifts_synced === true
+  ).length;
+}
+
 
 // Effective signed-up count for an event (people minus those assigned elsewhere same date)
 function effectiveSignupCount(event) {
@@ -2828,8 +2838,15 @@ function render() {
 function eventStatusClass(ev) {
   const needed = eventTotalNeeded(ev.id);
   const filled = eventTotalFilled(ev.id);
+  const synced = eventTotalSynced(ev.id);
   if (needed === 0) return { cls: 'not-submitted', tag: 'Not Submitted' };
-  if (filled >= needed) return { cls: 'staffed', tag: '✓ Staffed' };
+  // Fully filled AND every pill synced to 7shifts (JMAC counts as synced) =
+  // truly done. Green + strikethrough = no further action required.
+  if (filled >= needed && synced >= needed) return { cls: 'staffed', tag: '✓ Staffed' };
+  // All slots have pills but not all synced — Meg still has 7shifts work.
+  // Render as "Filled" in the existing amber treatment so it visually reads
+  // as "more to do" rather than "done".
+  if (filled >= needed) return { cls: 'submitted', tag: 'Filled' };
   return { cls: 'submitted', tag: 'Submitted' };
 }
 
