@@ -249,6 +249,22 @@ body {
   letter-spacing: 0.02em;
   white-space: nowrap;
 }
+/* Ghost-positions ribbon badge — surfaces on the collapsed event-head
+   when the event has placements whose stand or role no longer has a
+   matching staffing_requests row. Visual vocabulary mirrors .unresolved-tag
+   (same size, same icon-then-count layout) but red so it reads as a
+   different category of problem. Click expands the event so the Ghost
+   box is immediately visible. */
+.ghost-tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10px; font-weight: 700;
+  padding: 3px 8px; border-radius: 4px;
+  background: var(--red-light); color: var(--red);
+  border: 1px solid var(--red-border);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  cursor: help;
+}
 .lock-tag {
   display: inline-flex; align-items: center; gap: 4px;
   font-size: 11px; font-weight: 700; color: var(--slate);
@@ -912,6 +928,68 @@ body {
 .support-role-card {
   background: white; border: 1px solid var(--border);
   border-radius: 6px; padding: 10px;
+}
+
+/* ============================================================
+ * GHOST POSITIONS BOX — added for the plan-reduction orphan bug.
+ * Shows position_assignments rows whose (stand, role) no longer
+ * has a matching staffing_requests row with headcount > 0. Happens
+ * when a manager reduces headcount or removes a stand in Event
+ * Planning AFTER people were already placed by Schedule Assistant.
+ * The pills are real placements — they keep their original stand
+ * and role values in the DB for audit history. The box just makes
+ * them visible so they can be dragged into a live slot or released.
+ *
+ * Pills inherit .slot-filled styling so 7Shifts sync state, click-
+ * to-open-crew-card, home-venue badges, etc all work without any
+ * new wiring — they're just pills in a different container.
+ * ============================================================ */
+.ghost-section {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  background: #fdf4f3;
+  border: 1px solid var(--red-border);
+  border-left: 3px solid var(--red);
+  border-radius: 8px;
+}
+.ghost-section-head {
+  font-size: 12px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--red);
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 10px;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.ghost-section-head .ghost-count {
+  font-size: 11px; font-weight: 700; color: var(--red);
+  background: white; border: 1px solid var(--red-border);
+  padding: 2px 8px; border-radius: 10px;
+  text-transform: none; letter-spacing: 0;
+}
+.ghost-section-head .ghost-hint {
+  font-size: 10px; font-weight: 500; color: var(--label);
+  text-transform: none; letter-spacing: 0;
+  font-style: italic;
+}
+.ghost-pill-list {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  align-items: flex-start;
+}
+/* Each ghost pill is a .slot-filled (so it inherits color states and
+   drag handlers) but with a "was: X / Y" line beneath the name. The
+   was-line uses .person-note formatting so it wraps cleanly when the
+   stand/role label is long. min-width keeps pills readable when the
+   list wraps to multiple rows. */
+.ghost-pill {
+  min-width: 180px;
+  max-width: 280px;
+}
+.ghost-was-line {
+  flex-basis: 100%;
+  font-size: 10px; color: var(--label);
+  font-style: italic; font-weight: 500;
+  line-height: 1.3; padding-top: 2px;
+  word-break: break-word;
 }
 
 .locked-overlay {
@@ -2511,6 +2589,33 @@ function positionsFor(eventId, stand, role) {
 function positionsForEvent(eventId) {
   return state.positions.filter(p => p.event_id === eventId);
 }
+
+// Ghost positions — placements whose (event_id, venue, stand, role)
+// no longer has a matching staffing_requests row with headcount > 0.
+// Happens when Event Planning reduces a stand's role headcount to zero,
+// or removes the stand entirely, AFTER people were placed here. The
+// position_assignments rows still exist — they're just disconnected
+// from the plan. Returns them as an array of position_assignments rows.
+//
+// JMAC placements are included (same rules apply — if the plan says zero
+// CC slots, JMAC slots placed against CC are also ghosts and need to be
+// resolved). The over-fill case (role still exists, headcount lower than
+// placed count) is NOT a ghost — those pills stay in their role section
+// with the existing "⚠ over by N" badge, since the role still belongs.
+function ghostPlacementsFor(eventId) {
+  const positions = positionsForEvent(eventId);
+  if (positions.length === 0) return [];
+  // Build a Set of "stand||role" keys that have a live staffing_requests
+  // row for this event (headcount > 0 — same filter loadAll() uses).
+  const liveKeys = new Set();
+  state.staffingRequests.forEach(r => {
+    if (r.event_id !== eventId) return;
+    if ((r.headcount || 0) <= 0) return;
+    liveKeys.add(r.stand + '||' + r.role);
+  });
+  return positions.filter(p => !liveKeys.has(p.stand + '||' + p.role));
+}
+
 function eventTotalNeeded(eventId) {
   const reqs = state.staffingRequests.filter(r => r.event_id === eventId);
   return reqs.reduce((s, r) => s + (r.headcount || 0), 0);
@@ -2791,6 +2896,15 @@ function render() {
       if (ratio < 0.7) pillCls = 'red';
       else if (ratio < 1.0) pillCls = 'amber';
     }
+    // Ghost-positions demote: if any live event today has ghost placements,
+    // a green day pill gets knocked down to amber. Green means "this day is
+    // done" — it isn't done when there are unresolved ghosts. Red stays red
+    // because that's already the strongest signal (a short day is short
+    // regardless of ghost state).
+    if (pillCls === 'green') {
+      const dayHasGhosts = events.some(e => ghostPlacementsFor(e.id).length > 0);
+      if (dayHasGhosts) pillCls = 'amber';
+    }
 
     // Day-level unresolved = distinct people who signed up for >1 event today and have no assignment.
     // Per-event unresolved (rendered on each row) counts each event's view of the same set, so
@@ -2810,12 +2924,19 @@ function render() {
 
     html += '<div class="day-group">';
     html += '<h2>' + fmtDayHeader(date) + '</h2>';
-    // Skip the "X / Y people available" pill entirely when the day has zero
-    // live events (all events cancelled). Otherwise the pill would read
-    // "0 / 0 people available" which is misleading.
+    // Day-level headcount pill — total staff needed across every live event
+    // on this day. Single number (not X/Y) because per-event signup counts
+    // already live on each event row; duplicating them at the day level was
+    // confusing. Color still reflects coverage (red/amber/green based on
+    // distinct unique humans available across the day's events), so the
+    // at-a-glance "is this day short?" signal is preserved without the
+    // ambiguous fraction.
     if (events.length > 0) {
-      html += '<span class="day-pill-primary ' + pillCls + '">' +
-        availableHumans + ' / ' + totalNeed + ' people available</span>';
+      const _staffWord = totalNeed === 1 ? 'staff needed' : 'staff needed';
+      html += '<span class="day-pill-primary ' + pillCls + '" ' +
+        'title="' + availableHumans + ' distinct people signed up across all events today">' +
+        totalNeed + ' ' + _staffWord +
+        '</span>';
     }
     html += '<span class="day-spacer"></span>';
     html += '<div class="day-pills-secondary">';
@@ -2839,7 +2960,17 @@ function eventStatusClass(ev) {
   const needed = eventTotalNeeded(ev.id);
   const filled = eventTotalFilled(ev.id);
   const synced = eventTotalSynced(ev.id);
+  const ghosts = ghostPlacementsFor(ev.id).length;
   if (needed === 0) return { cls: 'not-submitted', tag: 'Not Submitted' };
+  // Ghost positions block the "✓ Staffed" treatment entirely. Even if every
+  // live slot is filled and synced, a ghost on the event means someone is
+  // scheduled with nowhere to go — that's an action item for the staffing
+  // manager (drag to a live slot, or ✕ to release). Sync state of the ghost
+  // doesn't matter; the ghost itself is what's unresolved. The event drops
+  // to "Filled" (amber) until every ghost is cleared.
+  if (ghosts > 0 && filled >= needed) {
+    return { cls: 'submitted', tag: 'Filled' };
+  }
   // Fully filled AND every pill synced to 7shifts (JMAC counts as synced) =
   // truly done. Green + strikethrough = no further action required.
   if (filled >= needed && synced >= needed) return { cls: 'staffed', tag: '✓ Staffed' };
@@ -2910,6 +3041,22 @@ function renderEventRow(ev) {
   const evUnresolved = unresolvedForEvent(ev);
   if (evUnresolved > 0) {
     html += '<span class="unresolved-tag">⚠ ' + evUnresolved + ' unresolved</span>';
+  }
+  // Ghost-positions ribbon badge — sits next to the unresolved tag so all
+  // "this event needs attention" signals live in one cluster. Tooltip
+  // surfaces the names so a manager can decide whether to expand without
+  // clicking. Click behavior is inherited from the event-head row (clicking
+  // anywhere outside a button expands the event), so no special wiring.
+  const evGhosts = ghostPlacementsFor(ev.id);
+  if (evGhosts.length > 0) {
+    const ghostNames = evGhosts.map(g => g.staff_name).join(', ');
+    const ghostTip = evGhosts.length + ' ghost position' +
+      (evGhosts.length === 1 ? '' : 's') +
+      ' — ' + ghostNames +
+      ' (placed but their stand/role was removed from the plan). Expand to fix.';
+    html += '<span class="ghost-tag" title="' + escapeAttr(ghostTip) + '">' +
+      '👻 ' + evGhosts.length + ' ghost' + (evGhosts.length === 1 ? '' : 's') +
+      '</span>';
   }
   // JMAC ribbon badges. Two separate signals:
   //  1. JMAC ×N — how many slots on this event are JMAC-covered.
@@ -3021,6 +3168,11 @@ function renderExpanded(ev, locked) {
   html += renderAvailablePanel(ev);
   html += '<div>';
   html += renderSummaryBar(ev);
+
+  // Ghost positions render above everything else in the main column —
+  // these are placements that no longer have a matching plan slot, so
+  // they need attention before the manager focuses on regular stand work.
+  html += renderGhostSection(ev, locked);
 
   if (!standGroups.length) {
     html += '<div class="no-stands-msg">No staffing requests submitted for this event yet. <a href="/event-planning/">Open Event Planning →</a></div>';
@@ -3444,6 +3596,95 @@ function renderTypeahead() {
       '<span class="ta-meta">' + (isSignedUp ? 'Employee · signed up today' : 'Employee') + '</span>' +
       '</div>';
   }).join('');
+}
+
+// Render the Ghost Positions box for an event. Returns empty string when
+// there are no ghosts (box self-hides). When there are ghosts, renders a
+// red-accented full-width section above the stands grid with each ghost
+// as a .slot-filled pill (so it inherits all the existing pill machinery:
+// 7Shifts sync toggle, crew-card click, home-venue badge, drag-to-move,
+// ✕ to release). A small "was: stand / role" line sits beneath each
+// name to surface the original placement context.
+function renderGhostSection(ev, locked) {
+  const ghosts = ghostPlacementsFor(ev.id);
+  if (ghosts.length === 0) return '';
+  // Sort: by stand, then by role, then by assigned_at — so people who
+  // came from the same removed stand/role group together visually.
+  ghosts.sort((a, b) => {
+    if (a.stand !== b.stand) return a.stand.localeCompare(b.stand);
+    if (a.role !== b.role) return a.role.localeCompare(b.role);
+    return (a.assigned_at || '').localeCompare(b.assigned_at || '');
+  });
+  let html = '<div class="ghost-section">';
+  html += '<div class="ghost-section-head">';
+  html += '<span>👻 Ghost positions <span class="ghost-count">' + ghosts.length + '</span></span>';
+  html += '<span class="ghost-hint">These people are scheduled but their stand or role was removed from the plan. Drag to a live slot, or ✕ to release.</span>';
+  html += '</div>';
+  html += '<div class="ghost-pill-list">';
+  ghosts.forEach(p => {
+    html += renderGhostPill(ev, p, locked);
+  });
+  html += '</div>';
+  html += '</div>';
+  return html;
+}
+
+// Single ghost pill. Reuses .slot-filled styling (red default, green when
+// synced, JMAC purple, etc) plus all the standard pill data attributes so
+// the existing drag/sync/click handlers attach to it for free. Adds .ghost-pill
+// for min-width sizing and a .ghost-was-line beneath the name.
+function renderGhostPill(ev, p, locked) {
+  let cls = 'slot-filled ghost-pill';
+  if (p.source === 'manual') cls += ' manager-typed';
+  if (p.source === 'placeholder') cls += ' placeholder';
+  if (p.source === 'jmac') cls += ' jmac';
+  if (locked) cls += ' locked';
+  if (p.seven_shifts_synced === true) cls += ' synced';
+
+  // JMAC ghosts get the simplified pill (no home-venue badge, no crew card)
+  if (p.source === 'jmac') {
+    let h = '<div class="' + cls + '" draggable="' + (locked ? 'false' : 'true') +
+      '" data-position-id="' + p.id + '" data-staff-name="' + escapeAttr(p.staff_name) + '" data-source="jmac">';
+    h += '<span class="person-name">📞 ' + escapeHtml(p.staff_name) + '</span>';
+    h += '<span class="jmac-slot-tag">AGENCY</span>';
+    if (!locked) h += '<button class="x" data-remove-position="' + p.id + '" title="Remove">✕</button>';
+    h += '<div class="ghost-was-line">was: ' + escapeHtml(p.stand) + ' / ' + escapeHtml(p.role) + '</div>';
+    h += '</div>';
+    return h;
+  }
+
+  let html = '<div class="' + cls + '" draggable="' + (locked ? 'false' : 'true') +
+    '" data-position-id="' + p.id + '" data-staff-name="' + escapeAttr(p.staff_name) + '" data-source="' + p.source + '">';
+  // Clickable name — opens crew card modal via existing handler
+  html += '<span class="person-name" data-staff-name-click="' + escapeAttr(p.staff_name) +
+    '" data-source-venue="' + escapeAttr(ev.venue) + '">' + escapeHtml(p.staff_name) + '</span>';
+  // Home-venue badge — same logic as everywhere else
+  const _hv = homeVenueOf(p.staff_name);
+  if (_hv) {
+    const hvColor = VENUE_COLORS[_hv] || '#666';
+    const hvTip = 'Home component: ' + _hv + (_hv === ev.venue ? ' (matches this event)' : ' (does not match this event)');
+    html += '<span class="home-venue-tag" style="background:' + hvColor + ';" title="' + escapeAttr(hvTip) + '">' + escapeHtml(_hv) + '</span>';
+  }
+  if (p.source === 'manual') html += '<span class="manual-tag">TYPED</span>';
+  if (p.source === 'placeholder') html += '<span class="placeholder-tag">PLACEHOLDER</span>';
+  // 7Shifts sync toggle — preserved exactly because the row IS still synced
+  // until manager flips it off or drags it elsewhere (which auto-unsyncs).
+  const synced = p.seven_shifts_synced === true;
+  const syncTip = synced
+    ? 'Marked synced to 7shifts'
+      + (p.seven_shifts_synced_by ? ' by ' + p.seven_shifts_synced_by : '')
+      + '. Click to undo. 7Shifts has them at ' + p.stand + ' / ' + p.role +
+        ' — which is no longer on the plan, so this needs attention.'
+    : 'Mark this person as scheduled in 7shifts.';
+  html += '<button class="sync-toggle' + (synced ? ' synced' : '') +
+    '" data-sync-toggle="' + p.id + '" title="' + escapeAttr(syncTip) + '">' +
+    (synced ? '&#10003; 7s' : '7s') +
+    '</button>';
+  if (!locked) html += '<button class="x" data-remove-position="' + p.id + '" title="Remove">✕</button>';
+  // The "was: stand / role" line — italic, muted, wraps to its own line.
+  html += '<div class="ghost-was-line">was: ' + escapeHtml(p.stand) + ' / ' + escapeHtml(p.role) + '</div>';
+  html += '</div>';
+  return html;
 }
 
 function renderSupportSection(ev, group, locked) {
