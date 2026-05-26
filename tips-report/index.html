@@ -310,6 +310,7 @@ header { background: #fff; border-bottom: 1px solid #e8e8e4; padding: 0 32px; di
 <script src="/pc-auth.js"></script>
 <script src="/pc-nav.js"></script>
 <script src="/pc-activity.js"></script>
+<script src="/pc-catalog.js"></script>
 <script>
 var SUPA_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
 var POOL_VENUES = ['FMP'];
@@ -317,28 +318,52 @@ var POOL_VENUES = ['FMP'];
 // Labor stands are non-revenue: people who worked the event but not at a sales stand.
 // Their staff_count is excluded from the tip-pool denominator, their tips are flagged
 // (not absorbed into the pool), and they render in a separate section below the grid.
-var LABOR_STANDS = ['Support Staff', 'Client Staffing Needs', 'Non-Event Labor'];
-function isLaborStand(stand) { return LABOR_STANDS.indexOf(stand) !== -1; }
+//
+// Phase -2b wiring (May 26, 2026): "labor" is now derived from the catalog's
+// stand_type column instead of a hardcoded name list. A stand is labor if its
+// stand_type is anything other than 'revenue'. This means:
+//   - 'support'   (Support Staff)        → labor ✓
+//   - 'client'    (Client Staffing Needs) → labor ✓
+//   - 'nonevent'  (Non-Event Labor)       → labor ✓
+//   - 'hawking'   (Hawking)               → labor ✓ (NEW — hawkers earn their
+//                                           own commission, never part of the
+//                                           tip pool, so this is semantically
+//                                           correct. Sales are rarely logged
+//                                           against Hawking in practice, so
+//                                           this is a defensive correctness
+//                                           change rather than a visible shift.)
+//   - 'revenue'   (everything else)       → pool-eligible
+//
+// Fallback name-based check kicks in if the stand isn't in the catalog
+// (legacy data referencing a retired stand) — same behavior as before.
+var _LEGACY_LABOR_NAMES = ['Support Staff', 'Client Staffing Needs', 'Non-Event Labor', 'Hawking'];
+function isLaborStand(stand) {
+  if (!stand) return false;
+  // Catalog-driven check (preferred). pcCatalog might not be ready yet
+  // during the very first render — fall back to name-based check in that
+  // case, which is equivalent for the standard 4 labor names.
+  if (typeof pcCatalog !== 'undefined' && pcCatalog && currentVenue) {
+    try {
+      var s = pcCatalog.getStand(currentVenue, stand);
+      if (s) return s.stand_type !== 'revenue';
+    } catch (e) { /* fall through */ }
+  }
+  return _LEGACY_LABOR_NAMES.indexOf(stand) !== -1;
+}
 
-var VENUE_LABELS = {
-  'Mann':'Mann Music Center','FMP':'FMP','ACCC':'ACCC','BWH':'Boardwalk Hall',
-  'Cure':'Cure Insurance Arena','DE':'DE Chase Field House','Subaru':'Subaru Park',
-  'Villanova':'Villanova','Montage':'Montage','SATB':'Sports at the Beach','Kirkwood':'Kirkwood'
-};
-
-var VENUE_STANDS = {
-  'Mann':['Support Staff','Hawking','Upper Concession','Upper Popcorn','Lower Popcorn','Upper Pizza','Lower Pizza','Farm & Fry Truck','Crescendo','Lawn Portable','Stage Left Bar','Upper Linear Bar','Skyline Popcorn','Skyline Pizza','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4','Mobile Cart 5','Mobile Cart 6','Mobile Cart 7','Mobile Cart 8','Mobile Cart 9','Mobile Cart 10','Client Staffing Needs'],
-  'FMP':['Support Staff','Hawking','Stand 782','783','SC1','LM1','LM2','WWI','UD1','Ben Kettle','Walt Kettle','IC1','BWI','Ziggys Walt','Ziggys Ben','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4','Mobile Cart 5','Client Staffing Needs'],
-  'ACCC':['Support Staff','Hawking','Stand 1','Stand 2','Client Staffing Needs'],
-  'BWH':['Support Staff','Hawking','North Stand','South Stand','Popcorn 1','Popcorn 2','Client Staffing Needs'],
-  'Cure':['Support Staff','Hawking','Popcorn','Candy','Cotton Candy','Client Staffing Needs'],
-  'DE':['Support Staff','Hawking','VIP Bar','Cafe','Popcorn','Bar','Farm & Fry','Client Staffing Needs'],
-  'Subaru':['Support Staff','Hawking','Popcorn','VIP','Client Staffing Needs'],
-  'Villanova':['Support Staff','Hawking','Stand 1','Client Staffing Needs'],
-  'Montage':['Support Staff','Hawking','BW Pizza','Midway Pizza','Midway Popcorn','Boardwalk Popcorn','Festival Foods','Potato Stand','Boardwalk New Food','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4','Client Staffing Needs'],
-  'SATB':['Support Staff','Hawking','Stand 1','Ice Cream 1','Stand 2','Stand 3','Catering','Client Staffing Needs'],
-  'Kirkwood':['Support Staff','Hawking','Stand 1','Client Staffing Needs']
-};
+// Phase -2b wiring (May 26, 2026): venue labels and stand lists are
+// sourced from pcCatalog (loaded above) at page init. The shape is kept
+// (VENUE_LABELS as a code→label dict, VENUE_STANDS as a code→stand-array
+// dict) so the existing helper functions (codesForLabel, isPoolVenue,
+// renderPage's stand iteration) don't need to change.
+//
+// Note: we use getAllStandsForVenue (not getActiveStandsForVenue) so this
+// historical report still surfaces "Not submitted" placeholder cards for
+// retired stands when looking at older events — the Tips Report's job is
+// to reflect what was planned vs what came in, including for closed-out
+// past events that may reference stands no longer active.
+var VENUE_LABELS = {};
+var VENUE_STANDS = {};
 
 // State
 var currentVenue = null;
@@ -382,8 +407,57 @@ pcAuth.require({
   onReady: function(user) {
     // Header + user pill painted by pc-nav.js — no manual setup here.
     pcActivity.init('tips-report');
-    loadVenues();
-    fetchRoster();
+    // Phase -2b wiring (May 26, 2026): populate VENUE_LABELS and
+    // VENUE_STANDS from pcCatalog before loading venues + roster. The
+    // existing functions read these dicts, so they need to be populated
+    // before any of them fire. On catalog load failure, fall back to
+    // hardcoded values so the page still renders.
+    pcCatalog.ready().then(function() {
+      var venues = pcCatalog.getActiveVenues();
+      venues.forEach(function(v) {
+        VENUE_LABELS[v.code] = v.full_name;
+        // Use getAllStandsForVenue (not just active) so historical events
+        // referencing retired stands still get a "Not submitted" card.
+        // Sort by sort_order, which getAllStandsForVenue already does.
+        VENUE_STANDS[v.code] = pcCatalog.getAllStandsForVenue(v.code)
+          .map(function(s) { return s.stand_name; });
+      });
+      loadVenues();
+      fetchRoster();
+    }).catch(function(err) {
+      console.warn('[tips-report] pc-catalog failed to load, using hardcoded fallback:', err);
+      // Fallback dicts — same 11 venues with canonical full names, same
+      // stand lists as the previous hardcoded VENUE_STANDS (including
+      // retired stands so Not-Submitted cards still render).
+      VENUE_LABELS = {
+        'Mann': 'Mann Music Center',
+        'FMP': 'Freedom Mortgage Pavilion',
+        'BWH': 'Boardwalk Hall',
+        'ACCC': 'AC Convention Center',
+        'Cure': 'Cure Insurance Arena',
+        'DE': 'DE Chase Field House',
+        'Subaru': 'Subaru Park',
+        'Montage': 'Montage Mountain',
+        'SATB': 'Sports at the Beach',
+        'Villanova': 'Villanova',
+        'Kirkwood': 'Kirkwood'
+      };
+      VENUE_STANDS = {
+        'Mann':['Support Staff','Hawking','Upper Concession','Upper Popcorn','Lower Popcorn','Upper Pizza','Lower Pizza','Farm & Fry Truck','Crescendo','Lawn Portable','Stage Left Bar','Upper Linear Bar','Skyline Popcorn','Skyline Pizza','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4','Mobile Cart 5','Mobile Cart 6','Mobile Cart 7','Mobile Cart 8','Mobile Cart 9','Mobile Cart 10','Client Staffing Needs'],
+        'FMP':['Support Staff','Hawking','Stand 782','783','SC1','LM1','LM2','WWI','UD1','Ben Kettle','Walt Kettle','IC1','BWI','Ziggys Walt','Ziggys Ben','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4','Mobile Cart 5','Client Staffing Needs'],
+        'ACCC':['Support Staff','Hawking','Stand 1','Stand 2','Client Staffing Needs'],
+        'BWH':['Support Staff','Hawking','North Stand','South Stand','Popcorn 1','Popcorn 2','Client Staffing Needs'],
+        'Cure':['Support Staff','Hawking','Popcorn','Candy','Cotton Candy','Client Staffing Needs'],
+        'DE':['Support Staff','Hawking','VIP Bar','Cafe','Popcorn','Bar','Farm & Fry','Client Staffing Needs'],
+        'Subaru':['Support Staff','Hawking','Popcorn','VIP','Client Staffing Needs'],
+        'Villanova':['Support Staff','Hawking','Stand 1','Client Staffing Needs'],
+        'Montage':['Support Staff','Hawking','BW Pizza','Midway Pizza','Midway Popcorn','Boardwalk Popcorn','Festival Foods','Potato Stand','Boardwalk New Food','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4','Client Staffing Needs'],
+        'SATB':['Support Staff','Hawking','Stand 1','Ice Cream 1','Stand 2','Stand 3','Catering','Client Staffing Needs'],
+        'Kirkwood':['Support Staff','Hawking','Stand 1','Client Staffing Needs']
+      };
+      loadVenues();
+      fetchRoster();
+    });
   }
 });
 
@@ -589,7 +663,48 @@ async function loadEvent() {
 function renderPage() {
   var venue = currentVenue;
   var isPool = isPoolVenue(venue);
-  var stands = VENUE_STANDS[venue] || [];
+
+  // Phase -2b refinement (May 26, 2026): the Tips Report should only show
+  // stands that were planned to be open for this event, not the venue's
+  // entire stand catalog. Without this, an event that planned 3 stands at
+  // a 19-stand venue renders 16 noisy "Not submitted" placeholder cards.
+  //
+  // Logic:
+  //   - If we have staffing_requests rows for this event, use those stand
+  //     names as the canonical list. Stand was planned to be open.
+  //   - Stands with sales (in salesData) are also included even if not in
+  //     staffingRequested — covers events where sales were logged against
+  //     an unplanned stand (a known data-quality issue worth surfacing).
+  //   - If we have NEITHER planning data NOR sales data, fall back to the
+  //     full venue catalog. This handles events with no planning records
+  //     (legacy events, pre-staffing-requests data) the same way the page
+  //     did before this change.
+  var stands;
+  var plannedStands = Object.keys(staffingRequested || {})
+        .filter(function(s) { return (staffingRequested[s] || 0) > 0; });
+  var salesStands = salesData.map(function(r) { return r.stand; });
+  if (plannedStands.length > 0 || salesStands.length > 0) {
+    // Build the union: planned + any with sales
+    var combined = {};
+    plannedStands.forEach(function(s) { combined[s] = true; });
+    salesStands.forEach(function(s) { combined[s] = true; });
+    // Sort to match the venue catalog's display order — so cards still
+    // appear in the consistent Mann/FMP/etc. ordering managers are used
+    // to. Stands not in the venue catalog (orphans) sort to the bottom.
+    var catalogOrder = VENUE_STANDS[venue] || [];
+    var orderIndex = {};
+    catalogOrder.forEach(function(s, i) { orderIndex[s] = i; });
+    stands = Object.keys(combined).sort(function(a, b) {
+      var ai = orderIndex[a] != null ? orderIndex[a] : 9999;
+      var bi = orderIndex[b] != null ? orderIndex[b] : 9999;
+      if (ai !== bi) return ai - bi;
+      return a.localeCompare(b);
+    });
+  } else {
+    // No planning AND no sales — fall back to full venue catalog (preserves
+    // legacy behavior for events with no staffing_requests data).
+    stands = VENUE_STANDS[venue] || [];
+  }
 
   // ── Group sales by stand into arrays (handles duplicate submissions) ──────
   var salesByStand = {};
