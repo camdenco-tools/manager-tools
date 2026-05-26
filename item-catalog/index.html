@@ -275,9 +275,17 @@ body { background: var(--bg); font-family: var(--font); color: var(--primary); m
 <script src="/pc-auth.js"></script>
 <script src="/pc-nav.js"></script>
 <script src="/pc-activity.js"></script>
+<script src="/pc-catalog.js"></script>
 <script>
 var SB_URL='https://aoazlttdjowhlfcksoyl.supabase.co';
-var VENUES=[{code:'Mann',label:'Mann Music Center'},{code:'FMP',label:'FMP'},{code:'Cure',label:'Cure Arena'},{code:'ACCC',label:'ACCC'},{code:'BWH',label:'Jim Whelan BWH'},{code:'DE',label:'DE Chase'},{code:'Subaru',label:'Subaru Park'},{code:'Villanova',label:'Villanova'},{code:'Montage',label:'Montage'},{code:'SATB',label:'SATB'},{code:'Kirkwood',label:'Kirkwood'}];
+// VENUES is populated from pcCatalog.getActiveVenues() during page init.
+// The shape stays {code, label} so renderVenueCheckboxes() doesn't need to
+// change — only the source of truth moves from hardcoded JS to the
+// venues table via pc-catalog.js (loaded above). Canonical full_name from
+// the catalog brings this page in line with Event Master List, Sales
+// History, Asset Tracker, Deal Structure, and the AR invoice print view —
+// all of which already use venues.full_name.
+var VENUES=[];
 
 var pcCategories=[],pcItems=[],pcProfiles=[];
 var selectedItemId=null,isNewItem=false;
@@ -491,7 +499,39 @@ pcAuth.require({
   pageSlug: 'item-catalog',
   onReady: function(user) {
     pcActivity.init('item-catalog');
-    loadAll();
+    // Phase -2b wiring (May 26, 2026): pull the venue list from the
+    // shared catalog before rendering. pcCatalog.ready() returns a
+    // cached promise after the first call, so calling it here doesn't
+    // double-fetch even if other code on this page (none today) also
+    // awaits it. On failure we fall back to a minimal hardcoded list
+    // so the page still loads — the venue checkboxes would otherwise
+    // be empty and admins couldn't save profiles.
+    pcCatalog.ready().then(function() {
+      VENUES = pcCatalog.getActiveVenues().map(function(v) {
+        return { code: v.code, label: v.full_name };
+      });
+      loadAll();
+    }).catch(function(err) {
+      console.warn('[item-catalog] pc-catalog failed to load, using hardcoded fallback:', err);
+      // Same set of 11 venues, with the canonical full_name labels so
+      // the fallback display matches the catalog-sourced display. Order
+      // mirrors sort_order from the catalog (alphabetical-ish with
+      // primary venues first).
+      VENUES = [
+        { code: 'Mann',      label: 'Mann Music Center' },
+        { code: 'FMP',       label: 'Freedom Mortgage Pavilion' },
+        { code: 'BWH',       label: 'Boardwalk Hall' },
+        { code: 'ACCC',      label: 'AC Convention Center' },
+        { code: 'Cure',      label: 'Cure Insurance Arena' },
+        { code: 'DE',        label: 'DE Chase Field House' },
+        { code: 'Subaru',    label: 'Subaru Park' },
+        { code: 'Montage',   label: 'Montage Mountain' },
+        { code: 'SATB',      label: 'Sports at the Beach' },
+        { code: 'Villanova', label: 'Villanova' },
+        { code: 'Kirkwood',  label: 'Kirkwood' }
+      ];
+      loadAll();
+    });
   }
 });
 </script>
