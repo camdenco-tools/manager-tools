@@ -35,8 +35,8 @@ header {
 }
 .card { background: white; border-radius: 16px; padding: 20px; margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); }
 .card-title { font-size: 10px; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 16px; }
-.mode-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 18px; background: #f0f0ec; border-radius: 12px; padding: 4px; }
-.mode-btn { padding: 10px; border: none; border-radius: 9px; font-size: 13px; font-weight: 600; cursor: pointer; background: transparent; color: #888; transition: all 0.15s; }
+.mode-toggle { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; margin-bottom: 18px; background: #f0f0ec; border-radius: 12px; padding: 4px; }
+.mode-btn { padding: 10px 6px; border: none; border-radius: 9px; font-size: 12px; font-weight: 600; cursor: pointer; background: transparent; color: #888; transition: all 0.15s; }
 .mode-btn.active { background: white; color: #1a1a1a; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
 .field { margin-bottom: 13px; }
 label { display: block; font-size: 13px; font-weight: 500; color: #555; margin-bottom: 4px; }
@@ -430,6 +430,7 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: #1a1a1a
         <div class="mode-toggle">
           <button class="mode-btn active" id="mode-invoice" onclick="setMode('invoice')">Vendor Invoice</button>
           <button class="mode-btn" id="mode-transfer" onclick="setMode('transfer')">Internal Transfer</button>
+          <button class="mode-btn" id="mode-expense" onclick="setMode('expense')">Other Expense</button>
         </div>
 
         <div id="invoice-fields">
@@ -465,6 +466,24 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: #1a1a1a
             <div class="add-file-btn" onclick="document.getElementById('file-transfer-input').click()">&#128247; Add page</div>
             <div class="upload-note">Photo of handwritten note, packing slip, or whatever you have</div>
             <input type="file" id="file-transfer-input" accept="image/jpeg,image/png,image/webp,image/gif,application/pdf" style="display:none;" onchange="addFile(this,'transfer')">
+          </div>
+        </div>
+
+        <div id="expense-fields" style="display:none;">
+          <div class="transfer-notice" style="background:#E6F1FB;color:#0C447C;">This is for non-food expenses (truck repairs, gas, supplies, parking, etc.). It will go to the office for category assignment. Venue is optional — only pick one if this expense clearly belongs to a single venue.</div>
+          <div class="field"><label>Date</label><input type="date" id="exp-date"></div>
+          <div class="field"><label>Vendor / description</label><input type="text" id="exp-vendor" placeholder="e.g. AAA Truck Repair, Wawa gas, Home Depot..."></div>
+          <div class="field"><label>Amount ($)</label><input type="number" id="exp-amount" placeholder="0.00" step="0.01" min="0"></div>
+          <div class="field"><label>Venue <span style="font-weight:400;color:#bbb;">(optional)</span></label>
+            <select id="exp-venue"><option value="">Not venue-specific</option><option>ACCC</option><option>Boardwalk Hall</option><option>Mann Music Center</option><option>FMP</option><option>Cure Insurance Arena</option><option>DE Chase Field House</option><option>Subaru Park</option><option>Villanova</option><option>Montage</option><option>Sports at the Beach</option></select>
+          </div>
+          <div class="field"><label>Note <span style="font-weight:400;color:#bbb;">(optional)</span></label><textarea id="exp-note" placeholder="e.g. flat tire replaced, fuel for box truck Camden run..."></textarea></div>
+          <div class="field">
+            <label>Receipt photos</label>
+            <div class="files-area" id="expense-files-list"></div>
+            <div class="add-file-btn" onclick="document.getElementById('file-expense-input').click()">&#128247; Add page</div>
+            <div class="upload-note">Attach the receipt -- add as many pages as needed</div>
+            <input type="file" id="file-expense-input" accept="image/jpeg,image/png,image/webp,image/gif,application/pdf" style="display:none;" onchange="addFile(this,'expense')">
           </div>
         </div>
 
@@ -555,6 +574,7 @@ var VENUE_OPTIONS = ['ACCC','Boardwalk Hall','Mann Music Center','FMP','Cure Ins
 var currentMode = 'invoice';
 var invoiceFiles = [];
 var transferFiles = [];
+var expenseFiles = [];
 var currentSearchData = [];
 var editPhotoFile = null;
 var editPhotoClear = false;
@@ -597,8 +617,8 @@ function isBlockedFile(file) {
 function addFile(input, mode) {
   if (!input.files || !input.files[0]) return;
   var file = input.files[0];
-  var listId = mode === 'invoice' ? 'invoice-files-list' : 'transfer-files-list';
-  var arr = mode === 'invoice' ? invoiceFiles : transferFiles;
+  var listId = mode === 'invoice' ? 'invoice-files-list' : (mode === 'transfer' ? 'transfer-files-list' : 'expense-files-list');
+  var arr = mode === 'invoice' ? invoiceFiles : (mode === 'transfer' ? transferFiles : expenseFiles);
 
   if (isBlockedFile(file)) {
     var el = document.getElementById(listId);
@@ -617,14 +637,14 @@ function addFile(input, mode) {
 }
 
 function removeFile(mode, index) {
-  var arr = mode === 'invoice' ? invoiceFiles : transferFiles;
+  var arr = mode === 'invoice' ? invoiceFiles : (mode === 'transfer' ? transferFiles : expenseFiles);
   arr.splice(index, 1);
   renderFileList(mode);
 }
 
 function renderFileList(mode) {
-  var arr = mode === 'invoice' ? invoiceFiles : transferFiles;
-  var listId = mode === 'invoice' ? 'invoice-files-list' : 'transfer-files-list';
+  var arr = mode === 'invoice' ? invoiceFiles : (mode === 'transfer' ? transferFiles : expenseFiles);
+  var listId = mode === 'invoice' ? 'invoice-files-list' : (mode === 'transfer' ? 'transfer-files-list' : 'expense-files-list');
   var el = document.getElementById(listId);
   if (!arr.length) { el.innerHTML = ''; return; }
   var html = '';
@@ -639,10 +659,13 @@ function setMode(mode) {
   currentMode = mode;
   document.getElementById('mode-invoice').classList.toggle('active', mode === 'invoice');
   document.getElementById('mode-transfer').classList.toggle('active', mode === 'transfer');
+  document.getElementById('mode-expense').classList.toggle('active', mode === 'expense');
   document.getElementById('invoice-fields').style.display = mode === 'invoice' ? 'block' : 'none';
   document.getElementById('transfer-fields').style.display = mode === 'transfer' ? 'block' : 'none';
+  document.getElementById('expense-fields').style.display = mode === 'expense' ? 'block' : 'none';
   var btn = document.getElementById('submit-btn');
   if (mode === 'transfer') { btn.textContent = 'Log Transfer'; btn.className = 'submit-btn amber'; }
+  else if (mode === 'expense') { btn.textContent = 'Send to Office'; btn.className = 'submit-btn amber'; }
   else { btn.textContent = 'Submit Purchase'; btn.className = 'submit-btn'; }
   document.getElementById('error-msg').style.display = 'none';
 }
@@ -665,7 +688,8 @@ async function uploadPhoto(file, path) {
 // ── Submit ──
 async function submitForm() {
   if (currentMode === 'invoice') await submitInvoice();
-  else await submitTransfer();
+  else if (currentMode === 'transfer') await submitTransfer();
+  else await submitExpense();
 }
 
 async function submitInvoice() {
@@ -774,6 +798,89 @@ async function submitTransfer() {
   }
 }
 
+async function submitExpense() {
+  var date = document.getElementById('exp-date').value;
+  var vendor = document.getElementById('exp-vendor').value.trim();
+  var amount = parseFloat(document.getElementById('exp-amount').value);
+  var venue = document.getElementById('exp-venue').value;
+  var note = document.getElementById('exp-note').value.trim();
+  var errEl = document.getElementById('error-msg');
+  errEl.style.display = 'none';
+  if (!date || !vendor || !amount || isNaN(amount)) {
+    errEl.textContent = 'Please fill in date, vendor, and amount.';
+    errEl.style.display = 'block';
+    return;
+  }
+  if (!expenseFiles.length) {
+    errEl.textContent = 'Please attach at least one receipt photo.';
+    errEl.style.display = 'block';
+    return;
+  }
+  var btn = document.getElementById('submit-btn');
+  btn.disabled = true; btn.textContent = 'Saving...';
+  try {
+    var hdrs = apiHeaders();
+    var id = crypto.randomUUID();
+
+    // Upload first page as primary photo
+    var photoUrl = await uploadPhoto(expenseFiles[0], id + '-p1.' + expenseFiles[0].name.split('.').pop());
+
+    // Upload any additional pages, appended to the note
+    var extraUrls = [];
+    for (var i = 1; i < expenseFiles.length; i++) {
+      var url = await uploadPhoto(expenseFiles[i], id + '-p' + (i+1) + '.' + expenseFiles[i].name.split('.').pop());
+      if (url) extraUrls.push(url);
+    }
+    var fullNote = note || '';
+    if (extraUrls.length) {
+      var suffix = '\n[Additional pages: ' + extraUrls.join(' , ') + ']';
+      fullNote = fullNote ? fullNote + suffix : suffix.trim();
+    }
+
+    // Manager display name for audit trail
+    var userName = 'unknown';
+    if (typeof pcAuth !== 'undefined') {
+      var u = pcAuth.getUser();
+      if (u) userName = u.display_name;
+    }
+
+    // Write to bank_charges with returned status so it lands in admin's Bank Review
+    var payload = {
+      id: id,
+      charge_date: date,
+      vendor_name: vendor,
+      amount: amount,
+      venue: venue || null,
+      status: 'returned',
+      return_reason: 'manager_upload',
+      return_note: fullNote || null,
+      returned_by: userName,
+      returned_at: new Date().toISOString(),
+      photo_url: photoUrl,
+      uploaded_by: userName,
+      raw_description: 'Manager-uploaded expense: ' + vendor
+    };
+
+    var res = await fetch(SUPA_URL + '/rest/v1/bank_charges', {
+      method: 'POST',
+      headers: Object.assign({}, hdrs, {'Content-Type': 'application/json', 'Prefer': 'return=minimal'}),
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) { console.error('[purchases] expense write failed', await res.text()); throw new Error(); }
+
+    document.getElementById('form-card').style.display = 'none';
+    var sc = document.getElementById('success-card');
+    sc.className = 'success-card amber-success'; sc.style.display = 'block';
+    document.getElementById('success-title').textContent = 'Sent to the office!';
+    var fileCount = expenseFiles.length;
+    document.getElementById('success-detail').textContent = vendor + '\n$' + fmtMoney(amount) + (venue ? '\n' + venue : '') + '\n' + fileCount + ' page' + (fileCount > 1 ? 's' : '') + ' attached\n\nThe office will categorize this expense.';
+  } catch(e) {
+    errEl.textContent = 'Something went wrong -- try again.';
+    errEl.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Send to Office';
+  }
+}
+
 function resetForm() {
   document.getElementById('form-card').style.display = 'block';
   document.getElementById('success-card').style.display = 'none';
@@ -786,8 +893,13 @@ function resetForm() {
   document.getElementById('from-venue').value = '';
   document.getElementById('to-venue').value = '';
   document.getElementById('transfer-desc').value = '';
-  invoiceFiles = []; transferFiles = [];
-  renderFileList('invoice'); renderFileList('transfer');
+  document.getElementById('exp-date').value = todayLocal();
+  document.getElementById('exp-vendor').value = '';
+  document.getElementById('exp-amount').value = '';
+  document.getElementById('exp-venue').value = '';
+  document.getElementById('exp-note').value = '';
+  invoiceFiles = []; transferFiles = []; expenseFiles = [];
+  renderFileList('invoice'); renderFileList('transfer'); renderFileList('expense');
   document.getElementById('error-msg').style.display = 'none';
   document.getElementById('submit-btn').disabled = false;
   setMode(currentMode);
@@ -1415,6 +1527,7 @@ async function saveReconAssignments() {
 function init() {
   document.getElementById('inv-date').value = todayLocal();
   document.getElementById('transfer-date').value = todayLocal();
+  document.getElementById('exp-date').value = todayLocal();
   document.getElementById('s-from').value = firstOfMonth();
   document.getElementById('s-to').value = todayLocal();
   document.getElementById('summary-month').value = thisMonth();
