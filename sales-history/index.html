@@ -42,7 +42,11 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
 .qr-chip.on { background: #1a1a1a; color: white; border-color: #1a1a1a; }
 .qr-chip.disabled { opacity: 0.45; cursor: not-allowed; }
 .qr-chip.disabled:hover { border-color: #e0e0e0; }
-.qr-showing { font-size: 12px; color: #555; margin-left: auto; padding: 6px 0; }
+.qr-showing { font-size: 12px; color: #555; padding: 6px 0; }
+.fn-group { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.fn-arrow { font-size: 11px; padding: 5px 9px; border-radius: 18px; background: white; border: 1px solid #e0e0e0; color: #555; cursor: pointer; font-family: inherit; transition: all 0.15s; line-height: 1; }
+.fn-arrow:hover:not(:disabled) { border-color: #1a1a1a; color: #1a1a1a; }
+.fn-arrow:disabled { opacity: 0.35; cursor: not-allowed; }
 
 .search-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
 .search-btn { width: 100%; padding: 11px; background: #1a1a1a; color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; margin-bottom: 14px; font-family: inherit; }
@@ -172,7 +176,11 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
         <button class="qr-chip" data-qr="this-fiscal" onclick="applyQuickRange('this-fiscal')">This fiscal month</button>
         <button class="qr-chip" data-qr="last-fiscal" onclick="applyQuickRange('last-fiscal')">Last fiscal month</button>
         <button class="qr-chip" data-qr="all-time" onclick="applyQuickRange('all-time')">All time</button>
-        <span class="qr-showing" id="qr-showing"></span>
+        <div class="fn-group">
+  <button type="button" class="fn-arrow" id="fn-prev" onclick="navigateFiscal(-1)" title="Prior fiscal period">&#9664;</button>
+  <button type="button" class="fn-arrow" id="fn-next" onclick="navigateFiscal(1)" title="Next fiscal period">&#9654;</button>
+  <span class="qr-showing" id="qr-showing"></span>
+</div>
       </div>
 
       <div class="search-grid">
@@ -345,6 +353,7 @@ function setQuickRangeUI(key, showingLabel) {
   }
   var showing = document.getElementById('qr-showing');
   if (showing) showing.textContent = showingLabel ? 'Showing: ' + showingLabel : '';
+  updateFiscalNavState();
 }
 
 function clearQuickRangeUI() {
@@ -353,6 +362,7 @@ function clearQuickRangeUI() {
   for (var i = 0; i < chips.length; i++) chips[i].classList.remove('on');
   var showing = document.getElementById('qr-showing');
   if (showing) showing.textContent = 'Showing: custom range';
+  updateFiscalNavState();
 }
 
 /* Disable fiscal chips if today falls outside the defined fiscal calendar */
@@ -369,6 +379,61 @@ function updateFiscalChipAvailability() {
     if (!prior) { lastChip.classList.add('disabled'); lastChip.title = 'No prior fiscal period available'; }
     else { lastChip.classList.remove('disabled'); lastChip.title = prior.period.name; }
   }
+  updateFiscalNavState();
+}
+
+/* Fiscal navigation arrows — step through periods one at a time. Always
+   usable as long as the current view resolves to SOME fiscal period and a
+   neighbor in the requested direction exists within pcFiscal's coverage. */
+function resolveCurrentFiscalAnchor() {
+  if (currentQuickRange === 'this-fiscal') return getCurrentFiscalPeriod();
+  if (currentQuickRange === 'last-fiscal') return getPriorFiscalPeriod();
+  // Otherwise, try to resolve from the From date picker; if it doesn't
+  // land in any defined period (custom range, all-time, gap dates), fall
+  // back to today's period so the arrows always have something to anchor
+  // off of.
+  var fromVal = document.getElementById('s-from').value;
+  var anchor = fromVal ? resolveFiscalPeriod(fromVal) : null;
+  if (!anchor) anchor = getCurrentFiscalPeriod();
+  return anchor;
+}
+
+function navigateFiscal(direction) {
+  var anchor = resolveCurrentFiscalAnchor();
+  if (!anchor) {
+    alert('Cannot navigate — today\'s date is outside the defined fiscal calendar.\n\nExtend the period list in /pc-fiscal.js to cover this year.');
+    return;
+  }
+  var target = direction < 0
+    ? pcFiscal.getPriorPeriod(anchor.period)
+    : pcFiscal.getNextPeriod(anchor.period);
+  if (!target) return; // edge of coverage — button should already be disabled
+
+  document.getElementById('s-from').value = target.start;
+  document.getElementById('s-to').value = target.end;
+  clearQuickRangeUI(); // drop chip highlight (we're not on "This"/"Last" anymore)
+  var showing = document.getElementById('qr-showing');
+  if (showing) showing.textContent = 'Showing: ' + target.name;
+  searchHistory();
+}
+
+function updateFiscalNavState() {
+  var prevBtn = document.getElementById('fn-prev');
+  var nextBtn = document.getElementById('fn-next');
+  if (!prevBtn || !nextBtn) return;
+  var anchor = resolveCurrentFiscalAnchor();
+  if (!anchor) {
+    prevBtn.disabled = true; nextBtn.disabled = true;
+    prevBtn.title = 'No fiscal period defined for navigation';
+    nextBtn.title = 'No fiscal period defined for navigation';
+    return;
+  }
+  var prior = pcFiscal.getPriorPeriod(anchor.period);
+  var next  = pcFiscal.getNextPeriod(anchor.period);
+  prevBtn.disabled = !prior;
+  nextBtn.disabled = !next;
+  prevBtn.title = prior ? 'Go to ' + prior.name : 'Earliest defined fiscal period reached';
+  nextBtn.title = next  ? 'Go to ' + next.name  : 'Latest defined fiscal period reached';
 }
 
 async function applyQuickRange(key) {
