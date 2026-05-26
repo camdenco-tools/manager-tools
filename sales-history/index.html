@@ -209,6 +209,7 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
 <script src="/pc-nav.js"></script>
 <script src="/pc-activity.js"></script>
 <script src="/pc-catalog.js"></script>
+<script src="/pc-fiscal.js"></script>
 <script>
 var SUPA_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
 var EDIT_WINDOW_DAYS = 4;
@@ -240,31 +241,9 @@ var _FALLBACK_STANDS = {
   'Kirkwood':['Stand 1','Hawking','Support Staff']
 };
 
-/*
- * FISCAL_PERIODS — 4-4-5 retail fiscal calendar.
- *
- * SOURCE OF TRUTH: /cos-labor/index.html (FISCAL_PERIODS array, ~line 270).
- * This is a verbatim copy. Until extracted to /pc-fiscal.js, BOTH FILES must
- * be updated together when adding future years or correcting period boundaries.
- *
- * Periods cover calendar year 2026 only as of this writing. If today's date
- * falls outside the range, the fiscal-month chips disable themselves rather
- * than silently returning wrong dates — see resolveFiscalPeriod() below.
- */
-var FISCAL_PERIODS = [
-  {name:'January 2026',start:'2026-01-05',end:'2026-02-01',weeks:4},
-  {name:'February 2026',start:'2026-02-02',end:'2026-03-01',weeks:4},
-  {name:'March 2026',start:'2026-03-02',end:'2026-03-29',weeks:4},
-  {name:'April 2026',start:'2026-04-06',end:'2026-05-03',weeks:4},
-  {name:'May 2026',start:'2026-05-04',end:'2026-05-31',weeks:4},
-  {name:'June 2026',start:'2026-06-01',end:'2026-06-28',weeks:4},
-  {name:'July 2026',start:'2026-06-29',end:'2026-08-02',weeks:5},
-  {name:'August 2026',start:'2026-08-03',end:'2026-08-30',weeks:4},
-  {name:'September 2026',start:'2026-08-31',end:'2026-09-27',weeks:4},
-  {name:'October 2026',start:'2026-09-28',end:'2026-11-01',weeks:5},
-  {name:'November 2026',start:'2026-11-02',end:'2026-11-29',weeks:4},
-  {name:'December 2026',start:'2026-11-30',end:'2027-01-03',weeks:5}
-];
+// FISCAL_PERIODS moved to /pc-fiscal.js (May 26, 2026). Use pcFiscal.getPeriods()
+// or pcFiscal.resolvePeriod(isoDate). Covers CY2026 (preserved verbatim from
+// cos-labor) + CY2027 (standard 4-4-5).
 
 var currentSearchData = [];
 var currentQuickRange = null; // 'last-event' | 'today' | 'this-week' | 'last-week' | 'this-fiscal' | 'last-fiscal' | 'all-time' | null (custom)
@@ -303,20 +282,24 @@ function fmtMonthDay(iso) {
   return parseInt(p[1]) + '/' + parseInt(p[2]) + '/' + p[0];
 }
 
-/* Fiscal period resolution — returns the period containing the given date, or null if outside the defined range. */
+/* Fiscal period resolution — thin wrappers around pcFiscal that preserve this
+   page's expected {idx, period} return shape so call sites are unchanged. */
 function resolveFiscalPeriod(isoDate) {
-  for (var i = 0; i < FISCAL_PERIODS.length; i++) {
-    if (isoDate >= FISCAL_PERIODS[i].start && isoDate <= FISCAL_PERIODS[i].end) {
-      return { idx: i, period: FISCAL_PERIODS[i] };
-    }
+  var period = pcFiscal.resolvePeriod(isoDate);
+  if (!period) return null;
+  var periods = pcFiscal.getPeriods();
+  for (var i = 0; i < periods.length; i++) {
+    if (periods[i].start === period.start) return { idx: i, period: period };
   }
   return null;
 }
 function getCurrentFiscalPeriod() { return resolveFiscalPeriod(todayLocal()); }
 function getPriorFiscalPeriod() {
   var cur = getCurrentFiscalPeriod();
-  if (!cur || cur.idx === 0) return null;
-  return { idx: cur.idx - 1, period: FISCAL_PERIODS[cur.idx - 1] };
+  if (!cur) return null;
+  var prior = pcFiscal.getPriorPeriod(cur.period);
+  if (!prior) return null;
+  return { idx: cur.idx - 1, period: prior };
 }
 
 function isWithinEditWindow(eventDate) {
@@ -414,7 +397,7 @@ async function applyQuickRange(key) {
     showingLabel = 'last week (' + fmtMonthDay(fromDate) + ' – ' + fmtMonthDay(toDate) + ')';
   } else if (key === 'this-fiscal') {
     var cur = getCurrentFiscalPeriod();
-    if (!cur) { alert('Current date is outside the defined fiscal calendar.\n\nUpdate FISCAL_PERIODS in /cos-labor/ and /sales-history/ to extend it.'); return; }
+    if (!cur) { alert('Current date is outside the defined fiscal calendar.\n\nExtend the period list in /pc-fiscal.js to cover this year.'); return; }
     fromDate = cur.period.start; toDate = cur.period.end; showingLabel = cur.period.name;
   } else if (key === 'last-fiscal') {
     var prior = getPriorFiscalPeriod();
