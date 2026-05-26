@@ -234,12 +234,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 </head>
 <body>
 
-<div class="sticky-header">
-  <a href="/">&larr; Toolkit</a>
-  <div class="title">COS &amp; Labor Report</div>
-  <span class="badge">EOM</span>
-  <div class="header-right" id="header-right"></div>
-</div>
+<!-- Header + ribbon + back-to-top injected by pc-nav.js -->
+<!-- Activity tracking (page_load / heartbeat / page_unload) handled by pc-activity.js -->
 
 <div class="name-overlay" id="name-overlay">
   <div class="name-box">
@@ -294,6 +290,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 </div>
 
 <script src="/pc-auth.js"></script>
+<script src="/pc-nav.js"></script>
+<script src="/pc-activity.js"></script>
+<script src="/pc-fiscal.js"></script>
 <script>
 var SUPA_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
 
@@ -319,20 +318,9 @@ VENUE_NAME_TO_CODE['Mann Music Center'] = 'Mann';
 VENUE_NAME_TO_CODE['Sports at the Beach'] = 'SATB';
 VENUE_NAME_TO_CODE['AC Convention Center'] = 'ACCC';
 
-var FISCAL_PERIODS = [
-  {name:'January 2026',start:'2026-01-05',end:'2026-02-01',weeks:4},
-  {name:'February 2026',start:'2026-02-02',end:'2026-03-01',weeks:4},
-  {name:'March 2026',start:'2026-03-02',end:'2026-03-29',weeks:4},
-  {name:'April 2026',start:'2026-04-06',end:'2026-05-03',weeks:4},
-  {name:'May 2026',start:'2026-05-04',end:'2026-05-31',weeks:4},
-  {name:'June 2026',start:'2026-06-01',end:'2026-06-28',weeks:4},
-  {name:'July 2026',start:'2026-06-29',end:'2026-08-02',weeks:5},
-  {name:'August 2026',start:'2026-08-03',end:'2026-08-30',weeks:4},
-  {name:'September 2026',start:'2026-08-31',end:'2026-09-27',weeks:4},
-  {name:'October 2026',start:'2026-09-28',end:'2026-11-01',weeks:5},
-  {name:'November 2026',start:'2026-11-02',end:'2026-11-29',weeks:4},
-  {name:'December 2026',start:'2026-11-30',end:'2027-01-03',weeks:5}
-];
+// FISCAL_PERIODS moved to /pc-fiscal.js (May 26, 2026). Use pcFiscal.getPeriods()
+// for the full array or pcFiscal.getPeriods()[idx] for a specific period. Covers
+// CY2026 (preserved) + CY2027 (standard 4-4-5).
 
 var selectedVenues = ['ALL'];
 // Diagnostic flag — set to true for verbose console.table dumps of every sale/stand_deal/deal_template
@@ -374,20 +362,13 @@ function showToast(msg, green) {
   _toastTimer = setTimeout(function() { t.classList.remove('show'); }, 2500);
 }
 
-function getWeekRanges(period) {
-  var ranges=[];var start=new Date(period.start+'T12:00:00');
-  for (var w=0;w<period.weeks;w++) {
-    var ws=new Date(start);ws.setDate(ws.getDate()+(w*7));
-    var we=new Date(ws);we.setDate(we.getDate()+6);
-    ranges.push({start:ws.toISOString().split('T')[0],end:we.toISOString().split('T')[0],label:fmtDate(ws.toISOString().split('T')[0])+' - '+fmtDate(we.toISOString().split('T')[0])});
-  }
-  return ranges;
-}
+// Fiscal helpers moved to /pc-fiscal.js (May 26, 2026):
+//   getWeekRanges(period)   → pcFiscal.getWeekRanges(period)
+//   findCurrentPeriod()     → pcFiscal.getCurrentPeriodIndex()
+//   getPeriodKey(period)    → period.key (precomputed on each period object)
+//   getPriorPeriod(idx)     → pcFiscal.getPriorPeriod(period)
 
 function resolveVenueCode(name) { return VENUE_NAME_TO_CODE[name]||name; }
-function findCurrentPeriod() { var today=new Date().toISOString().split('T')[0]; for (var i=0;i<FISCAL_PERIODS.length;i++) { if (today>=FISCAL_PERIODS[i].start&&today<=FISCAL_PERIODS[i].end) return i; } return FISCAL_PERIODS.length-1; }
-function getPeriodKey(period) { return period.start.slice(0,7); }
-function getPriorPeriod(idx) { return idx>0?FISCAL_PERIODS[idx-1]:null; }
 function isVenueSelected(code) { return selectedVenues.indexOf('ALL')>=0||selectedVenues.indexOf(code)>=0; }
 function getSelectedVenueCodes() { return selectedVenues.indexOf('ALL')>=0?VENUES.map(function(v){return v.code;}):selectedVenues.slice(); }
 
@@ -437,14 +418,14 @@ function renderPills() {
 
 /* Period navigation */
 function updatePeriodDisplay() {
-  var p=FISCAL_PERIODS[currentPeriodIdx];
+  var p=pcFiscal.getPeriods()[currentPeriodIdx];
   document.getElementById('fp-name').textContent=p.name;
   var startLabel=new Date(p.start+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});
   var endLabel=new Date(p.end+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});
   document.getElementById('fp-dates').textContent=startLabel+' — '+endLabel+' ('+p.weeks+' weeks)';
 }
 function prevPeriod() { if (currentPeriodIdx>0) { currentPeriodIdx--; updatePeriodDisplay(); loadAllData(); } }
-function nextPeriod() { if (currentPeriodIdx<FISCAL_PERIODS.length-1) { currentPeriodIdx++; updatePeriodDisplay(); loadAllData(); } }
+function nextPeriod() { if (currentPeriodIdx<pcFiscal.getPeriods().length-1) { currentPeriodIdx++; updatePeriodDisplay(); loadAllData(); } }
 
 /* Supabase helpers */
 async function supa(path) {
@@ -485,7 +466,7 @@ function supaDelete(table,filter) { var h=apiHeaders(); h['Prefer']='return=mini
 
 /* Data loading */
 async function loadAllData() {
-  var p=FISCAL_PERIODS[currentPeriodIdx]; var pk=getPeriodKey(p);
+  var p=pcFiscal.getPeriods()[currentPeriodIdx]; var pk=p.key;
   document.getElementById('report-content').innerHTML='<div class="loading">Loading report data...</div>';
   document.getElementById('lock-section').style.display='none';
   try {
@@ -508,7 +489,7 @@ async function loadAllData() {
     cachedStaffing=Array.isArray(results[11])?results[11]:[];
     isLocked=!!cachedSnapshot;
     cachedInventory={};currentInv.forEach(function(row){var vc=resolveVenueCode(row.venue);if(!cachedInventory[vc])cachedInventory[vc]=0;cachedInventory[vc]+=parseFloat(row.value_on_hand||0);});
-    var prior=getPriorPeriod(currentPeriodIdx);
+    var prior=pcFiscal.getPriorPeriod(p);
     if (prior) { var priorMonth=prior.start.slice(0,8)+'01'; var priorInv=await supa('inventory_counts?select=*&count_month=eq.'+priorMonth+'&item_id=neq.e2bf5cd1-5f50-4b11-b4b3-30c06907bffc'); cachedPriorInventory={}; if (Array.isArray(priorInv)) { priorInv.forEach(function(row){var vc=resolveVenueCode(row.venue);if(!cachedPriorInventory[vc])cachedPriorInventory[vc]=0;cachedPriorInventory[vc]+=parseFloat(row.value_on_hand||0);}); } } else { cachedPriorInventory={}; }
     var lockBadge=document.getElementById('fp-lock-badge');
     if (isLocked) { lockBadge.innerHTML='<span class="fp-lock-badge">Locked</span>'; lockBadge.style.display='block'; } else { lockBadge.style.display='none'; }
@@ -562,7 +543,7 @@ function calcEstimatedLaborCredit(venueCode) {
 
 /* Build venue data */
 function buildVenueData(venueCode) {
-  var p=FISCAL_PERIODS[currentPeriodIdx];var pk=getPeriodKey(p);var weeks=getWeekRanges(p);
+  var p=pcFiscal.getPeriods()[currentPeriodIdx];var pk=p.key;var weeks=pcFiscal.getWeekRanges(p);
   var cosRelatable=0;var otherSalesTotal=0;var venueSales=cachedSales.filter(function(s){return resolveVenueCode(s.venue)===venueCode;});
   var unmatchedGross=0;var unmatchedStands={};var unmatchedSaleCount=0;var grossSales=0;
   venueSales.forEach(function(s){var rev=calcRevenue(s);cosRelatable+=rev.cosRelatable;otherSalesTotal+=rev.otherSales;var amt=parseFloat(s.amount||0);grossSales+=amt;
@@ -611,7 +592,7 @@ function mergeVenueData(codes) {
 
 /* Render report */
 function renderReport() {
-  var codes=getSelectedVenueCodes();var data=mergeVenueData(codes);var p=FISCAL_PERIODS[currentPeriodIdx];var pk=getPeriodKey(p);var isSingleVenue=codes.length===1;var venueCode=isSingleVenue?codes[0]:null;var weeks=data.weeks;
+  var codes=getSelectedVenueCodes();var data=mergeVenueData(codes);var p=pcFiscal.getPeriods()[currentPeriodIdx];var pk=p.key;var isSingleVenue=codes.length===1;var venueCode=isSingleVenue?codes[0]:null;var weeks=data.weeks;
   var html='';
 
   /* COS SECTION */
@@ -790,7 +771,7 @@ function enterActualRevenue(venueCode) {
     var otherVal=prompt('Enter ACTUAL other sales (labor/bev deals) for '+venueCode+':\n\nEstimated: '+fmtMoney(d?d.otherSales:0)+'\n\n(Enter 0 or leave as-is if no other sales)',Math.round(currentOther));if(otherVal===null)return;otherVal=parseFloat(otherVal);if(isNaN(otherVal))otherVal=0;
     (async function(){
       var name=currentUserName();
-      var p=FISCAL_PERIODS[currentPeriodIdx];var pk=getPeriodKey(p);
+      var p=pcFiscal.getPeriods()[currentPeriodIdx];var pk=p.key;
       try{
         await supaUpsert('eom_manual_entries',{venue:venueCode,fiscal_period:pk,entry_type:'actual_cos_revenue',amount:cosVal,note:'From commission statements',entered_by:name,entered_at:new Date().toISOString()},'venue,fiscal_period,entry_type');
         await supaUpsert('eom_manual_entries',{venue:venueCode,fiscal_period:pk,entry_type:'actual_other_revenue',amount:otherVal,note:'From commission statements',entered_by:name,entered_at:new Date().toISOString()},'venue,fiscal_period,entry_type');
@@ -810,7 +791,7 @@ function updateLaborDiag(){var d=window._reportData;if(!d)return;var targetEl=do
 
 async function savePayroll(venueCode){
   var name=currentUserName();
-  var p=FISCAL_PERIODS[currentPeriodIdx];var pk=getPeriodKey(p);var weeks=getWeekRanges(p);var allData=[];
+  var p=pcFiscal.getPeriods()[currentPeriodIdx];var pk=p.key;var weeks=pcFiscal.getWeekRanges(p);var allData=[];
   for(var i=0;i<weeks.length;i++){var input=document.getElementById('payroll-'+i);if(!input)continue;var raw=input.value.trim();if(raw===''){continue;}var val=parseFloat(raw);if(isNaN(val))continue;allData.push({venue:venueCode,fiscal_period:pk,week_start:weeks[i].start,week_end:weeks[i].end,amount:val,entered_by:name,entered_at:new Date().toISOString()});}
   if(allData.length===0){alert('Please enter at least one payroll amount.');return;}
   try{
@@ -825,24 +806,21 @@ async function savePayroll(venueCode){
 
 function editPayroll(venueCode){requireAdmin('Admin access required to edit saved payroll.',function(){alert('Payroll fields are now editable. Make your changes and click Save.');});}
 
-async function saveTransfer(venueCode){var input=document.getElementById('transfer-input');if(!input)return;var val=parseFloat(input.value);if(isNaN(val)){alert('Please enter a dollar amount for transfers.');return;}var p=FISCAL_PERIODS[currentPeriodIdx];var pk=getPeriodKey(p);var name=currentUserName();try{await supaUpsert('eom_manual_entries',{venue:venueCode,fiscal_period:pk,entry_type:'transfer',amount:val,entered_by:name,entered_at:new Date().toISOString()},'venue,fiscal_period,entry_type');await loadAllData();}catch(e){console.error('saveTransfer error',e);alert('Error saving transfer:\n\n'+(e&&e.message?e.message:e)+'\n\nNothing was saved. See console for details.');}}
+async function saveTransfer(venueCode){var input=document.getElementById('transfer-input');if(!input)return;var val=parseFloat(input.value);if(isNaN(val)){alert('Please enter a dollar amount for transfers.');return;}var p=pcFiscal.getPeriods()[currentPeriodIdx];var pk=p.key;var name=currentUserName();try{await supaUpsert('eom_manual_entries',{venue:venueCode,fiscal_period:pk,entry_type:'transfer',amount:val,entered_by:name,entered_at:new Date().toISOString()},'venue,fiscal_period,entry_type');await loadAllData();}catch(e){console.error('saveTransfer error',e);alert('Error saving transfer:\n\n'+(e&&e.message?e.message:e)+'\n\nNothing was saved. See console for details.');}}
 
-function overrideLaborCredit(venueCode){requireAdmin('Admin access required to override labor credit.',function(){var current=window._reportData?window._reportData.laborCredit:0;var newVal=prompt('Enter labor credit override amount for '+venueCode+':\n\nCurrent value: '+fmtMoney(current),current);if(newVal===null)return;var val=parseFloat(newVal);if(isNaN(val)){alert('Please enter a valid number.');return;}(async function(){var name=currentUserName();var p=FISCAL_PERIODS[currentPeriodIdx];var pk=getPeriodKey(p);try{await supaUpsert('eom_manual_entries',{venue:venueCode,fiscal_period:pk,entry_type:'labor_credit',amount:val,note:'Override from QuickBooks',entered_by:name,entered_at:new Date().toISOString()},'venue,fiscal_period,entry_type');await loadAllData();showToast('Labor credit override saved', true);}catch(e){console.error('overrideLaborCredit error',e);alert('Error saving labor credit:\n\n'+(e&&e.message?e.message:e)+'\n\nNothing was saved. See console for details.');}})();});}
+function overrideLaborCredit(venueCode){requireAdmin('Admin access required to override labor credit.',function(){var current=window._reportData?window._reportData.laborCredit:0;var newVal=prompt('Enter labor credit override amount for '+venueCode+':\n\nCurrent value: '+fmtMoney(current),current);if(newVal===null)return;var val=parseFloat(newVal);if(isNaN(val)){alert('Please enter a valid number.');return;}(async function(){var name=currentUserName();var p=pcFiscal.getPeriods()[currentPeriodIdx];var pk=p.key;try{await supaUpsert('eom_manual_entries',{venue:venueCode,fiscal_period:pk,entry_type:'labor_credit',amount:val,note:'Override from QuickBooks',entered_by:name,entered_at:new Date().toISOString()},'venue,fiscal_period,entry_type');await loadAllData();showToast('Labor credit override saved', true);}catch(e){console.error('overrideLaborCredit error',e);alert('Error saving labor credit:\n\n'+(e&&e.message?e.message:e)+'\n\nNothing was saved. See console for details.');}})();});}
 
 function deletePurchase(id){requireAdmin('Admin access required to delete a purchase.',async function(){if(!confirm('Delete this invoice? This cannot be undone.'))return;try{await supaDelete('purchases','id=eq.'+id);loadAllData();}catch(e){alert('Error deleting purchase. Please try again.');}});}
 
-async function lockPeriod(){requireAdmin('Admin access required to lock this period.',function(){(async function(){var name=currentUserName();var p=FISCAL_PERIODS[currentPeriodIdx];var pk=getPeriodKey(p);var codes=VENUES.map(function(v){return v.code;});var allData={};codes.forEach(function(c){allData[c]=buildVenueData(c);});try{await supaUpsert('eom_snapshots',{fiscal_period:pk,locked_by:name,locked_at:new Date().toISOString(),snapshot_data:JSON.stringify(allData)},'fiscal_period');await loadAllData();showToast('Period '+p.name+' locked', true);}catch(e){console.error('lockPeriod error',e);alert('Error locking period:\n\n'+(e&&e.message?e.message:e)+'\n\nNothing was saved. See console for details.');}})();});}
+async function lockPeriod(){requireAdmin('Admin access required to lock this period.',function(){(async function(){var name=currentUserName();var p=pcFiscal.getPeriods()[currentPeriodIdx];var pk=p.key;var codes=VENUES.map(function(v){return v.code;});var allData={};codes.forEach(function(c){allData[c]=buildVenueData(c);});try{await supaUpsert('eom_snapshots',{fiscal_period:pk,locked_by:name,locked_at:new Date().toISOString(),snapshot_data:JSON.stringify(allData)},'fiscal_period');await loadAllData();showToast('Period '+p.name+' locked', true);}catch(e){console.error('lockPeriod error',e);alert('Error locking period:\n\n'+(e&&e.message?e.message:e)+'\n\nNothing was saved. See console for details.');}})();});}
 
 /* Login gate — must sign in to access this page */
 pcAuth.require({
   pageSlug: 'cos-labor',
   onReady: function(user) {
-    var el = document.getElementById('header-right');
-    if (el && user) {
-      el.innerHTML = '<span class="header-user">' + (user.display_name || user.email) + '</span>' +
-        '<button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
-    }
-    currentPeriodIdx = findCurrentPeriod();
+    // Header + user pill painted by pc-nav.js — no manual setup here.
+    pcActivity.init('cos-labor');
+    currentPeriodIdx = pcFiscal.getCurrentPeriodIndex();
     renderPills();
     updatePeriodDisplay();
     loadAllData();
