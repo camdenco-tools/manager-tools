@@ -116,12 +116,6 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
       <div class="modal-field"><label>Venue</label>
         <select id="edit-venue" onchange="updateEditStands()">
           <option value="">Select...</option>
-          <option value="Mann">Mann Music Center</option><option value="FMP">FMP</option>
-          <option value="ACCC">ACCC</option><option value="BWH">Boardwalk Hall</option>
-          <option value="Cure">Cure Insurance Arena</option><option value="DE">DE Chase Field House</option>
-          <option value="Subaru">Subaru Park</option><option value="Villanova">Villanova</option>
-          <option value="Montage">Montage</option><option value="SATB">Sports at the Beach</option>
-          <option value="Kirkwood">Kirkwood</option>
         </select>
       </div>
       <div class="modal-field"><label>Stand</label><select id="edit-stand"></select></div>
@@ -200,12 +194,6 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
           <label>Venue</label>
           <select id="s-venue">
             <option value="">All venues</option>
-            <option value="Mann">Mann Music Center</option><option value="FMP">FMP</option>
-            <option value="ACCC">ACCC</option><option value="BWH">Boardwalk Hall</option>
-            <option value="Cure">Cure Insurance Arena</option><option value="DE">DE Chase Field House</option>
-            <option value="Subaru">Subaru Park</option><option value="Villanova">Villanova</option>
-            <option value="Montage">Montage</option><option value="SATB">Sports at the Beach</option>
-            <option value="Kirkwood">Kirkwood</option>
           </select>
         </div>
       </div>
@@ -220,18 +208,25 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
 <script src="/pc-auth.js"></script>
 <script src="/pc-nav.js"></script>
 <script src="/pc-activity.js"></script>
+<script src="/pc-catalog.js"></script>
 <script>
 var SUPA_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
 var EDIT_WINDOW_DAYS = 4;
 var ALL_TIME_START = '2023-01-01';
 
-var VENUE_LABELS = {
-  'Mann':'Mann Music Center','FMP':'FMP','ACCC':'ACCC','BWH':'Boardwalk Hall',
+// Populated from pcCatalog in onReady. Fallback dicts below are used only if the
+// catalog fails to load — they must stay roughly in sync with the catalog as a
+// defensive measure but are NOT the source of truth.
+var VENUE_LABELS = {};
+var STANDS = {};
+
+var _FALLBACK_VENUE_LABELS = {
+  'Mann':'Mann Music Center','FMP':'Freedom Mortgage Pavilion','ACCC':'Atlantic City Convention Center','BWH':'Boardwalk Hall',
   'Cure':'Cure Insurance Arena','DE':'DE Chase Field House','Subaru':'Subaru Park',
   'Villanova':'Villanova','Montage':'Montage','SATB':'Sports at the Beach','Kirkwood':'Kirkwood'
 };
 
-var STANDS = {
+var _FALLBACK_STANDS = {
   'Mann':['Upper Concession','Upper Popcorn','Lower Popcorn','Skyline Popcorn','Upper Pizza','Lower Pizza','Skyline Pizza','Farm & Fry Truck','Crescendo','Lawn Portable','Stage Left Bar','Upper Linear Bar','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4','Mobile Cart 5','Mobile Cart 6','Mobile Cart 7','Mobile Cart 8','Mobile Cart 9','Mobile Cart 10','Hawking','Support Staff'],
   'FMP':['Stand 782','783','SC1','LM1','LM2','WWI','Ben Kettle','Walt Kettle','IC1','BWI','UD1','Ziggys Walt','Ziggys Ben','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4','Mobile Cart 5','Hawking','Support Staff'],
   'ACCC':['Stand 1','Stand 2','Hawking','Support Staff'],
@@ -793,13 +788,69 @@ function exportCSV() {
   a.click();
 }
 
+function populateVenueDropdowns() {
+  var sVenue = document.getElementById('s-venue');
+  var eVenue = document.getElementById('edit-venue');
+  // Sorted by catalog display order; falls back to Object.keys for the fallback path.
+  var venueCodes = Object.keys(VENUE_LABELS);
+  if (typeof pcCatalog !== 'undefined' && pcCatalog && pcCatalog.getActiveVenues) {
+    try {
+      var active = pcCatalog.getActiveVenues();
+      if (active && active.length) venueCodes = active.map(function(v) { return v.code; });
+    } catch (e) { /* fall through to Object.keys */ }
+  }
+  venueCodes.forEach(function(code) {
+    var label = VENUE_LABELS[code] || code;
+    var o1 = document.createElement('option');
+    o1.value = code; o1.textContent = label;
+    sVenue.appendChild(o1);
+    var o2 = document.createElement('option');
+    o2.value = code; o2.textContent = label;
+    eVenue.appendChild(o2);
+  });
+}
+
 pcAuth.require({
   pageSlug: 'sales-history',
   onReady: function(user) {
     pcActivity.init('sales-history');
     updateFiscalChipAvailability();
-    // Default: scope to the last event day with sales (lighter than pulling all-time).
-    applyQuickRange('last-event');
+
+    // Load catalog → populate dropdowns → kick off default search.
+    // Fallback path used only if catalog fails to load.
+    var initSearch = function() {
+      populateVenueDropdowns();
+      applyQuickRange('last-event');
+    };
+
+    if (typeof pcCatalog !== 'undefined' && pcCatalog && pcCatalog.ready) {
+      pcCatalog.ready().then(function() {
+        try {
+          pcCatalog.getActiveVenues().forEach(function(v) {
+            VENUE_LABELS[v.code] = v.full_name;
+            // getAllStandsForVenue: historical reports need retired stands too,
+            // so old edit-modal selections survive a save round-trip.
+            var stands = pcCatalog.getAllStandsForVenue(v.code) || [];
+            STANDS[v.code] = stands.map(function(s) { return s.name; });
+          });
+        } catch (e) {
+          console.warn('[sales-history] catalog populate failed, using fallbacks:', e);
+          VENUE_LABELS = _FALLBACK_VENUE_LABELS;
+          STANDS = _FALLBACK_STANDS;
+        }
+        initSearch();
+      }).catch(function(e) {
+        console.warn('[sales-history] pcCatalog.ready failed, using fallbacks:', e);
+        VENUE_LABELS = _FALLBACK_VENUE_LABELS;
+        STANDS = _FALLBACK_STANDS;
+        initSearch();
+      });
+    } else {
+      console.warn('[sales-history] pcCatalog not available, using fallbacks');
+      VENUE_LABELS = _FALLBACK_VENUE_LABELS;
+      STANDS = _FALLBACK_STANDS;
+      initSearch();
+    }
   }
 });
 </script>
