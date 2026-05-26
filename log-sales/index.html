@@ -10,6 +10,7 @@
 <script src="/pc-auth.js"></script>
 <script src="/pc-nav.js"></script>
 <script src="/pc-activity.js"></script>
+<script src="/pc-catalog.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f0ec; min-height: 100vh; }
@@ -433,13 +434,19 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
 var SUPA_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
 var EDGE_URL = SUPA_URL + '/functions/v1/parse-signin-sheet';
 
-var VENUE_LABELS = {
-  'Mann':'Mann Music Center','FMP':'FMP','ACCC':'ACCC','BWH':'Boardwalk Hall',
+// Populated from pcCatalog in onReady. Fallback dicts below are used only if
+// the catalog fails to load — they must stay roughly in sync with the catalog
+// as a defensive measure but are NOT the source of truth.
+var VENUE_LABELS = {};
+var STANDS = {};
+
+var _FALLBACK_VENUE_LABELS = {
+  'Mann':'Mann Music Center','FMP':'Freedom Mortgage Pavilion','ACCC':'AC Convention Center','BWH':'Boardwalk Hall',
   'Cure':'Cure Insurance Arena','DE':'DE Chase Field House','Subaru':'Subaru Park',
-  'Villanova':'Villanova','Montage':'Montage','SATB':'Sports at the Beach','Kirkwood':'Kirkwood'
+  'Villanova':'Villanova','Montage':'Montage Mountain','SATB':'Sports at the Beach','Kirkwood':'Kirkwood'
 };
 
-var STANDS = {
+var _FALLBACK_STANDS = {
   'Mann':['Upper Concession','Upper Popcorn','Lower Popcorn','Skyline Popcorn','Upper Pizza','Lower Pizza','Skyline Pizza','Farm & Fry Truck','Crescendo','Lawn Portable','Stage Left Bar','Upper Linear Bar','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4','Mobile Cart 5','Mobile Cart 6','Mobile Cart 7','Mobile Cart 8','Mobile Cart 9','Mobile Cart 10','Hawking','Support Staff'],
   'FMP':['Stand 782','783','SC1','LM1','LM2','WWI','Ben Kettle','Walt Kettle','IC1','BWI','UD1','Ziggys Walt','Ziggys Ben','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4','Mobile Cart 5','Hawking','Support Staff'],
   'ACCC':['Stand 1','Stand 2','Hawking','Support Staff'],
@@ -1752,9 +1759,43 @@ pcAuth.require({
     // #header-right population is gone — pc-nav reads pcAuth and renders the
     // user name into its own injected header bar.
     document.getElementById('evt-date').value = todayLocal();
-    handleDateChange();
-    loadScoreboard();
-    setInterval(loadScoreboard, 60000);
+
+    // Load catalog → populate VENUE_LABELS + STANDS → kick off form + scoreboard.
+    // Fallback path used only if catalog fails to load.
+    // Use getActiveStandsForVenue (NOT getAllStandsForVenue): this is a creation
+    // page; new sales should not be loggable against retired stands.
+    var initPage = function() {
+      handleDateChange();
+      loadScoreboard();
+      setInterval(loadScoreboard, 60000);
+    };
+
+    if (typeof pcCatalog !== 'undefined' && pcCatalog && pcCatalog.ready) {
+      pcCatalog.ready().then(function() {
+        try {
+          pcCatalog.getActiveVenues().forEach(function(v) {
+            VENUE_LABELS[v.code] = v.full_name;
+            var stands = pcCatalog.getActiveStandsForVenue(v.code) || [];
+            STANDS[v.code] = stands.map(function(s) { return s.stand_name; });
+          });
+        } catch (e) {
+          console.warn('[log-sales] catalog populate failed, using fallbacks:', e);
+          VENUE_LABELS = _FALLBACK_VENUE_LABELS;
+          STANDS = _FALLBACK_STANDS;
+        }
+        initPage();
+      }).catch(function(e) {
+        console.warn('[log-sales] pcCatalog.ready failed, using fallbacks:', e);
+        VENUE_LABELS = _FALLBACK_VENUE_LABELS;
+        STANDS = _FALLBACK_STANDS;
+        initPage();
+      });
+    } else {
+      console.warn('[log-sales] pcCatalog not available, using fallbacks');
+      VENUE_LABELS = _FALLBACK_VENUE_LABELS;
+      STANDS = _FALLBACK_STANDS;
+      initPage();
+    }
   }
 });
 </script>
