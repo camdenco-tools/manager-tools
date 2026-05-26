@@ -4,7 +4,7 @@
  * Loaded by pages AFTER /pc-auth.js. Provides read-only access to the
  * `roles` and `venue_roles` catalog tables (seeded May 14, 2026 — Phase -2).
  *
- * This is the role-side sibling of the planned pc-catalog.js (Phase -2b,
+ * This is the role-side sibling of pc-catalog.js (Phase -2b,
  * stands + venues). It is a PURE READ LAYER — it never writes. Pages that
  * edit venue_roles (e.g. the Venue Roles admin page) issue their own
  * fetch() writes and then call pcRoles.refresh() to invalidate the cache.
@@ -18,6 +18,7 @@
  *       var roles = pcRoles.getRoles();                 // all 11 canonical roles
  *       var fmp   = pcRoles.getRolesForVenue('FMP');    // active roles at FMP
  *       var rate  = pcRoles.getPayRate('FMP', 'Bartender');
+ *       var canon = pcRoles.legacyToCanonical('Concessions Cashier'); // -> 'Cashier'
  *     });
  *   }});
  *
@@ -29,6 +30,20 @@
  *   roles        — 11 rows: Supervisor, Lead, Bar Lead, Bartender, Cashier,
  *                  Cook, Pizza Maker, Stand Worker, Warehouse, Cleaner, Hawker
  *   venue_roles  — 59 rows across 11 venues (Kirkwood has 0)
+ *
+ * Legacy-to-canonical translation (added May 26, 2026):
+ *   The DB still contains legacy role strings on rows written before the
+ *   migration_markers cutover (2026-05-19 13:44:18 UTC). pcRoles.legacyToCanonical
+ *   translates any legacy string to its canonical equivalent. Mapping is
+ *   from role-pay-mapping-reference.md (confirmed by Keith May 14, 2026)
+ *   + the legacy-role-string spelunking documented in
+ *   project-update-may19-role-stand-catalog-foundation.md.
+ *
+ *   Safe to call on any input: canonical strings pass through unchanged,
+ *   unknown strings pass through unchanged. Returns null only for the
+ *   two confirmed DROP roles (Barback, Venue Manager) so callers can
+ *   filter them out explicitly. Use pcRoles.isDropped() if you just want
+ *   the boolean check.
  */
 (function () {
   'use strict';
@@ -44,6 +59,73 @@
                               //    role_name, role_sort, pay_rate,
                               //    is_active }, ...]
   var _readyPromise = null;   // the in-flight or settled load promise
+
+  // ---------------------------------------------------------------------
+  // Legacy-to-canonical mapping (added May 26, 2026).
+  //
+  // Hardcoded constant — small, stable, derived from confirmed reference
+  // doc. Building this as a function rather than a DB lookup because:
+  //   1. The mapping universe is closed (22 strings, no new legacy strings
+  //      can be created — the marker is in the past).
+  //   2. Translating role strings is a hot path (every render call hits
+  //      it many times). A function lookup is O(1) and synchronous.
+  //   3. A DB-backed mapping would need yet another table + RLS + fetch
+  //      for data that will never change.
+  //
+  // Source: role-pay-mapping-reference.md (confirmed by Keith 2026-05-14)
+  // combined with the legacy-string spelunking from
+  // project-update-may19-role-stand-catalog-foundation.md.
+  //
+  // Sentinel values:
+  //   null  — the role is confirmed DROP (Barback, Venue Manager).
+  //           Callers should filter these out. Don't render, don't sort.
+  //   '__MULTI__' — the special "Multiple / Open" applicant tag that
+  //           expands to three canonical roles. Callers that hit this
+  //           should treat it as [Stand Worker, Cashier, Cleaner] rather
+  //           than a single role. Rare — should only appear in candidate
+  //           applicant data, not in staffing_requests or position_assignments.
+  // ---------------------------------------------------------------------
+  var _LEGACY_TO_CANONICAL = {
+    // Already-canonical names (pass-through, included for completeness
+    // so callers can blindly run any string through the function)
+    'Supervisor':                  'Supervisor',
+    'Lead':                        'Lead',
+    'Bar Lead':                    'Bar Lead',
+    'Bartender':                   'Bartender',
+    'Cashier':                     'Cashier',
+    'Cook':                        'Cook',
+    'Pizza Maker':                 'Pizza Maker',
+    'Stand Worker':                'Stand Worker',
+    'Warehouse':                   'Warehouse',
+    'Cleaner':                     'Cleaner',
+    'Hawker':                      'Hawker',
+
+    // Renames (one legacy string -> one canonical role)
+    'Concessions Lead':            'Lead',
+    'Concessions Cashier':         'Cashier',
+    'Concessions Cook':            'Cook',
+    'Cleaning Crew':               'Cleaner',
+    'Warehouse/Runner':            'Warehouse',
+
+    // Collapses (multiple legacy strings -> one canonical role)
+    'Pizza Lead':                  'Lead',
+    'Pizza Cashier':               'Cashier',
+    'Beer Tender':                 'Bartender',
+    'Prep Cook':                   'Cook',
+
+    // Parenthetical-stripped variants seen in the spelunking
+    'Bartender (mixed drinks)':    'Bartender',
+    'Beer Tender (beer only)':     'Bartender',
+    'Hawker (commission)':         'Hawker',
+    'Supervisor / Manager':        'Supervisor',
+
+    // Drops (no canonical equivalent — null sentinel)
+    'Barback':                     null,
+    'Venue Manager':               null,
+
+    // Special expansion case (used only in applicant data, see header)
+    'Multiple / Open':             '__MULTI__'
+  };
 
   // ---------------------------------------------------------------------
   // Internal: one authenticated GET against PostgREST.
@@ -242,6 +324,49 @@
         if (vr.venue_code) seen[vr.venue_code] = true;
       });
       return Object.keys(seen).sort();
+    },
+
+    /*
+     * legacyToCanonical(roleString) — translates a legacy role string
+     * to its canonical equivalent. Safe to call on any input:
+     *   - Canonical names pass through unchanged ('Supervisor' -> 'Supervisor')
+     *   - Known legacy names translate ('Concessions Cashier' -> 'Cashier')
+     *   - Dropped roles return null (callers should filter these out)
+     *   - 'Multiple / Open' returns '__MULTI__' sentinel (callers that
+     *     hit this should expand to [Stand Worker, Cashier, Cleaner])
+     *   - Unknown strings pass through unchanged so misspelled rows
+     *     still render something (won't break the page)
+     *
+     * Does NOT require ready() to have been called — pure synchronous
+     * lookup against the hardcoded constant table.
+     */
+    legacyToCanonical: function (roleString) {
+      if (roleString == null) return null;
+      if (Object.prototype.hasOwnProperty.call(_LEGACY_TO_CANONICAL, roleString)) {
+        return _LEGACY_TO_CANONICAL[roleString];
+      }
+      // Unknown string — pass through unchanged. Better to render a
+      // surprise string than to silently drop a row.
+      return roleString;
+    },
+
+    /*
+     * isDropped(roleString) — convenience boolean for the 2 confirmed
+     * DROP roles (Barback, Venue Manager). Returns true if the string
+     * is one of those; false for canonical, renamed, collapsed, or
+     * unknown strings.
+     *
+     * Use this when filtering a role list before rendering — e.g. in a
+     * stand card's role iteration, skip any role where isDropped() is
+     * true so retired pseudo-roles disappear from the UI without losing
+     * historical data.
+     */
+    isDropped: function (roleString) {
+      if (roleString == null) return false;
+      if (!Object.prototype.hasOwnProperty.call(_LEGACY_TO_CANONICAL, roleString)) {
+        return false;
+      }
+      return _LEGACY_TO_CANONICAL[roleString] === null;
     }
   };
 
