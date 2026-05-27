@@ -2915,8 +2915,10 @@
    * has minimal blast radius.
    */
   function pmGetSignedUrl(path) {
-    var url = SB_URL + '/storage/v1/object/sign/ar-remittances/' +
-      path.split('/').map(encodeURIComponent).join('/');
+    // Storage REST expects the path appended as-is after the bucket name.
+    // Per-segment encoding breaks it — the API treats the encoded result
+    // as a literal filename containing %2F rather than a path separator.
+    var url = SB_URL + '/storage/v1/object/sign/ar-remittances/' + path;
     var hdrs = Object.assign({}, pcAuth.headers(), {
       'Content-Type': 'application/json'
     });
@@ -2936,7 +2938,9 @@
       var signed = data.signedURL || data.signedUrl;  // API has used both casings
       if (!signed) throw new Error('No signed URL in response');
       // The path starts with /storage/v1/... — combine with base.
-      return SB_URL + signed;
+      // signedURL comes back as "/object/sign/<bucket>/<path>?token=..."
+      // The actual servable URL needs the /storage/v1 prefix prepended.
+      return SB_URL + '/storage/v1' + signed;
     });
   }
 
