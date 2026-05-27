@@ -32,28 +32,50 @@
  * - cos-labor's   getPriorPeriod(idx)           → pcFiscal.getPriorPeriod(period)
  * - sales-history's resolveFiscalPeriod(iso)    → pcFiscal.resolvePeriod(iso)
  *
- * ⚠️ KEY COLLISION — known bug carried forward from cos-labor:
- *   Because period.key = period.start.slice(0,7), the November and
- *   December periods of any given fiscal year share the same key:
- *     - November 2026 starts 2026-11-02 → key '2026-11'
- *     - December 2026 starts 2026-11-30 → key '2026-11' (same!)
- *     - November 2027 starts 2027-11-01 → key '2027-11'
- *     - December 2027 starts 2027-11-29 → key '2027-11' (same!)
+ * ⚠️ KEY COLLISION — known limitation of the .key field:
+ *   Because period.key = period.start.slice(0,7), and a 5-week fiscal
+ *   period often starts at the end of the prior calendar month, many
+ *   periods share a key with one of their neighbors. This is NOT a
+ *   Nov/Dec-only issue — it happens in every quarter where a 5-week
+ *   period straddles a month boundary.
  *
- *   Production data in eom_snapshots, eom_payroll, eom_manual_entries
- *   has been written under this collision for months. Fixing the
- *   keying scheme would orphan existing rows. The collision is
- *   preserved here for compatibility — getPeriodByKey() returns the
- *   first match (November), which matches what cos-labor's UI does.
+ *   Concrete examples across the defined years:
+ *     - CY2026: 3 colliding pairs (Jun/Jul, Aug/Sep, Nov/Dec)
+ *     - CY2027: 3 colliding pairs (May/Jun, Aug/Sep, Nov/Dec)
+ *     - CY2028: 4 colliding pairs (Jan/Feb, May/Jun, Jul/Aug, Oct/Nov)
+ *     - CY2029: 4 colliding pairs (Jan/Feb, Apr/May, Jul/Aug, Oct/Nov)
+ *     - CY2030: 2 colliding pairs (Apr/May, Jul/Aug)
  *
- *   Workarounds for callers that need to disambiguate:
- *   - Use getPeriodByName('November 2026') / 'December 2026' (unique)
- *   - Use the period.start ISO string (unique)
+ *   Production data in eom_snapshots, eom_payroll, and eom_manual_entries
+ *   has been written under this collision since the cos-labor page
+ *   launched. The collision is preserved here for compatibility —
+ *   getPeriodByKey() returns the first match it finds, which in practice
+ *   means the earlier of the two colliding periods.
+ *
+ *   PRACTICAL IMPACT:
+ *   - Callers that use the FULL period object (resolvePeriod, getCurrentPeriod,
+ *     getPriorPeriod with an object input, etc.) are NOT affected — they
+ *     work off period.start which is always unique.
+ *   - Callers that pass around the 'YYYY-MM' key string and later try to
+ *     map it back to a specific period can land on the wrong period. The
+ *     existing eom_* tables in production are exactly this situation:
+ *     two real fiscal periods can both write rows under the same
+ *     fiscal_period value.
+ *
+ *   WORKAROUNDS for callers that need to disambiguate:
+ *   - Use getPeriodByName('November 2026') / 'December 2026' (always unique)
+ *   - Use the period.start ISO string (always unique)
  *   - Use getPeriods()[index] when the index is known
  *
  *   getPriorPeriod / getNextPeriod accept the period OBJECT as their
  *   primary input and walk by array position, so they are immune to
  *   the collision when given the object directly.
+ *
+ *   A proper fix would mean changing the key scheme (e.g., using the
+ *   period's full start ISO date instead of just year-month). That's
+ *   tracked as a follow-up and would require a data migration on the
+ *   eom_* tables. Not done here because the impact is limited and a
+ *   migration is non-trivial.
  *
  * KNOWN DATA NOTE — CY2026 boundaries (preserved as-shipped):
  *   The CY2026 calendar carried over from cos-labor is NOT a standard
@@ -69,18 +91,29 @@
  *   to resolve to null (callers handle the null gracefully — same
  *   pattern as year-end gaps).
  *
- * CY2027+ FOLLOWS STANDARD 4-4-5:
- *   Starting with CY2027, periods follow the canonical pattern: every
- *   quarter is 4-4-5 (13 weeks), every year is 52 weeks (no gaps),
- *   5-week periods fall in March, June, September, and December. This
- *   is the shape future years should be built on.
+ * CY2027+ FOLLOWS STANDARD NRF 4-4-5:
+ *   - CY2027: 52 weeks, standard 4-4-5 quarters
+ *   - CY2028: 52 weeks, standard 4-4-5 quarters
+ *   - CY2029: 52 weeks, standard 4-4-5 quarters
+ *   - CY2030: 53 WEEKS — the 53rd week lands in December, making
+ *     Q4 = 4-4-6 instead of 4-4-5. This is the standard NRF retail
+ *     calendar "leap week" used to re-anchor the fiscal year to a
+ *     January start. Without this extra week, by CY2032 the year
+ *     would start mid-December, 9+ days drifted from the original
+ *     anchor. The 53rd week brings CY2031 back to a Mon Jan 6, 2031
+ *     start.
  *
- * EXTENDING TO 2028+:
- *   Use the build script at the bottom of this comment block (or copy
- *   FISCAL_PERIODS_2027 and shift all dates by 364 days). Confirm the
- *   new year starts on a Monday and ends on a Sunday. Add as
- *   FISCAL_PERIODS_2028 and concat into ALL_PERIODS. CY2028 starts
- *   Mon Jan 3, 2028.
+ *   Note: January 2030 starts Mon Dec 31, 2029 — this is normal for
+ *   the year preceding a 53-week year and is NOT a bug. The fiscal
+ *   year label ("2030") follows the period's start MONTH, not its
+ *   calendar year. resolvePeriod('2029-12-31') correctly returns the
+ *   "January 2030" period.
+ *
+ * EXTENDING TO 2031+:
+ *   CY2031 starts Mon Jan 6, 2031 (chains from CY2030's 53-week end
+ *   on Sun Jan 5, 2031). Continue with standard 4-4-5 years until
+ *   drift accumulates again — the next 53-week year will likely be
+ *   CY2036 or CY2037. Recompute drift before encoding that far out.
  * ========================================================================== */
 
 (function() {
@@ -130,8 +163,72 @@
     { name: 'December 2027',  start: '2027-11-29', end: '2028-01-02', weeks: 5 }
   ];
 
+  /* CY2028 — standard 4-4-5, 52 weeks. Starts Mon Jan 3, 2028. */
+  var FISCAL_PERIODS_2028 = [
+    { name: 'January 2028',   start: '2028-01-03', end: '2028-01-30', weeks: 4 },
+    { name: 'February 2028',  start: '2028-01-31', end: '2028-02-27', weeks: 4 },
+    { name: 'March 2028',     start: '2028-02-28', end: '2028-04-02', weeks: 5 },
+    { name: 'April 2028',     start: '2028-04-03', end: '2028-04-30', weeks: 4 },
+    { name: 'May 2028',       start: '2028-05-01', end: '2028-05-28', weeks: 4 },
+    { name: 'June 2028',      start: '2028-05-29', end: '2028-07-02', weeks: 5 },
+    { name: 'July 2028',      start: '2028-07-03', end: '2028-07-30', weeks: 4 },
+    { name: 'August 2028',    start: '2028-07-31', end: '2028-08-27', weeks: 4 },
+    { name: 'September 2028', start: '2028-08-28', end: '2028-10-01', weeks: 5 },
+    { name: 'October 2028',   start: '2028-10-02', end: '2028-10-29', weeks: 4 },
+    { name: 'November 2028',  start: '2028-10-30', end: '2028-11-26', weeks: 4 },
+    { name: 'December 2028',  start: '2028-11-27', end: '2028-12-31', weeks: 5 }
+  ];
+
+  /* CY2029 — standard 4-4-5, 52 weeks. Starts Mon Jan 1, 2029.
+     January 1 happens to be a Monday this year — no Dec-start needed. */
+  var FISCAL_PERIODS_2029 = [
+    { name: 'January 2029',   start: '2029-01-01', end: '2029-01-28', weeks: 4 },
+    { name: 'February 2029',  start: '2029-01-29', end: '2029-02-25', weeks: 4 },
+    { name: 'March 2029',     start: '2029-02-26', end: '2029-04-01', weeks: 5 },
+    { name: 'April 2029',     start: '2029-04-02', end: '2029-04-29', weeks: 4 },
+    { name: 'May 2029',       start: '2029-04-30', end: '2029-05-27', weeks: 4 },
+    { name: 'June 2029',      start: '2029-05-28', end: '2029-07-01', weeks: 5 },
+    { name: 'July 2029',      start: '2029-07-02', end: '2029-07-29', weeks: 4 },
+    { name: 'August 2029',    start: '2029-07-30', end: '2029-08-26', weeks: 4 },
+    { name: 'September 2029', start: '2029-08-27', end: '2029-09-30', weeks: 5 },
+    { name: 'October 2029',   start: '2029-10-01', end: '2029-10-28', weeks: 4 },
+    { name: 'November 2029',  start: '2029-10-29', end: '2029-11-25', weeks: 4 },
+    { name: 'December 2029',  start: '2029-11-26', end: '2029-12-30', weeks: 5 }
+  ];
+
+  /* CY2030 — 53-WEEK LEAP YEAR. The 53rd week lands in December,
+     making it a 6-week period and Q4 = 4-4-6 (14 weeks) for this year
+     only. This is the standard NRF retail-calendar correction to keep
+     the fiscal year anchored to early January.
+
+     IMPORTANT: January 2030 starts Mon Dec 31, 2029 — NOT in January
+     of calendar year 2030. This is intentional and normal for the year
+     preceding a 53-week correction. The period name follows the start
+     MONTH convention; resolvePeriod('2029-12-31') correctly returns
+     the "January 2030" period.
+
+     After CY2030's 53rd week, CY2031 starts cleanly on Mon Jan 6, 2031. */
+  var FISCAL_PERIODS_2030 = [
+    { name: 'January 2030',   start: '2029-12-31', end: '2030-01-27', weeks: 4 },
+    { name: 'February 2030',  start: '2030-01-28', end: '2030-02-24', weeks: 4 },
+    { name: 'March 2030',     start: '2030-02-25', end: '2030-03-31', weeks: 5 },
+    { name: 'April 2030',     start: '2030-04-01', end: '2030-04-28', weeks: 4 },
+    { name: 'May 2030',       start: '2030-04-29', end: '2030-05-26', weeks: 4 },
+    { name: 'June 2030',      start: '2030-05-27', end: '2030-06-30', weeks: 5 },
+    { name: 'July 2030',      start: '2030-07-01', end: '2030-07-28', weeks: 4 },
+    { name: 'August 2030',    start: '2030-07-29', end: '2030-08-25', weeks: 4 },
+    { name: 'September 2030', start: '2030-08-26', end: '2030-09-29', weeks: 5 },
+    { name: 'October 2030',   start: '2030-09-30', end: '2030-10-27', weeks: 4 },
+    { name: 'November 2030',  start: '2030-10-28', end: '2030-11-24', weeks: 4 },
+    { name: 'December 2030',  start: '2030-11-25', end: '2031-01-05', weeks: 6 }
+  ];
+
   /* Master array — concat of all defined years in chronological order. */
-  var ALL_PERIODS = FISCAL_PERIODS_2026.concat(FISCAL_PERIODS_2027);
+  var ALL_PERIODS = FISCAL_PERIODS_2026
+    .concat(FISCAL_PERIODS_2027)
+    .concat(FISCAL_PERIODS_2028)
+    .concat(FISCAL_PERIODS_2029)
+    .concat(FISCAL_PERIODS_2030);
 
   /* Precompute the 'YYYY-MM' key used as fiscal_period across the schema
      (eom_snapshots.fiscal_period, eom_payroll.fiscal_period, etc.).
@@ -212,10 +309,11 @@
   }
 
   /* Lookup by 'YYYY-MM' key (the value stored in fiscal_period columns
-     across the schema). Returns the FIRST match — note that November
-     and December of any year share the same key (see file header), so
-     this returns November when given a 'YYYY-11' key. Returns null on
-     miss. Use getPeriodByName() when you need to disambiguate. */
+     across the schema). Returns the FIRST match — be careful, key
+     collisions are widespread because 5-week fiscal periods often
+     straddle a month boundary. See the file header for the full list
+     of colliding pairs by year. Use getPeriodByName() when you need to
+     disambiguate. Returns null on miss. */
   function getPeriodByKey(key) {
     if (!key) return null;
     for (var i = 0; i < ALL_PERIODS.length; i++) {
