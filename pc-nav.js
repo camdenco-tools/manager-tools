@@ -57,6 +57,7 @@
     dashboards: { label: 'Staffing dashboard', href: '/dashboard/', slug: 'dashboard' },
     admin: [
       { label: 'Accounts receivable',            href: '/accounts-receivable/',    slug: 'accounts-receivable' },
+      { label: 'Expense reports',                href: '/expense-reports/',        slug: 'expense-reports' },
       { label: 'Event master list',              href: '/events-admin/',           slug: 'events-admin' },
       { label: 'User access',                    href: '/user-access/',            slug: 'user-access' },
       { label: 'Venue roles',                    href: '/manage-venue-roles/',     slug: 'manage-venue-roles' },
