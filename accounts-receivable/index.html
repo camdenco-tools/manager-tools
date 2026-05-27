@@ -2431,6 +2431,7 @@
             '<button type="button" class="ar-btn ar-btn-void" id="arfVoid" hidden>Void invoice</button>' +
           '</div>' +
           '<div class="ar-modal-footer-right">' +
+            '<button type="button" class="ar-btn ar-btn-secondary" id="arfPrint" hidden>Print invoice</button>' +
             '<button type="button" class="ar-btn ar-btn-secondary" data-close-modal="modal">Cancel</button>' +
             '<button type="button" class="ar-btn ar-btn-primary" id="arfSave">Save invoice</button>' +
           '</div>' +
@@ -3208,6 +3209,22 @@
     if (voidBtn && !voidBtn._wired) {
       voidBtn._wired = true;
       voidBtn.addEventListener('click', openVoidConfirm);
+    }
+
+    // Reveal the Print button — edit mode only, since the invoice must
+    // exist in the DB before there's anything to print. New-invoice mode
+    // keeps the button hidden until the invoice is saved.
+    var printBtn = document.getElementById('arfPrint');
+    if (printBtn) {
+      printBtn.hidden = false;
+      if (!printBtn._wired) {
+        printBtn._wired = true;
+        printBtn.addEventListener('click', function () {
+          if (!formState || !formState._editing_id) return;
+          window.open('/accounts-receivable/print/?id=' +
+            encodeURIComponent(formState._editing_id), '_blank');
+        });
+      }
     }
   }
 
@@ -4190,7 +4207,8 @@
     var status    = button.getAttribute('data-invoice-status') || 'open';
     var invNum    = button.getAttribute('data-invoice-number') || '';
 
-    var html = '<button type="button" data-row-action="edit">Edit invoice</button>';
+    var html = '<button type="button" data-row-action="edit">Edit invoice</button>' +
+               '<button type="button" data-row-action="print">Print invoice</button>';
 
     // Mark disputed — only for open / partially_paid.
     if (status === 'open' || status === 'partially_paid') {
@@ -4262,6 +4280,10 @@
 
       if (action === 'edit') {
         openEditInvoiceModal(invoiceId);
+      } else if (action === 'print') {
+        // Open the print view in a new tab. The user prints / saves PDF
+        // from there, attaches to a Gmail draft. No tracking needed.
+        window.open('/accounts-receivable/print/?id=' + encodeURIComponent(invoiceId), '_blank');
       } else if (action === 'void') {
         openStatusConfirm({ invoiceId: invoiceId, invoiceNumber: invNum, oldStatus: status, newStatus: 'voided' });
       } else if (action === 'dispute') {
