@@ -688,6 +688,125 @@
   /* Modal-card needs relative positioning to host the overlay */
   .ar-modal-card { position: relative; }
 
+  /* ====================================================================
+     "+ NEW CUSTOMER" BUTTON next to the Client dropdown
+     Small secondary button. Visual weight intentionally light so it
+     doesn't compete with the dropdown.
+     ==================================================================== */
+  .ar-client-row {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+  }
+  .ar-client-row select { flex: 1; }
+  .ar-new-customer-btn {
+    background: #fff;
+    border: 1px solid #e0dfd8;
+    color: #555;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 0 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  }
+  .ar-new-customer-btn:hover {
+    background: #f1f0eb;
+    color: #1a1a1a;
+    border-color: #c8c6bd;
+  }
+
+  /* ====================================================================
+     NEW CUSTOMER MODAL  (overlay on top of the invoice modal)
+     ==================================================================== */
+  .nc-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(255,255,255,0.92);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 60px 24px 24px;
+    border-radius: 14px;
+    z-index: 20;
+    overflow-y: auto;
+  }
+  .nc-card {
+    background: #fff;
+    border: 1px solid #e0dfd8;
+    border-radius: 12px;
+    padding: 22px 24px;
+    max-width: 500px;
+    width: 100%;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.14);
+  }
+  .nc-title {
+    font-size: 17px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .nc-subtitle {
+    font-size: 12px;
+    color: #888;
+    margin-bottom: 16px;
+  }
+  .nc-field { margin-bottom: 12px; }
+  .nc-field label {
+    display: block;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #666;
+    margin-bottom: 5px;
+  }
+  .nc-field .req { color: #c33; }
+  .nc-field input[type="text"],
+  .nc-field input[type="number"],
+  .nc-field textarea {
+    width: 100%;
+    font-family: inherit;
+    font-size: 13px;
+    padding: 8px 10px;
+    border: 1px solid #e0dfd8;
+    border-radius: 6px;
+    background: #fff;
+    color: #1a1a1a;
+  }
+  .nc-field input:focus,
+  .nc-field textarea:focus { outline: none; border-color: #1a1a1a; }
+  .nc-field input.is-error { border-color: #791F1F; background: #fceaea; }
+  .nc-field textarea { resize: vertical; min-height: 60px; }
+  .nc-field-hint {
+    font-size: 11px;
+    color: #888;
+    margin-top: 3px;
+  }
+  .nc-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 18px;
+  }
+
+  /* ====================================================================
+     VENUE-OPTIONAL VISUAL SIGNAL
+     When the picked client has no default venue (wholesale customer),
+     the venue field shows "(optional)" inline with its label and the
+     red * asterisk gets hidden via the .is-optional class.
+     ==================================================================== */
+  .ar-field .ar-label .opt {
+    color: #888;
+    font-size: 10px;
+    font-weight: 500;
+    margin-left: 4px;
+    letter-spacing: 0.02em;
+    text-transform: none;
+  }
+  .ar-field .ar-label.is-optional .req { display: none; }
+
   .ar-field-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -2363,12 +2482,15 @@
 
           '<div class="ar-field-grid">' +
             '<div class="ar-field">' +
-              '<label class="ar-label">Venue <span class="req">*</span></label>' +
-              '<select id="arfVenue"><option value="">Select venue…</option></select>' +
+              '<label class="ar-label" id="arfVenueLabel">Venue <span class="req">*</span><span class="opt" id="arfVenueOpt" hidden>(optional)</span></label>' +
+              '<select id="arfVenue"><option value="">— no venue —</option></select>' +
             '</div>' +
             '<div class="ar-field">' +
               '<label class="ar-label">Client <span class="req">*</span></label>' +
-              '<select id="arfClient"><option value="">Select client…</option></select>' +
+              '<div class="ar-client-row">' +
+                '<select id="arfClient"><option value="">Select client…</option></select>' +
+                '<button type="button" class="ar-new-customer-btn" id="arfNewCustomerBtn" title="Add a new wholesale customer">+ New</button>' +
+              '</div>' +
               '<div class="ar-field-hint" id="arfClientHint">Pick a venue first</div>' +
             '</div>' +
             '<div class="ar-field">' +
@@ -2723,7 +2845,15 @@
           hint.textContent = 'No client selected';
         }
       }
+      // Re-evaluate venue requirement for the new client.
+      applyVenueRequirementForCurrentClient();
     });
+
+    // "+ New" customer button — opens the new-customer overlay.
+    var newCustBtn = document.getElementById('arfNewCustomerBtn');
+    if (newCustBtn) {
+      newCustBtn.addEventListener('click', openNewCustomerModal);
+    }
 
     // Client reference
     var cRef = document.getElementById('arfClientRef');
@@ -2992,6 +3122,7 @@
         refreshEventDatalist();
         renderLines();
         wireModalEvents();
+        applyVenueRequirementForCurrentClient();
       })
       .catch(function (e) {
         if (e && e.authFailed) { handleAuthFailure(); return; }
@@ -3167,6 +3298,9 @@
 
           // Set form field values from formState.
           syncFormFieldsFromState();
+
+          // Evaluate venue requirement based on the loaded client.
+          applyVenueRequirementForCurrentClient();
 
           // Re-enable save now that we're loaded.
           if (saveBtn) saveBtn.disabled = false;
@@ -3352,7 +3486,12 @@
   function validateForm() {
     var errors = [];
 
-    if (!formState.venue_code) errors.push('Pick a venue');
+    // Venue is conditionally required — only for clients that are a
+    // default payer for at least one venue. Wholesale / direct-bill
+    // clients are venue-less.
+    if (isClientVenueRequired(formState.client_id) && !formState.venue_code) {
+      errors.push('Pick a venue');
+    }
     if (!formState.client_id)  errors.push('Pick a client');
     if (!formState.period_start) errors.push('Set the invoice date');
 
@@ -4108,6 +4247,226 @@
       sub.innerHTML = 'Internal # · auto-generated on save  ·  ' +
         '<span style="color: #27500A; font-weight: 500;">Last saved: ' +
         esc(invoiceNumber) + '</span>';
+    }
+  }
+
+  // =====================================================================
+  // NEW CUSTOMER MODAL  (overlay on top of the invoice form modal)
+  //
+  // Triggered by the "+ New" button next to the Client dropdown. Inserts
+  // a row into ar_clients, refreshes state.clients, re-renders the Client
+  // dropdown, auto-selects the newly added client. No audit log per
+  // explicit decision (customers aren't transactions; created_by + 
+  // created_at on the row itself is enough provenance).
+  // =====================================================================
+
+  var ncSubmitting = false;
+
+  function openNewCustomerModal() {
+    if (!formState) return;          // only available with invoice modal open
+    var card = document.querySelector('.ar-modal-card');
+    if (!card) return;
+    // Already open? Don't double-stack.
+    if (document.getElementById('arfNewCustomerOverlay')) return;
+
+    var overlay = document.createElement('div');
+    overlay.className = 'nc-overlay';
+    overlay.id = 'arfNewCustomerOverlay';
+    overlay.innerHTML = '' +
+      '<div class="nc-card" role="dialog" aria-labelledby="ncTitle">' +
+        '<div class="nc-title" id="ncTitle">Add new customer</div>' +
+        '<div class="nc-subtitle">Wholesale or direct-bill clients without a venue. Adds to the ar_clients table.</div>' +
+        '<div class="nc-field">' +
+          '<label for="ncName">Customer name <span class="req">*</span></label>' +
+          '<input type="text" id="ncName" placeholder="e.g. Brulee Commissary" maxlength="200">' +
+        '</div>' +
+        '<div class="nc-field">' +
+          '<label for="ncVendorNumber">Their vendor # for Popcorn Chez</label>' +
+          '<input type="text" id="ncVendorNumber" placeholder="Optional · e.g. 21272" maxlength="100">' +
+          '<div class="nc-field-hint">If they assigned us a vendor number on their books.</div>' +
+        '</div>' +
+        '<div class="nc-field">' +
+          '<label for="ncTerms">Payment terms (days)</label>' +
+          '<input type="number" id="ncTerms" value="30" min="0" max="365">' +
+          '<div class="nc-field-hint">Drives aging math. Net 30 is standard.</div>' +
+        '</div>' +
+        '<div class="nc-field">' +
+          '<label for="ncNotes">Notes</label>' +
+          '<textarea id="ncNotes" placeholder="Optional context"></textarea>' +
+        '</div>' +
+        '<div class="nc-actions">' +
+          '<button type="button" class="ar-btn ar-btn-secondary" id="ncCancel">Cancel</button>' +
+          '<button type="button" class="ar-btn ar-btn-primary"   id="ncSave">Add customer</button>' +
+        '</div>' +
+      '</div>';
+
+    card.appendChild(overlay);
+
+    var nameInput = document.getElementById('ncName');
+    if (nameInput) nameInput.focus();
+
+    var cancelBtn = document.getElementById('ncCancel');
+    var saveBtn   = document.getElementById('ncSave');
+
+    if (cancelBtn) cancelBtn.addEventListener('click', closeNewCustomerModal);
+    if (saveBtn)   saveBtn.addEventListener('click', handleSaveNewCustomer);
+
+    // Enter in any text field = save. Esc = cancel.
+    overlay.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape') {
+        ev.stopPropagation();
+        closeNewCustomerModal();
+      } else if (ev.key === 'Enter' && ev.target.tagName !== 'TEXTAREA') {
+        ev.preventDefault();
+        handleSaveNewCustomer();
+      }
+    });
+  }
+
+  function closeNewCustomerModal() {
+    var overlay = document.getElementById('arfNewCustomerOverlay');
+    if (overlay && overlay.parentNode) {
+      overlay.parentNode.removeChild(overlay);
+    }
+  }
+
+  function handleSaveNewCustomer() {
+    if (ncSubmitting) return;
+    var nameEl   = document.getElementById('ncName');
+    var vendorEl = document.getElementById('ncVendorNumber');
+    var termsEl  = document.getElementById('ncTerms');
+    var notesEl  = document.getElementById('ncNotes');
+    var saveBtn  = document.getElementById('ncSave');
+
+    var name = (nameEl && nameEl.value || '').trim();
+    if (!name) {
+      if (nameEl) nameEl.classList.add('is-error');
+      showToast('Customer name is required', 2000);
+      if (nameEl) nameEl.focus();
+      return;
+    }
+    // De-dupe against existing clients (case-insensitive) to prevent
+    // accidental "Brulee Commissary" / "brulee commissary" duplicates.
+    var lower = name.toLowerCase();
+    var dupe = state.clients.find(function (c) {
+      return (c.name || '').toLowerCase() === lower;
+    });
+    if (dupe) {
+      if (nameEl) nameEl.classList.add('is-error');
+      showToast('A customer with that name already exists', 2400);
+      if (nameEl) nameEl.focus();
+      return;
+    }
+
+    // Parse terms — fall back to 30 if invalid.
+    var termsNum = parseInt(termsEl && termsEl.value, 10);
+    if (isNaN(termsNum) || termsNum < 0) termsNum = 30;
+    if (termsNum > 365) termsNum = 365;
+
+    var actor = '';
+    try {
+      if (typeof pcAuth !== 'undefined' && pcAuth.getUser) {
+        var u = pcAuth.getUser();
+        actor = (u && u.display_name) || (u && u.email) || 'unknown';
+      }
+    } catch (e) { actor = 'unknown'; }
+
+    var payload = {
+      name:                       name,
+      vendor_number:              (vendorEl && vendorEl.value || '').trim() || null,
+      default_payment_terms_days: termsNum,
+      notes:                      (notesEl && notesEl.value || '').trim() || null,
+      is_active:                  true,
+      created_by:                 actor
+    };
+
+    var hdrs = Object.assign({}, pcAuth.headers(), {
+      'Content-Type': 'application/json',
+      'Prefer':       'return=representation'
+    });
+
+    ncSubmitting = true;
+    if (saveBtn) {
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving…';
+    }
+
+    AR.authFetch(SB_REST + 'ar_clients', {
+      method:  'POST',
+      headers: hdrs,
+      body:    JSON.stringify(payload)
+    })
+    .then(function (rows) {
+      var inserted = (rows && rows[0]) || null;
+      if (!inserted || !inserted.id) {
+        throw new Error('Client insert returned no row');
+      }
+      // Add to in-memory state, re-sorted alphabetically so the dropdown
+      // order matches what a fresh page-load would show.
+      state.clients.push(inserted);
+      state.clients.sort(function (a, b) {
+        return (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase());
+      });
+      // Re-render the dropdown with the new client included and auto-select it.
+      formState.client_id = inserted.id;
+      // _default_client_id stays whatever it was — the venue's default
+      // hasn't changed. The new customer just isn't a default for anything.
+      refreshClientDropdown();
+      // Apply the venue-required toggle in case the new customer
+      // changes the requirement (it will: wholesale customers aren't
+      // anyone's default → venue becomes optional).
+      applyVenueRequirementForCurrentClient();
+      closeNewCustomerModal();
+      showToast('Added ' + inserted.name, 2200);
+    })
+    .catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      console.error('[AR] new customer save failed:', e);
+      var msg = (e && e.message) ? e.message : 'Could not save customer';
+      if (msg.length > 140) msg = msg.substring(0, 140) + '…';
+      showToast('Save failed · ' + msg, 4000);
+    })
+    .then(function () {
+      ncSubmitting = false;
+      var btn = document.getElementById('ncSave');
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Add customer';
+      }
+    });
+  }
+
+  // =====================================================================
+  // VENUE REQUIREMENT — derived from the picked client
+  //
+  // A client is "venue-required" if at least one row in `state.venues` has
+  // default_client_id pointing to that client. Wholesale / direct-bill
+  // clients with no venue defaults make venue optional.
+  //
+  // Called on:
+  //   - modal open (after venues + clients load)
+  //   - client change in the dropdown
+  //   - after adding a new customer (in case the auto-selected one is new)
+  // =====================================================================
+  function isClientVenueRequired(clientId) {
+    if (!clientId) return true;   // no client picked yet → don't relax the rule
+    for (var i = 0; i < state.venues.length; i++) {
+      if (state.venues[i].default_client_id === clientId) return true;
+    }
+    return false;
+  }
+
+  function applyVenueRequirementForCurrentClient() {
+    var label    = document.getElementById('arfVenueLabel');
+    var optSpan  = document.getElementById('arfVenueOpt');
+    if (!label) return;
+    var required = isClientVenueRequired(formState && formState.client_id);
+    if (required) {
+      label.classList.remove('is-optional');
+      if (optSpan) optSpan.hidden = true;
+    } else {
+      label.classList.add('is-optional');
+      if (optSpan) optSpan.hidden = false;
     }
   }
 
