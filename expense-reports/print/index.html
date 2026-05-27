@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Expense Report · Popcorn Chez</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap">
+
+<script src="/pc-auth.js"></script>
+
+<style>
+  /* ====================================================================
+     LAYOUT — mirrors the AR print page approach:
+       One page-shell + .report-page that prints cleanly to letter @ 1in
+       margins. Action bar is screen-only.
+     ==================================================================== */
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #f1f0eb;
+    color: #1a1a1a;
+    font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 14px;
+    line-height: 1.4;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Top action bar — screen only */
+  .action-bar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 14px 20px;
+    background: #fafaf6;
+    border-bottom: 1px solid #e0dfd8;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+  .action-bar .ab-spacer { flex: 1; }
+  .action-bar .ab-title {
+    font-size: 12px;
+    color: #888;
+    font-weight: 500;
+  }
+  .action-btn {
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    border: 0;
+  }
+  .action-btn.primary    { background: #1a1a1a; color: #fff; }
+  .action-btn.primary:hover { background: #2c2c2a; }
+  .action-btn.secondary  { background: #fff; color: #555; border: 1px solid #e0dfd8; }
+  .action-btn.secondary:hover { background: #f1f0eb; color: #1a1a1a; }
+
+  /* Screen container */
+  .page-shell {
+    padding: 30px 20px 60px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+  }
+
+  /* Each printable page — 6.5in content area (letter minus 1in margins) */
+  .report-page {
+    background: #fff;
+    width: 6.5in;
+    min-height: 9in;
+    color: #000;
+    padding: 0.5in;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    border-radius: 4px;
+    position: relative;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 11pt;
+    line-height: 1.4;
+  }
+
+  /* ====================================================================
+     HEADER BLOCK
+     ==================================================================== */
+  .rpt-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 28px;
+    border-bottom: 2px solid #000;
+    padding-bottom: 16px;
+  }
+  .rpt-head-left { display: flex; flex-direction: column; gap: 4px; }
+  .rpt-logo { max-width: 220px; height: auto; display: block; }
+  .rpt-head-right { text-align: right; }
+  .rpt-title {
+    font-size: 22pt;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    margin: 0 0 6px;
+    line-height: 1.1;
+  }
+  .rpt-subtitle {
+    font-size: 9.5pt;
+    color: #555;
+    margin: 0;
+  }
+
+  /* Submitter / metadata block — two columns */
+  .rpt-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 30px;
+    margin-bottom: 24px;
+  }
+  .rpt-meta-block { flex: 1; }
+  .rpt-meta-label {
+    font-size: 8pt;
+    font-weight: 700;
+    color: #000;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+  }
+  .rpt-meta-value {
+    font-size: 10.5pt;
+    line-height: 1.4;
+    white-space: pre-wrap;  /* preserve mailing address line breaks */
+  }
+  .rpt-meta-value .name { font-weight: 700; }
+
+  /* ====================================================================
+     LINES TABLE
+     ==================================================================== */
+  .rpt-lines {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10pt;
+    margin-bottom: 18px;
+  }
+  .rpt-lines thead th {
+    border: 0.75pt solid #000;
+    background: #f4f4f4;
+    padding: 5px 8px;
+    text-align: left;
+    font-weight: 700;
+    font-size: 8.5pt;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .rpt-lines th.col-date     { width: 70px; }
+  .rpt-lines th.col-category { width: 130px; }
+  .rpt-lines th.col-amount   { width: 90px; text-align: right; }
+  .rpt-lines tbody td {
+    border-left:  0.75pt solid #000;
+    border-right: 0.75pt solid #000;
+    border-bottom: 0.5pt solid #ccc;
+    padding: 5px 8px;
+    vertical-align: top;
+  }
+  .rpt-lines tbody tr:last-child td {
+    border-bottom: 0.75pt solid #000;
+  }
+  .rpt-lines td.col-date     { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .rpt-lines td.col-amount   {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    font-weight: 500;
+  }
+  .rpt-lines td.col-category { font-weight: 500; }
+
+  /* Sub-detail under primary description (mileage trip, food venue, split) */
+  .rpt-line-detail {
+    font-size: 9pt;
+    color: #555;
+    font-style: italic;
+    margin-top: 2px;
+  }
+
+  /* Split sub-rows: indent under the parent food line */
+  .rpt-lines tr.split-half td {
+    border-bottom-style: dashed;
+    background: #fafaf6;
+  }
+  .rpt-lines tr.split-half td.col-category {
+    padding-left: 20px;
+    font-style: italic;
+    font-weight: 400;
+    color: #444;
+  }
+
+  /* ====================================================================
+     TOTAL + CERT FOOTER
+     ==================================================================== */
+  .rpt-total {
+    margin-left: auto;
+    border-collapse: collapse;
+    font-size: 12pt;
+    margin-bottom: 36px;
+  }
+  .rpt-total td { border: 0.75pt solid #000; padding: 6px 14px; }
+  .rpt-total td.label {
+    font-weight: 700;
+    text-align: right;
+    background: #f4f4f4;
+  }
+  .rpt-total td.value {
+    font-weight: 700;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    min-width: 130px;
+    background: #fff;
+  }
+
+  .rpt-cert {
+    border-top: 1px solid #999;
+    padding-top: 14px;
+    font-size: 9.5pt;
+    line-height: 1.5;
+    color: #333;
+  }
+  .rpt-cert-headline {
+    font-weight: 700;
+    color: #000;
+    margin-bottom: 6px;
+  }
+  .rpt-cert-signature {
+    margin-top: 14px;
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    font-size: 9.5pt;
+  }
+  .rpt-cert-signature .sig-block { flex: 1; }
+  .rpt-cert-signature .sig-label {
+    font-size: 8pt;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #555;
+    margin-bottom: 2px;
+  }
+
+  /* ====================================================================
+     RECEIPT PAGES — one photo per page, page-break before each
+     ==================================================================== */
+  .receipt-page {
+    background: #fff;
+    width: 6.5in;
+    min-height: 9in;
+    color: #000;
+    padding: 0.5in;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    border-radius: 4px;
+    page-break-before: always;
+    break-before: page;
+    display: flex;
+    flex-direction: column;
+    font-family: Georgia, "Times New Roman", serif;
+  }
+  .receipt-page-head {
+    border-bottom: 1px solid #999;
+    padding-bottom: 10px;
+    margin-bottom: 16px;
+  }
+  .receipt-page-caption {
+    font-size: 11pt;
+    font-weight: 700;
+    margin-bottom: 3px;
+  }
+  .receipt-page-meta {
+    font-size: 9pt;
+    color: #555;
+  }
+  .receipt-page-img-wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+  }
+  .receipt-page-img {
+    max-width: 100%;
+    max-height: 7.5in;
+    object-fit: contain;
+    display: block;
+  }
+  .receipt-page-pdf-note {
+    font-size: 10pt;
+    color: #555;
+    text-align: center;
+    padding: 40px;
+    border: 1px dashed #999;
+    border-radius: 6px;
+  }
+
+  /* ====================================================================
+     STATE MESSAGES
+     ==================================================================== */
+  .state-msg {
+    padding: 80px 20px;
+    text-align: center;
+    color: #888;
+    font-size: 14px;
+    font-family: "DM Sans", sans-serif;
+  }
+  .state-msg.error { color: #791F1F; }
+  .state-msg .state-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1a1a1a;
+    margin-bottom: 8px;
+  }
+
+  /* ====================================================================
+     PRINT — strip screen chrome, expand pages to full content width
+     ==================================================================== */
+  @media print {
+    @page { size: letter portrait; margin: 1in; }
+    html, body { background: #fff; }
+    .action-bar { display: none !important; }
+    .page-shell {
+      padding: 0 !important;
+      gap: 0 !important;
+      display: block !important;
+    }
+    .report-page, .receipt-page {
+      width: 100% !important;
+      min-height: 0 !important;
+      padding: 0 !important;
+      box-shadow: none !important;
+      border-radius: 0 !important;
+    }
+    .receipt-page {
+      page-break-before: always;
+      break-before: page;
+    }
+    /* Ensure first page (report-page) doesn't force a page break before */
+    .report-page { page-break-before: avoid; }
+  }
+</style>
+</head>
+
+<body>
+
+  <div class="action-bar">
+    <span class="ab-title" id="abTitle">Expense report</span>
+    <span class="ab-spacer"></span>
+    <button type="button" class="action-btn secondary" id="btnClose">Close tab</button>
+    <button type="button" class="action-btn primary"   id="btnPrint">🖨 Print / Save as PDF</button>
+  </div>
+
+  <div class="page-shell" id="pageShell">
+    <div class="state-msg" id="loadingState">Loading expense report…</div>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+
+  // =====================================================================
+  // CONFIG
+  // =====================================================================
+  var SB_URL  = 'https://aoazlttdjowhlfcksoyl.supabase.co';
+  var SB_REST = SB_URL + '/rest/v1/';
+  var SB_STOR = SB_URL + '/storage/v1/';
+  var BUCKET  = 'expense-reports';
+
+  // Logo file — place at Netlify repo root so it deploys to
+  // tools.camdenco.com/CAMDEN_CO_logo_FINAL.png. Falls back to "Camden Co."
+  // wordmark text if it doesn't load.
+  var LOGO_URL = '/CAMDEN_CO_logo_FINAL.png';
+
+  // Mileage rate constant for display fallback if line.mileage_rate is null.
+  var MILEAGE_RATE_FALLBACK = 0.70;
+
+  // =====================================================================
+  // UTILITIES
+  // =====================================================================
+  function pad2(n) { n = String(n); return n.length < 2 ? '0' + n : n; }
+
+  function esc(s) {
+    if (s == null) return '';
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function fmtMoney(n) {
+    if (n == null || isNaN(n)) n = 0;
+    var sign = n < 0 ? '-' : '';
+    var abs = Math.abs(n);
+    return sign + '$' + abs.toLocaleString('en-US', {
+      minimumFractionDigits: 2, maximumFractionDigits: 2
+    });
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return '';
+    var s = String(iso).substring(0, 10);
+    var parts = s.split('-');
+    if (parts.length !== 3) return s;
+    var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var m = months[parseInt(parts[1], 10) - 1] || '';
+    return m + ' ' + parseInt(parts[2], 10) + ', ' + parts[0];
+  }
+
+  function fmtDateShort(iso) {
+    if (!iso) return '';
+    var s = String(iso).substring(0, 10);
+    var parts = s.split('-');
+    if (parts.length !== 3) return s;
+    return parseInt(parts[1], 10) + '/' + parseInt(parts[2], 10) + '/' + parts[0].slice(2);
+  }
+
+  function fmtDateTime(iso) {
+    if (!iso) return '';
+    try {
+      var d = new Date(iso);
+      var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      var m = months[d.getMonth()];
+      var hr = d.getHours();
+      var am = hr >= 12 ? 'PM' : 'AM';
+      hr = hr % 12; if (hr === 0) hr = 12;
+      return m + ' ' + d.getDate() + ', ' + d.getFullYear() + ' at ' + hr + ':' + pad2(d.getMinutes()) + ' ' + am;
+    } catch (e) { return iso; }
+  }
+
+  // =====================================================================
+  // URL parse
+  // =====================================================================
+  function getReportIdFromUrl() {
+    var qs = window.location.search || '';
+    var match = qs.match(/[?&]id=([^&]+)/);
+    return match ? decodeURIComponent(match[1]) : null;
+  }
+
+  // =====================================================================
+  // AUTH FETCH
+  // =====================================================================
+  function handleAuthFailure() {
+    try {
+      localStorage.removeItem('sb_access_token');
+      localStorage.removeItem('sb_refresh_token');
+    } catch (e) { /* ignore */ }
+    setTimeout(function () { window.location.reload(); }, 800);
+  }
+
+  function authFetch(url, options) {
+    return fetch(url, options).then(function (r) {
+      if (!r.ok) {
+        return r.text().then(function (t) {
+          if (r.status === 401 || (t && t.indexOf('JWT expired') !== -1)) {
+            var err = new Error('JWT expired');
+            err.authFailed = true;
+            throw err;
+          }
+          throw new Error(t || ('HTTP ' + r.status));
+        });
+      }
+      return r.text().then(function (t) {
+        if (!t) return [];
+        try { return JSON.parse(t); } catch (e) { return []; }
+      });
+    });
+  }
+
+  // Signed URL helper for private bucket
+  function getSignedUrl(path, expiresIn) {
+    expiresIn = expiresIn || 3600;
+    var url = SB_STOR + 'object/sign/' + BUCKET + '/' + path;
+    var hdrs = Object.assign({}, pcAuth.headers(), { 'Content-Type': 'application/json' });
+    return fetch(url, {
+      method: 'POST', headers: hdrs,
+      body: JSON.stringify({ expiresIn: expiresIn })
+    })
+    .then(function (r) {
+      if (!r.ok) return r.text().then(function (t) {
+        if (r.status === 401) { var e = new Error('JWT'); e.authFailed = true; throw e; }
+        throw new Error(t);
+      });
+      return r.json();
+    })
+    .then(function (data) {
+      if (data && data.signedURL) {
+        if (data.signedURL.indexOf('http') === 0) return data.signedURL;
+        return SB_STOR.replace(/\/$/, '') + data.signedURL;
+      }
+      throw new Error('No signed URL in response');
+    });
+  }
+
+  // =====================================================================
+  // FETCH
+  // =====================================================================
+  function fetchReport(reportId) {
+    var selectClause = 'select=' + [
+      'id', 'submitter_id', 'submitter_name', 'mailing_address', 'status',
+      'total_amount', 'line_count', 'period_start', 'period_end',
+      'created_at', 'submitted_at', 'submitter_certified_at',
+      'approved_at', 'approved_by', 'paid_at', 'paid_by', 'check_number',
+      'return_note',
+      'expense_report_lines(id,line_no,line_date,description,amount,miles,miles_from,miles_to,mileage_rate,venue,allocation_group_id,photo_url,expense_categories(name,gl_group))'
+    ].join(',');
+    return authFetch(
+      SB_REST + 'expense_reports?id=eq.' + encodeURIComponent(reportId) + '&' + selectClause,
+      { headers: pcAuth.headers() }
+    );
+  }
+
+  // =====================================================================
+  // RENDER
+  // =====================================================================
+
+  function pairUpSplitLines(lines) {
+    // Group split lines together by allocation_group_id so we render them
+    // as a primary line + secondary half-row pair, while non-split lines
+    // render as-is.
+    var seen = {};
+    var out = [];
+    lines.forEach(function (line) {
+      if (seen[line.id]) return;
+      if (line.allocation_group_id) {
+        // Find both halves
+        var halves = lines.filter(function (l) {
+          return l.allocation_group_id === line.allocation_group_id;
+        });
+        halves.sort(function (a, b) { return (a.line_no || 0) - (b.line_no || 0); });
+        halves.forEach(function (h) { seen[h.id] = true; });
+        // Emit primary first, then a marker for the secondary
+        out.push({ line: halves[0], splitSecondary: null });
+        if (halves[1]) {
+          out.push({ line: halves[1], splitSecondary: true });
+        }
+      } else {
+        seen[line.id] = true;
+        out.push({ line: line, splitSecondary: false });
+      }
+    });
+    return out;
+  }
+
+  function renderLineRow(item) {
+    var line = item.line;
+    var cat = line.expense_categories;
+    var catName = cat ? cat.name : '(uncategorized)';
+    var isMileage = cat && cat.name === 'Mileage Reimbursement';
+    var isFood    = cat && cat.name === 'Food Purchases';
+
+    // Build the detail text under the description (varies by category)
+    var detailBits = [];
+    if (line.description) detailBits.push(line.description);
+    if (isMileage) {
+      var miles = Number(line.miles) || 0;
+      var rate  = Number(line.mileage_rate) || MILEAGE_RATE_FALLBACK;
+      var trip = [];
+      if (line.miles_from) trip.push(line.miles_from);
+      if (line.miles_to)   trip.push(line.miles_to);
+      var tripStr = trip.length ? trip.join(' → ') : '';
+      var milesStr = miles ? (miles + ' miles × $' + rate.toFixed(2) + ' / mi') : '';
+      var combined = [tripStr, milesStr].filter(Boolean).join(' · ');
+      if (combined) detailBits.push(combined);
+    }
+    if (isFood && line.venue && !item.splitSecondary) {
+      detailBits.push('Venue: ' + line.venue);
+    }
+    if (item.splitSecondary && line.venue) {
+      detailBits = ['Split — venue: ' + line.venue];
+    }
+
+    var detailHtml = '';
+    if (detailBits.length) {
+      detailHtml = '<div class="rpt-line-detail">' + esc(detailBits.join(' · ')) + '</div>';
+    }
+
+    var rowClass = item.splitSecondary ? 'split-half' : '';
+    var catCell = item.splitSecondary
+      ? '<span style="font-style:italic;">↳ split portion</span>'
+      : esc(catName);
+
+    return '<tr' + (rowClass ? ' class="' + rowClass + '"' : '') + '>' +
+      '<td class="col-date">' + esc(fmtDateShort(line.line_date)) + '</td>' +
+      '<td class="col-category">' + catCell + detailHtml + '</td>' +
+      '<td class="col-amount">' + esc(fmtMoney(Number(line.amount || 0))) + '</td>' +
+    '</tr>';
+  }
+
+  function renderReport(report) {
+    var lines = (report.expense_report_lines || []).slice().sort(function (a, b) {
+      return (a.line_no || 0) - (b.line_no || 0);
+    });
+
+    var pairedLines = pairUpSplitLines(lines);
+    var total = Number(report.total_amount || 0);
+
+    // Cover page
+    var statusLabel = '';
+    if (report.status === 'submitted') statusLabel = 'Submitted';
+    else if (report.status === 'approved') statusLabel = 'Approved';
+    else if (report.status === 'paid')     statusLabel = 'Paid';
+    else if (report.status === 'returned') statusLabel = 'Returned';
+    else statusLabel = report.status;
+
+    var submittedAtStr = report.submitted_at
+      ? fmtDateTime(report.submitted_at)
+      : '— not yet submitted —';
+
+    // Compute period range for the meta block
+    var periodStr = '';
+    if (report.period_start && report.period_end) {
+      if (report.period_start === report.period_end) {
+        periodStr = fmtDate(report.period_start);
+      } else {
+        periodStr = fmtDate(report.period_start) + ' – ' + fmtDate(report.period_end);
+      }
+    } else {
+      periodStr = '—';
+    }
+
+    var coverHtml = '<div class="report-page" id="reportCoverPage">' +
+
+      '<div class="rpt-head">' +
+        '<div class="rpt-head-left">' +
+          '<img class="rpt-logo" src="' + esc(LOGO_URL) + '" alt="Camden Co." ' +
+          'onerror="this.outerHTML=\'<div style=&quot;font-size:18pt;font-weight:700;letter-spacing:0.01em;&quot;>Camden Co.</div>\'">' +
+        '</div>' +
+        '<div class="rpt-head-right">' +
+          '<h1 class="rpt-title">Expense Report</h1>' +
+          '<p class="rpt-subtitle">' + esc(statusLabel) + ' · Report ' + esc(String(report.id).substring(0, 8)) + '</p>' +
+        '</div>' +
+      '</div>' +
+
+      '<div class="rpt-meta">' +
+        '<div class="rpt-meta-block">' +
+          '<div class="rpt-meta-label">Submitted by</div>' +
+          '<div class="rpt-meta-value">' +
+            '<div class="name">' + esc(report.submitter_name || '—') + '</div>' +
+            (report.mailing_address
+              ? '<div>' + esc(report.mailing_address) + '</div>'
+              : '<div style="font-style:italic;color:#888;">No mailing address on file</div>') +
+          '</div>' +
+        '</div>' +
+        '<div class="rpt-meta-block">' +
+          '<div class="rpt-meta-label">Period covered</div>' +
+          '<div class="rpt-meta-value">' + esc(periodStr) + '</div>' +
+          '<div class="rpt-meta-label" style="margin-top:10px;">Submitted</div>' +
+          '<div class="rpt-meta-value">' + esc(submittedAtStr) + '</div>' +
+        '</div>' +
+      '</div>' +
+
+      '<table class="rpt-lines">' +
+        '<thead>' +
+          '<tr>' +
+            '<th class="col-date">Date</th>' +
+            '<th class="col-category">Category / details</th>' +
+            '<th class="col-amount">Amount</th>' +
+          '</tr>' +
+        '</thead>' +
+        '<tbody>' +
+          (pairedLines.length === 0
+            ? '<tr><td colspan="3" style="text-align:center;color:#999;padding:20px;">No lines on this report.</td></tr>'
+            : pairedLines.map(renderLineRow).join('')) +
+        '</tbody>' +
+      '</table>' +
+
+      '<table class="rpt-total">' +
+        '<tr>' +
+          '<td class="label">Total reimbursement requested</td>' +
+          '<td class="value">' + esc(fmtMoney(total)) + '</td>' +
+        '</tr>' +
+      '</table>' +
+
+      '<div class="rpt-cert">' +
+        '<div class="rpt-cert-headline">Certification</div>' +
+        '<div>' +
+          'The submitter certifies that the expenses listed above were incurred ' +
+          'on behalf of Popcorn Chez / Camden Co. for legitimate business purposes, ' +
+          'have not been previously reimbursed, and are not personal expenses.' +
+          (lines.some(function (l) { return l.expense_categories && l.expense_categories.name === 'Mileage Reimbursement'; })
+            ? ' For mileage reimbursement lines, the submitter further certifies that they ' +
+              'maintain valid personal auto insurance meeting Popcorn Chez minimum liability ' +
+              'requirements ($100,000 / $300,000 bodily injury · $25,000 property damage).'
+            : '') +
+        '</div>' +
+        '<div class="rpt-cert-signature">' +
+          '<div class="sig-block">' +
+            '<div class="sig-label">Certified by</div>' +
+            '<div>' + esc(report.submitter_name || '—') + '</div>' +
+          '</div>' +
+          '<div class="sig-block" style="text-align:right;">' +
+            '<div class="sig-label">Certified at</div>' +
+            '<div>' +
+              (report.submitter_certified_at
+                ? esc(fmtDateTime(report.submitter_certified_at))
+                : '— not yet certified —') +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+
+    '</div>';
+
+    // Receipt pages — one per photo
+    var receiptHtml = '';
+    var receiptIndex = 0;
+    pairedLines.forEach(function (item) {
+      if (item.splitSecondary) return;  // photo lives on the primary
+      var line = item.line;
+      if (!line.photo_url) return;
+      receiptIndex += 1;
+      var cat = line.expense_categories;
+      var catName = cat ? cat.name : '(uncategorized)';
+      var ext = (line.photo_url.split('.').pop() || '').toLowerCase();
+      var isPdf = ext === 'pdf';
+      var caption = catName + (line.description ? ' — ' + line.description : '');
+      var meta = fmtDate(line.line_date) + ' · ' + fmtMoney(Number(line.amount || 0));
+
+      var imgContent = isPdf
+        ? '<div class="receipt-page-pdf-note">' +
+            'Receipt is a PDF. View it at <strong>' + esc(line.photo_url) + '</strong> in the toolkit; ' +
+            'the printout omits PDFs since browsers can\'t embed them into a printable page reliably.' +
+          '</div>'
+        : '<img class="receipt-page-img" id="receipt-img-' + receiptIndex + '" alt="Receipt ' + receiptIndex + '" data-path="' + esc(line.photo_url) + '">';
+
+      receiptHtml += '<div class="receipt-page">' +
+        '<div class="receipt-page-head">' +
+          '<div class="receipt-page-caption">Receipt ' + receiptIndex + ' — ' + esc(caption) + '</div>' +
+          '<div class="receipt-page-meta">' + esc(meta) + '</div>' +
+        '</div>' +
+        '<div class="receipt-page-img-wrap">' + imgContent + '</div>' +
+      '</div>';
+    });
+
+    document.getElementById('pageShell').innerHTML = coverHtml + receiptHtml;
+
+    // Lazy-load receipt images via signed URLs
+    var imgEls = document.querySelectorAll('.receipt-page-img');
+    imgEls.forEach(function (el) {
+      var path = el.getAttribute('data-path');
+      if (!path) return;
+      getSignedUrl(path, 3600)
+        .then(function (url) { el.src = url; })
+        .catch(function (e) {
+          if (e && e.authFailed) { handleAuthFailure(); return; }
+          el.outerHTML = '<div class="receipt-page-pdf-note">Could not load receipt image.</div>';
+        });
+    });
+
+    // Tab title + action bar title
+    var displayId = String(report.id).substring(0, 8);
+    var tabTitle = 'Expense Report · ' + (report.submitter_name || '—') + ' · ' + fmtMoney(total);
+    document.title = tabTitle;
+    var ab = document.getElementById('abTitle');
+    if (ab) ab.textContent = displayId + ' · ' + (report.submitter_name || '—');
+  }
+
+  function showError(title, detail) {
+    document.getElementById('pageShell').innerHTML =
+      '<div class="state-msg error">' +
+        '<div class="state-title">' + esc(title) + '</div>' +
+        (detail ? '<div>' + esc(detail) + '</div>' : '') +
+      '</div>';
+  }
+
+  // =====================================================================
+  // BOOT
+  // =====================================================================
+  function start() {
+    var reportId = getReportIdFromUrl();
+    if (!reportId) {
+      showError('No report specified',
+        'This page expects ?id=<report-uuid> in the URL.');
+      return;
+    }
+
+    fetchReport(reportId)
+      .then(function (rows) {
+        if (!rows || rows.length === 0) {
+          showError('Report not found',
+            'The report either doesn\'t exist or you don\'t have permission to view it.');
+          return;
+        }
+        renderReport(rows[0]);
+      })
+      .catch(function (e) {
+        if (e && e.authFailed) { handleAuthFailure(); return; }
+        console.error('[print] fetch failed:', e);
+        showError('Could not load report',
+          (e && e.message) ? e.message : 'Unknown error');
+      });
+  }
+
+  document.getElementById('btnPrint').addEventListener('click', function () {
+    window.print();
+  });
+  document.getElementById('btnClose').addEventListener('click', function () {
+    window.close();
+  });
+
+  if (typeof pcAuth === 'undefined' || !pcAuth.require) {
+    showError('Authentication unavailable',
+      'pc-auth.js failed to load. Check the network tab.');
+  } else {
+    pcAuth.require({
+      pageSlug: 'expense-reports',
+      onReady:  function () { start(); }
+    });
+  }
+})();
+</script>
+
+</body>
+</html>
