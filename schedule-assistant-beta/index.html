@@ -7,6 +7,8 @@
 <script src="/pc-auth.js"></script>
 <script src="/pc-nav.js"></script>
 <script src="/pc-activity.js"></script>
+<script src="/pc-catalog.js"></script>
+<script src="/pc-roles.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -1612,6 +1614,126 @@ body {
 .log-entry .log-actor { color: var(--label); }
 
 /* ============================================================
+ * AUDIT LOG REDESIGN — Session 4 (May 26, 2026)
+ * ------------------------------------------------------------
+ * Filter chips, sort toggle, pill-style action labels, before/
+ * after rendering for plan_* actions, "during staffing" annotation.
+ * Pure rendering pass — no DB or backend changes. Data lives in
+ * position_assignment_log.details with prev_value/new_value
+ * already captured by Session 3.
+ * ============================================================ */
+.audit-controls {
+  display: flex; align-items: center; gap: 10px;
+  flex-wrap: wrap;
+  padding-bottom: 12px; margin-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.audit-chips { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.audit-chip {
+  background: white;
+  border: 1px solid var(--border-strong);
+  color: var(--label);
+  font-family: inherit;
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 0.04em; text-transform: uppercase;
+  padding: 4px 10px; border-radius: 14px;
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.audit-chip:hover { background: var(--slate-light); color: var(--primary); }
+.audit-chip.active {
+  background: var(--primary); color: white; border-color: var(--primary);
+}
+.audit-chip .chip-count {
+  font-size: 10px; font-weight: 700;
+  background: var(--slate-light); color: var(--slate);
+  padding: 0 6px; border-radius: 8px;
+  letter-spacing: 0;
+}
+.audit-chip.active .chip-count {
+  background: rgba(255,255,255,0.25); color: white;
+}
+.audit-controls .audit-spacer { flex: 1; }
+.audit-sort-select {
+  font-family: inherit; font-size: 12px; font-weight: 600;
+  border: 1px solid var(--border-strong); border-radius: 6px;
+  padding: 4px 8px; background: white; color: var(--primary);
+}
+.audit-empty-filtered {
+  padding: 24px; text-align: center;
+  font-size: 12px; color: var(--label); font-style: italic;
+}
+
+/* New row layout — wider description column, pill replaces the bold
+   uppercase text label. Plan rows get a subtle purple background tint
+   so they stripe visually even before chip-filtering. */
+.log-entry {
+  grid-template-columns: 110px 130px 1fr 110px;
+  align-items: center;
+  padding: 10px 10px;
+}
+.log-entry.cat-plan {
+  background: linear-gradient(to right,
+    rgba(124,58,237,0.05) 0%,
+    rgba(124,58,237,0.02) 60%,
+    transparent 100%);
+}
+.log-pill {
+  display: inline-flex; align-items: center;
+  font-size: 10px; font-weight: 800;
+  letter-spacing: 0.04em; text-transform: uppercase;
+  padding: 3px 9px; border-radius: 10px;
+  white-space: nowrap;
+  border: 1px solid;
+}
+.log-pill.cat-plan {
+  background: var(--purple-light); color: var(--purple-dark);
+  border-color: var(--purple-mid);
+}
+.log-pill.cat-staff {
+  background: var(--blue-light); color: var(--blue-dark);
+  border-color: var(--blue-mid);
+}
+.log-pill.cat-removed {
+  background: var(--amber-light); color: var(--amber-dark);
+  border-color: var(--amber-border);
+}
+.log-pill.cat-notify {
+  background: var(--green-light); color: var(--green-dark);
+  border-color: var(--green-mid);
+}
+.log-pill.cat-other {
+  background: var(--slate-light); color: var(--slate);
+  border-color: var(--border-strong);
+}
+.log-desc {
+  font-size: 12px; line-height: 1.45;
+  color: var(--primary);
+}
+.log-desc strong { font-weight: 700; }
+.log-desc .arrow {
+  color: var(--label); margin: 0 2px;
+}
+.log-desc .delta-old {
+  color: var(--label);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+.log-desc .delta-new {
+  font-weight: 700; color: var(--primary);
+}
+.log-during-staffing {
+  display: inline-block;
+  font-size: 10px; font-style: italic; font-weight: 600;
+  color: var(--amber-dark);
+  background: var(--amber-light);
+  border: 1px solid var(--amber-border);
+  padding: 1px 6px; border-radius: 3px;
+  margin-left: 6px;
+  vertical-align: 1px;
+}
+
+/* ============================================================
    CLICKABLE PERSON NAME — added May 11, 2026
    Every .person-name span (on every pill, every state) becomes
    clickable to open the crew-card modal. We use a subtle hover
@@ -2141,7 +2263,7 @@ body {
       <div class="ns-event-line" id="notify-staffing-event-line"></div>
       <div class="ns-field">
         <label class="ns-label">Note for staffing (optional)</label>
-        <textarea class="ns-textarea" id="notify-staffing-note" placeholder="Anything Meg should know &mdash; held seats, special requests, etc."></textarea>
+        <textarea class="ns-textarea" id="notify-staffing-note" placeholder="Anything staffing should know &mdash; held seats, special requests, etc."></textarea>
       </div>
       <div class="ns-recipient-line" id="notify-staffing-recipient"></div>
     </div>
@@ -2419,8 +2541,40 @@ const ROLE_ORDER = [
 ];
 
 function roleSortKey(role) {
+  // Try direct match first — handles legacy role strings ("Concessions
+  // Cashier", "Pizza Lead", etc.) which are still what's in the DB
+  // today on rows written before the migration_markers cutover.
   const i = ROLE_ORDER.indexOf(role);
-  return i === -1 ? 999 : i;
+  if (i !== -1) return i;
+
+  // Phase -2 bridge (May 26, 2026): rows written AFTER the migration
+  // marker (2026-05-19) use canonical role names ('Cashier', 'Lead',
+  // 'Cook', etc). Those won't be in ROLE_ORDER directly. Walk
+  // ROLE_ORDER once and find the first slot whose own canonical form
+  // matches the input. This preserves the existing legacy-driven
+  // display order (Concessions Lead before Pizza Lead, etc) — canonical
+  // strings inherit the position of their first legacy equivalent in
+  // the array.
+  //
+  // Concrete example: a new row with role='Cashier' matches the
+  // ROLE_ORDER slot 'Concessions Cashier' (index 6), so it sorts in
+  // the same position concessions cashiers always did.
+  //
+  // pcRoles.legacyToCanonical is safe on canonical input (pass-through),
+  // so this comparison works whether ROLE_ORDER's entry is legacy or
+  // canonical.
+  if (typeof pcRoles !== 'undefined' && pcRoles.legacyToCanonical) {
+    const inputCanon = pcRoles.legacyToCanonical(role);
+    if (inputCanon != null) {
+      for (let j = 0; j < ROLE_ORDER.length; j++) {
+        if (pcRoles.legacyToCanonical(ROLE_ORDER[j]) === inputCanon) {
+          return j;
+        }
+      }
+    }
+  }
+
+  return 999;
 }
 
 // ---------- Auth helpers ----------
@@ -7368,67 +7522,336 @@ function printCallableList() {
 document.getElementById('callable-print-btn').addEventListener('click', printCallableList);
 
 // ---------- Audit log modal ----------
+//
+// Session 4 (May 26, 2026): redesigned to use filter chips, sort toggle,
+// pill-style action labels, before/after rendering for plan_* actions,
+// and a "during staffing" annotation when plan changes happen after
+// the first placement. All data already lives in position_assignment_log
+// — this is purely a rendering pass.
+
+// Category mapping for the filter chips and pill colors.
+// 'plan'    = the 7 plan_* actions written by Session 3's submit handler
+// 'staff'   = placements, moves, sync events, locks
+// 'removed' = position removals + 7shifts unsync events
+// 'notify'  = staffing-notification emails
+// 'other'   = anything else (event_cancelled, event_restored, locked/unlocked, etc)
+const AUDIT_CATEGORY = {
+  plan_submit:        'plan',
+  plan_stand_added:   'plan',
+  plan_stand_removed: 'plan',
+  plan_role_added:    'plan',
+  plan_role_removed:  'plan',
+  plan_headcount_set: 'plan',
+  plan_forecast_set:  'plan',
+  placed:             'staff',
+  moved:              'staff',
+  synced_7s:          'staff',
+  locked:             'other',
+  unlocked:           'other',
+  removed:            'removed',
+  unsynced_7s:        'removed',
+  notified_staffing:  'notify',
+  event_cancelled:    'other',
+  event_restored:     'other'
+};
+
+// Human-readable pill labels. The pill replaces the previous bold
+// uppercase action text — labels here are still uppercase but spelled
+// out so they read like phrases instead of constant names.
+const AUDIT_PILL_LABEL = {
+  plan_submit:        'Plan submitted',
+  plan_stand_added:   'Stand added',
+  plan_stand_removed: 'Stand removed',
+  plan_role_added:    'Role added',
+  plan_role_removed:  'Role removed',
+  plan_headcount_set: 'Headcount',
+  plan_forecast_set:  'Forecast',
+  placed:             'Placed',
+  moved:              'Moved',
+  removed:            'Removed',
+  synced_7s:          'Synced 7s',
+  unsynced_7s:        'Unsynced 7s',
+  notified_staffing:  'Notified',
+  locked:             'Locked',
+  unlocked:           'Unlocked',
+  event_cancelled:    'Cancelled',
+  event_restored:     'Restored'
+};
+
+function auditCategoryOf(action) {
+  return AUDIT_CATEGORY[action] || 'other';
+}
+
+function auditPillLabelOf(action) {
+  return AUDIT_PILL_LABEL[action] || action;
+}
+
+// Format a forecast number for the audit description.
+// null → "(none)", numeric → "$1,200".
+function fmtAuditForecast(v) {
+  if (v == null) return '(none)';
+  const n = Number(v);
+  if (isNaN(n)) return String(v);
+  return '$' + n.toLocaleString();
+}
+
+// Build the description HTML for a single audit row. Returns the inner
+// HTML of the .log-desc span — NOT including the pill or actor columns.
+// Falls back to a JSON dump for unknown action vocabulary so misspelled
+// actions are still visible (low-severity bug, easy to grep for).
+function renderAuditDescription(row) {
+  const d = row.details || {};
+  const a = row.action;
+  switch (a) {
+    case 'plan_submit': {
+      const stands = d.stand_count || 0;
+      const staff = d.staff_total || 0;
+      const fcast = d.forecast_total;
+      const verb = d.is_resubmit ? 'Plan resubmitted' : 'Plan submitted';
+      let s = '<strong>' + verb + '</strong> &mdash; ' +
+        stands + ' stand' + (stands === 1 ? '' : 's') + ', ' +
+        staff + ' staff';
+      if (fcast != null && Number(fcast) > 0) {
+        s += ', ' + fmtAuditForecast(fcast) + ' forecast';
+      }
+      return s;
+    }
+    case 'plan_stand_added':
+      return '<strong>' + escapeHtml(d.stand || '?') + '</strong> added to plan' +
+        (d.role_count ? ' &mdash; ' + d.role_count + ' role' +
+          (d.role_count === 1 ? '' : 's') : '');
+    case 'plan_stand_removed': {
+      let s = '<strong>' + escapeHtml(d.stand || '?') + '</strong> removed from plan';
+      if (d.had_placements && d.placement_count) {
+        s += ' &mdash; ' + d.placement_count + ' placement' +
+          (d.placement_count === 1 ? '' : 's') + ' orphaned';
+      }
+      return s;
+    }
+    case 'plan_role_added':
+      return escapeHtml(d.role || '?') + ' added at <strong>' +
+        escapeHtml(d.stand || '?') + '</strong>' +
+        (d.headcount ? ' &mdash; ' + d.headcount + ' staff' : '');
+    case 'plan_role_removed':
+      return escapeHtml(d.role || '?') + ' removed from <strong>' +
+        escapeHtml(d.stand || '?') + '</strong>' +
+        (d.prev_value ? ' (was ' + d.prev_value + ')' : '');
+    case 'plan_headcount_set':
+      return escapeHtml(d.role || '?') + ' at <strong>' +
+        escapeHtml(d.stand || '?') + '</strong>: ' +
+        '<span class="delta-old">' + (d.prev_value != null ? d.prev_value : '?') + '</span>' +
+        '<span class="arrow"> &rarr; </span>' +
+        '<span class="delta-new">' + (d.new_value != null ? d.new_value : '?') + '</span>';
+    case 'plan_forecast_set':
+      return 'Forecast for <strong>' + escapeHtml(d.stand || '?') + '</strong>: ' +
+        '<span class="delta-old">' + fmtAuditForecast(d.prev_value) + '</span>' +
+        '<span class="arrow"> &rarr; </span>' +
+        '<span class="delta-new">' + fmtAuditForecast(d.new_value) + '</span>';
+    case 'placed':
+      return '<strong>' + escapeHtml(d.staff_name || '?') + '</strong> &rarr; ' +
+        escapeHtml(d.stand || '?') + ' / ' + escapeHtml(d.role || '?') +
+        (d.source ? ' <span style="color:var(--label);">(' + escapeHtml(d.source) + ')</span>' : '') +
+        (d.override ? ' <span style="color:var(--amber-dark);font-weight:700;">&#9888; OVERRIDE</span>' : '');
+    case 'removed': {
+      let s = '<strong>' + escapeHtml(d.staff_name || '?') + '</strong> from ' +
+        escapeHtml(d.stand || '?') + ' / ' + escapeHtml(d.role || '?');
+      if (d.was_synced) s += ' <span style="color:var(--label);font-style:italic;">(was synced to 7shifts)</span>';
+      return s;
+    }
+    case 'moved':
+      return '<strong>' + escapeHtml(d.staff_name || '?') + '</strong>: ' +
+        escapeHtml(d.from && d.from.stand) + ' / ' + escapeHtml(d.from && d.from.role) +
+        '<span class="arrow"> &rarr; </span>' +
+        escapeHtml(d.to && d.to.stand) + ' / ' + escapeHtml(d.to && d.to.role);
+    case 'synced_7s':
+      return '<strong>' + escapeHtml(d.staff_name || '?') + '</strong> marked synced at ' +
+        escapeHtml(d.stand || '?') + ' / ' + escapeHtml(d.role || '?');
+    case 'unsynced_7s': {
+      const reasonLabel =
+        d.reason === 'manual_uncheck'          ? 'manually unmarked' :
+        d.reason === 'moved'                   ? 'auto-cleared (moved)' :
+        d.reason === 'role_changed'            ? 'auto-cleared (role changed)' :
+        d.reason === 'stand_changed'           ? 'auto-cleared (stand changed)' :
+        d.reason === 'event_changed'           ? 'auto-cleared (event changed)' :
+        d.reason === 'removed'                 ? 'auto-cleared (removed from schedule)' :
+        d.reason === 'dismissed_after_release' ? 'dismissed (removed from 7shifts)' :
+        d.reason || 'cleared';
+      return '<strong>' + escapeHtml(d.staff_name || '?') + '</strong> &mdash; ' +
+        'sync flag ' + escapeHtml(reasonLabel);
+    }
+    case 'notified_staffing': {
+      let s = 'Staffing notified at <strong>' +
+        escapeHtml(d.recipient || 'staffing@camdenco.com') + '</strong>';
+      if (d.cc) s += ' (CC: ' + escapeHtml(d.cc) + ')';
+      if (d.note) s += ' &mdash; Note: <em>' + escapeHtml(d.note) + '</em>';
+      return s;
+    }
+    case 'unlocked': return 'Manually unlocked';
+    case 'locked':   return 'Locked';
+    default:
+      return '<span style="color:var(--label);font-family:monospace;font-size:11px;">' +
+        escapeHtml(JSON.stringify(d)) + '</span>';
+  }
+}
+
+// Per-event audit log state. Filter chip + sort direction. Keyed by
+// event_id so two open audit modals on different events (we only show
+// one at a time but the state persists in case we reopen) don't share.
+const _auditState = {
+  eventId: null,
+  rows: [],
+  filter: 'all',
+  sort: 'desc'   // 'desc' = newest first, 'asc' = oldest first
+};
+
 function openAuditLog(eventId) {
   const ev = state.events.find(e => e.id === eventId);
   document.getElementById('audit-title').textContent = 'Audit Log — ' + (ev ? ev.event_name : eventId);
   document.getElementById('audit-body').innerHTML = '<div class="loader">Loading…</div>';
   document.getElementById('audit-modal').classList.add('show');
 
-  authFetch(SUPABASE_URL + '/rest/v1/position_assignment_log?event_id=eq.' + eventId + '&order=actor_at.desc&limit=200',
+  // Reset state on every open. Filter resets to 'all', sort to newest-first.
+  _auditState.eventId = eventId;
+  _auditState.rows = [];
+  _auditState.filter = 'all';
+  _auditState.sort = 'desc';
+
+  // Explicit limit baked into the URL per sql-delivery-rules.md.
+  // 5000 is generous — a heavily-edited event with many resubmits and
+  // hundreds of placements still won't approach it, and Supabase REST
+  // would otherwise silently cap at the server's max_rows.
+  authFetch(SUPABASE_URL + '/rest/v1/position_assignment_log?event_id=eq.' + eventId +
+            '&order=actor_at.desc&limit=5000',
     { headers: apiHeaders() })
   .then(rows => {
-    if (!rows || !rows.length) {
-      document.getElementById('audit-body').innerHTML = '<div class="empty-state">No log entries yet.</div>';
-      return;
-    }
-    let html = '';
-    rows.forEach(r => {
-      const d = r.details || {};
-      let desc = '';
-      if (r.action === 'placed') desc = (d.staff_name || '?') + ' → ' + (d.stand || '?') + ' / ' + (d.role || '?') + (d.source ? ' (' + d.source + ')' : '') + (d.override ? ' ⚠ OVERRIDE' : '');
-      else if (r.action === 'removed') {
-        desc = (d.staff_name || '?') + ' from ' + (d.stand || '?') + ' / ' + (d.role || '?');
-        if (d.was_synced) desc += ' (was synced to 7shifts)';
-      }
-      else if (r.action === 'moved') desc = (d.staff_name || '?') + ': ' + (d.from && d.from.stand) + ' / ' + (d.from && d.from.role) + ' → ' + (d.to && d.to.stand) + ' / ' + (d.to && d.to.role);
-      else if (r.action === 'unlocked') desc = 'Manually unlocked';
-      else if (r.action === 'synced_7s') desc = (d.staff_name || '?') + ' marked synced to 7shifts at ' + (d.stand || '?') + ' / ' + (d.role || '?');
-      else if (r.action === 'unsynced_7s') {
-        const reasonLabel =
-          d.reason === 'manual_uncheck'         ? 'manually unmarked' :
-          d.reason === 'moved'                  ? 'auto-cleared (moved)' :
-          d.reason === 'role_changed'           ? 'auto-cleared (role changed)' :
-          d.reason === 'stand_changed'          ? 'auto-cleared (stand changed)' :
-          d.reason === 'event_changed'          ? 'auto-cleared (event changed)' :
-          d.reason === 'removed'                ? 'auto-cleared (removed from schedule)' :
-          d.reason === 'dismissed_after_release' ? 'dismissed (removed from 7shifts)' :
-          d.reason || 'cleared';
-        desc = (d.staff_name || '?') + ' — sync flag ' + reasonLabel;
-      }
-      else if (r.action === 'notified_staffing') {
-        desc = 'Staffing notified at ' + (d.recipient || 'staffing@camdenco.com');
-        if (d.cc) desc += ' (CC: ' + d.cc + ')';
-        if (d.note) desc += ' — Note: "' + d.note + '"';
-      }
-      else desc = JSON.stringify(d);
-      html += '<div class="log-entry">';
-      html += '<span class="log-time">' + fmtDateTime(r.actor_at) + '</span>';
-      html += '<span class="log-action ' + r.action + '">' + r.action + '</span>';
-      html += '<span>' + escapeHtml(desc) + '</span>';
-      html += '<span class="log-actor">' + escapeHtml(r.actor || '') + '</span>';
-      // Override reason shown on a second line in muted amber. Only
-      // present for placements that fired the home-venue override dialog.
-      if (d.override_reason) {
-        html += '<div class="log-reason">Reason: ' + escapeHtml(d.override_reason) + '</div>';
-      }
-      html += '</div>';
-    });
-    document.getElementById('audit-body').innerHTML = html;
+    _auditState.rows = rows || [];
+    renderAuditLogBody();
   })
   .catch(err => {
     if (err.authFailed) { handleAuthFailure(); return; }
-    document.getElementById('audit-body').innerHTML = '<div class="empty-state">Could not load log: ' + (err.message || '') + '</div>';
+    document.getElementById('audit-body').innerHTML =
+      '<div class="empty-state">Could not load log: ' + (err.message || '') + '</div>';
   });
+}
+
+// Render the audit modal body from _auditState. Called once after fetch,
+// and again whenever the filter chip or sort direction changes.
+function renderAuditLogBody() {
+  const rows = _auditState.rows;
+  const body = document.getElementById('audit-body');
+
+  if (!rows || !rows.length) {
+    body.innerHTML = '<div class="empty-state">No log entries yet.</div>';
+    return;
+  }
+
+  // Count by category for the chip badges (computed from the full row
+  // set, not just the filtered view — chips show "how many of each kind
+  // exist", not "how many are currently shown").
+  const counts = { all: rows.length, plan: 0, staff: 0, removed: 0, notify: 0 };
+  rows.forEach(r => {
+    const cat = auditCategoryOf(r.action);
+    if (counts[cat] != null) counts[cat]++;
+  });
+
+  // Identify the first placement (sorted by actor_at) so we can mark
+  // any plan_* actions that occurred AFTER it as "during staffing".
+  // Walks the rows once; rows are already sorted DESC from the fetch
+  // so we look for the last 'placed' entry's timestamp.
+  let firstPlacedAt = null;
+  for (let i = rows.length - 1; i >= 0; i--) {
+    if (rows[i].action === 'placed') {
+      firstPlacedAt = rows[i].actor_at;
+      break;
+    }
+  }
+
+  // Apply filter
+  const filter = _auditState.filter;
+  let filtered = (filter === 'all')
+    ? rows.slice()
+    : rows.filter(r => auditCategoryOf(r.action) === filter);
+
+  // Apply sort. Rows from the fetch are DESC; reverse if user picked ASC.
+  if (_auditState.sort === 'asc') filtered.reverse();
+
+  // Build controls HTML — chips + sort dropdown
+  const chipBtn = (key, label) => {
+    const active = (filter === key) ? ' active' : '';
+    const count = counts[key] != null ? counts[key] : 0;
+    return '<button class="audit-chip' + active + '" data-audit-filter="' + key + '">' +
+      label + '<span class="chip-count">' + count + '</span>' +
+    '</button>';
+  };
+  let html = '<div class="audit-controls">';
+  html += '<div class="audit-chips">';
+  html += chipBtn('all',     'All');
+  html += chipBtn('plan',    'Plan');
+  html += chipBtn('staff',   'Staff');
+  html += chipBtn('removed', 'Removed');
+  html += chipBtn('notify',  'Notify');
+  html += '</div>';
+  html += '<span class="audit-spacer"></span>';
+  html += '<select class="audit-sort-select" data-audit-sort>' +
+    '<option value="desc"' + (_auditState.sort === 'desc' ? ' selected' : '') + '>Newest first</option>' +
+    '<option value="asc"'  + (_auditState.sort === 'asc'  ? ' selected' : '') + '>Oldest first</option>' +
+  '</select>';
+  html += '</div>';
+
+  // Empty-filtered branch
+  if (filtered.length === 0) {
+    html += '<div class="audit-empty-filtered">No ' +
+      escapeHtml(filter) + ' actions on this event.</div>';
+    body.innerHTML = html;
+    attachAuditControlHandlers();
+    return;
+  }
+
+  // Rows
+  filtered.forEach(r => {
+    const cat = auditCategoryOf(r.action);
+    const label = auditPillLabelOf(r.action);
+    const desc = renderAuditDescription(r);
+    const isDuringStaffing = cat === 'plan' && firstPlacedAt &&
+                             r.actor_at > firstPlacedAt;
+    html += '<div class="log-entry cat-' + cat + '">';
+    html += '<span class="log-time">' + fmtDateTime(r.actor_at) + '</span>';
+    html += '<span class="log-pill cat-' + cat + '">' + escapeHtml(label) + '</span>';
+    html += '<span class="log-desc">' + desc;
+    if (isDuringStaffing) {
+      html += '<span class="log-during-staffing" title="This plan change happened after the first placement on this event — may have caused ghost positions on the Staff tab.">&uarr; during staffing</span>';
+    }
+    html += '</span>';
+    html += '<span class="log-actor">' + escapeHtml(r.actor || '') + '</span>';
+    // Override reason on a second line — preserved from the previous design.
+    const d = r.details || {};
+    if (d.override_reason) {
+      html += '<div class="log-reason">Reason: ' + escapeHtml(d.override_reason) + '</div>';
+    }
+    html += '</div>';
+  });
+
+  body.innerHTML = html;
+  attachAuditControlHandlers();
+}
+
+// Wire the filter chips and sort dropdown. Re-bound on every render
+// because we replace the modal body's innerHTML.
+function attachAuditControlHandlers() {
+  document.querySelectorAll('[data-audit-filter]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      _auditState.filter = btn.getAttribute('data-audit-filter');
+      renderAuditLogBody();
+    });
+  });
+  const sortSel = document.querySelector('[data-audit-sort]');
+  if (sortSel) {
+    sortSel.addEventListener('change', () => {
+      _auditState.sort = sortSel.value;
+      renderAuditLogBody();
+    });
+  }
 }
 
 document.addEventListener('click', e => {
@@ -8153,7 +8576,26 @@ function startApp(user) {
   // Default custom range inputs
   document.getElementById('custom-from').value = todayIsoLocal();
   document.getElementById('custom-to').value = isoFromOffset(14);
-  loadAll();
+
+  // Phase -2b wiring (May 26, 2026): wait for the shared stand/venue
+  // catalog (pc-catalog.js) and the role catalog (pc-roles.js) to load
+  // before kicking off the main data fetch. Both helpers cache for the
+  // page session — the first ready() call triggers the fetch; subsequent
+  // calls return the same promise. If either fails to load (network
+  // hiccup, RLS issue), we log and proceed with hardcoded fallbacks
+  // still in place. Nothing on this page depends on the catalogs yet —
+  // this just gets them warmed up so subsequent patches can swap reads
+  // in surgically without changing the load sequence each time.
+  Promise.all([
+    pcCatalog.ready(),
+    pcRoles.ready()
+  ]).then(() => {
+    console.log('[catalog] pc-catalog and pc-roles ready');
+    loadAll();
+  }).catch(err => {
+    console.warn('[catalog] catalog load failed, proceeding with hardcoded fallbacks:', err);
+    loadAll();
+  });
 }
 
 pcAuth.require({
