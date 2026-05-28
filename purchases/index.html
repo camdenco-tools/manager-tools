@@ -247,6 +247,8 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: #1a1a1a
 .receipt-amt.credit { color: #27500A; }
 .receipt-amt.needs-value { color: #BA7517; font-style: italic; font-size: 11px; cursor: pointer; text-decoration: underline; text-decoration-color: rgba(186,117,23,0.3); }
 .receipt-amt.needs-value:hover { color: #8C5811; text-decoration-color: #BA7517; }
+.receipt-item.is-transfer.row-clickable { cursor: pointer; }
+.receipt-item.is-transfer.row-clickable:hover { filter: brightness(0.96); }
 .receipt-photo { font-size: 10px; background: #EAF3DE; color: #27500A; padding: 2px 7px; border-radius: 6px; text-decoration: none; font-weight: 600; margin-left: 6px; }
 
 /* Search */
@@ -625,6 +627,27 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: #1a1a1a
   </div>
 </div>
 
+<!-- Duplicate invoice warning modal -->
+<div class="modal-overlay" id="dup-modal">
+  <div class="modal">
+    <h2 style="color:#BA7517;">Possible duplicate invoice</h2>
+    <div class="reason-summary" id="dup-new-summary"></div>
+    <div style="font-size:12px;color:#666;margin-bottom:8px;font-weight:600;">Already in the system:</div>
+    <div id="dup-matches-list" style="margin-bottom:14px;"></div>
+    <label class="reason-chip" id="dup-ack-chip" style="cursor:pointer;">
+      <input type="checkbox" id="dup-ack-check" onchange="onDupAckChange()">
+      <div>
+        <div class="reason-chip-label">I checked &mdash; this is a separate, legitimate purchase, not a duplicate</div>
+        <div class="reason-chip-hint">Tick this only after reviewing the matching transaction(s) above.</div>
+      </div>
+    </label>
+    <div class="modal-actions">
+      <button class="modal-cancel" onclick="closeDupModal()">Cancel</button>
+      <button class="modal-save amber" id="dup-save-btn" onclick="confirmDupOverride()" disabled>Save anyway</button>
+    </div>
+  </div>
+</div>
+
 <!-- Return-charge reason modal -->
 <div class="modal-overlay" id="return-modal">
   <div class="modal">
@@ -888,6 +911,7 @@ var expenseFiles = [];
 var currentSearchData = [];
 var editPhotoFile = null;
 var editPhotoClear = false;
+var pendingDupOverride = null;  // holds the submit fn to re-run after override
 
 // Reconciliation bar state
 var reconCharges = [];
@@ -1361,6 +1385,85 @@ async function uploadPhoto(file, path) {
   return r.ok ? SUPA_URL + '/storage/v1/object/public/purchase-receipts/' + path : null;
 }
 
+// ── Duplicate invoice detection ──
+// Normalize vendor for comparison: lowercase, strip spaces & punctuation.
+// "GoldMedal" and "Gold medal" both become "goldmedal".
+function normVendor(s) {
+  return String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+// Query purchases for likely duplicates of a candidate invoice.
+// Match rule: same vendor (fuzzy), amount within $1.00, date within +/-5 days.
+// Returns array of matching rows (empty if none).
+async function findDuplicateInvoices(vendor, amount, dateStr) {
+  try {
+    var hdrs = apiHeaders();
+    var d = new Date(dateStr + 'T00:00:00');
+    var from = new Date(d); from.setDate(from.getDate() - 5);
+    var to = new Date(d); to.setDate(to.getDate() + 5);
+    var fromStr = from.toISOString().slice(0,10);
+    var toStr = to.toISOString().slice(0,10);
+    var lo = (parseFloat(amount) - 1).toFixed(2);
+    var hi = (parseFloat(amount) + 1).toFixed(2);
+    var url = SUPA_URL + '/rest/v1/purchases?type=eq.invoice'
+            + '&invoice_date=gte.' + fromStr + '&invoice_date=lte.' + toStr
+            + '&amount=gte.' + lo + '&amount=lte.' + hi
+            + '&select=id,invoice_date,vendor,venue,amount,photo_url,allocation_group_id';
+    var res = await fetch(url, { headers: hdrs });
+    if (!res.ok) return [];
+    var rows = await res.json();
+    if (!Array.isArray(rows)) return [];
+    var nv = normVendor(vendor);
+    return rows.filter(function(r) { return normVendor(r.vendor) === nv; });
+  } catch(e) { console.error('[purchases] dup check failed', e); return []; }
+}
+
+// Open the duplicate-warning modal. `matches` is the array of existing rows,
+// `newSummary` is HTML describing the invoice being entered, and `proceedFn`
+// is the function to call if the user overrides.
+function openDupModal(matches, newSummary, proceedFn) {
+  pendingDupOverride = proceedFn;
+  document.getElementById('dup-new-summary').innerHTML = '<strong>Trying to add:</strong> ' + newSummary;
+  var html = '';
+  for (var i = 0; i < matches.length; i++) {
+    var m = matches[i];
+    var ds = m.invoice_date.slice(5,7) + '/' + m.invoice_date.slice(8,10) + '/' + m.invoice_date.slice(0,4);
+    var splitTag = m.allocation_group_id ? ' <span class="split-badge">Split</span>' : '';
+    html += '<div style="background:#FAEEDA;border:1px solid #EF9F27;border-radius:8px;padding:10px 12px;margin-bottom:6px;">';
+    html += '<div style="font-size:13px;font-weight:700;color:#1a1a1a;">' + escHtml(m.vendor || 'Unknown') + splitTag + '</div>';
+    html += '<div style="font-size:12px;color:#633806;margin-top:2px;">' + ds + ' &middot; ' + escHtml(m.venue || '') + ' &middot; <strong>$' + fmtMoney(m.amount) + '</strong>';
+    if (m.photo_url) html += ' &middot; <a href="' + escHtml(m.photo_url) + '" target="_blank" style="color:#0C447C;font-weight:600;">view receipt</a>';
+    html += '</div></div>';
+  }
+  document.getElementById('dup-matches-list').innerHTML = html;
+  document.getElementById('dup-ack-check').checked = false;
+  document.getElementById('dup-ack-chip').classList.remove('selected');
+  document.getElementById('dup-save-btn').disabled = true;
+  document.getElementById('dup-modal').classList.add('open');
+}
+
+function onDupAckChange() {
+  var checked = document.getElementById('dup-ack-check').checked;
+  document.getElementById('dup-save-btn').disabled = !checked;
+  document.getElementById('dup-ack-chip').classList.toggle('selected', checked);
+}
+
+function closeDupModal() {
+  document.getElementById('dup-modal').classList.remove('open');
+  pendingDupOverride = null;
+  // Re-enable the submit button that was left in a disabled/Saving state
+  var btn = document.getElementById('submit-btn');
+  btn.disabled = false;
+  setMode(currentMode);  // restores correct button label
+}
+
+function confirmDupOverride() {
+  var fn = pendingDupOverride;
+  document.getElementById('dup-modal').classList.remove('open');
+  pendingDupOverride = null;
+  if (fn) fn(true);  // re-run the submit, this time skipping the dup check
+}
+
 // ── Submit ──
 async function submitForm() {
   if (currentMode === 'invoice') await submitInvoice();
@@ -1368,7 +1471,7 @@ async function submitForm() {
   else await submitExpense();
 }
 
-async function submitInvoice() {
+async function submitInvoice(skipDupCheck) {
   var date = document.getElementById('inv-date').value;
   var vendor = document.getElementById('vendor').value.trim();
   var amount = parseFloat(document.getElementById('amount').value);
@@ -1419,6 +1522,21 @@ async function submitInvoice() {
     if (Math.abs(sum - expected) > 0.005) {
       errEl.textContent = 'Split amounts must add up to $' + fmtMoney(amount) + ' (currently $' + fmtMoney(sum) + ').';
       errEl.style.display = 'block';
+      return;
+    }
+  }
+
+  // ── Duplicate check (runs before save; skipped on override re-run) ──
+  if (skipDupCheck !== true) {
+    var dupMatches = await findDuplicateInvoices(vendor, amount, date);
+    if (dupMatches.length) {
+      var newSummary;
+      if (!isSplit) {
+        newSummary = escHtml(vendor) + ' &middot; ' + date + ' &middot; ' + escHtml(venue) + ' &middot; <strong>$' + fmtMoney(amount) + '</strong>';
+      } else {
+        newSummary = escHtml(vendor) + ' &middot; ' + date + ' &middot; split ' + escHtml(splitVenue1) + '/' + escHtml(splitVenue2) + ' &middot; <strong>$' + fmtMoney(amount) + '</strong>';
+      }
+      openDupModal(dupMatches, newSummary, function(ovr) { submitInvoice(ovr); });
       return;
     }
   }
@@ -1902,7 +2020,12 @@ async function loadMonthlySummary() {
           detail = tds + (noteSnippet ? ' &middot; ' + escHtml(noteSnippet) : '');
         }
 
-        html += '<div class="receipt-item ' + rowClass + '"><div class="receipt-left"><div class="receipt-vendor ' + labelClass + '">' + escHtml(tlabel) + '</div>';
+        // Legacy pending transfers: make the WHOLE row clickable to open the edit modal.
+        var isLegacyPending = !tr.isNew && !(tr.transfer_valued && tr.amount);
+        var rowExtraClass = isLegacyPending ? ' row-clickable' : '';
+        var rowOnclick = isLegacyPending ? ' onclick="event.stopPropagation();triggerEditLegacyTransfer(\'' + tr.id + '\')"' : '';
+
+        html += '<div class="receipt-item ' + rowClass + rowExtraClass + '"' + rowOnclick + '><div class="receipt-left"><div class="receipt-vendor ' + labelClass + '">' + escHtml(tlabel) + '</div>';
         html += '<div class="receipt-date">' + detail + '</div></div>';
         html += '<div style="display:flex;align-items:center;">';
 
@@ -1913,8 +2036,8 @@ async function loadMonthlySummary() {
         } else if (tr.transfer_valued && tr.amount) {
           html += '<div class="receipt-amt">$' + fmtMoney(tr.amount) + '</div>';
         } else {
-          // Legacy pending transfer: clickable to open edit modal
-          html += '<div class="receipt-amt needs-value" onclick="event.stopPropagation();triggerEditLegacyTransfer(\'' + tr.id + '\')">needs value</div>';
+          // Whole row is clickable now; keep the text styled as the affordance
+          html += '<div class="receipt-amt needs-value">needs value</div>';
         }
         html += (tr.photo_url ? '<a href="' + escHtml(tr.photo_url) + '" target="_blank" class="receipt-photo" onclick="event.stopPropagation();">photo</a>' : '') + '</div></div>';
       });
