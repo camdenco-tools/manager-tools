@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Invoice · Popcorn Chez</title>
+
+<!-- DM Sans for screen view; print stylesheet falls back to a serif that
+     prints cleanly across browsers without depending on web-font loading. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap">
+
+<!-- Auth gates the page even though it's a print view. Anyone hitting
+     /print/?id=<uuid> still needs to be signed in to fetch the data. -->
+<script src="/pc-auth.js"></script>
+
+<style>
+  /* ====================================================================
+     LAYOUT STRATEGY (READ THIS FIRST)
+     
+     One layout for both screen and print. The .invoice-page is a 6.5in
+     wide box (8.5in letter minus 1in margins on each side). It NEVER has
+     internal padding — instead, the surrounding context provides the
+     margin space:
+     
+       - On screen: the .page-shell centers it on a 6.5in column with
+         visible margins to the page tile background, so you see exactly
+         what will print.
+       - In print: @page provides 1in margins on the physical sheet, and
+         the .invoice-page fills the available 6.5in printable area.
+     
+     This way the content is always sized for the same width — no
+     layout shifts between screen and print, no padding-juggling.
+     ==================================================================== */
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #f1f0eb;
+    color: #1a1a1a;
+    font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 14px;
+    line-height: 1.4;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Top action bar — only visible on-screen. Print / Close buttons sit
+     above the page tile. Stripped at print time. */
+  .action-bar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 14px 20px;
+    background: #fafaf6;
+    border-bottom: 1px solid #e0dfd8;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+  .action-bar .ab-spacer { flex: 1; }
+  .action-bar .ab-title {
+    font-size: 12px;
+    color: #888;
+    font-weight: 500;
+  }
+  .action-btn {
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    border: 0;
+    text-decoration: none;
+    display: inline-block;
+  }
+  .action-btn.primary    { background: #1a1a1a; color: #fff; }
+  .action-btn.primary:hover { background: #2c2c2a; }
+  .action-btn.secondary  { background: #fff; color: #555; border: 1px solid #e0dfd8; }
+  .action-btn.secondary:hover { background: #f1f0eb; color: #1a1a1a; }
+
+  /* Screen container — gives the invoice-page some visual breathing room
+     against the neutral background. Has NO effect on print. */
+  .page-shell {
+    padding: 30px 20px 60px;
+    display: flex;
+    justify-content: center;
+  }
+
+  /* The invoice page itself. 6.5in wide = letter (8.5) minus 1in margins.
+     NO PADDING. Content fills the box. */
+  .invoice-page {
+    background: #fff;
+    width: 6.5in;
+    min-height: 9in;
+    color: #1a1a1a;
+    /* Screen-only chrome: shadow + radius + simulated margin around content. */
+    padding: 0.5in;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    border-radius: 4px;
+    position: relative;
+  }
+  /* On screen we add 0.5in padding inside the tile to suggest white margins
+     between the content and the visible page edge. The screen tile is 6.5in
+     wide with 0.5in padding = 5.5in of content. Visually accurate preview. */
+
+  /* ====================================================================
+     INVOICE BODY
+     Layout modeled on the reference PDF (wk ending 5/10 Legends):
+       - Top row:    [issuer block left] [Invoice / date / number right]
+       - Mid row:    [Bill To block left] [P.O. No. table right]
+       - Line items table
+       - Right-aligned total
+     ==================================================================== */
+  .invoice-body {
+    font-family: Georgia, "Times New Roman", "Liberation Serif", serif;
+    font-size: 11pt;
+    color: #000;
+    line-height: 1.35;
+    width: 100%;
+  }
+
+  /* Top row */
+  .inv-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 30px;
+    width: 100%;
+  }
+  .inv-issuer { font-size: 10.5pt; line-height: 1.4; }
+  .inv-issuer .issuer-name { font-weight: 700; font-size: 11pt; }
+  .inv-meta { text-align: right; }
+  .inv-meta .inv-title {
+    font-size: 22pt; font-weight: 700; letter-spacing: 0.01em;
+    margin-bottom: 10px; line-height: 1.1;
+  }
+  .inv-meta-table {
+    margin-left: auto; border-collapse: collapse; font-size: 9.5pt;
+  }
+  .inv-meta-table th, .inv-meta-table td {
+    border: 0.75pt solid #000; padding: 4px 10px; text-align: left;
+  }
+  .inv-meta-table th {
+    font-weight: 700; background: #f4f4f4; font-size: 8.5pt;
+  }
+  .inv-meta-table td { background: #fff; white-space: nowrap; }
+  .inv-meta-table td.num { text-align: right; }
+
+  /* Mid row */
+  .inv-mid {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 28px;
+    width: 100%;
+  }
+  .inv-bill-to { font-size: 10.5pt; }
+  .inv-bill-to .bill-to-label {
+    font-size: 9pt; font-weight: 700; color: #000; margin-bottom: 4px;
+  }
+  .inv-bill-to .bill-to-name { font-weight: 700; margin-bottom: 2px; }
+  .inv-bill-to .bill-to-line { margin-bottom: 1px; }
+  .inv-po-table {
+    border-collapse: collapse; font-size: 9.5pt;
+  }
+  .inv-po-table th, .inv-po-table td {
+    border: 0.75pt solid #000; padding: 4px 10px; text-align: left;
+  }
+  .inv-po-table th { font-weight: 700; background: #f4f4f4; font-size: 8.5pt; }
+  .inv-po-table td { background: #fff; white-space: nowrap; }
+
+  /* Line items table */
+  .inv-lines {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10.5pt;
+    margin-bottom: 20px;
+  }
+  .inv-lines thead th {
+    border: 0.75pt solid #000; background: #f4f4f4;
+    padding: 5px 10px; text-align: left; font-weight: 700; font-size: 9.5pt;
+  }
+  .inv-lines th.col-qty, .inv-lines th.col-rate, .inv-lines th.col-amount {
+    text-align: right;
+  }
+  .inv-lines th.col-qty       { width: 70px; }
+  .inv-lines th.col-rate      { width: 90px; }
+  .inv-lines th.col-amount    { width: 110px; }
+  .inv-lines tbody td {
+    border-left: 0.75pt solid #000;
+    border-right: 0.75pt solid #000;
+    padding: 4px 10px; vertical-align: top;
+  }
+  .inv-lines tbody tr:last-child td { border-bottom: 0.75pt solid #000; }
+  .inv-lines td.col-qty, .inv-lines td.col-rate, .inv-lines td.col-amount {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .inv-lines tr.filler td { height: 12px; padding: 0; }
+
+  /* Total row */
+  .inv-totals {
+    margin-left: auto; border-collapse: collapse; font-size: 12pt;
+  }
+  .inv-totals td { border: 0.75pt solid #000; padding: 6px 14px; }
+  .inv-totals td.total-label {
+    font-weight: 700; text-align: right; background: #f4f4f4;
+  }
+  .inv-totals td.total-value {
+    font-weight: 700; text-align: right;
+    font-variant-numeric: tabular-nums;
+    min-width: 130px; background: #fff;
+  }
+
+  /* Loading and error states */
+  .state-msg {
+    padding: 80px 20px; text-align: center; color: #888;
+    font-size: 14px; font-family: "DM Sans", sans-serif;
+  }
+  .state-msg.error { color: #791F1F; }
+  .state-msg .state-title {
+    font-size: 16px; font-weight: 600; color: #1a1a1a; margin-bottom: 8px;
+  }
+
+  /* ====================================================================
+     PRINT STYLES
+     - @page gives us 1-inch margins on the physical sheet.
+     - .invoice-page becomes a clean 6.5-inch-wide canvas with no padding
+       or chrome (no shadow, no radius, no extra padding).
+     - .action-bar and .page-shell padding are stripped.
+     - User MUST set Chrome's "Margins" setting to "Default" for @page to
+       work; "None" overrides it.
+     ==================================================================== */
+  @media print {
+    @page {
+      size: letter portrait;
+      margin: 1in;
+    }
+    html, body { background: #fff; }
+    .action-bar { display: none !important; }
+    .page-shell { padding: 0 !important; display: block !important; }
+    .invoice-page {
+      width: 100% !important;       /* fill the printable area (6.5in) */
+      min-height: 0 !important;
+      padding: 0 !important;        /* no inner padding in print */
+      box-shadow: none !important;
+      border-radius: 0 !important;
+    }
+  }
+</style>
+</head>
+
+<body>
+
+  <!-- On-screen-only action bar. Print and Close. Print triggers the
+       native browser print dialog; user picks "Save as PDF" or sends to
+       a real printer from there. -->
+  <div class="action-bar">
+    <span class="ab-title" id="abTitle">Invoice</span>
+    <span class="ab-spacer"></span>
+    <button type="button" class="action-btn secondary" id="btnClose">Close tab</button>
+    <button type="button" class="action-btn primary"   id="btnPrint">🖨 Print / Save as PDF</button>
+  </div>
+
+  <div class="page-shell">
+    <div class="invoice-page">
+      <div id="invoiceRoot">
+        <div class="state-msg" id="loadingState">Loading invoice…</div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+
+  // =====================================================================
+  // CONFIG
+  // =====================================================================
+  var SB_URL  = 'https://aoazlttdjowhlfcksoyl.supabase.co';
+  var SB_REST = SB_URL + '/rest/v1/';
+
+  // Hard-coded issuer block. Matches Keith's reference PDF: name + address
+  // only, no phone / email / EIN. If this ever changes, edit here.
+  var ISSUER = {
+    name:  'Popcorn Chez, LLC',
+    line1: '55 E Church St',
+    city:  'Blackwood',
+    state: 'NJ',
+    zip:   '08012'
+  };
+
+  // =====================================================================
+  // UTILITIES
+  // =====================================================================
+  function esc(s) {
+    if (s == null) return '';
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function fmtMoney(n) {
+    if (n == null || isNaN(n)) n = 0;
+    var sign = n < 0 ? '-' : '';
+    var abs = Math.abs(n);
+    return sign + '$' + abs.toLocaleString('en-US', {
+      minimumFractionDigits: 2, maximumFractionDigits: 2
+    });
+  }
+
+  function fmtNum(n) {
+    if (n == null || n === '' || isNaN(n)) return '';
+    return Number(n).toLocaleString('en-US', {
+      minimumFractionDigits: 2, maximumFractionDigits: 2
+    });
+  }
+
+  function fmtQty(n) {
+    if (n == null || n === '' || isNaN(n)) return '';
+    var num = Number(n);
+    if (Math.abs(num - Math.round(num)) < 0.001) {
+      return String(Math.round(num));
+    }
+    return String(Math.round(num * 100) / 100);
+  }
+
+  function fmtInvoiceDate(iso) {
+    if (!iso) return '';
+    var parts = iso.split('-');
+    if (parts.length !== 3) return iso;
+    return parseInt(parts[1], 10) + '/' +
+           parseInt(parts[2], 10) + '/' +
+           parts[0];
+  }
+
+  // =====================================================================
+  // URL PARSE
+  // =====================================================================
+  function getInvoiceIdFromUrl() {
+    var qs = window.location.search || '';
+    var match = qs.match(/[?&]id=([^&]+)/);
+    return match ? decodeURIComponent(match[1]) : null;
+  }
+
+  // =====================================================================
+  // AUTH FETCH (mirrors the pattern from the AR pages)
+  // =====================================================================
+  function handleAuthFailure() {
+    try {
+      localStorage.removeItem('sb_access_token');
+      localStorage.removeItem('sb_refresh_token');
+    } catch (e) { /* ignore */ }
+    setTimeout(function () { window.location.reload(); }, 800);
+  }
+
+  function authFetch(url, options) {
+    return fetch(url, options).then(function (r) {
+      if (!r.ok) {
+        return r.text().then(function (t) {
+          if (r.status === 401 || (t && t.indexOf('JWT expired') !== -1)) {
+            var err = new Error('JWT expired');
+            err.authFailed = true;
+            throw err;
+          }
+          throw new Error(t || ('HTTP ' + r.status));
+        });
+      }
+      return r.text().then(function (t) {
+        if (!t) return [];
+        try { return JSON.parse(t); } catch (e) { return []; }
+      });
+    });
+  }
+
+  // =====================================================================
+  // FETCH — PostgREST embedded select pulls invoice + lines + venue +
+  // client in one round-trip.
+  // =====================================================================
+  function fetchInvoiceFull(invoiceId) {
+    var selectClause = 'select=' + [
+      'id', 'internal_invoice_number', 'client_reference', 'client_id',
+      'venue_code', 'period_start', 'net_amount_due', 'status', 'notes',
+      'ar_invoice_lines(id,item_id,description,amount,quantity,unit_price,sort_order,ar_items(name))',
+      'ar_clients(id,name)',
+      'venues(code,full_name,billing_address_line1,billing_address_line2,billing_city,billing_state,billing_zip)'
+    ].join(',');
+    return authFetch(
+      SB_REST + 'ar_invoices?id=eq.' + encodeURIComponent(invoiceId) + '&' + selectClause,
+      { headers: pcAuth.headers() }
+    );
+  }
+
+  // Billing-only venue lookup by code. Returns a row shaped like the
+  // embedded venues(...) object so buildBillToBlock() can consume it
+  // unchanged, or null if not found.
+  function fetchArVenueByCode(code) {
+    if (!code) return Promise.resolve(null);
+    var sel = 'select=code,full_name,billing_address_line1,billing_address_line2,' +
+      'billing_city,billing_state,billing_zip';
+    return authFetch(
+      SB_REST + 'ar_venues?code=eq.' + encodeURIComponent(code) + '&' + sel + '&limit=1',
+      { headers: pcAuth.headers() }
+    ).then(function (rows) {
+      return (rows && rows[0]) ? rows[0] : null;
+    });
+  }
+
+  // =====================================================================
+  // RENDER
+  // =====================================================================
+
+  // Builds the Bill To block lines based on whether the invoice has a venue.
+  // Venue → use venue's full_name + address.
+  // No venue → fall back to ar_clients.name (direct-bill case).
+  function buildBillToBlock(invoice) {
+    var venue = invoice.venues;
+    if (venue) {
+      var lines = [];
+      lines.push(venue.full_name || venue.code || '(unnamed venue)');
+      if (venue.billing_address_line1) lines.push(venue.billing_address_line1);
+      if (venue.billing_address_line2) lines.push(venue.billing_address_line2);
+      var citystatezip = '';
+      if (venue.billing_city)  citystatezip += venue.billing_city;
+      if (venue.billing_state) citystatezip += (citystatezip ? ', ' : '') + venue.billing_state;
+      if (venue.billing_zip)   citystatezip += (citystatezip ? ' '  : '') + venue.billing_zip;
+      if (citystatezip) lines.push(citystatezip);
+      return lines;
+    }
+    var client = invoice.ar_clients;
+    if (client) return [client.name || '(unnamed client)'];
+    return ['(no bill-to information)'];
+  }
+
+  function renderInvoice(invoice) {
+    var lines = (invoice.ar_invoice_lines || []).slice().sort(function (a, b) {
+      return (a.sort_order || 0) - (b.sort_order || 0);
+    });
+
+    var billToLines = buildBillToBlock(invoice);
+    var invoiceDate = fmtInvoiceDate(invoice.period_start);
+    var invoiceNum  = invoice.internal_invoice_number || '';
+    var clientRef   = invoice.client_reference || '';
+    var totalAmount = Number(invoice.net_amount_due || 0);
+
+    // Display the suffix after the dash (e.g. "3041" from "260519-3041").
+    var displayInvoiceNum = invoiceNum;
+    var dashIdx = invoiceNum.indexOf('-');
+    if (dashIdx !== -1) displayInvoiceNum = invoiceNum.substring(dashIdx + 1);
+
+    // Build line item rows
+    var lineRowsHtml = lines.map(function (l) {
+      var description = l.description || (l.ar_items && l.ar_items.name) || '';
+      var qty   = fmtQty(l.quantity);
+      var rate  = fmtNum(l.unit_price);
+      var amount = fmtNum(Math.abs(Number(l.amount || 0)));
+      return '<tr>' +
+        '<td class="col-qty">' + esc(qty) + '</td>' +
+        '<td class="col-desc">' + esc(description) + '</td>' +
+        '<td class="col-rate">' + esc(rate) + '</td>' +
+        '<td class="col-amount">' + esc(amount) + '</td>' +
+      '</tr>';
+    }).join('');
+
+    // One thin filler row below the data
+    var fillerRowsHtml = '<tr class="filler">' +
+      '<td class="col-qty"></td>' +
+      '<td class="col-desc"></td>' +
+      '<td class="col-rate"></td>' +
+      '<td class="col-amount"></td>' +
+    '</tr>';
+
+    var html = '<div class="invoice-body">' +
+
+      // Top: issuer (left) | Invoice title + meta table (right)
+      '<div class="inv-top">' +
+        '<div class="inv-issuer">' +
+          '<div class="issuer-name">' + esc(ISSUER.name) + '</div>' +
+          '<div>' + esc(ISSUER.line1) + '</div>' +
+          '<div>' + esc(ISSUER.city) + ' ' + esc(ISSUER.state) + ' ' + esc(ISSUER.zip) + '</div>' +
+        '</div>' +
+        '<div class="inv-meta">' +
+          '<div class="inv-title">Invoice</div>' +
+          '<table class="inv-meta-table">' +
+            '<tr><th>Date</th><th>Invoice #</th></tr>' +
+            '<tr>' +
+              '<td class="num">' + esc(invoiceDate) + '</td>' +
+              '<td class="num">' + esc(displayInvoiceNum) + '</td>' +
+            '</tr>' +
+          '</table>' +
+        '</div>' +
+      '</div>' +
+
+      // Mid: Bill To (left) | P.O. No. table (right, only if client_ref present)
+      '<div class="inv-mid">' +
+        '<div class="inv-bill-to">' +
+          '<div class="bill-to-label">Bill To</div>' +
+          billToLines.map(function (ln, idx) {
+            var cls = idx === 0 ? 'bill-to-name' : 'bill-to-line';
+            return '<div class="' + cls + '">' + esc(ln) + '</div>';
+          }).join('') +
+        '</div>' +
+        (clientRef
+          ? '<table class="inv-po-table">' +
+              '<tr><th>P.O. No.</th></tr>' +
+              '<tr><td>' + esc(clientRef) + '</td></tr>' +
+            '</table>'
+          : '<div></div>') +
+      '</div>' +
+
+      // Lines table
+      '<table class="inv-lines">' +
+        '<thead>' +
+          '<tr>' +
+            '<th class="col-qty">Quantity</th>' +
+            '<th class="col-desc">Description</th>' +
+            '<th class="col-rate">Rate</th>' +
+            '<th class="col-amount">Amount</th>' +
+          '</tr>' +
+        '</thead>' +
+        '<tbody>' + lineRowsHtml + fillerRowsHtml + '</tbody>' +
+      '</table>' +
+
+      // Total
+      '<table class="inv-totals">' +
+        '<tr>' +
+          '<td class="total-label">Total</td>' +
+          '<td class="total-value">' + esc(fmtMoney(totalAmount)) + '</td>' +
+        '</tr>' +
+      '</table>' +
+
+    '</div>';
+
+    document.getElementById('invoiceRoot').innerHTML = html;
+
+    var tabTitle = 'Invoice ' + (displayInvoiceNum || invoiceNum) +
+      (billToLines[0] ? ' · ' + billToLines[0] : '');
+    document.title = tabTitle;
+    var ab = document.getElementById('abTitle');
+    if (ab) ab.textContent = tabTitle;
+  }
+
+  function showError(title, detail) {
+    document.getElementById('invoiceRoot').innerHTML =
+      '<div class="state-msg error">' +
+        '<div class="state-title">' + esc(title) + '</div>' +
+        (detail ? '<div>' + esc(detail) + '</div>' : '') +
+      '</div>';
+  }
+
+  // =====================================================================
+  // BOOT
+  // =====================================================================
+  function start() {
+    var invoiceId = getInvoiceIdFromUrl();
+    if (!invoiceId) {
+      showError('No invoice specified',
+        'This page expects ?id=<invoice-uuid> in the URL.');
+      return;
+    }
+
+    fetchInvoiceFull(invoiceId)
+      .then(function (rows) {
+        if (!rows || rows.length === 0) {
+          showError('Invoice not found',
+            'The invoice you requested either doesn\'t exist or you don\'t have permission to view it.');
+          return;
+        }
+        var invoice = rows[0];
+        // Operational venues resolve via the embedded venues(...) join.
+        // Billing-only venues (ar_venues, e.g. PNC) have no FK from
+        // ar_invoices.venue_code, so the embed comes back null — look them
+        // up by code and attach to the same `venues` shape the renderer
+        // already expects.
+        if (!invoice.venues && invoice.venue_code) {
+          return fetchArVenueByCode(invoice.venue_code)
+            .then(function (arVenue) {
+              if (arVenue) invoice.venues = arVenue;
+              renderInvoice(invoice);
+            });
+        }
+        renderInvoice(invoice);
+      })
+      .catch(function (e) {
+        if (e && e.authFailed) { handleAuthFailure(); return; }
+        console.error('[print] fetch failed:', e);
+        showError('Could not load invoice',
+          (e && e.message) ? e.message : 'Unknown error');
+      });
+  }
+
+  document.getElementById('btnPrint').addEventListener('click', function () {
+    window.print();
+  });
+  document.getElementById('btnClose').addEventListener('click', function () {
+    window.close();
+  });
+
+  if (typeof pcAuth === 'undefined' || !pcAuth.require) {
+    showError('Authentication unavailable',
+      'pc-auth.js failed to load. Check the network tab.');
+  } else {
+    pcAuth.require({
+      pageSlug: 'accounts-receivable',
+      onReady:  function () { start(); }
+    });
+  }
+})();
+</script>
+
+</body>
+</html>
