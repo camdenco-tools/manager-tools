@@ -1688,6 +1688,7 @@
       'status',
       'origin',
       'notes',
+      'invoice_notes',
       'created_at',
       'created_by',
       'ar_clients(name)',
@@ -2424,7 +2425,8 @@
       period_start: todayIso(),
       net_amount_due: '',     // user-entered (or pre-filled from line sum)
       net_amount_due_dirty: false, // true once the user has typed in net field
-      notes: '',
+      notes: '',              // INTERNAL notes — never printed
+      invoice_notes: '',      // client-facing notes — printed on the invoice
       lines: [],              // array of {id?, item_id, qty, unit_price, amount, note, _line_id_seq}
       _dirty: false           // any user input has happened — used for close confirm
     };
@@ -2573,8 +2575,13 @@
           '<div class="ar-mismatch-strip" id="arfMismatch" hidden></div>' +
 
           '<div class="ar-field">' +
-            '<label class="ar-label">Notes</label>' +
-            '<textarea id="arfNotes" rows="2" placeholder="Optional"></textarea>' +
+            '<label class="ar-label">Invoice notes <span class="opt">(prints on invoice)</span></label>' +
+            '<textarea id="arfInvoiceNotes" rows="2" placeholder="Shown on the printed customer invoice — e.g. For delivery 6/3"></textarea>' +
+          '</div>' +
+
+          '<div class="ar-field">' +
+            '<label class="ar-label">Internal notes <span class="opt">(not printed)</span></label>' +
+            '<textarea id="arfNotes" rows="2" placeholder="For your records only — never shown to the client"></textarea>' +
           '</div>' +
 
         '</div>' +
@@ -2934,6 +2941,12 @@
       formState.notes = notes.value;
     });
 
+    // Invoice notes (client-facing)
+    var invNotes = document.getElementById('arfInvoiceNotes');
+    if (invNotes) invNotes.addEventListener('input', function () {
+      formState.invoice_notes = invNotes.value;
+    });
+
     // Add line
     var addBtn = document.getElementById('arfAddLine');
     if (addBtn) addBtn.addEventListener('click', function () {
@@ -3201,6 +3214,7 @@
       'status',
       'origin',
       'notes',
+      'invoice_notes',
       'created_at',
       'created_by',
       'ar_invoice_lines(id,item_id,description,amount,quantity,unit_price,sort_order)',
@@ -3235,6 +3249,7 @@
     // Mismatched net → set dirty=true so the legitimate override is preserved.
     state.net_amount_due_dirty = false;  // resolved after lines load, below
     state.notes            = invoice.notes || '';
+    state.invoice_notes    = invoice.invoice_notes || '';
 
     // Lines — denormalize signed amounts back to user-typed magnitudes for display.
     var fetchedLines = (invoice.ar_invoice_lines || []).slice().sort(function (a, b) {
@@ -3284,6 +3299,7 @@
       period_start:     state.period_start,
       net_amount_due:   state.net_amount_due,
       notes:            state.notes,
+      invoice_notes:    state.invoice_notes,
       status:           state._status,
       lines: state.lines.map(function (l) {
         return {
@@ -3422,6 +3438,7 @@
     var cref = document.getElementById('arfClientRef');
     var ps   = document.getElementById('arfPeriodStart');
     var nts  = document.getElementById('arfNotes');
+    var invn = document.getElementById('arfInvoiceNotes');
     var net  = document.getElementById('arfNetAmount');
 
     if (vSel) vSel.value = formState.venue_code || '';
@@ -3430,6 +3447,7 @@
     if (cref) cref.value = formState.client_reference || '';
     if (ps)   ps.value   = formState.period_start || '';
     if (nts)  nts.value  = formState.notes || '';
+    if (invn) invn.value = formState.invoice_notes || '';
 
     // Net amount due — format with currency.
     var nN = evalMath(formState.net_amount_due);
@@ -3632,6 +3650,7 @@
       status:           'open',
       origin:           'client_statement',
       notes:            formState.notes || null,
+      invoice_notes:    formState.invoice_notes || null,
       created_by:       actor
     };
 
@@ -3759,6 +3778,7 @@
           net_amount_due:          savedInvoice.net_amount_due,
           client_reference:        savedInvoice.client_reference,
           notes:                   savedInvoice.notes,
+          invoice_notes:           savedInvoice.invoice_notes,
           line_count:              payload.lines.length,
           lines:                   payload.lines
         }
@@ -3848,7 +3868,7 @@
     var headerChanges = {};
     var headerFields = [
       'client_id', 'client_reference', 'venue_code', 'stand_id',
-      'event_id', 'period_start', 'notes'
+      'event_id', 'period_start', 'notes', 'invoice_notes'
     ];
     headerFields.forEach(function (f) {
       var origVal = orig[f];
@@ -4816,6 +4836,7 @@
     var cref = document.getElementById('arfClientRef');
     var ps   = document.getElementById('arfPeriodStart');
     var nts  = document.getElementById('arfNotes');
+    var invn = document.getElementById('arfInvoiceNotes');
     var net  = document.getElementById('arfNetAmount');
 
     if (vSel) vSel.value = '';
@@ -4833,6 +4854,7 @@
     if (cref) cref.value = '';
     if (ps)   ps.value = formState.period_start;
     if (nts)  nts.value = '';
+    if (invn) invn.value = '';
     if (net)  net.value = fmtMoney(0);
 
     // Reset the event datalist (no venue picked = no events).
