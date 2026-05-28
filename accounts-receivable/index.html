@@ -791,6 +791,14 @@
     margin-top: 18px;
   }
 
+  /* Address city/state/zip row inside the new-venue modal. */
+  .nv-addr-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr;
+    gap: 8px;
+  }
+  .nv-addr-grid input { width: 100%; }
+
   /* ====================================================================
      VENUE-OPTIONAL VISUAL SIGNAL
      When the picked client has no default venue (wholesale customer),
@@ -1307,6 +1315,7 @@
     invoices: [],            // currently loaded invoices (server-filtered by status + date)
     clients: [],             // active ar_clients rows for filter dropdown
     venues: [],              // canonical venue codes from venues table
+    arVenues: [],            // billing-only venues (ar_venues table) — PNC etc.
 
     filters: {
       client: 'all',         // 'all' | <client_id uuid>
@@ -1600,6 +1609,21 @@
   }
 
   /**
+   * ar_venues — billing-only venues (DBAs / wholesale bill-to identities
+   * like PNC) that resolve to a parent ar_clients payer via
+   * default_client_id. These are NOT operational venues; they live only in
+   * AR. Merged into the invoice form's venue dropdown + the receivables
+   * venue filter alongside the operational venues fetched above.
+   */
+  function fetchArVenues() {
+    return AR.authFetch(
+      SB_REST + 'ar_venues?select=code,full_name,is_active,default_client_id' +
+      '&is_active=eq.true&order=code.asc&limit=10000',
+      { headers: pcAuth.headers() }
+    );
+  }
+
+  /**
    * ar_invoices — server-filtered by status + date bound.
    * Each row embeds ar_clients(name) and stands(stand_name) so the table
    * renders without N+1 lookups. PostgREST resolves the FK relationships.
@@ -1798,10 +1822,13 @@
       cSel.value = state.filters.client;
     }
     if (vSel) {
-      vSel.innerHTML = '<option value="all">All venues</option>' +
-        state.venues.map(function (v) {
-          return '<option value="' + esc(v.code) + '">' + esc(v.code) + '</option>';
-        }).join('');
+      var opVenueOpts = state.venues.map(function (v) {
+        return '<option value="' + esc(v.code) + '">' + esc(v.code) + '</option>';
+      }).join('');
+      var arVenueOpts = state.arVenues.map(function (v) {
+        return '<option value="' + esc(v.code) + '">' + esc(v.code) + ' · billing</option>';
+      }).join('');
+      vSel.innerHTML = '<option value="all">All venues</option>' + opVenueOpts + arVenueOpts;
       vSel.value = state.filters.venue;
     }
   }
@@ -2483,7 +2510,10 @@
           '<div class="ar-field-grid">' +
             '<div class="ar-field">' +
               '<label class="ar-label" id="arfVenueLabel">Venue <span class="req">*</span><span class="opt" id="arfVenueOpt" hidden>(optional)</span></label>' +
-              '<select id="arfVenue"><option value="">— no venue —</option></select>' +
+              '<div class="ar-client-row">' +
+                '<select id="arfVenue"><option value="">— no venue —</option></select>' +
+                '<button type="button" class="ar-new-customer-btn" id="arfNewVenueBtn" title="Add a billing-only venue (e.g. PNC)">+ Venue</button>' +
+              '</div>' +
             '</div>' +
             '<div class="ar-field">' +
               '<label class="ar-label">Client <span class="req">*</span></label>' +
@@ -2565,10 +2595,25 @@
   function populateModalStatics() {
     var vSel = document.getElementById('arfVenue');
     if (vSel) {
-      vSel.innerHTML = '<option value="">Select venue…</option>' +
-        state.venues.map(function (v) {
+      // Operational venues + billing-only ar_venues. Both carry
+      // data-default-client so picking either auto-fills the client (PNC
+      // -> Legends, just like FMP -> Legends). ar_venues are grouped under
+      // their own optgroup so they read as distinct from real venues.
+      var opVenueOpts = state.venues.map(function (v) {
+        return '<option value="' + esc(v.code) + '" data-default-client="' + esc(v.default_client_id || '') + '">' + esc(v.code) + '</option>';
+      }).join('');
+
+      var html = '<option value="">Select venue…</option>';
+      if (opVenueOpts) {
+        html += '<optgroup label="Venues">' + opVenueOpts + '</optgroup>';
+      }
+      if (state.arVenues && state.arVenues.length) {
+        var arVenueOpts = state.arVenues.map(function (v) {
           return '<option value="' + esc(v.code) + '" data-default-client="' + esc(v.default_client_id || '') + '">' + esc(v.code) + '</option>';
         }).join('');
+        html += '<optgroup label="Billing-only">' + arVenueOpts + '</optgroup>';
+      }
+      vSel.innerHTML = html;
     }
     var ps = document.getElementById('arfPeriodStart');
     if (ps) ps.value = formState.period_start;
@@ -2853,6 +2898,12 @@
     var newCustBtn = document.getElementById('arfNewCustomerBtn');
     if (newCustBtn) {
       newCustBtn.addEventListener('click', openNewCustomerModal);
+    }
+
+    // "+ Venue" button — opens the new billing-only venue overlay.
+    var newVenueBtn = document.getElementById('arfNewVenueBtn');
+    if (newVenueBtn) {
+      newVenueBtn.addEventListener('click', openNewVenueModal);
     }
 
     // Client reference
@@ -4437,6 +4488,274 @@
   }
 
   // =====================================================================
+  // NEW VENUE MODAL  (overlay on top of the invoice form modal)
+  //
+  // Triggered by the "+ Venue" button next to the Venue dropdown. Inserts
+  // a row into ar_venues — a billing-only venue (DBA / wholesale bill-to
+  // identity like PNC) that resolves to a parent ar_clients payer via
+  // default_client_id. On save: refresh state.arVenues, re-render the venue
+  // dropdown, auto-select the new venue (which auto-fills the client to its
+  // payer, exactly like an operational venue does). No audit log — same
+  // master-data decision as the customer add.
+  //
+  // Code uniqueness is enforced at insert across BOTH the operational
+  // `venues` list and the existing `ar_venues` list (state.venues +
+  // state.arVenues), since ar_invoices.venue_code is plain text and a
+  // collision would make a venue_code ambiguous between the two tables.
+  // =====================================================================
+
+  var nvSubmitting = false;
+
+  function openNewVenueModal() {
+    if (!formState) return;          // only available with invoice modal open
+    var card = document.querySelector('.ar-modal-card');
+    if (!card) return;
+    if (document.getElementById('arfNewVenueOverlay')) return;  // no double-stack
+
+    var clientOpts = '<option value="">Select payer…</option>' +
+      state.clients.map(function (c) {
+        return '<option value="' + esc(c.id) + '">' + esc(c.name) + '</option>';
+      }).join('');
+
+    var overlay = document.createElement('div');
+    overlay.className = 'nc-overlay';
+    overlay.id = 'arfNewVenueOverlay';
+    overlay.innerHTML = '' +
+      '<div class="nc-card" role="dialog" aria-labelledby="nvTitle">' +
+        '<div class="nc-title" id="nvTitle">Add billing-only venue</div>' +
+        '<div class="nc-subtitle">A venue we invoice but don\u2019t operate (e.g. PNC). It gets its own name + address on the invoice, but is paid by the client you pick below. Adds to the ar_venues table.</div>' +
+        '<div class="nc-field">' +
+          '<label for="nvCode">Venue code <span class="req">*</span></label>' +
+          '<input type="text" id="nvCode" placeholder="e.g. PNC" maxlength="40">' +
+          '<div class="nc-field-hint">Short, uppercase, no spaces. Shows in the venue dropdown and prints on the invoice.</div>' +
+        '</div>' +
+        '<div class="nc-field">' +
+          '<label for="nvFullName">Full name <span class="req">*</span></label>' +
+          '<input type="text" id="nvFullName" placeholder="e.g. PNC Bank Arts Center" maxlength="200">' +
+        '</div>' +
+        '<div class="nc-field">' +
+          '<label for="nvClient">Client / payer <span class="req">*</span></label>' +
+          '<select id="nvClient">' + clientOpts + '</select>' +
+          '<div class="nc-field-hint">Who actually pays. Invoices for this venue ride this client\u2019s remittances (e.g. PNC paid by Legends).</div>' +
+        '</div>' +
+        '<div class="nc-field">' +
+          '<label for="nvAddr1">Billing address</label>' +
+          '<input type="text" id="nvAddr1" placeholder="Line 1 · optional" maxlength="200">' +
+        '</div>' +
+        '<div class="nc-field">' +
+          '<input type="text" id="nvAddr2" placeholder="Line 2 · optional" maxlength="200">' +
+        '</div>' +
+        '<div class="nc-field nv-addr-grid">' +
+          '<input type="text" id="nvCity"  placeholder="City"  maxlength="120">' +
+          '<input type="text" id="nvState" placeholder="State" maxlength="40">' +
+          '<input type="text" id="nvZip"   placeholder="ZIP"   maxlength="20">' +
+        '</div>' +
+        '<div class="nc-actions">' +
+          '<button type="button" class="ar-btn ar-btn-secondary" id="nvCancel">Cancel</button>' +
+          '<button type="button" class="ar-btn ar-btn-primary"   id="nvSave">Add venue</button>' +
+        '</div>' +
+      '</div>';
+
+    card.appendChild(overlay);
+
+    var codeInput = document.getElementById('nvCode');
+    if (codeInput) codeInput.focus();
+
+    var cancelBtn = document.getElementById('nvCancel');
+    var saveBtn   = document.getElementById('nvSave');
+    if (cancelBtn) cancelBtn.addEventListener('click', closeNewVenueModal);
+    if (saveBtn)   saveBtn.addEventListener('click', handleSaveNewVenue);
+
+    // Enter in a text field = save; Esc = cancel. (Select fields excluded
+    // so Enter doesn't fire while choosing the payer.)
+    overlay.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape') {
+        ev.stopPropagation();
+        closeNewVenueModal();
+      } else if (ev.key === 'Enter' && ev.target.tagName === 'INPUT') {
+        ev.preventDefault();
+        handleSaveNewVenue();
+      }
+    });
+  }
+
+  function closeNewVenueModal() {
+    var overlay = document.getElementById('arfNewVenueOverlay');
+    if (overlay && overlay.parentNode) {
+      overlay.parentNode.removeChild(overlay);
+    }
+  }
+
+  function handleSaveNewVenue() {
+    if (nvSubmitting) return;
+    var codeEl  = document.getElementById('nvCode');
+    var nameEl  = document.getElementById('nvFullName');
+    var clientEl= document.getElementById('nvClient');
+    var a1El    = document.getElementById('nvAddr1');
+    var a2El    = document.getElementById('nvAddr2');
+    var cityEl  = document.getElementById('nvCity');
+    var stateEl = document.getElementById('nvState');
+    var zipEl   = document.getElementById('nvZip');
+    var saveBtn = document.getElementById('nvSave');
+
+    var code = (codeEl && codeEl.value || '').trim().toUpperCase();
+    var name = (nameEl && nameEl.value || '').trim();
+    var clientId = clientEl && clientEl.value || '';
+
+    // --- required-field validation ---
+    if (!code) {
+      if (codeEl) codeEl.classList.add('is-error');
+      showToast('Venue code is required', 2000);
+      if (codeEl) codeEl.focus();
+      return;
+    }
+    if (/\s/.test(code)) {
+      if (codeEl) codeEl.classList.add('is-error');
+      showToast('Venue code can\u2019t contain spaces', 2400);
+      if (codeEl) codeEl.focus();
+      return;
+    }
+    if (!name) {
+      if (nameEl) nameEl.classList.add('is-error');
+      showToast('Full name is required', 2000);
+      if (nameEl) nameEl.focus();
+      return;
+    }
+    if (!clientId) {
+      if (clientEl) clientEl.classList.add('is-error');
+      showToast('Pick the client who pays', 2200);
+      if (clientEl) clientEl.focus();
+      return;
+    }
+
+    // --- code uniqueness across BOTH tables (operational + billing) ---
+    var codeUpper = code.toUpperCase();
+    var clashOperational = state.venues.some(function (v) {
+      return (v.code || '').toUpperCase() === codeUpper;
+    });
+    var clashBilling = state.arVenues.some(function (v) {
+      return (v.code || '').toUpperCase() === codeUpper;
+    });
+    if (clashOperational || clashBilling) {
+      if (codeEl) codeEl.classList.add('is-error');
+      showToast('That venue code already exists' +
+        (clashOperational ? ' (operational venue)' : ' (billing venue)'), 3000);
+      if (codeEl) codeEl.focus();
+      return;
+    }
+
+    var actor = '';
+    try {
+      if (typeof pcAuth !== 'undefined' && pcAuth.getUser) {
+        var u = pcAuth.getUser();
+        actor = (u && u.display_name) || (u && u.email) || 'unknown';
+      }
+    } catch (e) { actor = 'unknown'; }
+
+    var payload = {
+      code:                  code,
+      full_name:             name,
+      default_client_id:     clientId,
+      billing_address_line1: (a1El   && a1El.value   || '').trim() || null,
+      billing_address_line2: (a2El   && a2El.value   || '').trim() || null,
+      billing_city:          (cityEl && cityEl.value || '').trim() || null,
+      billing_state:         (stateEl&& stateEl.value|| '').trim() || null,
+      billing_zip:           (zipEl  && zipEl.value  || '').trim() || null,
+      is_active:             true,
+      created_by:            actor
+    };
+
+    var hdrs = Object.assign({}, pcAuth.headers(), {
+      'Content-Type': 'application/json',
+      'Prefer':       'return=representation'
+    });
+
+    nvSubmitting = true;
+    if (saveBtn) {
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving…';
+    }
+
+    AR.authFetch(SB_REST + 'ar_venues', {
+      method:  'POST',
+      headers: hdrs,
+      body:    JSON.stringify(payload)
+    })
+    .then(function (rows) {
+      var inserted = (rows && rows[0]) || null;
+      if (!inserted || !inserted.id) {
+        throw new Error('Venue insert returned no row');
+      }
+      // Add to in-memory billing-venue list, re-sorted by code so the
+      // dropdown order matches a fresh page load.
+      state.arVenues.push({
+        code:              inserted.code,
+        full_name:         inserted.full_name,
+        is_active:         inserted.is_active !== false,
+        default_client_id: inserted.default_client_id || ''
+      });
+      state.arVenues.sort(function (a, b) {
+        return (a.code || '').localeCompare((b.code || ''));
+      });
+
+      // Set form selection to the new venue and adopt its payer as the
+      // default client, mirroring the venue-change handler's behavior.
+      formState.venue_code = inserted.code;
+      formState._default_client_id = inserted.default_client_id || '';
+      formState.client_id = inserted.default_client_id || '';
+      // New venue = different stand/event lists; reset those.
+      formState.stand_id = '';
+      formState.event_id = '';
+      formState.event_text = '';
+
+      // Rebuild the venue dropdown (now including the new ar_venues row),
+      // then sync the selection + dependent dropdowns.
+      populateModalStatics();
+      var vSel = document.getElementById('arfVenue');
+      if (vSel) vSel.value = inserted.code;
+      refreshClientDropdown();
+      refreshStandDropdown();
+
+      var evtInput = document.getElementById('arfEvent');
+      if (evtInput) evtInput.value = '';
+      var ehint = document.getElementById('arfEventHint');
+      if (ehint) ehint.textContent = 'No event linked';
+
+      // Load events for the new venue (likely none, but keep behavior
+      // consistent with the normal venue-change path).
+      if (formState.venue_code) {
+        fetchEventsForVenue(formState.venue_code)
+          .then(refreshEventDatalist)
+          .catch(function (e) {
+            if (e && e.authFailed) { handleAuthFailure(); return; }
+            console.error('[AR] fetchEventsForVenue (new venue) failed:', e);
+          });
+      }
+
+      // Re-evaluate the venue-required toggle for the adopted client.
+      applyVenueRequirementForCurrentClient();
+
+      closeNewVenueModal();
+      showToast('Added venue ' + inserted.code, 2200);
+    })
+    .catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      console.error('[AR] new venue save failed:', e);
+      var msg = (e && e.message) ? e.message : 'Could not save venue';
+      if (msg.length > 140) msg = msg.substring(0, 140) + '…';
+      showToast('Save failed · ' + msg, 4000);
+    })
+    .then(function () {
+      nvSubmitting = false;
+      var btn = document.getElementById('nvSave');
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Add venue';
+      }
+    });
+  }
+
+  // =====================================================================
   // VENUE REQUIREMENT — derived from the picked client
   //
   // A client is "venue-required" if at least one row in `state.venues` has
@@ -4452,6 +4771,11 @@
     if (!clientId) return true;   // no client picked yet → don't relax the rule
     for (var i = 0; i < state.venues.length; i++) {
       if (state.venues[i].default_client_id === clientId) return true;
+    }
+    // Also key off billing-only venues: a client that is ONLY the payer for
+    // an ar_venues row (e.g. a wholesale-only DBA) still requires a venue.
+    for (var j = 0; j < state.arVenues.length; j++) {
+      if (state.arVenues[j].default_client_id === clientId) return true;
     }
     return false;
   }
@@ -4846,10 +5170,11 @@
     // Initial load: clients + venues for filter dropdowns, then the
     // first invoice fetch with the default filter (open+partial, 12mo).
     setLoading(true);
-    Promise.all([fetchClients(), fetchVenues()])
+    Promise.all([fetchClients(), fetchVenues(), fetchArVenues()])
       .then(function (results) {
-        state.clients = results[0] || [];
-        state.venues  = results[1] || [];
+        state.clients  = results[0] || [];
+        state.venues   = results[1] || [];
+        state.arVenues = results[2] || [];
         renderFilterDropdowns();
         return reloadInvoices();
       })
