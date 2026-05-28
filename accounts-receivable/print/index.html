@@ -218,6 +218,22 @@
     min-width: 130px; background: #fff;
   }
 
+  /* Invoice notes block — bottom-left, below the total. */
+  .inv-notes {
+    margin-top: 28px;
+    font-size: 10pt;
+    max-width: 4.5in;
+  }
+  .inv-notes .inv-notes-label {
+    font-weight: 700;
+    font-size: 9pt;
+    margin-bottom: 3px;
+  }
+  .inv-notes .inv-notes-body {
+    white-space: pre-wrap;
+    line-height: 1.4;
+  }
+
   /* Loading and error states */
   .state-msg {
     padding: 80px 20px; text-align: center; color: #888;
@@ -389,7 +405,7 @@
   function fetchInvoiceFull(invoiceId) {
     var selectClause = 'select=' + [
       'id', 'internal_invoice_number', 'client_reference', 'client_id',
-      'venue_code', 'period_start', 'net_amount_due', 'status', 'notes',
+      'venue_code', 'period_start', 'net_amount_due', 'status', 'notes', 'invoice_notes',
       'ar_invoice_lines(id,item_id,description,amount,quantity,unit_price,sort_order,ar_items(name))',
       'ar_clients(id,name)',
       'venues(code,full_name,billing_address_line1,billing_address_line2,billing_city,billing_state,billing_zip)'
@@ -451,6 +467,7 @@
     var invoiceNum  = invoice.internal_invoice_number || '';
     var clientRef   = invoice.client_reference || '';
     var totalAmount = Number(invoice.net_amount_due || 0);
+    var notesText   = invoice.invoice_notes || '';
 
     // Display the suffix after the dash (e.g. "3041" from "260519-3041").
     var displayInvoiceNum = invoiceNum;
@@ -537,6 +554,14 @@
           '<td class="total-value">' + esc(fmtMoney(totalAmount)) + '</td>' +
         '</tr>' +
       '</table>' +
+
+      // Invoice notes — client-facing, only rendered when present.
+      (notesText
+        ? '<div class="inv-notes">' +
+            '<div class="inv-notes-label">Notes</div>' +
+            '<div class="inv-notes-body">' + esc(notesText) + '</div>' +
+          '</div>'
+        : '') +
 
     '</div>';
 
