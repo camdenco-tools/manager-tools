@@ -256,6 +256,32 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
   .capture-row { flex-direction: column; }
   .capture-btn { padding: 11px 10px; }
 }
+
+/* ============================================================
+ * EVENT NOTES CARD — added May 29, 2026
+ * ------------------------------------------------------------
+ * Scoped to event (date+venue), NOT per-stand. Writes to
+ * events.manager_notes. First save triggers fetch-event-weather
+ * edge function to populate weather columns.
+ * ============================================================ */
+.notes-card { display: none; }
+.notes-card.active { display: block; }
+.notes-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 10px; flex-wrap: wrap; }
+.notes-title { font-size: 10px; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 0.08em; }
+.weather-chip { font-size: 12px; font-weight: 600; color: #444; background: #f5f5f5; border: 1px solid #e0e0e0; border-radius: 20px; padding: 4px 11px; display: inline-flex; align-items: center; gap: 6px; }
+.weather-chip-icon { font-size: 13px; line-height: 1; }
+.weather-chip.loading { color: #888; font-style: italic; }
+.weather-chip.error { color: #A32D2D; background: #FCEBEB; border-color: #F09595; }
+.weather-refresh { font-size: 11px; color: #185FA5; cursor: pointer; padding: 2px 7px; border-radius: 6px; user-select: none; background: none; border: none; font-family: inherit; }
+.weather-refresh:hover { background: #E6F1FB; }
+.notes-textarea { width: 100%; min-height: 90px; padding: 11px 13px; border: 1px solid #e0e0e0; border-radius: 10px; font-size: 14px; color: #1a1a1a; background: #fafafa; font-family: inherit; resize: vertical; line-height: 1.5; transition: border-color 0.15s; }
+.notes-textarea:focus { outline: none; border-color: #1a1a1a; background: white; }
+.notes-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; gap: 10px; flex-wrap: wrap; }
+.notes-last-updated { font-size: 11px; color: #999; }
+.notes-save-btn { padding: 9px 18px; background: #1a1a1a; color: white; border: none; border-radius: 9px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.notes-save-btn:disabled { background: #ccc; cursor: not-allowed; }
+.notes-save-btn.saved { background: #EAF3DE; color: #27500A; border: 1px solid #97C459; }
+.notes-error { color: #c0392b; font-size: 12px; padding: 8px 11px; background: #fdf0ee; border-radius: 8px; margin-top: 8px; display: none; }
 </style>
 </head>
 <body>
@@ -394,6 +420,24 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
         <button class="submit-btn" id="submit-btn" onclick="submitSale()">Submit Sale</button>
       </div>
 
+      <!-- ============================================================
+           EVENT NOTES CARD — added May 29, 2026
+           Notes are scoped to the event (date+venue), not the stand.
+           First save triggers weather fetch via edge function.
+           ============================================================ -->
+      <div class="card notes-card" id="notes-card">
+        <div class="notes-header">
+          <div class="notes-title">Event notes</div>
+          <div id="weather-chip-container"></div>
+        </div>
+        <textarea id="notes-textarea" class="notes-textarea" placeholder="What went well, what didn't, anything to remember for next time. Water ice given to crew, items received from clients, weather impacts, etc."></textarea>
+        <div class="notes-error" id="notes-error"></div>
+        <div class="notes-footer">
+          <div class="notes-last-updated" id="notes-last-updated"></div>
+          <button class="notes-save-btn" id="notes-save-btn" onclick="saveNotes()">Save notes</button>
+        </div>
+      </div>
+
       <div class="success-card" id="success-card">
         <h2>Sale logged!</h2>
         <p id="success-detail"></p>
@@ -477,6 +521,12 @@ var lastSubmittedSaleId = null;
 // that sale row. Submit button is disabled while this is set, and a warning banner
 // surfaces with an "Edit existing" link.
 var existingSaleForStand = null;
+
+// Event notes state — populated when date+venue selected and an event exists.
+// notesEvent holds the events row (id, manager_notes, manager_notes_updated_by/at,
+// weather_*) for the currently selected date+venue. Null when no event matches.
+var notesEvent = null;
+var notesLoadingForKey = null; // "date||venue" key in flight, prevents stale loads
 
 function apiHeaders() { return pcAuth.headers(); }
 
@@ -933,6 +983,7 @@ async function handleDateChange() {
   document.getElementById('stand-sel').innerHTML = '<option value="">Select venue first...</option>';
   eventsOnDate = [];
   clearDupWarning();
+  hideNotesCard();
   if (!date) { document.getElementById('no-event-warning').style.display = 'none'; return; }
   noteEl.textContent = 'Loading events...';
   noteEl.className = 'field-note';
@@ -981,6 +1032,9 @@ function handleVenueChange() {
     }
   }
   clearDupWarning();
+  // Load notes card for new date+venue combination
+  var date = document.getElementById('evt-date').value;
+  loadNotesForEvent(date, venueCode);
 }
 
 async function handleStandChange() {
@@ -1053,6 +1107,199 @@ function clearDupWarning() {
 function openExistingFromDupWarning() {
   if (!existingSaleForStand) return;
   openEditModal(existingSaleForStand.id);
+}
+
+// ============================================================
+// EVENT NOTES — load, save, weather fetch trigger
+// ============================================================
+
+function hideNotesCard() {
+  notesEvent = null;
+  var card = document.getElementById('notes-card');
+  card.classList.remove('active');
+  document.getElementById('notes-textarea').value = '';
+  document.getElementById('notes-last-updated').textContent = '';
+  document.getElementById('weather-chip-container').innerHTML = '';
+  document.getElementById('notes-error').style.display = 'none';
+  var btn = document.getElementById('notes-save-btn');
+  btn.disabled = false;
+  btn.classList.remove('saved');
+  btn.textContent = 'Save notes';
+}
+
+async function loadNotesForEvent(date, venue) {
+  if (!date || !venue) { hideNotesCard(); return; }
+  var key = date + '||' + venue;
+  notesLoadingForKey = key;
+  try {
+    var url = SUPA_URL + '/rest/v1/events?event_date=eq.' + encodeURIComponent(date) +
+              '&venue=eq.' + encodeURIComponent(venue) +
+              '&cancelled_at=is.null' +
+              '&select=id,manager_notes,manager_notes_updated_by,manager_notes_updated_at,' +
+              'weather_high_f,weather_low_f,weather_conditions,weather_fetched_at&limit=1';
+    var res = await fetch(url, { headers: apiHeaders() });
+    var rows = await res.json();
+    // Bail if user changed date/venue while this was in flight
+    if (notesLoadingForKey !== key) return;
+    if (!Array.isArray(rows) || !rows.length) {
+      hideNotesCard();
+      return;
+    }
+    notesEvent = rows[0];
+    showNotesCard();
+  } catch(e) {
+    hideNotesCard();
+  }
+}
+
+function showNotesCard() {
+  if (!notesEvent) return;
+  document.getElementById('notes-card').classList.add('active');
+  document.getElementById('notes-textarea').value = notesEvent.manager_notes || '';
+  document.getElementById('notes-error').style.display = 'none';
+  var btn = document.getElementById('notes-save-btn');
+  btn.disabled = false;
+  btn.classList.remove('saved');
+  btn.textContent = 'Save notes';
+  renderLastUpdated();
+  renderWeatherChip();
+}
+
+function renderLastUpdated() {
+  var el = document.getElementById('notes-last-updated');
+  if (!notesEvent || !notesEvent.manager_notes_updated_at) {
+    el.textContent = '';
+    return;
+  }
+  var who = notesEvent.manager_notes_updated_by || 'someone';
+  var when = new Date(notesEvent.manager_notes_updated_at);
+  var whenStr = when.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  el.textContent = 'Last updated by ' + who + ' \u00b7 ' + whenStr;
+}
+
+function renderWeatherChip() {
+  var container = document.getElementById('weather-chip-container');
+  container.innerHTML = '';
+  if (!notesEvent) return;
+  if (notesEvent.weather_fetched_at && notesEvent.weather_conditions) {
+    var high = notesEvent.weather_high_f != null ? notesEvent.weather_high_f + '\u00b0F' : '';
+    var low = notesEvent.weather_low_f != null ? notesEvent.weather_low_f + '\u00b0F' : '';
+    var range = high && low ? (high + ' / ' + low) : (high || low);
+    var icon = weatherIconFor(notesEvent.weather_conditions);
+    var chip = document.createElement('span');
+    chip.className = 'weather-chip';
+    chip.innerHTML = '<span class="weather-chip-icon">' + icon + '</span>' + range + ' \u00b7 ' + notesEvent.weather_conditions;
+    container.appendChild(chip);
+    var refresh = document.createElement('button');
+    refresh.className = 'weather-refresh';
+    refresh.textContent = '\u21bb refresh';
+    refresh.onclick = function() { fetchWeather(true); };
+    container.appendChild(refresh);
+  }
+}
+
+function weatherIconFor(cond) {
+  if (!cond) return '\u2601\ufe0f';
+  var c = cond.toLowerCase();
+  if (c.indexOf('clear') !== -1) return '\u2600\ufe0f';        // ☀️
+  if (c.indexOf('mostly clear') !== -1) return '\u26c5';        // ⛅
+  if (c.indexOf('cloudy') !== -1) return '\u2601\ufe0f';        // ☁️
+  if (c.indexOf('fog') !== -1) return '\ud83c\udf2b\ufe0f';     // 🌫️
+  if (c.indexOf('drizzle') !== -1) return '\ud83c\udf26\ufe0f'; // 🌦️
+  if (c.indexOf('rain') !== -1) return '\ud83c\udf27\ufe0f';    // 🌧️
+  if (c.indexOf('snow') !== -1) return '\ud83c\udf28\ufe0f';    // 🌨️
+  if (c.indexOf('thunder') !== -1) return '\u26c8\ufe0f';       // ⛈️
+  return '\u2601\ufe0f';
+}
+
+async function saveNotes() {
+  if (!notesEvent) return;
+  var textareaEl = document.getElementById('notes-textarea');
+  var btn = document.getElementById('notes-save-btn');
+  var errEl = document.getElementById('notes-error');
+  errEl.style.display = 'none';
+
+  var newText = textareaEl.value.trim();
+  var nowIso = new Date().toISOString();
+  var who = pcAuth.getUser() ? pcAuth.getUser().display_name : null;
+
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+
+  try {
+    var hdrs = apiHeaders();
+    hdrs['Content-Type'] = 'application/json';
+    hdrs['Prefer'] = 'return=minimal';
+    var res = await fetch(SUPA_URL + '/rest/v1/events?id=eq.' + notesEvent.id, {
+      method: 'PATCH',
+      headers: hdrs,
+      body: JSON.stringify({
+        manager_notes: newText || null,
+        manager_notes_updated_by: who,
+        manager_notes_updated_at: nowIso
+      })
+    });
+    if (!res.ok) throw new Error(await res.text());
+
+    // Update local copy so UI reflects the save without a re-fetch
+    notesEvent.manager_notes = newText || null;
+    notesEvent.manager_notes_updated_by = who;
+    notesEvent.manager_notes_updated_at = nowIso;
+    renderLastUpdated();
+
+    // Visual confirmation
+    btn.classList.add('saved');
+    btn.textContent = '\u2713 Saved';
+    setTimeout(function() {
+      btn.classList.remove('saved');
+      btn.textContent = 'Save notes';
+      btn.disabled = false;
+    }, 1800);
+
+    // Trigger weather fetch in background if never fetched for this event
+    if (!notesEvent.weather_fetched_at) {
+      fetchWeather(false);
+    }
+  } catch(e) {
+    errEl.textContent = 'Could not save notes: ' + (e.message || String(e));
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Save notes';
+  }
+}
+
+async function fetchWeather(isManualRefresh) {
+  if (!notesEvent) return;
+  var container = document.getElementById('weather-chip-container');
+  container.innerHTML = '<span class="weather-chip loading"><span class="spinner"></span>Reading weather...</span>';
+  try {
+    var hdrs = pcAuth.headers();
+    hdrs['Content-Type'] = 'application/json';
+    var res = await fetch(SUPA_URL + '/functions/v1/fetch-event-weather', {
+      method: 'POST',
+      headers: hdrs,
+      body: JSON.stringify({ event_id: notesEvent.id })
+    });
+    var data = await res.json();
+    if (!res.ok || data.error) {
+      container.innerHTML = '<span class="weather-chip error">Could not read weather</span>';
+      if (isManualRefresh) {
+        setTimeout(function() { renderWeatherChip(); }, 2500);
+      }
+      return;
+    }
+    // Patch local copy with returned values
+    notesEvent.weather_high_f = data.weather_high_f;
+    notesEvent.weather_low_f = data.weather_low_f;
+    notesEvent.weather_conditions = data.weather_conditions;
+    notesEvent.weather_fetched_at = data.weather_fetched_at;
+    renderWeatherChip();
+  } catch(e) {
+    container.innerHTML = '<span class="weather-chip error">Could not read weather</span>';
+    if (isManualRefresh) {
+      setTimeout(function() { renderWeatherChip(); }, 2500);
+    }
+  }
 }
 
 function siPillHtml(saleId, hasSigning) {
