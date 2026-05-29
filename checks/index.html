@@ -95,6 +95,15 @@
   }
   .from-report-banner[hidden] { display: none; }
   .from-report-banner strong { font-weight: 600; }
+  .from-report-banner .clear-link {
+    background: transparent; border: 0;
+    color: #0C447C; cursor: pointer;
+    font-family: inherit; font-size: 12px;
+    padding: 0; text-decoration: underline; text-underline-offset: 3px;
+    margin-left: 6px;
+  }
+  .from-report-banner .clear-link:hover { color: #053461; }
+
   .btn-primary {
     background: #1a1a1a; color: #fff; border: 0;
     font-family: inherit; font-size: 13px; font-weight: 500;
@@ -116,6 +125,46 @@
   .form-actions .spacer { flex: 1; }
   .submit-reason { font-size: 11px; color: #888; font-style: italic; margin-right: 4px; }
   .submit-reason[hidden] { display: none; }
+
+  /* ============ POST-PRINT BANNER ============ */
+  .post-print-banner {
+    background: #eaf3de; border: 1px solid #c5dba1;
+    border-radius: 8px; padding: 12px 14px; margin-bottom: 16px;
+    font-size: 13px; color: #173404; line-height: 1.5;
+  }
+  .post-print-banner[hidden] { display: none; }
+  .post-print-banner .pp-head {
+    font-weight: 600; margin-bottom: 8px;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px;
+  }
+  .post-print-banner .pp-actions {
+    display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px;
+  }
+  .post-print-banner .pp-actions button {
+    font-family: inherit; font-size: 12px; font-weight: 500;
+    padding: 6px 12px; border-radius: 5px; cursor: pointer;
+    border: 1px solid #c5dba1; background: #fff; color: #1a1a1a;
+  }
+  .post-print-banner .pp-actions button:hover { background: #f1f0eb; }
+  .post-print-banner .pp-actions button.is-primary {
+    background: #27500A; color: #fff; border-color: #27500A;
+  }
+  .post-print-banner .pp-actions button.is-primary:hover { background: #173404; }
+  .post-print-banner.is-editing {
+    background: #fef6ec; border-color: #f3d9a8; color: #633806;
+  }
+  .post-print-banner.is-editing .pp-actions button { border-color: #f3d9a8; }
+  .post-print-banner .pp-edit-row {
+    display: flex; align-items: center; gap: 8px; margin-top: 10px;
+    flex-wrap: wrap;
+  }
+  .post-print-banner .pp-edit-row input {
+    font-family: inherit; font-size: 13px; padding: 6px 9px;
+    border: 1px solid #e0dfd8; border-radius: 5px; background: #fff;
+    color: #1a1a1a; width: 120px;
+  }
+  .post-print-banner .pp-edit-row input:focus { outline: none; border-color: #1a1a1a; }
 
   .preview-wrap { position: sticky; top: 150px; }
   .preview-toolbar {
@@ -225,6 +274,37 @@
   }
   .payee-row .pr-del:hover { color: #791F1F; }
 
+  /* ============ RECENT CHECKS LIST ============ */
+  .recent-empty { font-size: 12px; color: #888; padding: 8px 0; }
+  .recent-row {
+    display: grid; grid-template-columns: 64px 1fr auto;
+    gap: 10px; align-items: center;
+    padding: 8px 0; border-bottom: 1px solid #f0efe8;
+    font-size: 12.5px;
+  }
+  .recent-row:last-child { border-bottom: 0; }
+  .recent-num { font-weight: 600; color: #1a1a1a; font-variant-numeric: tabular-nums; }
+  .recent-mid { min-width: 0; }
+  .recent-payee {
+    font-weight: 500; color: #1a1a1a;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .recent-meta { font-size: 11px; color: #888; }
+  .recent-amount {
+    font-weight: 600; font-variant-numeric: tabular-nums;
+    color: #1a1a1a; text-align: right;
+  }
+  .recent-row.is-voided .recent-num,
+  .recent-row.is-voided .recent-payee,
+  .recent-row.is-voided .recent-amount {
+    text-decoration: line-through;
+    color: #999;
+  }
+  .recent-row.is-voided .recent-meta {
+    color: #b85a5a;
+    font-style: italic;
+  }
+
   .pc-toast-host {
     position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
     z-index: 2000; pointer-events: none;
@@ -276,6 +356,9 @@
     <div class="form-col">
       <div class="from-report-banner" id="fromReportBanner" hidden></div>
 
+      <!-- Post-print banner (Reprint / Edit number / All good) -->
+      <div class="post-print-banner" id="postPrintBanner" hidden></div>
+
       <div class="card">
         <div class="card-head">
           <div>
@@ -284,6 +367,15 @@
           </div>
         </div>
         <div class="card-body">
+
+          <!-- Report-loader dropdown (admin-only, hidden when loaded via URL) -->
+          <div class="field" id="reportLoaderField" hidden>
+            <label for="reportLoaderSelect">Load from approved expense report <span class="opt">— optional</span></label>
+            <select id="reportLoaderSelect">
+              <option value="">— None / writing a standalone check —</option>
+            </select>
+            <div class="field-hint" id="reportLoaderHint">Picks an approved-but-unpaid report and pre-fills payee, address, amount. Printing auto-marks it paid.</div>
+          </div>
 
           <div class="field" id="savedPayeeField">
             <label for="savedPayeeSelect">Saved payee <span class="opt">— pick to auto-fill</span></label>
@@ -359,6 +451,20 @@
           <div class="payee-manage-empty">Loading…</div>
         </div>
       </div>
+
+      <!-- Recent checks list -->
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <h2 class="card-title">Recent checks</h2>
+            <div class="card-subtitle">Last 10 from the register · voided checks shown struck through</div>
+          </div>
+        </div>
+        <div class="card-body" id="recentChecksBody">
+          <div class="recent-empty">Loading…</div>
+        </div>
+      </div>
+
     </div>
 
     <div class="preview-wrap">
@@ -431,12 +537,6 @@
 
   // ---------------------------------------------------------------------
   // FIELD POSITIONS — inches from top-left of the 8.5x11 sheet.
-  //   • Check       — top third       0.0 to ~3.67in
-  //   • Stub 1      — middle third    ~3.67 to ~7.33in  (faces envelope window)
-  //   • Stub 2      — bottom third    ~7.33 to ~11.0in
-  //
-  // Window-mailing block prints in Stub 1 since Stub 1 is what faces out
-  // through the envelope window after a standard business tri-fold.
   // ---------------------------------------------------------------------
   var DEFAULT_POS = {
     // CHECK (top third) — calibrated against Checkomatic Wells Fargo voucher stock
@@ -463,7 +563,7 @@
     stub2Memo:   { top: 8.35, left: 4.20, width: 4.0, align: 'left' }
   };
 
-  var POS_KEY = 'pc_check_pos_v3';  // bumped after baking in calibrated defaults
+  var POS_KEY = 'pc_check_pos_v3';
   var POS = loadPos();
 
   function loadPos() {
@@ -487,11 +587,65 @@
   function clonePos(p) { return JSON.parse(JSON.stringify(p)); }
   function num(v, fallback) { var n = parseFloat(v); return isFinite(n) ? n : fallback; }
 
+  // =====================================================================
+  // STATE
+  // =====================================================================
   var state = {
     isAdmin: false, currentUser: null,
     categories: [], payees: [],
-    fromReport: null, mode: 'standalone'
+    approvedReports: [],   // dropdown options (admin only)
+    recentChecks: [],      // recent checks list
+
+    fromReport: null,      // the expense_reports row when loaded via dropdown or ?id=
+    mode: 'standalone',    // 'standalone' | 'report'
+
+    // Post-print state — set when a print has just succeeded so the
+    // Reprint / Edit-number / All-good banner can act on the right rows.
+    lastPrint: null
+    // lastPrint shape: {
+    //   registerId: bigint,        // check_register.id of the just-inserted row
+    //   checkNumber: '2704',       // the number we logged
+    //   amount, payee, addr, dateV, memo, catId, reportId, payeeRowId
+    //   expenseFanoutIds: [uuid, ...]  // expenses table rows created (report-fanout only)
+    //   standaloneExpenseId: uuid | null   // single expense row for standalone with category
+    //   isReprint: false           // true if this print itself was a reprint
+    // }
   };
+
+  // =====================================================================
+  // UTILITIES
+  // =====================================================================
+  /**
+   * Normalize a US mailing address into "street\ncity, state ZIP" format.
+   * Idempotent. Returns the input unchanged if it already has newlines or
+   * if we can't find a trailing "STATE ZIP" pattern to anchor on.
+   */
+  function normalizeAddress(raw) {
+    if (!raw) return raw;
+    var s = String(raw).trim();
+    if (!s) return s;
+    if (s.indexOf('\n') !== -1) return s;
+    s = s.replace(/\s+/g, ' ');
+    var stateZip = /\s([A-Za-z]{2})\s+(\d{5}(?:-\d{4})?)\s*$/;
+    var m = s.match(stateZip);
+    if (!m) return raw;
+    var stateUpper = m[1].toUpperCase();
+    var zip = m[2];
+    var beforeStateZip = s.substring(0, m.index).trim().replace(/,\s*$/, '');
+    var lastComma = beforeStateZip.lastIndexOf(',');
+    var street, city;
+    if (lastComma !== -1) {
+      street = beforeStateZip.substring(0, lastComma).trim();
+      city = beforeStateZip.substring(lastComma + 1).trim();
+    } else {
+      var idx = beforeStateZip.lastIndexOf(' ');
+      if (idx === -1) return raw;
+      street = beforeStateZip.substring(0, idx).trim();
+      city = beforeStateZip.substring(idx + 1).trim();
+    }
+    if (!street || !city) return raw;
+    return street + '\n' + city + ', ' + stateUpper + ' ' + zip;
+  }
 
   function pad2(n) { n = String(n); return n.length < 2 ? '0' + n : n; }
   function todayIso() {
@@ -610,7 +764,16 @@
       });
     });
   }
+  function actorName() {
+    try {
+      var u = pcAuth.getUser();
+      return (u && u.display_name) || (u && u.email) || 'unknown';
+    } catch (e) { return 'unknown'; }
+  }
 
+  // =====================================================================
+  // FETCHES
+  // =====================================================================
   function fetchCategories() {
     return authFetch(
       SB_REST + 'expense_categories?select=id,name,gl_group,sort_order,is_active' +
@@ -632,6 +795,37 @@
       { headers: pcAuth.headers() }
     );
   }
+  /**
+   * Fetch approved-but-unpaid reports (status='approved') for the dropdown.
+   * RLS only allows admins to see these — non-admins will get an empty list,
+   * which is why we also gate UI visibility by isAdmin.
+   */
+  function fetchApprovedReports() {
+    var sel = 'select=id,submitter_name,total_amount,line_count,period_start,period_end,approved_at';
+    return authFetch(
+      SB_REST + 'expense_reports?' + sel +
+      '&status=eq.approved' +
+      '&order=approved_at.asc.nullslast,created_at.asc' +
+      '&limit=100',
+      { headers: pcAuth.headers() }
+    );
+  }
+  /**
+   * For the auto Mark-paid fan-out — pull the full line list for a report.
+   */
+  function fetchReportLinesForFanout(reportId) {
+    var sel = 'select=' + [
+      'id','line_no','line_date','description','amount',
+      'miles','miles_from','miles_to','mileage_rate',
+      'venue','allocation_group_id','category_id',
+      'expense_categories(id,name)'
+    ].join(',');
+    return authFetch(
+      SB_REST + 'expense_report_lines?report_id=eq.' + encodeURIComponent(reportId) +
+      '&' + sel + '&order=line_no.asc',
+      { headers: pcAuth.headers() }
+    );
+  }
   function fetchDupCheck(checkNum) {
     if (!checkNum) return Promise.resolve([]);
     return authFetch(
@@ -641,11 +835,25 @@
       { headers: pcAuth.headers() }
     );
   }
+  /**
+   * Recent checks list (last 10 by check_date desc). Includes voided so
+   * we can render them struck through.
+   */
+  function fetchRecentChecks() {
+    return authFetch(
+      SB_REST + 'check_register?select=id,check_number,check_date,payee_name,amount,memo,voided,void_reason,source' +
+      '&order=created_at.desc&limit=10',
+      { headers: pcAuth.headers() }
+    );
+  }
   function getReportIdFromUrl() {
     var m = (window.location.search || '').match(/[?&]id=([^&]+)/);
     return m ? decodeURIComponent(m[1]) : null;
   }
 
+  // =====================================================================
+  // RENDER — preview
+  // =====================================================================
   function applyPositions() {
     Object.keys(POS).forEach(function (key) {
       var elId = 'ck' + key.charAt(0).toUpperCase() + key.slice(1);
@@ -671,7 +879,6 @@
     var dateLong  = dateV ? fmtDateLong(dateV)  : '';
     var dateShort = dateV ? fmtDateShort(dateV) : '';
 
-    // CHECK
     setVal('ckDate', dateLong);
     setVal('ckPayee', payee);
     setVal('ckAmountBox', hasAmt ? '**' + amtStr.replace('$','') : '');
@@ -686,7 +893,6 @@
       }
     }
 
-    // ENVELOPE WINDOW — name above address, only when address is filled
     if (addr) {
       setVal('ckWindowName', payee);
       setVal('ckWindowAddress', addr);
@@ -695,13 +901,11 @@
       setVal('ckWindowAddress', '');
     }
 
-    // STUB 1 — full record
     setVal('ckStub1Date',   dateShort ? 'Date: ' + dateShort : '');
     setVal('ckStub1Payee',  payee     ? 'Pay to: ' + payee   : '');
     setVal('ckStub1Amount', hasAmt    ? 'Amount: ' + amtStr  : '');
     setVal('ckStub1Memo',   memo      ? 'Memo: ' + memo      : '');
 
-    // STUB 2 — summary
     setVal('ckStub2Date',   dateShort);
     setVal('ckStub2Payee',  payee);
     setVal('ckStub2Amount', amtStr);
@@ -713,6 +917,9 @@
   }
   function repeatChar(c, n) { var s = ''; for (var i=0;i<n;i++) s += c; return s; }
 
+  // =====================================================================
+  // CATEGORY + PAYEE SELECTS
+  // =====================================================================
   function populateCategorySelect() {
     var sel = document.getElementById('fldCategory');
     if (!sel) return;
@@ -788,6 +995,52 @@
     }
   }
 
+  // =====================================================================
+  // REPORT LOADER DROPDOWN
+  // =====================================================================
+  function populateReportLoaderSelect() {
+    var sel = document.getElementById('reportLoaderSelect');
+    if (!sel) return;
+    if (!state.approvedReports.length) {
+      sel.innerHTML = '<option value="">— No approved reports awaiting payment —</option>';
+      sel.disabled = true;
+      return;
+    }
+    sel.disabled = false;
+    sel.innerHTML = '<option value="">— None / writing a standalone check —</option>' +
+      state.approvedReports.map(function (r) {
+        var amt = fmtMoney(Number(r.total_amount || 0));
+        var lines = (r.line_count || 0) + ' line' + (r.line_count === 1 ? '' : 's');
+        var who = r.submitter_name || '(unknown)';
+        var label = who + ' · ' + amt + ' · ' + lines;
+        return '<option value="' + esc(r.id) + '">' + esc(label) + '</option>';
+      }).join('');
+  }
+  function onReportLoaderPick() {
+    var sel = document.getElementById('reportLoaderSelect');
+    if (!sel) return;
+    var id = sel.value;
+    if (!id) {
+      // User reverted to standalone mode mid-stream
+      exitReportMode();
+      return;
+    }
+    loadFromReport(id);
+  }
+  function refreshApprovedReports() {
+    if (!state.isAdmin) return Promise.resolve();
+    return fetchApprovedReports().then(function (rows) {
+      state.approvedReports = rows || [];
+      populateReportLoaderSelect();
+    }).catch(function (e) {
+      if (e && e.authFailed) handleAuthFailure();
+      else console.error('[checks] fetchApprovedReports failed:', e);
+    });
+  }
+
+  // =====================================================================
+  // DUPLICATE CHECK-NUMBER WARNING
+  // =====================================================================
   var dupTimer = null;
   function onCheckNumInput() {
     var warn = document.getElementById('dupCheckWarn');
@@ -812,6 +1065,9 @@
     }, 450);
   }
 
+  // =====================================================================
+  // PRINT GATE
+  // =====================================================================
   function printGate() {
     var payee = document.getElementById('fldPayee').value.trim();
     var amt   = parseAmount(document.getElementById('fldAmount').value);
@@ -834,10 +1090,14 @@
     if (reasonEl) { reasonEl.hidden = g.ok; reasonEl.textContent = g.ok ? '' : g.reason; }
   }
 
+  // =====================================================================
+  // PRINT + LOG + (report mode: AUTO MARK-PAID + EXPENSE FAN-OUT)
+  // =====================================================================
   function handlePrint() {
     if (pcSubmitting) return;
     var g = printGate();
     if (!g.ok) { showToast(g.reason, 2200); return; }
+
     var payee = document.getElementById('fldPayee').value.trim();
     var addr  = document.getElementById('fldAddress').value.trim();
     var amt   = parseAmount(document.getElementById('fldAmount').value);
@@ -852,10 +1112,24 @@
     var btn = document.getElementById('btnPrint');
     if (btn) { btn.disabled = true; btn.textContent = 'Logging…'; }
     var actor = actorName();
-    var minimalHdrs = Object.assign({}, pcAuth.headers(), { 'Content-Type': 'application/json', 'Prefer': 'return=minimal' });
+    var minimalHdrs   = Object.assign({}, pcAuth.headers(), { 'Content-Type': 'application/json', 'Prefer': 'return=minimal' });
     var representHdrs = Object.assign({}, pcAuth.headers(), { 'Content-Type': 'application/json', 'Prefer': 'return=representation' });
 
-    var expenseStep;
+    // We'll collect everything we need for the post-print state machine.
+    var ctx = {
+      registerId: null,
+      checkNumber: ckNum,
+      amount: amt, payee: payee, addr: addr, dateV: dateV,
+      memo: memo, catId: catId,
+      reportId: state.mode === 'report' && state.fromReport ? state.fromReport.id : null,
+      payeeRowId: parseInt(document.getElementById('savedPayeeSelect').value, 10) || null,
+      expenseFanoutIds: [],
+      standaloneExpenseId: null,
+      isReprint: false
+    };
+
+    // --- STEP 1: STANDALONE expense row (if category picked) ---
+    var standaloneExpenseStep;
     if (state.mode === 'standalone' && catId) {
       var expenseRow = {
         charge_date: dateV,
@@ -868,44 +1142,93 @@
         expense_report_id: null,
         expense_report_line_id: null
       };
-      expenseStep = authFetch(SB_REST + 'expenses', {
+      standaloneExpenseStep = authFetch(SB_REST + 'expenses', {
         method: 'POST', headers: representHdrs, body: JSON.stringify(expenseRow)
-      }).then(function (rows) { return (rows && rows[0]) ? rows[0].id : null; });
+      }).then(function (rows) {
+        var id = (rows && rows[0]) ? rows[0].id : null;
+        ctx.standaloneExpenseId = id;
+        return id;
+      });
     } else {
-      expenseStep = Promise.resolve(null);
+      standaloneExpenseStep = Promise.resolve(null);
     }
-    var savedExpenseId = null;
 
-    expenseStep
-      .then(function (expenseId) {
-        savedExpenseId = expenseId;
-        var regRow = {
-          check_number: ckNum, check_date: dateV,
-          payee_name: payee, mailing_address: addr || null,
-          amount: amt, memo: memo,
-          source: state.mode === 'report' ? 'expense_report' : 'standalone',
-          payee_id: null, category_id: catId, expense_id: savedExpenseId,
-          expense_report_id: state.mode === 'report' && state.fromReport ? state.fromReport.id : null,
-          created_by: actor
-        };
-        var pickedPayeeId = document.getElementById('savedPayeeSelect').value;
-        if (pickedPayeeId) regRow.payee_id = parseInt(pickedPayeeId, 10);
-        return authFetch(SB_REST + 'check_register', {
-          method: 'POST', headers: minimalHdrs, body: JSON.stringify(regRow)
+    // --- STEP 2: REPORT fan-out — fetch lines + bulk-insert expenses ---
+    var reportFanoutStep = standaloneExpenseStep.then(function () {
+      if (state.mode !== 'report' || !ctx.reportId) return null;
+      return fetchReportLinesForFanout(ctx.reportId).then(function (lines) {
+        if (!lines || !lines.length) return null;
+        var rows = lines.map(function (line) {
+          return buildExpenseRowFromLine(line, payee, ckNum, actor, ctx.reportId);
         });
-      })
+        return authFetch(SB_REST + 'expenses', {
+          method: 'POST', headers: representHdrs, body: JSON.stringify(rows)
+        }).then(function (inserted) {
+          ctx.expenseFanoutIds = (inserted || []).map(function (r) { return r.id; });
+          return inserted;
+        });
+      });
+    });
+
+    // --- STEP 3: check_register row ---
+    var registerStep = reportFanoutStep.then(function () {
+      var regRow = {
+        check_number: ckNum, check_date: dateV,
+        payee_name: payee, mailing_address: addr || null,
+        amount: amt, memo: memo,
+        source: state.mode === 'report' ? 'expense_report' : 'standalone',
+        payee_id: ctx.payeeRowId, category_id: catId,
+        expense_id: ctx.standaloneExpenseId,
+        expense_report_id: ctx.reportId,
+        created_by: actor
+      };
+      return authFetch(SB_REST + 'check_register', {
+        method: 'POST', headers: representHdrs, body: JSON.stringify(regRow)
+      }).then(function (rows) {
+        if (rows && rows[0]) ctx.registerId = rows[0].id;
+      });
+    });
+
+    // --- STEP 4: PATCH report to paid (report mode only) ---
+    var reportPaidStep = registerStep.then(function () {
+      if (state.mode !== 'report' || !ctx.reportId) return;
+      var nowIso = new Date().toISOString();
+      return authFetch(
+        SB_REST + 'expense_reports?id=eq.' + encodeURIComponent(ctx.reportId),
+        {
+          method: 'PATCH', headers: minimalHdrs,
+          body: JSON.stringify({
+            status: 'paid',
+            paid_at: dateV + 'T12:00:00Z',
+            paid_by: actor,
+            check_number: ckNum
+          })
+        }
+      );
+    });
+
+    // --- STEP 5: optionally save the payee ---
+    var savePayeeStep = reportPaidStep.then(function () {
+      if (!doSavePayee) return;
+      var payeeRow = {
+        payee_name: payee, mailing_address: addr || null,
+        default_memo: memo, default_category_id: catId, created_by: actor
+      };
+      return authFetch(SB_REST + 'check_payees', {
+        method: 'POST', headers: minimalHdrs, body: JSON.stringify(payeeRow)
+      }).then(function () { return refreshPayees(); });
+    });
+
+    // --- STEP 6: kick off the print dialog + show post-print banner ---
+    savePayeeStep
       .then(function () {
-        if (!doSavePayee) return;
-        var payeeRow = {
-          payee_name: payee, mailing_address: addr || null,
-          default_memo: memo, default_category_id: catId, created_by: actor
-        };
-        return authFetch(SB_REST + 'check_payees', {
-          method: 'POST', headers: minimalHdrs, body: JSON.stringify(payeeRow)
-        }).then(function () { return refreshPayees(); });
-      })
-      .then(function () {
-        showToast('Logged · opening print…', 1400);
+        state.lastPrint = ctx;
+        var loggedMsg = state.mode === 'report'
+          ? 'Logged · report marked paid · opening print…'
+          : 'Logged · opening print…';
+        showToast(loggedMsg, 1600);
+        renderPostPrintBanner();
+        // Small delay so the toast paints before the print dialog steals focus
         setTimeout(function () { window.print(); }, 250);
       })
       .catch(function (e) {
@@ -918,16 +1241,297 @@
         pcSubmitting = false;
         if (btn) { btn.disabled = false; btn.textContent = '🖨 Print & log check'; }
         updatePrintEnabled();
+        // Refresh dropdowns / lists after the print transaction is fully done
+        if (state.mode === 'report') refreshApprovedReports();
+        refreshRecentChecks();
       });
   }
 
-  function actorName() {
-    try {
-      var u = pcAuth.getUser();
-      return (u && u.display_name) || (u && u.email) || 'unknown';
-    } catch (e) { return 'unknown'; }
+  /**
+   * Build one expenses row from a single expense_report_line, mirroring
+   * the logic the Mark-paid flow on /expense-reports uses so Bank Review
+   * sees the same vendor_name conventions.
+   */
+  function buildExpenseRowFromLine(line, payeeName, checkNum, actor, reportId) {
+    var cat = line.expense_categories;
+    var catName = cat ? cat.name : '';
+    var isMileage = catName === 'Mileage Reimbursement';
+    var isFood    = catName === 'Food Purchases';
+
+    var vendorName = '';
+    if (isMileage) {
+      var trip = [];
+      if (line.miles_from) trip.push(line.miles_from);
+      if (line.miles_to)   trip.push(line.miles_to);
+      var tripStr = trip.length ? trip.join(' → ') : 'Mileage';
+      var miles = Number(line.miles) || 0;
+      var rate  = Number(line.mileage_rate) || 0.70;
+      vendorName = tripStr;
+      if (miles) vendorName += ' · ' + miles + ' miles × $' + rate.toFixed(2) + '/mi';
+    } else if (isFood) {
+      var base = line.description || 'Food purchase';
+      vendorName = line.venue ? (base + ' · ' + line.venue) : base;
+    } else {
+      vendorName = line.description || catName || 'Expense';
+    }
+
+    return {
+      charge_date: line.line_date,
+      vendor_name: String(vendorName).substring(0, 500),
+      amount: Number(line.amount || 0),
+      category_id: line.category_id,
+      bank_charge_id: null,
+      notes: 'Reimbursement to ' + (payeeName || 'manager') + ' · Check #' + checkNum,
+      created_by: actor,
+      expense_report_id: reportId,
+      expense_report_line_id: line.id
+    };
   }
 
+  // =====================================================================
+  // POST-PRINT BANNER  (Reprint / Edit number / All good)
+  // =====================================================================
+  function renderPostPrintBanner() {
+    var banner = document.getElementById('postPrintBanner');
+    if (!banner) return;
+    var lp = state.lastPrint;
+    if (!lp || !lp.registerId) {
+      banner.hidden = true;
+      banner.innerHTML = '';
+      banner.classList.remove('is-editing');
+      return;
+    }
+    banner.hidden = false;
+    banner.classList.remove('is-editing');
+    banner.innerHTML =
+      '<div class="pp-head">' +
+        '<span>✓ Printed check #' + esc(lp.checkNumber) + ' to ' + esc(lp.payee) + ' for ' + esc(fmtMoney(lp.amount)) + (lp.isReprint ? ' <em>(reprint)</em>' : '') + '</span>' +
+      '</div>' +
+      '<div>Did anything go wrong with the print? You can void this and reprint with a new number, or just correct the number if you typed it wrong.</div>' +
+      '<div class="pp-actions">' +
+        '<button type="button" data-pp-action="all-good" class="is-primary">✓ All good</button>' +
+        '<button type="button" data-pp-action="reprint">🔄 Reprint as new #</button>' +
+        '<button type="button" data-pp-action="edit-num">✎ Just edit the #</button>' +
+      '</div>';
+    banner.querySelectorAll('[data-pp-action]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var act = b.getAttribute('data-pp-action');
+        if (act === 'all-good') dismissPostPrintBanner();
+        else if (act === 'reprint') startReprint();
+        else if (act === 'edit-num') startEditNumber();
+      });
+    });
+  }
+
+  function dismissPostPrintBanner() {
+    state.lastPrint = null;
+    renderPostPrintBanner();
+  }
+
+  /**
+   * Reprint as new # — void the original row, then put the same data back
+   * in the form so the user can type a new check number and print again.
+   * We do NOT re-fan-out expenses or re-PATCH the report — the original
+   * fan-out is still valid; only the cash check changed.
+   */
+  function startReprint() {
+    var lp = state.lastPrint;
+    if (!lp || !lp.registerId) return;
+
+    var reason = window.prompt(
+      'Reason for voiding check #' + lp.checkNumber + '? (e.g. "Paper jam — reprinted as new #")',
+      'Paper jam — reprinted as new #'
+    );
+    if (reason == null) return;  // cancelled
+    reason = String(reason).trim();
+    if (!reason) {
+      showToast('A reason is required', 2200);
+      return;
+    }
+
+    var minimalHdrs = Object.assign({}, pcAuth.headers(), { 'Content-Type': 'application/json', 'Prefer': 'return=minimal' });
+
+    showToast('Voiding check #' + lp.checkNumber + '…', 1400);
+
+    authFetch(
+      SB_REST + 'check_register?id=eq.' + encodeURIComponent(lp.registerId),
+      {
+        method: 'PATCH', headers: minimalHdrs,
+        body: JSON.stringify({ voided: true, void_reason: reason })
+      }
+    )
+    .then(function () {
+      // Restore form fields so user can adjust the check number and re-print
+      document.getElementById('fldPayee').value     = lp.payee || '';
+      document.getElementById('fldAddress').value   = lp.addr  || '';
+      document.getElementById('fldAmount').value    = String(lp.amount || '');
+      document.getElementById('fldDate').value      = lp.dateV || todayIso();
+      document.getElementById('fldMemo').value      = lp.memo  || '';
+      document.getElementById('fldCheckNum').value  = '';  // BLANK — force fresh number
+      if (lp.catId) {
+        var catSel = document.getElementById('fldCategory');
+        if (catSel) catSel.value = lp.catId;
+      }
+
+      // If this was a report print, we need to flip BACK to report mode so the
+      // form behaves correctly (category gate off, banner up, no double fan-out).
+      // The category was already nulled on the original register row for report
+      // prints; same for the new print.
+      if (lp.reportId) {
+        // Re-load the report to refresh state.fromReport and UI affordances.
+        // Note: it's now in 'paid' status; loadFromReport doesn't filter on status.
+        loadFromReport(lp.reportId).then(function () {
+          showToast('Voided. Enter the new check number and print again.', 3000);
+        });
+      } else {
+        showToast('Voided. Enter the new check number and print again.', 3000);
+      }
+
+      // Tag the next print as a reprint (UI hint only — DB is fine)
+      state.lastPrint = null;
+      renderPostPrintBanner();
+      renderPreview();
+      updatePrintEnabled();
+
+      // Focus the check-number field so the user can just type
+      var nf = document.getElementById('fldCheckNum');
+      if (nf) nf.focus();
+
+      refreshRecentChecks();
+    })
+    .catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      console.error('[checks] reprint void failed:', e);
+      showToast('Void failed · ' + ((e && e.message) || 'unknown'), 4000);
+    });
+  }
+
+  /**
+   * Edit number — just rename the check number on the existing register
+   * row (and any linked expenses + the linked report's check_number).
+   * No void; the original physical check is fine, the system just had the
+   * wrong number typed.
+   */
+  function startEditNumber() {
+    var lp = state.lastPrint;
+    if (!lp || !lp.registerId) return;
+
+    var banner = document.getElementById('postPrintBanner');
+    if (!banner) return;
+    banner.classList.add('is-editing');
+    banner.innerHTML =
+      '<div class="pp-head"><span>✎ Edit check number for the row in the register</span></div>' +
+      '<div>The physical check is fine — you just typed the wrong number into the system. Enter the correct one below.</div>' +
+      '<div class="pp-edit-row">' +
+        '<input type="text" id="ppEditNumInput" inputmode="numeric" value="' + esc(lp.checkNumber) + '" autocomplete="off" placeholder="New check #">' +
+        '<button type="button" id="ppEditNumSave" class="is-primary" style="background:#854F0B;color:#fff;border-color:#854F0B;">Save</button>' +
+        '<button type="button" id="ppEditNumCancel">Cancel</button>' +
+      '</div>';
+
+    var inp = document.getElementById('ppEditNumInput');
+    if (inp) { inp.focus(); inp.select(); }
+
+    document.getElementById('ppEditNumCancel').addEventListener('click', function () {
+      banner.classList.remove('is-editing');
+      renderPostPrintBanner();
+    });
+    document.getElementById('ppEditNumSave').addEventListener('click', commitEditNumber);
+    if (inp) inp.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Enter') commitEditNumber();
+    });
+  }
+
+  function commitEditNumber() {
+    var lp = state.lastPrint;
+    if (!lp || !lp.registerId) return;
+    var inp = document.getElementById('ppEditNumInput');
+    var newNum = inp ? inp.value.trim() : '';
+    if (!newNum) {
+      showToast('Enter a check number', 2200);
+      if (inp) inp.focus();
+      return;
+    }
+    if (newNum === lp.checkNumber) {
+      // No change — just close
+      var banner = document.getElementById('postPrintBanner');
+      if (banner) banner.classList.remove('is-editing');
+      renderPostPrintBanner();
+      return;
+    }
+
+    var minimalHdrs = Object.assign({}, pcAuth.headers(), { 'Content-Type': 'application/json', 'Prefer': 'return=minimal' });
+
+    showToast('Updating check number…', 1400);
+
+    // Step 1: update check_register row
+    var step1 = authFetch(
+      SB_REST + 'check_register?id=eq.' + encodeURIComponent(lp.registerId),
+      {
+        method: 'PATCH', headers: minimalHdrs,
+        body: JSON.stringify({ check_number: newNum })
+      }
+    );
+
+    // Step 2: update expense_reports.check_number (report-print path)
+    var step2 = step1.then(function () {
+      if (!lp.reportId) return;
+      return authFetch(
+        SB_REST + 'expense_reports?id=eq.' + encodeURIComponent(lp.reportId),
+        {
+          method: 'PATCH', headers: minimalHdrs,
+          body: JSON.stringify({ check_number: newNum })
+        }
+      );
+    });
+
+    // Step 3: rewrite notes on linked expense rows so "Check #2704" → "Check #2706"
+    // Standalone path → one expense row; report-fanout path → many.
+    var step3 = step2.then(function () {
+      var ids = [];
+      if (lp.standaloneExpenseId) ids.push(lp.standaloneExpenseId);
+      if (lp.expenseFanoutIds && lp.expenseFanoutIds.length) {
+        ids = ids.concat(lp.expenseFanoutIds);
+      }
+      if (!ids.length) return;
+      // Fetch current notes, replace #oldNum with #newNum, PATCH each row.
+      // We do this individually since each row's notes may have other text.
+      var idList = ids.map(function (i) { return encodeURIComponent(i); }).join(',');
+      return authFetch(
+        SB_REST + 'expenses?select=id,notes&id=in.(' + idList + ')',
+        { headers: pcAuth.headers() }
+      ).then(function (rows) {
+        var ops = (rows || []).map(function (r) {
+          var oldNotes = r.notes || '';
+          var newNotes = oldNotes.split('#' + lp.checkNumber).join('#' + newNum);
+          if (newNotes === oldNotes) return null;
+          return authFetch(SB_REST + 'expenses?id=eq.' + encodeURIComponent(r.id), {
+            method: 'PATCH', headers: minimalHdrs,
+            body: JSON.stringify({ notes: newNotes })
+          });
+        }).filter(function (op) { return op !== null; });
+        return Promise.all(ops);
+      });
+    });
+
+    step3
+      .then(function () {
+        showToast('Check number updated to #' + newNum, 2400);
+        lp.checkNumber = newNum;
+        var banner = document.getElementById('postPrintBanner');
+        if (banner) banner.classList.remove('is-editing');
+        renderPostPrintBanner();
+        refreshRecentChecks();
+      })
+      .catch(function (e) {
+        if (e && e.authFailed) { handleAuthFailure(); return; }
+        console.error('[checks] edit number failed:', e);
+        showToast('Update failed · ' + ((e && e.message) || 'unknown'), 4000);
+      });
+  }
+
+  // =====================================================================
+  // PAYEE DELETE (soft)
+  // =====================================================================
   function deletePayee(id) {
     var p = payeeById(id);
     if (!p) return;
@@ -953,6 +1557,48 @@
     });
   }
 
+  // =====================================================================
+  // RECENT CHECKS LIST
+  // =====================================================================
+  function refreshRecentChecks() {
+    return fetchRecentChecks()
+      .then(function (rows) {
+        state.recentChecks = rows || [];
+        renderRecentChecks();
+      })
+      .catch(function (e) {
+        if (e && e.authFailed) { handleAuthFailure(); return; }
+        console.error('[checks] recent failed:', e);
+      });
+  }
+  function renderRecentChecks() {
+    var body = document.getElementById('recentChecksBody');
+    if (!body) return;
+    if (!state.recentChecks.length) {
+      body.innerHTML = '<div class="recent-empty">No checks in the register yet.</div>';
+      return;
+    }
+    body.innerHTML = state.recentChecks.map(function (r) {
+      var dateStr = r.check_date ? fmtDateShort(r.check_date) : '—';
+      var srcLabel = r.source === 'expense_report' ? 'Reimbursement' : 'Standalone';
+      var voidNote = r.voided && r.void_reason
+        ? ' · VOIDED — ' + r.void_reason
+        : (r.voided ? ' · VOIDED' : '');
+      var rowClass = 'recent-row' + (r.voided ? ' is-voided' : '');
+      return '<div class="' + rowClass + '">' +
+        '<div class="recent-num">#' + esc(r.check_number) + '</div>' +
+        '<div class="recent-mid">' +
+          '<div class="recent-payee">' + esc(r.payee_name || '—') + '</div>' +
+          '<div class="recent-meta">' + esc(dateStr + ' · ' + srcLabel + voidNote) + '</div>' +
+        '</div>' +
+        '<div class="recent-amount">' + esc(fmtMoney(Number(r.amount || 0))) + '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  // =====================================================================
+  // CLEAR
+  // =====================================================================
   function clearForm() {
     document.getElementById('savedPayeeSelect').value = '';
     document.getElementById('fldPayee').value = '';
@@ -964,11 +1610,19 @@
     document.getElementById('fldMemo').value = '';
     var warn = document.getElementById('dupCheckWarn');
     if (warn) warn.hidden = true;
+    // Also reset report mode if active
+    if (state.mode === 'report') exitReportMode();
+    var rls = document.getElementById('reportLoaderSelect');
+    if (rls) rls.value = '';
     updateSavePayeeRow();
     renderPreview();
     updatePrintEnabled();
+    dismissPostPrintBanner();
   }
 
+  // =====================================================================
+  // LOAD FROM EXPENSE REPORT — used by both ?id= URL and the dropdown
+  // =====================================================================
   function loadFromReport(reportId) {
     return fetchReport(reportId)
       .then(function (rows) {
@@ -977,22 +1631,44 @@
         state.fromReport = report;
         state.mode = 'report';
         document.getElementById('fldPayee').value   = report.submitter_name || '';
-        document.getElementById('fldAddress').value = report.mailing_address || '';
+        document.getElementById('fldAddress').value = normalizeAddress(report.mailing_address || '');
         document.getElementById('fldAmount').value  = report.total_amount != null
           ? String(Math.round(Number(report.total_amount) * 100) / 100) : '';
         document.getElementById('fldDate').value    = todayIso();
         document.getElementById('fldMemo').value    =
           'Expense reimbursement · Report ' + String(report.id).substring(0, 8);
+
         var catStar = document.getElementById('categoryReqStar');
         var catHint = document.getElementById('categoryHint');
         if (catStar) catStar.style.display = 'none';
-        if (catHint) catHint.textContent = 'Not needed — expenses for this report were already filed when it was marked paid.';
+        if (catHint) catHint.textContent = 'Not needed — printing this check will auto-mark the report paid and create the expense rows for bank review.';
         var catSel = document.getElementById('fldCategory');
         if (catSel) { catSel.value = ''; catSel.disabled = true; }
+
         var savedField = document.getElementById('savedPayeeField');
         if (savedField) savedField.style.display = 'none';
         var saveRow = document.getElementById('savePayeeRow');
         if (saveRow) saveRow.hidden = true;
+
+        // Sync the report-loader dropdown to this report (in case the URL set it)
+        var rls = document.getElementById('reportLoaderSelect');
+        if (rls && state.isAdmin) {
+          // The selected option may not be in the approved list anymore (e.g. already paid).
+          // Make sure it's selectable by injecting it if missing.
+          var has = false;
+          for (var i = 0; i < rls.options.length; i++) {
+            if (rls.options[i].value === report.id) { has = true; break; }
+          }
+          if (!has) {
+            var opt = document.createElement('option');
+            opt.value = report.id;
+            opt.textContent = (report.submitter_name || '(unknown)') + ' · ' +
+              fmtMoney(Number(report.total_amount || 0)) + ' · (loaded)';
+            rls.appendChild(opt);
+          }
+          rls.value = report.id;
+        }
+
         var banner = document.getElementById('fromReportBanner');
         if (banner) {
           banner.hidden = false;
@@ -1000,7 +1676,13 @@
             'Paying ' + esc(report.submitter_name || 'manager') + ' ' +
             esc(fmtMoney(Number(report.total_amount || 0))) +
             '. Enter the check number you\'re printing on, then print. ' +
-            'This logs to the check register (the expenses were already created when you marked it paid).';
+            'Printing will auto-mark this report paid and create the expense rows.' +
+            '<button type="button" class="clear-link" id="fromReportClear">Cancel — write a standalone check instead</button>';
+          var clr = document.getElementById('fromReportClear');
+          if (clr) clr.addEventListener('click', function () {
+            exitReportMode();
+            clearForm();
+          });
         }
         var sub = document.getElementById('formSubtitle');
         if (sub) sub.textContent = 'Reimbursement check from an approved report';
@@ -1014,6 +1696,35 @@
       });
   }
 
+  /**
+   * Flip back to standalone mode (e.g. user picked None on the dropdown,
+   * or clicked Cancel in the banner). Does NOT clear field values — that's
+   * what Clear is for.
+   */
+  function exitReportMode() {
+    state.fromReport = null;
+    state.mode = 'standalone';
+    var catStar = document.getElementById('categoryReqStar');
+    var catHint = document.getElementById('categoryHint');
+    if (catStar) catStar.style.display = '';
+    if (catHint) catHint.textContent = 'Required — files this check as an expense for bank review.';
+    var catSel = document.getElementById('fldCategory');
+    if (catSel) catSel.disabled = false;
+    var savedField = document.getElementById('savedPayeeField');
+    if (savedField) savedField.style.display = '';
+    var banner = document.getElementById('fromReportBanner');
+    if (banner) { banner.hidden = true; banner.innerHTML = ''; }
+    var sub = document.getElementById('formSubtitle');
+    if (sub) sub.textContent = 'Enter the info, then print onto your check stock';
+    var rls = document.getElementById('reportLoaderSelect');
+    if (rls) rls.value = '';
+    updateSavePayeeRow();
+    updatePrintEnabled();
+  }
+
+  // =====================================================================
+  // CALIBRATION
+  // =====================================================================
   function buildCalibFields() {
     var wrap = document.getElementById('calibFields');
     if (!wrap) return;
@@ -1065,6 +1776,9 @@
     showToast('Reset to defaults', 1800);
   }
 
+  // =====================================================================
+  // WIRE
+  // =====================================================================
   function wire() {
     ['fldPayee','fldAddress','fldAmount','fldDate','fldMemo'].forEach(function (id) {
       var el = document.getElementById(id);
@@ -1080,6 +1794,8 @@
     if (catEl) catEl.addEventListener('change', updatePrintEnabled);
     var savedSel = document.getElementById('savedPayeeSelect');
     if (savedSel) savedSel.addEventListener('change', onSavedPayeePick);
+    var rls = document.getElementById('reportLoaderSelect');
+    if (rls) rls.addEventListener('change', onReportLoaderPick);
     var printBtn = document.getElementById('btnPrint');
     if (printBtn) printBtn.addEventListener('click', handlePrint);
     var clearBtn = document.getElementById('btnClear');
@@ -1098,24 +1814,41 @@
     if (calibReset) calibReset.addEventListener('click', resetCalibration);
   }
 
+  // =====================================================================
+  // BOOT
+  // =====================================================================
   function onAuthReady(user) {
     if (typeof pcActivity !== 'undefined' && pcActivity.init) pcActivity.init('checks');
     document.body.classList.remove('pre-auth');
     state.currentUser = user;
     state.isAdmin = (pcAuth && pcAuth.isAdmin) ? pcAuth.isAdmin() : false;
     document.getElementById('fldDate').value = todayIso();
+
+    // Reveal the admin-only report-loader dropdown
+    var loaderField = document.getElementById('reportLoaderField');
+    if (loaderField && state.isAdmin) loaderField.hidden = false;
+
     applyPositions();
     buildCalibFields();
     wire();
     renderPreview();
     updatePrintEnabled();
-    Promise.all([fetchCategories(), fetchPayees()])
+
+    var initialLoads = [
+      fetchCategories(),
+      fetchPayees(),
+      refreshRecentChecks()
+    ];
+    if (state.isAdmin) initialLoads.push(refreshApprovedReports());
+
+    Promise.all(initialLoads)
       .then(function (res) {
         state.categories = res[0] || [];
         state.payees = res[1] || [];
         populateCategorySelect();
         populatePayeeSelect();
         renderPayeeManage();
+        // URL-pre-load wins over the dropdown
         var reportId = getReportIdFromUrl();
         if (reportId) return loadFromReport(reportId);
       })
