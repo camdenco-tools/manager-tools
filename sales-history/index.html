@@ -102,9 +102,58 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
   .result-stand-table th, .result-stand-table td { padding: 6px 8px; font-size: 12px; }
   .qr-showing { margin-left: 0; width: 100%; padding-top: 0; }
 }
+
+/* ============================================================
+ * EVENT NOTES + WEATHER RENDERING — added May 29, 2026
+ * Notes live on events.manager_notes; weather on events.weather_*.
+ * Rendered as expandable row at top of each event group.
+ * ============================================================ */
+.weather-chip-inline { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; color: #555; background: #f5f5f5; border: 1px solid #e0e0e0; border-radius: 16px; padding: 2px 8px; margin-left: 8px; vertical-align: middle; }
+.weather-chip-icon { font-size: 11px; line-height: 1; }
+.event-meta-line { font-size: 11px; color: #bbb; margin-top: 2px; }
+.notes-row { padding: 8px 14px; border-top: 1px solid #f5f5f5; cursor: pointer; background: #FDFCF7; }
+.notes-row:hover { background: #FAF7E8; }
+.notes-row-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.notes-row-label { font-size: 12px; font-weight: 600; color: #7A5C00; display: flex; align-items: center; gap: 6px; }
+.notes-row-preview { font-size: 11px; color: #999; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.notes-row-chev { font-size: 10px; color: #ccc; flex-shrink: 0; }
+.notes-row-expanded { display: none; padding: 12px 14px 14px; border-top: 1px solid #f5f5f5; background: #FDFCF7; }
+.notes-row-expanded.open { display: block; }
+.notes-text { font-size: 13px; color: #1a1a1a; white-space: pre-wrap; line-height: 1.5; margin-bottom: 10px; }
+.notes-weather-detail { font-size: 11px; color: #888; margin-bottom: 8px; padding: 6px 10px; background: white; border-radius: 7px; border: 1px solid #eee; display: inline-block; }
+.notes-meta { font-size: 11px; color: #999; display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.notes-edit-btn { font-size: 11px; background: #E6F1FB; color: #0C447C; padding: 4px 11px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; font-family: inherit; }
+.notes-edit-btn.locked { background: #f0f0f0; color: #aaa; cursor: default; }
+.notes-add-row { padding: 8px 14px; border-top: 1px dashed #e8e8e0; cursor: pointer; color: #185FA5; font-size: 12px; font-style: italic; display: flex; align-items: center; gap: 7px; }
+.notes-add-row:hover { background: #F5F9FD; }
+.notes-add-icon { width: 18px; height: 18px; border-radius: 50%; background: #E6F1FB; border: 1px solid #B5D4F4; display: flex; align-items: center; justify-content: center; font-size: 13px; color: #185FA5; flex-shrink: 0; line-height: 1; }
 </style>
 </head>
 <body>
+
+<!-- ============================================================
+     EVENT NOTES EDIT MODAL — added May 29, 2026
+     Notes belong to the event (events.manager_notes), not to a sale,
+     so this is a separate modal from the per-stand sales edit modal
+     even though it uses the same visual pattern.
+     ============================================================ -->
+<div class="modal-overlay" id="notes-edit-modal">
+  <div class="modal">
+    <h2>Edit event notes</h2>
+    <input type="hidden" id="notes-edit-event-id">
+    <div id="notes-edit-window-notice" class="window-notice" style="display:none;"></div>
+    <div class="modal-field" id="notes-edit-context"></div>
+    <div class="modal-field">
+      <label>Notes</label>
+      <textarea id="notes-edit-textarea" rows="6" style="width:100%;padding:11px 13px;border:1px solid #ddd;border-radius:9px;font-size:14px;color:#1a1a1a;background:#fafafa;font-family:inherit;resize:vertical;line-height:1.5;"></textarea>
+    </div>
+    <div class="modal-error" id="notes-edit-error"></div>
+    <div class="modal-actions">
+      <button class="modal-cancel" onclick="closeNotesEditModal()">Cancel</button>
+      <button class="modal-save" id="notes-edit-save-btn" onclick="saveNotesEdit()">Save changes</button>
+    </div>
+  </div>
+</div>
 
 <div class="modal-overlay" id="edit-modal">
   <div class="modal">
@@ -508,6 +557,32 @@ async function searchHistory() {
       return;
     }
 
+    // Fetch event-level data (notes + weather) for the date+venue combinations in
+    // these sales rows. One query indexed by event_date range, joined to results
+    // client-side. Cancelled events excluded (defensive — already filtered in
+    // most code paths but doesn't hurt).
+    var eventInfoByKey = {}; // "date||venue" → events row
+    try {
+      var minDate = rows.reduce(function(m, r) { return r.event_date < m ? r.event_date : m; }, rows[0].event_date);
+      var maxDate = rows.reduce(function(m, r) { return r.event_date > m ? r.event_date : m; }, rows[0].event_date);
+      var evUrl = SUPA_URL + '/rest/v1/events?event_date=gte.' + minDate + '&event_date=lte.' + maxDate +
+                  '&cancelled_at=is.null' +
+                  '&select=id,venue,event_date,manager_notes,manager_notes_updated_by,' +
+                  'manager_notes_updated_at,weather_high_f,weather_low_f,weather_conditions,weather_fetched_at';
+      var evRes = await fetch(evUrl, { headers: apiHeaders() });
+      var evRows = await evRes.json();
+      if (Array.isArray(evRows)) {
+        evRows.forEach(function(ev) {
+          eventInfoByKey[ev.event_date + '||' + ev.venue] = ev;
+        });
+      }
+    } catch(e) {
+      // Notes/weather are non-critical — if the lookup fails, render sales without them
+      console.warn('[sales-history] event info lookup failed:', e);
+    }
+    // Stash for use by edit-modal handlers
+    currentEventInfoByKey = eventInfoByKey;
+
     var grandTotal = rows.reduce(function(s,r) { return s+parseFloat(r.amount); }, 0);
     var grandTips = rows.reduce(function(s,r) { return s+(parseFloat(r.tip_amount)||0); }, 0);
 
@@ -563,13 +638,51 @@ async function searchHistory() {
       var tipsMeta = eventTips > 0 ? ' - Tips: $' + Math.round(eventTips).toLocaleString() : '';
       var venueLabel = VENUE_LABELS[evtVenue] || evtVenue;
 
+      // Pull event-level info (notes + weather) for this date+venue
+      var eventInfo = currentEventInfoByKey[evtDate + '||' + evtVenue];
+      var weatherInline = '';
+      if (eventInfo && eventInfo.weather_fetched_at && eventInfo.weather_conditions) {
+        var highTxt = eventInfo.weather_high_f != null ? eventInfo.weather_high_f + '\u00b0F' : '';
+        var icon = weatherIconFor(eventInfo.weather_conditions);
+        weatherInline = '<span class="weather-chip-inline"><span class="weather-chip-icon">' + icon + '</span>' + highTxt + ' \u00b7 ' + eventInfo.weather_conditions + '</span>';
+      }
+
+      // Event meta line now lives BELOW the venue name+weather, not squished
+      // onto the venue label line, so the new weather chip has room to breathe.
+      var eventMetaParts = [];
+      eventMetaParts.push(stands.length + ' stand' + (stands.length > 1 ? 's' : ''));
+      if (hasStaff && totalStaff > 0) {
+        eventMetaParts.push(totalStaff + ' staff');
+        eventMetaParts.push('$' + Math.round(total/totalStaff).toLocaleString() + '/person');
+      }
+      if (eventTips > 0) {
+        eventMetaParts.push('Tips: $' + Math.round(eventTips).toLocaleString());
+      }
+      var eventMetaStr = eventMetaParts.join(' \u00b7 ');
+
       html += '<div class="result-venue">';
       html += '<div class="result-venue-header" onclick="toggleResult(\'' + id + '\',\'rch' + i + '\')">';
-      html += '<div><div class="result-venue-name">' + evtName + '</div>';
-      html += '<div class="result-venue-meta">' + dateStr + ' - ' + venueLabel + ' - ' + stands.length + ' stand' + (stands.length > 1 ? 's' : '') + staffMeta + tipsMeta + '</div></div>';
+      html += '<div style="flex:1;min-width:0;">';
+      html += '<div class="result-venue-name">' + evtName + weatherInline + '</div>';
+      html += '<div class="result-venue-meta">' + dateStr + ' \u00b7 ' + venueLabel + '</div>';
+      html += '<div class="event-meta-line">' + eventMetaStr + '</div>';
+      html += '</div>';
       html += '<div style="display:flex;align-items:center;gap:8px;">';
       html += '<div class="result-venue-total">$' + Math.round(total).toLocaleString() + '</div>';
       html += '<div class="chevron" id="rch' + i + '">&#9654;</div></div></div>';
+
+      // Notes row — only when notes exist OR within edit window to invite add
+      if (eventInfo) {
+        var hasNotes = !!(eventInfo.manager_notes && eventInfo.manager_notes.trim());
+        var withinWindow = canEdit(evtDate);
+        if (hasNotes) {
+          html += renderNotesRow(eventInfo, i, withinWindow);
+        } else if (withinWindow) {
+          html += '<div class="notes-add-row" onclick="openNotesEditModal(\'' + eventInfo.id + '\',\'' + evtDate + '\',\'' + evtVenue + '\')">';
+          html += '<div class="notes-add-icon">+</div>Add notes for this event</div>';
+        }
+      }
+
       html += '<table class="result-stand-table" id="' + id + '">';
       html += '<thead><tr><th>Stand</th><th style="text-align:right;">Amount</th><th style="text-align:right;">Tips</th><th>Photos</th><th>Actions</th></tr></thead><tbody>';
 
@@ -617,6 +730,158 @@ function toggleResult(id, chId) {
   var open = el.style.display === 'table';
   el.style.display = open ? 'none' : 'table';
   ch.innerHTML = open ? '&#9654;' : '&#9660;';
+}
+
+// ============================================================
+// EVENT NOTES rendering + edit modal (added May 29, 2026)
+// ============================================================
+
+var currentEventInfoByKey = {}; // populated by searchHistory(), keyed by "date||venue"
+
+function weatherIconFor(cond) {
+  if (!cond) return '\u2601\ufe0f';
+  var c = cond.toLowerCase();
+  if (c.indexOf('mostly clear') !== -1) return '\u26c5';
+  if (c.indexOf('clear') !== -1) return '\u2600\ufe0f';
+  if (c.indexOf('cloudy') !== -1) return '\u2601\ufe0f';
+  if (c.indexOf('fog') !== -1) return '\ud83c\udf2b\ufe0f';
+  if (c.indexOf('drizzle') !== -1) return '\ud83c\udf26\ufe0f';
+  if (c.indexOf('rain') !== -1) return '\ud83c\udf27\ufe0f';
+  if (c.indexOf('snow') !== -1) return '\ud83c\udf28\ufe0f';
+  if (c.indexOf('thunder') !== -1) return '\u26c8\ufe0f';
+  return '\u2601\ufe0f';
+}
+
+function renderNotesRow(eventInfo, eventIdx, withinWindow) {
+  var notesText = eventInfo.manager_notes || '';
+  var preview = notesText.replace(/\s+/g, ' ').trim();
+  if (preview.length > 80) preview = preview.slice(0, 78) + '...';
+  var nrId = 'nr-' + eventIdx;
+  var nrExpId = 'nrx-' + eventIdx;
+  var nrChId = 'nrc-' + eventIdx;
+
+  var html = '<div class="notes-row" onclick="toggleNotesRow(\'' + nrExpId + '\',\'' + nrChId + '\')">';
+  html += '<div class="notes-row-top">';
+  html += '<div class="notes-row-label">\ud83d\udcdd Notes from this event</div>';
+  html += '<div class="notes-row-preview">' + escapeHtml(preview) + '</div>';
+  html += '<div class="notes-row-chev" id="' + nrChId + '">&#9654;</div>';
+  html += '</div></div>';
+
+  html += '<div class="notes-row-expanded" id="' + nrExpId + '" onclick="event.stopPropagation()">';
+  html += '<div class="notes-text">' + escapeHtml(notesText) + '</div>';
+
+  // Weather detail (full range, not just high)
+  if (eventInfo.weather_fetched_at && eventInfo.weather_conditions) {
+    var icon = weatherIconFor(eventInfo.weather_conditions);
+    var high = eventInfo.weather_high_f != null ? eventInfo.weather_high_f + '\u00b0F' : '';
+    var low = eventInfo.weather_low_f != null ? eventInfo.weather_low_f + '\u00b0F' : '';
+    var range = high && low ? (high + ' / ' + low) : (high || low);
+    html += '<div class="notes-weather-detail">' + icon + ' ' + range + ' \u00b7 ' + eventInfo.weather_conditions + '</div>';
+  }
+
+  html += '<div class="notes-meta">';
+  var who = eventInfo.manager_notes_updated_by || 'someone';
+  var when = eventInfo.manager_notes_updated_at ? new Date(eventInfo.manager_notes_updated_at) : null;
+  var whenStr = when ? when.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+  html += '<span>Last updated by ' + escapeHtml(who) + (whenStr ? ' \u00b7 ' + whenStr : '') + '</span>';
+  if (withinWindow) {
+    html += '<button class="notes-edit-btn" onclick="event.stopPropagation();openNotesEditModal(\'' + eventInfo.id + '\',\'' + eventInfo.event_date + '\',\'' + eventInfo.venue + '\')">Edit notes</button>';
+  } else {
+    html += '<button class="notes-edit-btn locked" title="Edit window closed">Locked</button>';
+  }
+  html += '</div></div>';
+
+  return html;
+}
+
+function toggleNotesRow(expId, chId) {
+  var el = document.getElementById(expId);
+  var ch = document.getElementById(chId);
+  if (!el || !ch) return;
+  var open = el.classList.contains('open');
+  if (open) {
+    el.classList.remove('open');
+    ch.innerHTML = '&#9654;';
+  } else {
+    el.classList.add('open');
+    ch.innerHTML = '&#9660;';
+  }
+}
+
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function openNotesEditModal(eventId, evtDate, evtVenue) {
+  var info = currentEventInfoByKey[evtDate + '||' + evtVenue];
+  if (!info) return;
+
+  document.getElementById('notes-edit-event-id').value = eventId;
+  document.getElementById('notes-edit-textarea').value = info.manager_notes || '';
+
+  var withinWindow = isWithinEditWindow(evtDate);
+  var isAdmin = pcAuth.isAdmin();
+  var dateStr = evtDate.slice(5,7) + '/' + evtDate.slice(8,10) + '/' + evtDate.slice(0,4);
+  var venueLabel = VENUE_LABELS[evtVenue] || evtVenue;
+  document.getElementById('notes-edit-context').innerHTML = '<strong>' + venueLabel + '</strong> \u00b7 ' + dateStr;
+
+  var noticeEl = document.getElementById('notes-edit-window-notice');
+  if (isAdmin && !withinWindow) {
+    noticeEl.textContent = 'Edit window closed for managers \u2014 you have admin access.';
+    noticeEl.style.display = 'block';
+  } else {
+    noticeEl.style.display = 'none';
+  }
+
+  document.getElementById('notes-edit-error').style.display = 'none';
+  document.getElementById('notes-edit-save-btn').disabled = false;
+  document.getElementById('notes-edit-save-btn').textContent = 'Save changes';
+  document.getElementById('notes-edit-modal').classList.add('open');
+}
+
+function closeNotesEditModal() {
+  document.getElementById('notes-edit-modal').classList.remove('open');
+}
+
+async function saveNotesEdit() {
+  var eventId = document.getElementById('notes-edit-event-id').value;
+  var newText = document.getElementById('notes-edit-textarea').value.trim();
+  var errEl = document.getElementById('notes-edit-error');
+  var btn = document.getElementById('notes-edit-save-btn');
+  errEl.style.display = 'none';
+
+  if (!eventId) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+
+  var nowIso = new Date().toISOString();
+  var who = pcAuth.getUser() ? pcAuth.getUser().display_name : null;
+
+  try {
+    var hdrs = apiHeaders();
+    hdrs['Content-Type'] = 'application/json';
+    hdrs['Prefer'] = 'return=minimal';
+    var res = await fetch(SUPA_URL + '/rest/v1/events?id=eq.' + eventId, {
+      method: 'PATCH',
+      headers: hdrs,
+      body: JSON.stringify({
+        manager_notes: newText || null,
+        manager_notes_updated_by: who,
+        manager_notes_updated_at: nowIso
+      })
+    });
+    if (!res.ok) throw new Error(await res.text());
+
+    closeNotesEditModal();
+    searchHistory(); // re-render to pick up the updated notes
+  } catch(e) {
+    errEl.textContent = 'Could not save: ' + (e.message || String(e));
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Save changes';
+  }
 }
 
 function openEditModal(id) {
@@ -729,6 +994,14 @@ function clearPhoto(type) {
 }
 
 function closeEditModal() { document.getElementById('edit-modal').classList.remove('open'); }
+
+// Close notes edit modal when clicking outside it (matches Log Sales behavior)
+document.addEventListener('click', function(e) {
+  var overlay = document.getElementById('notes-edit-modal');
+  if (overlay && overlay.classList.contains('open') && e.target === overlay) {
+    closeNotesEditModal();
+  }
+});
 
 async function uploadPhoto(file, path) {
   var hdrs = apiHeaders();
