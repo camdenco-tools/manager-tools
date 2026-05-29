@@ -2311,6 +2311,38 @@
   // =====================================================================
   // UTILITIES
   // =====================================================================
+  /**
+   * Normalize a US mailing address into "street\ncity, state ZIP" format.
+   * Idempotent. Returns the input unchanged if it already has newlines or
+   * if we can't find a trailing "STATE ZIP" pattern to anchor on.
+   */
+  function normalizeAddress(raw) {
+    if (!raw) return raw;
+    var s = String(raw).trim();
+    if (!s) return s;
+    if (s.indexOf('\n') !== -1) return s;
+    s = s.replace(/\s+/g, ' ');
+    var stateZip = /\s([A-Za-z]{2})\s+(\d{5}(?:-\d{4})?)\s*$/;
+    var m = s.match(stateZip);
+    if (!m) return raw;
+    var stateUpper = m[1].toUpperCase();
+    var zip = m[2];
+    var beforeStateZip = s.substring(0, m.index).trim().replace(/,\s*$/, '');
+    var lastComma = beforeStateZip.lastIndexOf(',');
+    var street, city;
+    if (lastComma !== -1) {
+      street = beforeStateZip.substring(0, lastComma).trim();
+      city = beforeStateZip.substring(lastComma + 1).trim();
+    } else {
+      var idx = beforeStateZip.lastIndexOf(' ');
+      if (idx === -1) return raw;
+      street = beforeStateZip.substring(0, idx).trim();
+      city = beforeStateZip.substring(idx + 1).trim();
+    }
+    if (!street || !city) return raw;
+    return street + '\n' + city + ', ' + stateUpper + ' ' + zip;
+  }
+
   function pad2(n) { n = String(n); return n.length < 2 ? '0' + n : n; }
   function todayIso() {
     var d = new Date();
@@ -4299,10 +4331,21 @@
     var prev = draftState.report.mailing_address || '';
     if (prev === newValue) return;
     draftState.report.mailing_address = newValue;
-    // Debounced PATCH
+    // Debounced PATCH — normalize at save time, not keystroke time, so the
+    // cursor doesn't jump while the user is mid-typing.
     clearTimeout(draftState._addressSaveTimer);
     draftState._addressSaveTimer = setTimeout(function () {
-      patchReport({ mailing_address: newValue || null })
+      var normalized = normalizeAddress(newValue);
+      // If normalize cleaned it up, reflect that in state + the textarea
+      if (normalized !== newValue) {
+        draftState.report.mailing_address = normalized;
+        var ta = document.getElementById('draftAddress');
+        if (ta && document.activeElement !== ta) {
+          // Only rewrite the textarea if it's not focused (don't yank cursor)
+          ta.value = normalized;
+        }
+      }
+      patchReport({ mailing_address: normalized || null })
         .then(function () { updateSubmitButtonState(); })
         .catch(function (e) {
           if (e && e.authFailed) { handleAuthFailure(); return; }
@@ -5467,13 +5510,14 @@
       if (draftState.saveDefaultAddressOnSubmit && draftState.report.mailing_address) {
         var u = pageState.currentUser;
         if (u && u.id) {
+          var normalizedForDefault = normalizeAddress(draftState.report.mailing_address);
           return authFetch(SB_REST + 'user_roles?id=eq.' + encodeURIComponent(u.id), {
             method:  'PATCH',
             headers: minimalHdrs,
-            body:    JSON.stringify({ mailing_address: draftState.report.mailing_address })
+            body:    JSON.stringify({ mailing_address: normalizedForDefault })
           }).then(function () {
             // Update local pageState so UX reflects the new default immediately
-            pageState.currentUser.mailing_address = draftState.report.mailing_address;
+            pageState.currentUser.mailing_address = normalizedForDefault;
           }).catch(function (e) {
             // Non-fatal — log and continue. The report submitted; saving the
             // default is a nice-to-have.
@@ -6085,6 +6129,7 @@
     } else if (kind === 'approved') {
       actionsHtml = '<div class="admin-queue-actions">' +
         '<button type="button" class="btn-secondary" data-admin-action="review-open" data-report-id="' + esc(r.id) + '">View</button>' +
+        '<a href="/checks/?id=' + encodeURIComponent(r.id) + '" target="_blank" class="btn-secondary" style="text-decoration:none;display:inline-block;">🖨 Print check</a>' +
         '<button type="button" class="btn-success"   data-admin-action="pay-open"   data-report-id="' + esc(r.id) + '">Mark paid</button>' +
       '</div>';
     } else if (kind === 'paid') {
