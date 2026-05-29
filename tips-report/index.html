@@ -315,40 +315,61 @@ header { background: #fff; border-bottom: 1px solid #e8e8e4; padding: 0 32px; di
 var SUPA_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
 var POOL_VENUES = ['FMP'];
 
-// Labor stands are non-revenue: people who worked the event but not at a sales stand.
-// Their staff_count is excluded from the tip-pool denominator, their tips are flagged
-// (not absorbed into the pool), and they render in a separate section below the grid.
+// Stand categorization for tip-pool math. Each stand falls into ONE of three
+// buckets based on its stand_type from the catalog:
 //
-// Phase -2b wiring (May 26, 2026): "labor" is now derived from the catalog's
-// stand_type column instead of a hardcoded name list. A stand is labor if its
-// stand_type is anything other than 'revenue'. This means:
-//   - 'support'   (Support Staff)        → labor ✓
-//   - 'client'    (Client Staffing Needs) → labor ✓
-//   - 'nonevent'  (Non-Event Labor)       → labor ✓
-//   - 'hawking'   (Hawking)               → labor ✓ (NEW — hawkers earn their
-//                                           own commission, never part of the
-//                                           tip pool, so this is semantically
-//                                           correct. Sales are rarely logged
-//                                           against Hawking in practice, so
-//                                           this is a defensive correctness
-//                                           change rather than a visible shift.)
-//   - 'revenue'   (everything else)       → pool-eligible
+//   'main'       → revenue stands. At pool venues these combine into the
+//                  building-wide pool. At non-pool venues they each compute
+//                  per-stand tip share.
+//
+//   'mobilecart' → mobile carts. POOL TOGETHER as their own separate pool,
+//                  distinct from the main building pool. At non-pool venues
+//                  they behave the same as 'main' (per-stand calculation).
+//
+//   'hawking'    → hawkers. PER-STAND/PER-ROW — each Hawking sale keeps its
+//                  own tips, never pooled. Renders in the main grid alongside
+//                  other revenue stands.
+//
+//   'labor'      → support, client, nonevent. Excluded from all pools.
+//                  Their tips (if any) are flagged as "review" because labor
+//                  stands aren't supposed to generate tips. Render in the
+//                  "Labor (not in tip pool)" section below the main grid.
+//
+// Phase -2b note (May 29, 2026): the 'mobilecart' stand_type was introduced
+// this date specifically to support a separate Mobile Cart tip pool at FMP.
+// At venues where mobile carts are still typed as 'revenue', they'll behave
+// as main-pool stands — no migration on other venues yet.
 //
 // Fallback name-based check kicks in if the stand isn't in the catalog
-// (legacy data referencing a retired stand) — same behavior as before.
-var _LEGACY_LABOR_NAMES = ['Support Staff', 'Client Staffing Needs', 'Non-Event Labor', 'Hawking'];
-function isLaborStand(stand) {
-  if (!stand) return false;
+// (legacy data referencing a retired stand). The fallback is conservative:
+// known labor names are flagged labor, everything else defaults to 'main'.
+var _LEGACY_LABOR_NAMES = ['Support Staff', 'Client Staffing Needs', 'Non-Event Labor'];
+var _LEGACY_HAWKING_NAMES = ['Hawking'];
+function getStandBucket(stand) {
+  if (!stand) return 'main';
   // Catalog-driven check (preferred). pcCatalog might not be ready yet
-  // during the very first render — fall back to name-based check in that
-  // case, which is equivalent for the standard 4 labor names.
+  // during the very first render — fall back to name-based check.
   if (typeof pcCatalog !== 'undefined' && pcCatalog && currentVenue) {
     try {
       var s = pcCatalog.getStand(currentVenue, stand);
-      if (s) return s.stand_type !== 'revenue';
+      if (s) {
+        var t = s.stand_type;
+        if (t === 'revenue') return 'main';
+        if (t === 'mobilecart') return 'mobilecart';
+        if (t === 'hawking') return 'hawking';
+        return 'labor'; // support, client, nonevent, or anything unrecognized non-revenue
+      }
     } catch (e) { /* fall through */ }
   }
-  return _LEGACY_LABOR_NAMES.indexOf(stand) !== -1;
+  // Fallback: name-based
+  if (_LEGACY_HAWKING_NAMES.indexOf(stand) !== -1) return 'hawking';
+  if (_LEGACY_LABOR_NAMES.indexOf(stand) !== -1) return 'labor';
+  return 'main';
+}
+// Backward-compat shim. Some code paths still check "is this labor?" as a
+// binary. Labor is now strictly the support/client/nonevent bucket.
+function isLaborStand(stand) {
+  return getStandBucket(stand) === 'labor';
 }
 
 // Phase -2b wiring (May 26, 2026): venue labels and stand lists are
@@ -747,28 +768,61 @@ function renderPage() {
     });
   });
 
-  // ── Split sales: pool-eligible vs labor-only ─────────────────────────────
-  var poolSales = salesData.filter(function(r) { return !isLaborStand(r.stand); });
-  var laborSales = salesData.filter(function(r) { return isLaborStand(r.stand); });
-
-  // ── Pool tip math — uses ONLY pool-eligible sales ─────────────────────────
-  var poolTips = 0, poolStaff = 0;
-  poolSales.forEach(function(r) { poolTips += parseFloat(r.tip_amount) || 0; });
-  poolSales.forEach(function(r) {
-    var assigns = (assignmentsData[r.id] || []).filter(function(a) { return !removedRows[a.id]; });
-    if (assigns.length > 0) poolStaff += assigns.length;
-    else poolStaff += parseInt(r.staff_count) || 0;
+  // ── Bucket sales by stand type ────────────────────────────────────────────
+  // Each sale gets sorted into one of four buckets based on its stand's type
+  // in the catalog. This drives all downstream tip-pool math and rendering.
+  var mainSales = [];        // 'revenue' stands — main building pool (or per-stand at non-pool venues)
+  var cartSales = [];        // 'mobilecart' stands — separate Mobile Cart pool at pool venues
+  var hawkingSales = [];     // 'hawking' stands — always per-row (never pooled)
+  var laborSales = [];       // 'support'/'client'/'nonevent' — excluded entirely
+  salesData.forEach(function(r) {
+    var b = getStandBucket(r.stand);
+    if (b === 'main') mainSales.push(r);
+    else if (b === 'mobilecart') cartSales.push(r);
+    else if (b === 'hawking') hawkingSales.push(r);
+    else laborSales.push(r);
   });
-  var poolTipPerPerson = isPool && poolStaff > 0 ? poolTips / poolStaff : null;
 
-  // ── Labor stats (separate, NOT pooled) ────────────────────────────────────
-  var laborTips = 0, laborStaff = 0;
-  laborSales.forEach(function(r) { laborTips += parseFloat(r.tip_amount) || 0; });
-  laborSales.forEach(function(r) {
-    var assigns = (assignmentsData[r.id] || []).filter(function(a) { return !removedRows[a.id]; });
-    if (assigns.length > 0) laborStaff += assigns.length;
-    else laborStaff += parseInt(r.staff_count) || 0;
-  });
+  // ── Helper: sum tips and staff counts for a bucket ───────────────────────
+  function bucketTotals(sales) {
+    var tips = 0, staff = 0;
+    sales.forEach(function(r) { tips += parseFloat(r.tip_amount) || 0; });
+    sales.forEach(function(r) {
+      var assigns = (assignmentsData[r.id] || []).filter(function(a) { return !removedRows[a.id]; });
+      if (assigns.length > 0) staff += assigns.length;
+      else staff += parseInt(r.staff_count) || 0;
+    });
+    return { tips: tips, staff: staff };
+  }
+
+  // ── Main pool math ───────────────────────────────────────────────────────
+  // At pool venues (FMP): tips/staff combined across all 'revenue' stands → one rate.
+  // At non-pool venues: each stand is computed per-stand in renderStandCard,
+  // poolTipPerPerson stays null and the card uses standTipPerPerson instead.
+  var mainTotals = bucketTotals(mainSales);
+  var poolTipPerPerson = isPool && mainTotals.staff > 0 ? mainTotals.tips / mainTotals.staff : null;
+
+  // ── Mobile Cart pool math ────────────────────────────────────────────────
+  // At pool venues (FMP): cart tips and cart staff combine into their OWN pool,
+  // distinct from the main pool. Per-person rate calculated only if we have
+  // both tips AND staff. At non-pool venues, carts fall through to per-stand
+  // calculation just like main-pool stands do.
+  var cartTotals = bucketTotals(cartSales);
+  var cartTipPerPerson = isPool && cartTotals.staff > 0 ? cartTotals.tips / cartTotals.staff : null;
+
+  // ── Hawking: always per-row, no aggregate calculation ────────────────────
+  // Each Hawking sale renders with its own per-stand share via renderStandCard
+  // (which already handles per-stand math for non-pool venues). No aggregate.
+
+  // ── Labor stats (separate, NOT pooled) ───────────────────────────────────
+  var laborTotals = bucketTotals(laborSales);
+  var laborTips = laborTotals.tips;
+  var laborStaff = laborTotals.staff;
+
+  // Legacy names kept for backward compatibility with code that follows
+  var poolSales = mainSales;
+  var poolTips = mainTotals.tips;
+  var poolStaff = mainTotals.staff;
 
   // ── Overall totals (all sales — used for the top-line summary cards) ──────
   var totalSales = 0, totalTips = 0, totalVerified = 0, totalAssigned = 0;
@@ -790,22 +844,36 @@ function renderPage() {
   pctEl.className = 's-pct ' + pctClass(overallPct);
   document.getElementById('sum-per-person').textContent = poolTipPerPerson !== null ? fmtD(poolTipPerPerson) : (poolStaff > 0 ? 'per stand' : '—');
   document.getElementById('sum-per-person-sub').textContent = isPool ? 'building-wide pool' : 'calculated per stand';
-  // Staff card shows POOL staff count; sub-line surfaces labor staff separately
+  // "Staff signed in" headline = main pool staff. Sub-line includes the
+  // breakouts so the manager can see who isn't in the main pool's denominator.
   document.getElementById('sum-staff').textContent = poolStaff;
   var reqTotal = Object.values(staffingRequested).reduce(function(s,v){return s+v;},0);
   var staffSubEl = document.getElementById('sum-staff-sub');
   var staffSubBits = [];
   if (reqTotal > 0) staffSubBits.push(reqTotal + ' requested');
+  if (cartTotals.staff > 0) staffSubBits.push('+ ' + cartTotals.staff + ' carts (own pool)');
+  if (hawkingSales.length > 0) {
+    var hawkStaff = 0;
+    hawkingSales.forEach(function(r) {
+      var assigns = (assignmentsData[r.id] || []).filter(function(a) { return !removedRows[a.id]; });
+      hawkStaff += assigns.length > 0 ? assigns.length : (parseInt(r.staff_count) || 0);
+    });
+    if (hawkStaff > 0) staffSubBits.push('+ ' + hawkStaff + ' hawking (own tips)');
+  }
   if (laborStaff > 0) staffSubBits.push('+ ' + laborStaff + ' labor (not in pool)');
   staffSubEl.textContent = staffSubBits.join(' · ');
   staffSubEl.className = 's-sub ' + (reqTotal > 0 && poolStaff < reqTotal ? 'amber' : '');
-  // Stands reported uses DISTINCT pool-eligible stands, not raw sales row count
-  var distinctPoolStands = {};
-  poolSales.forEach(function(r) { distinctPoolStands[r.stand] = true; });
-  var distinctPoolStandsCount = Object.keys(distinctPoolStands).length;
-  var poolStandTotal = stands.filter(function(s) { return !isLaborStand(s); }).length;
-  document.getElementById('sum-stands').textContent = distinctPoolStandsCount + ' of ' + poolStandTotal;
-  document.getElementById('sum-stands-sub').textContent = (poolStandTotal - distinctPoolStandsCount) + ' not submitted';
+  // "Stands reported" counts ALL non-labor stands (main + mobilecart + hawking)
+  // since they all generate sales/tips, just into different pools. Labor is
+  // the only bucket excluded from this count.
+  var distinctReportedStands = {};
+  mainSales.forEach(function(r) { distinctReportedStands[r.stand] = true; });
+  cartSales.forEach(function(r) { distinctReportedStands[r.stand] = true; });
+  hawkingSales.forEach(function(r) { distinctReportedStands[r.stand] = true; });
+  var distinctReportedStandsCount = Object.keys(distinctReportedStands).length;
+  var reportableStandTotal = stands.filter(function(s) { return getStandBucket(s) !== 'labor'; }).length;
+  document.getElementById('sum-stands').textContent = distinctReportedStandsCount + ' of ' + reportableStandTotal;
+  document.getElementById('sum-stands-sub').textContent = (reportableStandTotal - distinctReportedStandsCount) + ' not submitted';
   document.getElementById('sum-verified').textContent = totalVerified + ' of ' + totalAssigned;
   var verSubEl = document.getElementById('sum-verified-sub');
   var unverified = totalAssigned - totalVerified;
@@ -814,11 +882,27 @@ function renderPage() {
   document.getElementById('summary-strip').style.display = 'grid';
 
   // ── Pool notice ───────────────────────────────────────────────────────────
+  // At pool venues, surface BOTH the main pool rate AND the Mobile Cart pool
+  // rate (when there are cart submissions). Hawking and labor are mentioned
+  // as carve-outs so the manager knows why those people aren't in the count.
   var poolEl = document.getElementById('pool-notice');
   if (isPool) {
-    var notice = 'FMP uses a building-wide tip pool — all tips collected at sales stands are combined and split equally across ' + poolStaff + ' pool-eligible staff. Each person earns ' + (poolTipPerPerson !== null ? fmtD(poolTipPerPerson) : '—') + ' regardless of stand.';
-    if (laborStaff > 0) notice += ' Support staff (' + laborStaff + ') are not part of the pool.';
-    poolEl.textContent = notice;
+    var lines = [];
+    // Main pool line
+    lines.push('<strong>Main pool:</strong> ' + poolStaff + ' staff sharing ' + fmt(poolTips) + ' — each person earns ' + (poolTipPerPerson !== null ? fmtD(poolTipPerPerson) : '—') + '.');
+    // Mobile Cart pool line — only if any carts logged sales
+    if (cartSales.length > 0) {
+      lines.push('<strong>Mobile Cart pool:</strong> ' + cartTotals.staff + ' staff sharing ' + fmt(cartTotals.tips) + ' — each person earns ' + (cartTipPerPerson !== null ? fmtD(cartTipPerPerson) : '—') + '. Carts pool separately from the main building.');
+    }
+    // Hawking carve-out line — only if Hawkers logged anything
+    if (hawkingSales.length > 0) {
+      lines.push('<strong>Hawking:</strong> ' + hawkingSales.length + ' submission' + (hawkingSales.length > 1 ? 's' : '') + ' — each Hawker keeps their own tips, not pooled.');
+    }
+    // Labor carve-out line
+    if (laborStaff > 0) {
+      lines.push('<strong>Support staff:</strong> ' + laborStaff + ' people — not in any pool.');
+    }
+    poolEl.innerHTML = lines.join(' ');
     poolEl.style.display = 'block';
   } else { poolEl.style.display = 'none'; }
 
@@ -855,9 +939,14 @@ function renderPage() {
   document.getElementById('print-footer').innerHTML = '<div class="print-sig"><div class="print-sig-line">Manager signature</div><div class="print-sig-line">Date</div></div><div style="margin-top:12px;">Popcorn Chez &middot; ' + (VENUE_LABELS[venue]||venue) + ' &middot; ' + (currentEventName||'') + ' &middot; ' + dateStr + '</div>';
 
   // ── Render pool-stand cards grid ─────────────────────────────────────────
+  // Each card calls renderStandCard with the right pool context for its bucket:
+  //   - 'main' revenue stands: main pool rate (or per-stand at non-pool venues)
+  //   - 'mobilecart' stands: cart pool rate (or per-stand at non-pool venues)
+  //   - 'hawking' stands: ALWAYS per-stand (isPool=false), never pooled
   var html = '<div class="stands-grid">';
   stands.forEach(function(stand) {
-    if (isLaborStand(stand)) return;
+    var bucket = getStandBucket(stand);
+    if (bucket === 'labor') return; // labor renders in separate section below
     var standSales = salesByStand[stand];
     if (!standSales || !standSales.length) {
       var requested = staffingRequested[stand] || 0;
@@ -869,7 +958,20 @@ function renderPage() {
     }
     var primary = standSales[0];
     var dupes = standSales.slice(1);
-    html += renderStandCard(primary, dupes, isPool, poolTipPerPerson);
+    // Pass the correct pool context for this card's bucket
+    var cardIsPool, cardPoolRate;
+    if (bucket === 'mobilecart') {
+      cardIsPool = isPool;
+      cardPoolRate = cartTipPerPerson;
+    } else if (bucket === 'hawking') {
+      cardIsPool = false; // Hawking is ALWAYS per-stand, never pooled
+      cardPoolRate = null;
+    } else {
+      // 'main' revenue stand
+      cardIsPool = isPool;
+      cardPoolRate = poolTipPerPerson;
+    }
+    html += renderStandCard(primary, dupes, cardIsPool, cardPoolRate);
   });
   html += '</div>';
 
