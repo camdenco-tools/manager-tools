@@ -216,6 +216,64 @@ body {
 }
 .card-btn:hover { border-color: var(--muted); background: var(--bg); }
 .card-btn svg { flex-shrink: 0; }
+
+/* ============================================================
+   SIGNUP COUNT BADGE — added May 29, 2026
+   Renders on each active employee row between the name and the
+   Card button, showing their lifetime signup count. Red treatment
+   when count <= LOW_SIGNUP_THRESHOLD; otherwise muted gray. Hidden
+   on Inactive tab and for employees with home_venue = 'NA'.
+   ============================================================ */
+.signup-count-badge-row {
+  font-size: 11px; font-weight: 600;
+  color: var(--muted);
+  padding: 3px 8px;
+  border-radius: 5px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  background: var(--bg);
+  border: 1px solid var(--border-lt);
+}
+.signup-count-badge-row.low {
+  background: var(--red-50);
+  color: var(--red-600);
+  font-weight: 700;
+  border-color: #f0c8c4;
+}
+/* Clickable variant of the badge — used when the employee has 1+ signups
+   to drill into. Same visual treatment as the non-clickable span but
+   reset the default <button> styling and add a hover state so the
+   affordance reads. */
+.signup-count-badge-row.clickable {
+  cursor: pointer;
+  font-family: inherit;
+}
+.signup-count-badge-row.clickable:hover {
+  border-color: var(--muted);
+  background: #ececea;
+}
+.signup-count-badge-row.low.clickable:hover {
+  background: #fbe0db;
+  border-color: var(--red-600);
+}
+
+/* Lifetime signup line at the top of the card modal Signups section */
+.signups-lifetime {
+  font-size: 12px;
+  color: var(--text);
+  background: var(--bg);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+.signups-lifetime strong {
+  color: var(--text);
+  font-weight: 700;
+}
+.signups-lifetime .lifetime-venues {
+  color: var(--muted);
+}
 .dropdown-wrap { position: relative; flex-shrink: 0; }
 .venue-select {
   appearance: none;
@@ -1602,6 +1660,12 @@ body {
   // Must match the same constant on /certifications/index.html.
   var EXPIRING_SOON_DAYS = 30;
 
+  // Signup-count badge threshold. Rows with lifetime signup count <= this
+  // render with a red treatment on the Crew page row list. Bump as the
+  // season progresses — the right line at 30 days into the season is not
+  // the right line at 90 days. See build brief from May 29, 2026.
+  var LOW_SIGNUP_THRESHOLD = 5;
+
   // Uniform shirt sizes — must match the CHECK constraint on
   // candidates.shirt_size and employees.shirt_size in the database.
   // Order is small -> large for sortability. If you change this list,
@@ -1760,7 +1824,16 @@ body {
     // Per the perf decision: we do NOT pull onboarding_submissions at
     // boot. The four helper columns on employees drive section visibility;
     // the actual submission row is fetched only when needed.
-    cardSubmissionByEmpId: {}
+    cardSubmissionByEmpId: {},
+
+    // Lifetime signup counts per employee — derived from state.signups
+    // at boot time, alongside the existing rating data assembly. Used
+    // by the row-list badge and by the card modal's Signups section
+    // lifetime summary line. Shape:
+    //   { "Full Name": { total: 14, byVenue: { FMP: 9, Mann: 4, SATB: 1 } } }
+    // Never refetched — recomputed only if state.signups changes (which
+    // it doesn't, post-boot, on this page).
+    signupCountsByName: {}
   };
 
   // -------------------------------------------------------------
@@ -2730,9 +2803,38 @@ body {
         '</svg>' +
         'Card' +
       '</button>';
+
+    // Signup count badge — only on Active tab, only when the employee
+    // has a real home venue (NA people are managers/floaters/exempt
+    // and showing "0 signups" on them is just noise). Red treatment
+    // when count <= LOW_SIGNUP_THRESHOLD.
+    var signupBadge = '';
+    if (state.statusTab === 'active' && emp.home_venue !== 'NA') {
+      var sc = state.signupCountsByName[name];
+      var total = sc ? sc.total : 0;
+      var badgeClass = 'signup-count-badge-row' + (total <= LOW_SIGNUP_THRESHOLD ? ' low' : '');
+      var tip = total === 0
+        ? 'Never signed up'
+        : total + ' lifetime signup' + (total === 1 ? '' : 's');
+      // Clickable when there's history to show. Opens the card and
+      // auto-expands the Signups section. Zero-count badges still render
+      // but stay non-clickable since there's nothing to drill into.
+      if (total > 0) {
+        signupBadge = '<button class="' + badgeClass + ' clickable" data-signup-badge="' + emp.id + '" ' +
+          'title="' + escapeHtml(tip) + ' &mdash; click to see history">' +
+          total + ' signup' + (total === 1 ? '' : 's') +
+        '</button>';
+      } else {
+        signupBadge = '<span class="' + badgeClass + '" title="' + escapeHtml(tip) + '">' +
+          total + ' signup' + (total === 1 ? '' : 's') +
+        '</span>';
+      }
+    }
+
     return '' +
       '<div class="' + classes + '" data-emp-id="' + emp.id + '">' +
         '<div class="emp-name">' + escapeHtml(name) + '</div>' +
+        signupBadge +
         cardBtn +
         '<div class="dropdown-wrap">' +
           '<select class="venue-select" data-emp-id="' + emp.id + '">' +
@@ -2800,6 +2902,19 @@ body {
       cardBtns[c].addEventListener('click', function(e) {
         var empId = e.currentTarget.getAttribute('data-card-emp');
         openCardModal(empId);
+      });
+    }
+    // Wire signup badge clicks. Opens the card with the Signups section
+    // already expanded so the manager lands directly on the history view.
+    var sigBtns = area.querySelectorAll('button[data-signup-badge]');
+    for (var sb = 0; sb < sigBtns.length; sb++) {
+      sigBtns[sb].addEventListener('click', function(e) {
+        var empId = e.currentTarget.getAttribute('data-signup-badge');
+        openCardModal(empId);
+        // Auto-expand Signups section. openCardModal sets signupsOpen=false
+        // by default, so we flip it after open and re-render.
+        state.signupsOpen = true;
+        renderCardModal();
       });
     }
   }
@@ -4136,8 +4251,9 @@ body {
     return out;
   }
 
-  // Bucket signups into upcoming vs recent-past (within 14 days).
-  // Older-than-14-days past signups are filtered out entirely.
+  // Bucket signups into three groups: upcoming, recent past (within 14 days),
+  // and older past (everything else). The older bucket was previously dropped
+  // entirely; it's now kept so the badge-click flow can surface full history.
   function partitionSignups(signups) {
     var today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -4146,6 +4262,7 @@ body {
 
     var upcoming = [];
     var recentPast = [];
+    var olderPast = [];
     for (var i = 0; i < signups.length; i++) {
       var r = signups[i];
       var ev = state.eventsById[r.event_id];
@@ -4158,12 +4275,14 @@ body {
         upcoming.push({ row: r, ev: ev, evMs: evMs });
       } else if (evMs >= fourteenDaysAgoMs) {
         recentPast.push({ row: r, ev: ev, evMs: evMs });
+      } else {
+        olderPast.push({ row: r, ev: ev, evMs: evMs });
       }
-      // else: older than 14 days past — drop
     }
     upcoming.sort(function(a, b) { return a.evMs - b.evMs; });
     recentPast.sort(function(a, b) { return b.evMs - a.evMs; }); // most recent past first
-    return { upcoming: upcoming, recentPast: recentPast };
+    olderPast.sort(function(a, b) { return b.evMs - a.evMs; });  // most recent first within older
+    return { upcoming: upcoming, recentPast: recentPast, olderPast: olderPast };
   }
 
   function formatSignupEventDate(ev) {
@@ -4242,7 +4361,7 @@ body {
     var pastCount = parts.recentPast.length;
 
     var bodyHtml;
-    if (parts.upcoming.length === 0 && parts.recentPast.length === 0) {
+    if (parts.upcoming.length === 0 && parts.recentPast.length === 0 && parts.olderPast.length === 0) {
       bodyHtml = '<div class="signups-empty">No upcoming signups, and nothing in the last 14 days.</div>';
     } else {
       var pieces = [];
@@ -4260,7 +4379,33 @@ body {
           pieces.push(renderSignupRow(parts.recentPast[j], true));
         }
       }
+      if (parts.olderPast.length > 0) {
+        pieces.push('<div class="signups-group-label">Older &middot; ' + parts.olderPast.length + '</div>');
+        for (var k = 0; k < parts.olderPast.length; k++) {
+          pieces.push(renderSignupRow(parts.olderPast[k], true));
+        }
+      }
       bodyHtml = pieces.join('');
+    }
+
+    // Lifetime summary line — prepended to the body when the employee
+    // has any signups on record. Pulls the pre-computed aggregate from
+    // state.signupCountsByName (built at boot). Venue list sorted by
+    // count descending so the most-frequent venue reads first.
+    var lifetime = state.signupCountsByName[fullName(emp)];
+    if (lifetime && lifetime.total > 0) {
+      var venueKeys = Object.keys(lifetime.byVenue).sort(function(a, b) {
+        return lifetime.byVenue[b] - lifetime.byVenue[a];
+      });
+      var venueParts = venueKeys.map(function(v) {
+        return escapeHtml(v) + ' ' + lifetime.byVenue[v];
+      });
+      var lifetimeHtml = '<div class="signups-lifetime">' +
+        '<strong>Lifetime:</strong> ' + lifetime.total + ' signup' +
+        (lifetime.total === 1 ? '' : 's') +
+        ' <span class="lifetime-venues">&middot; ' + venueParts.join(' &middot; ') + '</span>' +
+      '</div>';
+      bodyHtml = lifetimeHtml + bodyHtml;
     }
 
     var countBadge = '<span class="signup-count-badge">' + upcomingCount + '</span>';
@@ -5265,6 +5410,26 @@ body {
         state.verifiedAttendance = ratingData.verifiedAttendance;
         state.eventsById = ratingData.eventsById;
         state.eventsWithSignin = ratingData.eventsWithSignin;
+
+        // Build the lifetime signup count map. Uses already-loaded
+        // signups + eventsById — no extra fetch. Skips soft-removed
+        // signups and any signup whose event we couldn't resolve.
+        // Name matching follows the same first_name + ' ' + last_name
+        // against availability.staff_name pattern Performance Signals
+        // uses; same known soft gap on nicknames/typos.
+        state.signupCountsByName = {};
+        state.signups.forEach(function(s) {
+          if (s.removed_at) return;
+          if (!s.staff_name) return;
+          var ev = state.eventsById[s.event_id];
+          if (!ev || !ev.venue) return;
+          if (!state.signupCountsByName[s.staff_name]) {
+            state.signupCountsByName[s.staff_name] = { total: 0, byVenue: {} };
+          }
+          state.signupCountsByName[s.staff_name].total++;
+          state.signupCountsByName[s.staff_name].byVenue[ev.venue] =
+            (state.signupCountsByName[s.staff_name].byVenue[ev.venue] || 0) + 1;
+        });
 
         // Card change history — keyed by employee_id, sorted newest-first.
         state.changeHistory = results[5] || {};
