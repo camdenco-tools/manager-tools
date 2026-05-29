@@ -476,6 +476,30 @@ async function fetchRoster() {
 // selectVenue queries with venue=in.(<comma-separated codes>) to catch sales under either.
 var labelToCodes = {};
 
+// Find the most recent event date with submitted sales, return the
+// alphabetically-first venue label from that date. Used to default the
+// page to a relevant venue instead of always landing on ACCC.
+async function getDefaultVenueLabel() {
+  try {
+    var res = await fetch(
+      SUPA_URL + '/rest/v1/sales?select=event_date,venue&order=event_date.desc&limit=30',
+      { headers: apiHeaders() }
+    );
+    var rows = await res.json();
+    if (!Array.isArray(rows) || !rows.length) return null;
+    var mostRecentDate = rows[0].event_date;
+    var venuesOnThatDate = {};
+    rows.forEach(function(r) {
+      if (r.event_date === mostRecentDate && r.venue) {
+        var label = VENUE_LABELS[r.venue] || r.venue;
+        venuesOnThatDate[label] = true;
+      }
+    });
+    var labels = Object.keys(venuesOnThatDate).sort();
+    return labels.length ? labels[0] : null;
+  } catch(e) { return null; }
+}
+
 async function loadVenues() {
   try {
     var res = await fetch(SUPA_URL + '/rest/v1/sales?select=venue&order=venue.asc', { headers: apiHeaders() });
@@ -491,15 +515,17 @@ async function loadVenues() {
     var pillsEl = document.getElementById('venue-pills');
     if (!labels.length) { pillsEl.innerHTML = '<span style="font-size:12px;color:#aaa;">No sales logged yet</span>'; return; }
     pillsEl.innerHTML = '';
-    labels.forEach(function(label, i) {
+    var preferredLabel = await getDefaultVenueLabel();
+    var defaultLabel = (preferredLabel && labels.indexOf(preferredLabel) !== -1) ? preferredLabel : labels[0];
+    labels.forEach(function(label) {
       var btn = document.createElement('button');
-      btn.className = 'venue-pill' + (i === 0 ? ' active' : '');
+      btn.className = 'venue-pill' + (label === defaultLabel ? ' active' : '');
       btn.textContent = label;
       btn.onclick = function() { selectVenue(label); };
       btn.id = 'vpill-' + label.replace(/[^a-zA-Z0-9]/g, '_');
       pillsEl.appendChild(btn);
     });
-    selectVenue(labels[0]);
+    selectVenue(defaultLabel);
   } catch(e) {}
 }
 
