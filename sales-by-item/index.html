@@ -1,0 +1,1860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sales by Item — Admin · Popcorn Chez</title>
+
+<!-- DM Sans — matches the rest of the toolkit -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap">
+
+<!-- Auth must load BEFORE pc-nav (pc-nav reads pcAuth.getUser()) -->
+<script src="/pc-auth.js"></script>
+<script src="/pc-nav.js"></script>
+<script src="/pc-activity.js"></script>
+<script src="/pc-fiscal.js"></script>
+
+<style>
+  /* ========================================================================
+     RESET / BASE
+     ======================================================================== */
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #faf9f6;
+    color: #1a1a1a;
+    font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ========================================================================
+     PAGE-TITLE ROW
+     ======================================================================== */
+  .page-title-row {
+    background: #faf9f6;
+    border-bottom: 1px solid #e8e8e4;
+    padding: 18px 22px 16px;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .page-title {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0;
+  }
+  .page-title-meta {
+    font-size: 12px;
+    color: #888;
+    font-weight: 500;
+  }
+
+  /* ========================================================================
+     CONTENT WRAPPER
+     ======================================================================== */
+  .page-body {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 18px 22px 80px;
+  }
+
+  /* ========================================================================
+     DATE CHIP ROW
+     ======================================================================== */
+  .chip-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 22px;
+  }
+  .chip {
+    background: #fff;
+    border: 1px solid #e0dfd8;
+    color: #555;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 7px 14px;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  }
+  .chip:hover { background: #f1f0eb; color: #1a1a1a; }
+  .chip.is-active {
+    background: #1a1a1a;
+    color: #fff;
+    border-color: #1a1a1a;
+  }
+  .chip-range {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 8px;
+  }
+  .chip-range input[type="date"] {
+    font-family: inherit;
+    font-size: 13px;
+    padding: 6px 8px;
+    border: 1px solid #e0dfd8;
+    border-radius: 6px;
+    background: #fff;
+    color: #1a1a1a;
+  }
+  .chip-range input:focus { outline: none; border-color: #1a1a1a; }
+  .chip-range span { color: #888; font-size: 12px; }
+
+  .range-banner {
+    font-size: 12px;
+    color: #888;
+    margin-bottom: 14px;
+  }
+  .range-banner strong { color: #555; font-weight: 600; }
+
+  .range-warning {
+    background: #fef6ec;
+    border: 1px solid #f3d9a8;
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin-bottom: 14px;
+    font-size: 12px;
+    color: #633806;
+  }
+  .range-warning[hidden] { display: none; }
+
+  /* ========================================================================
+     BIG TOTAL CARD
+     ======================================================================== */
+  .total-card {
+    background: #fff;
+    border: 0.5px solid #e0dfd8;
+    border-radius: 12px;
+    padding: 26px 28px;
+    margin-bottom: 18px;
+  }
+  .total-card-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #888;
+    margin-bottom: 8px;
+  }
+  .total-card-value {
+    font-size: 36px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: #1a1a1a;
+    font-variant-numeric: tabular-nums;
+    margin-bottom: 6px;
+  }
+  .total-card-meta {
+    font-size: 13px;
+    color: #666;
+  }
+  .total-card-meta .sep { color: #c8c6bd; margin: 0 6px; }
+  .total-card.is-loading .total-card-value,
+  .total-card.is-loading .total-card-meta {
+    color: transparent;
+    background: linear-gradient(90deg, #f0efe8 0%, #f6f6f3 50%, #f0efe8 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s infinite;
+    border-radius: 6px;
+  }
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  /* ========================================================================
+     BY-VENUE CARD
+     ======================================================================== */
+  .by-venue-card {
+    background: #fff;
+    border: 0.5px solid #e0dfd8;
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 18px;
+  }
+  .card-head {
+    padding: 14px 18px;
+    border-bottom: 1px solid #f0efe8;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1a1a1a;
+  }
+  .card-subtitle {
+    font-size: 12px;
+    color: #888;
+  }
+
+  .by-venue-row {
+    display: grid;
+    grid-template-columns: 1fr 90px 70px 110px 24px;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 18px;
+    border-bottom: 1px solid #f0efe8;
+    cursor: pointer;
+    transition: background 0.08s ease;
+    background: #fff;
+    border: 0;
+    border-bottom: 1px solid #f0efe8;
+    text-align: left;
+    font-family: inherit;
+    color: inherit;
+    width: 100%;
+  }
+  .by-venue-row:hover { background: #fafaf6; }
+  .by-venue-row:last-of-type { border-bottom: 0; }
+  .by-venue-row.is-expanded { background: #f6f6f3; }
+  .by-venue-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: #1a1a1a;
+  }
+  .by-venue-meta {
+    font-size: 12px;
+    color: #888;
+  }
+  .by-venue-meta .full-name { display: block; font-size: 11px; color: #aaa; margin-top: 1px; }
+  .by-venue-pct {
+    font-size: 12px;
+    color: #888;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .by-venue-amount {
+    font-size: 14px;
+    font-weight: 600;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .by-venue-chevron {
+    width: 14px;
+    height: 14px;
+    transition: transform 0.15s ease;
+    color: #aaa;
+  }
+  .by-venue-row.is-expanded .by-venue-chevron { transform: rotate(180deg); }
+
+  .by-venue-detail {
+    background: #fafaf6;
+    border-bottom: 1px solid #f0efe8;
+    padding: 8px 18px 14px 38px;
+  }
+  .by-venue-detail-row {
+    display: grid;
+    grid-template-columns: 1fr 90px 110px;
+    gap: 12px;
+    padding: 6px 0;
+    font-size: 13px;
+  }
+  .by-venue-detail-row .item-name { color: #555; }
+  .by-venue-detail-row .item-name .item-cat-tag {
+    font-size: 10px;
+    color: #aaa;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-left: 6px;
+  }
+  .by-venue-detail-row .item-pct {
+    font-size: 11px;
+    color: #888;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .by-venue-detail-row .item-amt {
+    font-size: 13px;
+    font-weight: 500;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .by-venue-detail-row .item-amt.is-negative {
+    color: #791F1F;
+  }
+
+  .by-venue-empty {
+    padding: 36px 18px;
+    text-align: center;
+    color: #888;
+    font-size: 13px;
+  }
+
+  /* ========================================================================
+     CROSS-TAB
+     ======================================================================== */
+  .crosstab-card {
+    background: #fff;
+    border: 0.5px solid #e0dfd8;
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 24px;
+  }
+  .crosstab-card-body {
+    overflow-x: auto;
+  }
+  .crosstab-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .crosstab-table thead tr {
+    background: #f6f6f3;
+    border-bottom: 1px solid #e0dfd8;
+  }
+  .crosstab-table th {
+    padding: 10px 12px;
+    font-weight: 500;
+    color: #555;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    text-align: right;
+    white-space: nowrap;
+    vertical-align: bottom;
+  }
+  .crosstab-table th.col-item { text-align: left; }
+  .crosstab-table th.col-total {
+    color: #1a1a1a;
+    background: #f1f0eb;
+    border-left: 1px solid #e0dfd8;
+  }
+  .crosstab-table th .venue-fullname {
+    display: block;
+    font-size: 9px;
+    color: #aaa;
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 400;
+    margin-top: 2px;
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .crosstab-table tbody tr {
+    border-bottom: 1px solid #f6f5f0;
+  }
+  .crosstab-table tbody tr.is-cat-header {
+    background: #fafaf6;
+  }
+  .crosstab-table tbody tr.is-cat-header td {
+    padding: 10px 12px 6px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #888;
+    border-bottom: 0;
+    border-top: 1px solid #f0efe8;
+  }
+  .crosstab-table tbody tr.is-total-row {
+    background: #f1f0eb;
+    border-top: 2px solid #1a1a1a;
+  }
+  .crosstab-table tbody tr.is-total-row td {
+    font-weight: 700;
+    padding: 12px;
+  }
+
+  .crosstab-table td {
+    padding: 9px 12px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    vertical-align: top;
+  }
+  .crosstab-table td.col-item {
+    text-align: left;
+    color: #1a1a1a;
+    white-space: normal;
+    max-width: 280px;
+  }
+  .crosstab-table td.col-item .item-tag {
+    display: inline-block;
+    font-size: 10px;
+    font-style: italic;
+    color: #aaa;
+    margin-left: 6px;
+    font-weight: 400;
+  }
+  .crosstab-table td.col-total {
+    background: #fafaf6;
+    border-left: 1px solid #f0efe8;
+    font-weight: 600;
+  }
+  .crosstab-table tbody tr.is-total-row td.col-total {
+    background: #e9e7df;
+  }
+
+  .ct-cell-amt {
+    display: block;
+    font-size: 13px;
+    color: #1a1a1a;
+  }
+  .ct-cell-amt.is-zero {
+    color: #c8c6bd;
+  }
+  .ct-cell-amt.is-negative {
+    color: #791F1F;
+  }
+  .ct-cell-pct {
+    display: block;
+    font-size: 10px;
+    color: #888;
+    margin-top: 1px;
+    font-variant-numeric: tabular-nums;
+  }
+  .ct-cell-pct.is-hidden {
+    visibility: hidden;
+  }
+
+  /* Click-through cells. The whole cell behaves like a button when there's
+     non-zero activity to drill into. */
+  .ct-cell-btn {
+    background: transparent;
+    border: 0;
+    padding: 2px 6px;
+    margin: -2px -6px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    color: inherit;
+    text-align: right;
+    width: 100%;
+    transition: background 0.1s ease;
+  }
+  .ct-cell-btn:hover {
+    background: #e6f1fb;
+  }
+  .ct-cell-btn:disabled {
+    cursor: default;
+  }
+  .ct-cell-btn:disabled:hover {
+    background: transparent;
+  }
+
+  .crosstab-empty {
+    padding: 50px 20px;
+    text-align: center;
+    color: #888;
+    font-size: 13px;
+  }
+
+  /* ========================================================================
+     DRILL-DOWN MODAL
+     ======================================================================== */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.36);
+    z-index: 1500;
+    display: none;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 60px 16px;
+    overflow-y: auto;
+  }
+  .modal-backdrop.is-open { display: flex; }
+
+  .drill-modal {
+    background: #fff;
+    border-radius: 14px;
+    max-width: 720px;
+    width: 100%;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.18);
+    overflow: hidden;
+  }
+  .drill-head {
+    padding: 20px 24px 14px;
+    border-bottom: 1px solid #f0efe8;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .drill-title {
+    font-size: 17px;
+    font-weight: 600;
+    color: #1a1a1a;
+    margin-bottom: 2px;
+  }
+  .drill-subtitle {
+    font-size: 12px;
+    color: #888;
+  }
+  .drill-close {
+    background: transparent;
+    border: 0;
+    font-size: 22px;
+    color: #888;
+    cursor: pointer;
+    line-height: 1;
+    padding: 4px 8px;
+  }
+  .drill-close:hover { color: #1a1a1a; }
+
+  .drill-body {
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+  .drill-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .drill-table thead tr {
+    background: #f6f6f3;
+    border-bottom: 1px solid #e0dfd8;
+  }
+  .drill-table th {
+    padding: 8px 14px;
+    font-weight: 500;
+    color: #555;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    text-align: left;
+    white-space: nowrap;
+  }
+  .drill-table th.is-amount { text-align: right; }
+  .drill-table tbody tr {
+    border-bottom: 1px solid #f0efe8;
+    cursor: pointer;
+    transition: background 0.08s ease;
+  }
+  .drill-table tbody tr:hover { background: #fafaf6; }
+  .drill-table tbody tr:last-child { border-bottom: 0; }
+  .drill-table td {
+    padding: 10px 14px;
+  }
+  .drill-table td.col-inv {
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+  }
+  .drill-table td.col-date {
+    font-variant-numeric: tabular-nums;
+    color: #555;
+  }
+  .drill-table td.col-amt {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+  }
+  .drill-table td.col-amt.is-negative { color: #791F1F; }
+  .drill-empty {
+    padding: 40px 20px;
+    text-align: center;
+    color: #888;
+    font-size: 13px;
+  }
+  .drill-footer {
+    padding: 12px 24px;
+    border-top: 1px solid #f0efe8;
+    background: #fafaf6;
+    font-size: 12px;
+    color: #888;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .drill-footer strong { color: #1a1a1a; font-weight: 600; }
+
+  /* ========================================================================
+     TOAST
+     ======================================================================== */
+  .pc-toast-host {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2000;
+    pointer-events: none;
+  }
+  .pc-toast {
+    background: #1a1a1a;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 11px 18px;
+    border-radius: 24px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.18s ease, transform 0.18s ease;
+  }
+  .pc-toast.is-shown { opacity: 1; transform: translateY(0); }
+
+  /* ========================================================================
+     AUTH-GATE PRE-BODY
+     ======================================================================== */
+  body.pre-auth .page-body,
+  body.pre-auth .page-title-row { display: none; }
+
+  /* ========================================================================
+     RESPONSIVE
+     ======================================================================== */
+  @media (max-width: 760px) {
+    .total-card-value { font-size: 28px; }
+    .by-venue-row {
+      grid-template-columns: 1fr 60px 90px 18px;
+    }
+    .by-venue-row .by-venue-pct { display: none; }
+    .crosstab-table th, .crosstab-table td { padding: 8px 8px; }
+  }
+</style>
+</head>
+
+<body class="pre-auth">
+
+  <!-- pc-nav.js injects its own <header> -->
+
+  <div class="page-title-row" aria-hidden="true">
+    <h1 class="page-title">Sales by item</h1>
+    <span class="page-title-meta">Billed · all invoices except voided</span>
+  </div>
+
+  <main class="page-body">
+
+    <!-- DATE CHIP ROW ---------------------------------------------------- -->
+    <div class="chip-row" id="chipRow" role="tablist" aria-label="Date range">
+      <button type="button" class="chip is-active" data-chip="ytd"            role="tab" aria-selected="true">YTD</button>
+      <button type="button" class="chip"            data-chip="this-period"    role="tab" aria-selected="false">This fiscal month</button>
+      <button type="button" class="chip"            data-chip="last-period"    role="tab" aria-selected="false">Last fiscal month</button>
+      <button type="button" class="chip"            data-chip="this-quarter"   role="tab" aria-selected="false">This fiscal quarter</button>
+      <button type="button" class="chip"            data-chip="custom"         role="tab" aria-selected="false">Custom</button>
+      <span class="chip-range" id="chipRangeWrap" hidden>
+        <input type="date" id="chipFrom" aria-label="From date">
+        <span>→</span>
+        <input type="date" id="chipTo" aria-label="To date">
+      </span>
+    </div>
+
+    <!-- Date range display -->
+    <div class="range-banner" id="rangeBanner">Loading…</div>
+    <div class="range-warning" id="rangeWarning" hidden></div>
+
+    <!-- BIG TOTAL CARD --------------------------------------------------- -->
+    <div class="total-card is-loading" id="totalCard">
+      <div class="total-card-label" id="totalCardLabel">Total sales · YTD</div>
+      <div class="total-card-value" id="totalCardValue">$0.00</div>
+      <div class="total-card-meta"  id="totalCardMeta">Across 0 invoices <span class="sep">·</span> 0 venues <span class="sep">·</span> 0 items</div>
+    </div>
+
+    <!-- BY-VENUE CARD ---------------------------------------------------- -->
+    <div class="by-venue-card">
+      <div class="card-head">
+        <div>
+          <div class="card-title">By venue</div>
+          <div class="card-subtitle" id="byVenueSubtitle">Click any row to see the venue's item breakdown</div>
+        </div>
+      </div>
+      <div id="byVenueBody">
+        <div class="by-venue-empty" id="byVenueEmpty">Loading…</div>
+      </div>
+    </div>
+
+    <!-- CROSS-TAB -------------------------------------------------------- -->
+    <div class="crosstab-card">
+      <div class="card-head">
+        <div>
+          <div class="card-title">Item × venue cross-tab</div>
+          <div class="card-subtitle" id="crosstabSubtitle">Top 4 venues · click any amount to see the underlying invoices</div>
+        </div>
+      </div>
+      <div class="crosstab-card-body" id="crosstabBody">
+        <div class="crosstab-empty" id="crosstabEmpty">Loading…</div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- DRILL-DOWN MODAL ---------------------------------------------------- -->
+  <div class="modal-backdrop" id="drillBackdrop">
+    <!-- Filled dynamically by openDrilldown() -->
+  </div>
+
+  <!-- Toast host -->
+  <div class="pc-toast-host" id="pcToastHost" aria-live="polite" aria-atomic="true"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  // =====================================================================
+  // CONFIG
+  // =====================================================================
+  var SB_URL  = 'https://aoazlttdjowhlfcksoyl.supabase.co';
+  var SB_REST = SB_URL + '/rest/v1/';
+
+  var TOP_N_VENUES = 4;  // top-N + Others rollup in the cross-tab
+
+  // Income category order in the cross-tab (matches spec § DECISIONS LOCKED)
+  var CATEGORY_ORDER = ['sales', 'labor_reimbursement', 'tips', 'fees', 'tax', 'adjustment'];
+  var CATEGORY_LABELS = {
+    sales:               'Sales',
+    labor_reimbursement: 'Labor reimbursement',
+    tips:                'Tips',
+    fees:                'Fees',
+    tax:                 'Tax',
+    adjustment:          'Adjustments'
+  };
+
+  // =====================================================================
+  // STATE
+  // =====================================================================
+  var state = {
+    chip: 'ytd',              // 'ytd' | 'this-period' | 'last-period' | 'this-quarter' | 'custom'
+    from: null,               // ISO date string
+    to:   null,               // ISO date string
+
+    invoices: [],             // raw ar_invoices rows (non-voided, in date range)
+    lines: [],                // raw ar_invoice_lines rows for those invoices
+    items: {},                // item_id → ar_items row
+    venues: {},               // venue_code → { code, full_name, source: 'venues'|'ar_venues' }
+
+    // Derived (rebuilt on every reload)
+    totals: null,
+    byVenue: null,
+    byItem: null,
+    venueColumns: null,       // ordered list of {code, full_name, total} for the cross-tab
+    expandedVenue: null,      // venue_code currently expanded in the By Venue card
+    loading: true
+  };
+
+  // =====================================================================
+  // UTILITIES
+  // =====================================================================
+
+  function pad2(n) { n = String(n); return n.length < 2 ? '0' + n : n; }
+  function todayIso() {
+    var d = new Date();
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    var parts = String(iso).split('-');
+    if (parts.length < 3) return iso;
+    var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var m = months[parseInt(parts[1], 10) - 1] || '';
+    return m + ' ' + parseInt(parts[2], 10) + ', ' + parts[0];
+  }
+  function fmtDateShort(iso) {
+    if (!iso) return '—';
+    var parts = String(iso).split('-');
+    if (parts.length < 3) return iso;
+    return parseInt(parts[1], 10) + '/' + parseInt(parts[2], 10) + '/' + parts[0].slice(2);
+  }
+  function fmtMoney(n) {
+    if (n == null || isNaN(n)) n = 0;
+    var sign = n < 0 ? '-' : '';
+    var abs = Math.abs(n);
+    return sign + '$' + abs.toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  }
+  function fmtMoneyCompact(n) {
+    if (n == null || isNaN(n)) n = 0;
+    var sign = n < 0 ? '-' : '';
+    var abs = Math.abs(n);
+    if (abs >= 1000) {
+      return sign + '$' + (Math.round(abs / 100) / 10).toFixed(1) + 'k';
+    }
+    return sign + '$' + abs.toFixed(0);
+  }
+  function fmtPct(n) {
+    if (n == null || isNaN(n) || !isFinite(n)) return '—';
+    if (Math.abs(n) < 0.05) return '0%';
+    return (Math.round(n * 10) / 10).toFixed(1).replace(/\.0$/, '') + '%';
+  }
+  function esc(s) {
+    if (s == null) return '';
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  function pluralize(n, one, many) {
+    return n === 1 ? (n + ' ' + one) : (n + ' ' + many);
+  }
+
+  // =====================================================================
+  // TOAST
+  // =====================================================================
+  function showToast(msg, ms) {
+    ms = ms || 2400;
+    var host = document.getElementById('pcToastHost');
+    if (!host) return;
+    var el = document.createElement('div');
+    el.className = 'pc-toast';
+    el.textContent = msg;
+    host.appendChild(el);
+    requestAnimationFrame(function () { el.classList.add('is-shown'); });
+    setTimeout(function () {
+      el.classList.remove('is-shown');
+      setTimeout(function () { el.remove(); }, 260);
+    }, ms);
+  }
+
+  // =====================================================================
+  // JWT EXPIRY PATTERN
+  // =====================================================================
+  function handleAuthFailure() {
+    try {
+      localStorage.removeItem('sb_access_token');
+      localStorage.removeItem('sb_refresh_token');
+    } catch (e) {}
+    showToast('Session expired. Reloading…', 1800);
+    setTimeout(function () { window.location.reload(); }, 1800);
+  }
+
+  function authFetch(url, options) {
+    return fetch(url, options).then(function (r) {
+      if (!r.ok) {
+        return r.text().then(function (t) {
+          if (r.status === 401 || (t && t.indexOf('JWT expired') !== -1)) {
+            var ae = new Error('JWT expired');
+            ae.authFailed = true;
+            throw ae;
+          }
+          throw new Error(t || ('HTTP ' + r.status));
+        });
+      }
+      return r.text().then(function (t) {
+        if (!t) return [];
+        try { return JSON.parse(t); } catch (e) { return []; }
+      });
+    });
+  }
+
+  // =====================================================================
+  // DATE RANGE RESOLUTION
+  // =====================================================================
+
+  /**
+   * Resolve the active chip to a {from, to, label} object.
+   * Returns null when the chip needs the user to set custom dates.
+   */
+  function resolveChipRange(chip) {
+    var today = todayIso();
+    var coverage = pcFiscal.getCoverage();
+    var current  = pcFiscal.getCurrentPeriod();
+
+    if (chip === 'ytd') {
+      // Year-to-date based on the fiscal calendar. Find the first period
+      // of the current fiscal year and use its .start as the floor.
+      // Fall back to Jan 1 of the calendar year if today is outside coverage.
+      var ytdStart = null;
+      if (current) {
+        // Extract the fiscal year from the current period's name.
+        var m = current.name.match(/(\d{4})$/);
+        var year = m ? parseInt(m[1], 10) : null;
+        if (year) {
+          // Walk the periods, find the first one whose name ends with `year`.
+          var all = pcFiscal.getPeriods();
+          for (var i = 0; i < all.length; i++) {
+            var pm = all[i].name.match(/(\d{4})$/);
+            if (pm && parseInt(pm[1], 10) === year) {
+              ytdStart = all[i].start;
+              break;
+            }
+          }
+        }
+      }
+      if (!ytdStart) {
+        ytdStart = today.slice(0, 4) + '-01-01';
+      }
+      return {
+        from: ytdStart,
+        to:   today,
+        label: 'Year to date',
+        fromLabel: fmtDate(ytdStart),
+        toLabel:   fmtDate(today)
+      };
+    }
+
+    if (chip === 'this-period') {
+      if (!current) return null;
+      return {
+        from: current.start,
+        to:   current.end,
+        label: 'This fiscal month · ' + current.name,
+        fromLabel: fmtDate(current.start),
+        toLabel:   fmtDate(current.end)
+      };
+    }
+
+    if (chip === 'last-period') {
+      var prior = current ? pcFiscal.getPriorPeriod(current) : null;
+      if (!prior) return null;
+      return {
+        from: prior.start,
+        to:   prior.end,
+        label: 'Last fiscal month · ' + prior.name,
+        fromLabel: fmtDate(prior.start),
+        toLabel:   fmtDate(prior.end)
+      };
+    }
+
+    if (chip === 'this-quarter') {
+      var q = pcFiscal.getCurrentQuarter();
+      if (!q) return null;
+      return {
+        from: q.start,
+        to:   q.end,
+        label: 'This fiscal quarter · ' + q.name,
+        fromLabel: fmtDate(q.start),
+        toLabel:   fmtDate(q.end)
+      };
+    }
+
+    if (chip === 'custom') {
+      if (!state.from || !state.to) return null;
+      return {
+        from: state.from,
+        to:   state.to,
+        label: 'Custom range',
+        fromLabel: fmtDate(state.from),
+        toLabel:   fmtDate(state.to)
+      };
+    }
+
+    return null;
+  }
+
+  /**
+   * Check if today is within pc-fiscal coverage. Surfaces a warning banner
+   * if we had to fall back to calendar-year YTD.
+   */
+  function checkFiscalCoverage() {
+    var warn = document.getElementById('rangeWarning');
+    if (!warn) return;
+    var current = pcFiscal.getCurrentPeriod();
+    if (current) {
+      warn.hidden = true;
+      return;
+    }
+    var coverage = pcFiscal.getCoverage();
+    warn.hidden = false;
+    warn.innerHTML = '<strong>⚠ Today is outside the fiscal calendar coverage.</strong> ' +
+      'Falling back to calendar-year YTD. Coverage: ' +
+      esc(fmtDate(coverage.start)) + ' – ' + esc(fmtDate(coverage.end)) + '. ' +
+      'Add the next year to <code>pc-fiscal.js</code> to extend.';
+  }
+
+  // =====================================================================
+  // FETCHES
+  //
+  // Strategy: fetch invoices first (filtered by date + non-voided), then
+  // fetch lines for just those invoice IDs. Two round trips, but the
+  // payloads are predictable and PostgREST handles the IN-list cleanly.
+  // ar_items is small enough to fetch entirely once per page session.
+  // =====================================================================
+
+  function fetchItems() {
+    return authFetch(
+      SB_REST + 'ar_items?select=id,name,income_category,default_sign,default_unit_price,sort_order,is_active' +
+      '&order=sort_order.asc,name.asc&limit=500',
+      { headers: pcAuth.headers() }
+    ).then(function (rows) {
+      var byId = {};
+      (rows || []).forEach(function (r) { byId[r.id] = r; });
+      state.items = byId;
+      return rows;
+    });
+  }
+
+  function fetchVenues() {
+    // Two-table union — operational venues + ar_venues (PNC etc.).
+    // Both produce a {code, full_name} pair we can merge.
+    var opP = authFetch(
+      SB_REST + 'venues?select=code,full_name,is_active&limit=200',
+      { headers: pcAuth.headers() }
+    );
+    var arP = authFetch(
+      SB_REST + 'ar_venues?select=code,full_name,is_active&limit=200',
+      { headers: pcAuth.headers() }
+    );
+    return Promise.all([opP, arP]).then(function (results) {
+      var merged = {};
+      (results[0] || []).forEach(function (v) {
+        merged[v.code] = { code: v.code, full_name: v.full_name, source: 'venues' };
+      });
+      (results[1] || []).forEach(function (v) {
+        // ar_venues codes shouldn't collide with operational venues (enforced
+        // at insert), but in case of collision, ar_venues wins because the
+        // billing identity is what's on the invoice.
+        merged[v.code] = { code: v.code, full_name: v.full_name, source: 'ar_venues' };
+      });
+      state.venues = merged;
+      return merged;
+    });
+  }
+
+  function fetchInvoicesInRange(fromIso, toIso) {
+    // Non-voided invoices with period_start in [from, to].
+    // status filter is in.(...) excluding voided. Embed client name for
+    // the drill-down modal display.
+    var url = SB_REST + 'ar_invoices?' + [
+      'select=id,internal_invoice_number,client_id,venue_code,period_start,status,net_amount_due,ar_clients(name)',
+      'status=in.(open,partially_paid,paid,disputed,overpaid)',
+      'period_start=gte.' + encodeURIComponent(fromIso),
+      'period_start=lte.' + encodeURIComponent(toIso),
+      'order=period_start.desc',
+      'limit=20000'
+    ].join('&');
+    return authFetch(url, { headers: pcAuth.headers() });
+  }
+
+  function fetchLinesForInvoices(invoiceIds) {
+    if (!invoiceIds || invoiceIds.length === 0) return Promise.resolve([]);
+
+    // Chunk the IN list to avoid overly long URLs (each UUID is 36 chars
+    // plus comma; 500 IDs = ~18KB. PostgREST handles long URLs but
+    // browser caches don't always. 500 per chunk is well under any limit.)
+    var CHUNK = 500;
+    var chunks = [];
+    for (var i = 0; i < invoiceIds.length; i += CHUNK) {
+      chunks.push(invoiceIds.slice(i, i + CHUNK));
+    }
+
+    var promises = chunks.map(function (chunk) {
+      var url = SB_REST + 'ar_invoice_lines?' + [
+        'select=id,invoice_id,item_id,description,amount,quantity,unit_price,sort_order',
+        'invoice_id=in.(' + chunk.join(',') + ')',
+        'limit=50000'
+      ].join('&');
+      return authFetch(url, { headers: pcAuth.headers() });
+    });
+
+    return Promise.all(promises).then(function (results) {
+      var all = [];
+      results.forEach(function (rows) {
+        (rows || []).forEach(function (r) { all.push(r); });
+      });
+      return all;
+    });
+  }
+
+  // =====================================================================
+  // AGGREGATION
+  // =====================================================================
+
+  /**
+   * One pass over all lines builds:
+   *  - state.totals: { amount, invoiceIds: Set, venueCodes: Set, itemIds: Set }
+   *  - state.byVenue: { code → { total, invoiceIds: Set, items: { item_id → { amount, lineCount } } } }
+   *  - state.byItem: { item_id → { name, income_category, default_sign, sort_order, total, byVenue: {code → amount}, venuesTouched: Set } }
+   *  - state.venueColumns: ordered cross-tab venue columns
+   */
+  function aggregate() {
+    var totals = {
+      amount: 0,
+      invoiceIds: {},
+      venueCodes: {},
+      itemIds: {}
+    };
+    var byVenue = {};
+    var byItem  = {};
+
+    // Index invoices by id for quick lookup.
+    var invById = {};
+    state.invoices.forEach(function (inv) { invById[inv.id] = inv; });
+
+    state.lines.forEach(function (line) {
+      var inv = invById[line.invoice_id];
+      if (!inv) return;  // line orphaned by a filter — skip
+      var amt = Number(line.amount || 0);
+      if (!isFinite(amt) || amt === 0) return;
+
+      var venueCode = inv.venue_code || '__no_venue__';
+      var itemId    = line.item_id;
+      var item      = state.items[itemId];
+      if (!item) return;  // line references a missing item — skip silently
+
+      totals.amount += amt;
+      totals.invoiceIds[inv.id] = true;
+      totals.venueCodes[venueCode] = true;
+      totals.itemIds[itemId] = true;
+
+      // By-venue accumulator
+      if (!byVenue[venueCode]) {
+        byVenue[venueCode] = {
+          code: venueCode,
+          total: 0,
+          invoiceIds: {},
+          items: {}
+        };
+      }
+      byVenue[venueCode].total += amt;
+      byVenue[venueCode].invoiceIds[inv.id] = true;
+      if (!byVenue[venueCode].items[itemId]) {
+        byVenue[venueCode].items[itemId] = { amount: 0, lineCount: 0 };
+      }
+      byVenue[venueCode].items[itemId].amount += amt;
+      byVenue[venueCode].items[itemId].lineCount += 1;
+
+      // By-item accumulator
+      if (!byItem[itemId]) {
+        byItem[itemId] = {
+          id:               itemId,
+          name:             item.name,
+          income_category:  item.income_category,
+          default_sign:     item.default_sign,
+          sort_order:       item.sort_order || 0,
+          total:            0,
+          byVenue:          {},
+          venuesTouched:    {}
+        };
+      }
+      byItem[itemId].total += amt;
+      byItem[itemId].byVenue[venueCode] = (byItem[itemId].byVenue[venueCode] || 0) + amt;
+      byItem[itemId].venuesTouched[venueCode] = true;
+    });
+
+    // Convert byVenue.invoiceIds to count
+    Object.keys(byVenue).forEach(function (k) {
+      byVenue[k].invoiceCount = Object.keys(byVenue[k].invoiceIds).length;
+    });
+
+    state.totals = {
+      amount:        Math.round(totals.amount * 100) / 100,
+      invoiceCount:  Object.keys(totals.invoiceIds).length,
+      venueCount:    Object.keys(totals.venueCodes).length,
+      itemCount:     Object.keys(totals.itemIds).length
+    };
+    state.byVenue = byVenue;
+    state.byItem  = byItem;
+
+    // Build the cross-tab venue column list: top-N by absolute total, plus Others.
+    var venueList = Object.keys(byVenue).map(function (code) {
+      return { code: code, total: byVenue[code].total };
+    });
+    venueList.sort(function (a, b) { return Math.abs(b.total) - Math.abs(a.total); });
+
+    var columns = [];
+    venueList.slice(0, TOP_N_VENUES).forEach(function (v) {
+      var venueMeta = state.venues[v.code] || { full_name: v.code };
+      columns.push({
+        code:      v.code,
+        full_name: venueMeta.full_name || v.code,
+        total:     v.total,
+        isOthers:  false
+      });
+    });
+
+    var othersList = venueList.slice(TOP_N_VENUES);
+    if (othersList.length > 0) {
+      var othersTotal = 0;
+      var othersCodes = othersList.map(function (v) {
+        othersTotal += v.total;
+        return v.code;
+      });
+      columns.push({
+        code:      '__others__',
+        full_name: othersList.length + ' more',
+        total:     othersTotal,
+        isOthers:  true,
+        memberCodes: othersCodes
+      });
+    }
+    state.venueColumns = columns;
+  }
+
+  // =====================================================================
+  // RENDER — total card
+  // =====================================================================
+  function renderTotalCard(rangeMeta) {
+    var card = document.getElementById('totalCard');
+    var label = document.getElementById('totalCardLabel');
+    var val   = document.getElementById('totalCardValue');
+    var meta  = document.getElementById('totalCardMeta');
+    if (!card) return;
+    card.classList.remove('is-loading');
+
+    var labelTxt = 'Total sales';
+    if (rangeMeta) {
+      if (state.chip === 'ytd') labelTxt += ' · YTD';
+      else if (state.chip === 'this-period')  labelTxt += ' · This fiscal month';
+      else if (state.chip === 'last-period')  labelTxt += ' · Last fiscal month';
+      else if (state.chip === 'this-quarter') labelTxt += ' · This fiscal quarter';
+      else if (state.chip === 'custom')       labelTxt += ' · Custom range';
+    }
+    if (label) label.textContent = labelTxt;
+
+    var t = state.totals || { amount: 0, invoiceCount: 0, venueCount: 0, itemCount: 0 };
+    if (val) val.textContent = fmtMoney(t.amount);
+    if (meta) {
+      meta.innerHTML = 'Across ' + pluralize(t.invoiceCount, 'invoice', 'invoices') +
+        ' <span class="sep">·</span> ' + pluralize(t.venueCount, 'venue', 'venues') +
+        ' <span class="sep">·</span> ' + pluralize(t.itemCount, 'item', 'items');
+    }
+  }
+
+  function renderRangeBanner(rangeMeta) {
+    var banner = document.getElementById('rangeBanner');
+    if (!banner) return;
+    if (!rangeMeta) {
+      banner.textContent = 'Pick a custom date range to load the report.';
+      return;
+    }
+    banner.innerHTML = '<strong>' + esc(rangeMeta.label) + '</strong> · ' +
+      esc(rangeMeta.fromLabel) + ' – ' + esc(rangeMeta.toLabel);
+  }
+
+  // =====================================================================
+  // RENDER — by-venue card
+  // =====================================================================
+  function renderByVenue() {
+    var host = document.getElementById('byVenueBody');
+    var subtitle = document.getElementById('byVenueSubtitle');
+    if (!host) return;
+
+    var venues = state.byVenue ? Object.keys(state.byVenue) : [];
+    if (venues.length === 0) {
+      host.innerHTML = '<div class="by-venue-empty">No venue activity in this range.</div>';
+      if (subtitle) subtitle.textContent = '';
+      return;
+    }
+
+    // Sort by total descending.
+    var sorted = venues.map(function (code) {
+      return { code: code, data: state.byVenue[code] };
+    });
+    sorted.sort(function (a, b) { return Math.abs(b.data.total) - Math.abs(a.data.total); });
+
+    if (subtitle) {
+      subtitle.textContent = pluralize(sorted.length, 'venue', 'venues') +
+        ' · click any row to see the breakdown';
+    }
+
+    var companyTotal = state.totals ? state.totals.amount : 0;
+
+    var html = '';
+    sorted.forEach(function (entry) {
+      var code = entry.code;
+      var data = entry.data;
+      var venueMeta = state.venues[code] || {};
+      var displayCode = (code === '__no_venue__') ? '(no venue)' : code;
+      var displayFullName = venueMeta.full_name && venueMeta.full_name !== code
+        ? venueMeta.full_name : '';
+      var pct = companyTotal ? (data.total / companyTotal * 100) : 0;
+      var isExpanded = state.expandedVenue === code;
+
+      html += '<button type="button" class="by-venue-row' + (isExpanded ? ' is-expanded' : '') + '" data-venue-code="' + esc(code) + '">' +
+        '<div>' +
+          '<div class="by-venue-name">' + esc(displayCode) + '</div>' +
+          '<div class="by-venue-meta">' + pluralize(data.invoiceCount, 'invoice', 'invoices') +
+            (displayFullName ? '<span class="full-name">' + esc(displayFullName) + '</span>' : '') +
+          '</div>' +
+        '</div>' +
+        '<div class="by-venue-pct">' + fmtPct(pct) + '</div>' +
+        '<div></div>' +
+        '<div class="by-venue-amount">' + esc(fmtMoney(data.total)) + '</div>' +
+        '<svg class="by-venue-chevron" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+          '<path d="M4 5.5L7 8.5L10 5.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>' +
+        '</svg>' +
+      '</button>';
+
+      if (isExpanded) {
+        html += renderByVenueDetail(code, data);
+      }
+    });
+
+    host.innerHTML = html;
+  }
+
+  function renderByVenueDetail(venueCode, venueData) {
+    var venueTotal = venueData.total;
+    if (Math.abs(venueTotal) < 0.005) {
+      return '<div class="by-venue-detail"><div class="by-venue-detail-row"><div class="item-name">No items in this venue for the selected range.</div><div></div><div></div></div></div>';
+    }
+
+    // Build a sorted item list for this venue (by abs amount descending).
+    var rows = Object.keys(venueData.items).map(function (itemId) {
+      var item = state.items[itemId];
+      return {
+        itemId:   itemId,
+        name:     item ? item.name : '(unknown item)',
+        category: item ? item.income_category : '',
+        amount:   venueData.items[itemId].amount
+      };
+    });
+    rows.sort(function (a, b) { return Math.abs(b.amount) - Math.abs(a.amount); });
+
+    var html = '<div class="by-venue-detail">';
+    rows.forEach(function (r) {
+      var pct = venueTotal ? (r.amount / venueTotal * 100) : 0;
+      var amtClass = r.amount < 0 ? ' is-negative' : '';
+      html += '<div class="by-venue-detail-row">' +
+        '<div class="item-name">' + esc(r.name) +
+          (r.category ? '<span class="item-cat-tag">' + esc(CATEGORY_LABELS[r.category] || r.category) + '</span>' : '') +
+        '</div>' +
+        '<div class="item-pct">' + fmtPct(pct) + '</div>' +
+        '<div class="item-amt' + amtClass + '">' + esc(fmtMoney(r.amount)) + '</div>' +
+      '</div>';
+    });
+    html += '</div>';
+    return html;
+  }
+
+  // =====================================================================
+  // RENDER — cross-tab
+  // =====================================================================
+  function renderCrosstab() {
+    var host = document.getElementById('crosstabBody');
+    var subtitle = document.getElementById('crosstabSubtitle');
+    if (!host) return;
+
+    if (!state.byItem || Object.keys(state.byItem).length === 0) {
+      host.innerHTML = '<div class="crosstab-empty">No items with activity in this range.</div>';
+      if (subtitle) subtitle.textContent = '';
+      return;
+    }
+
+    var companyTotal = state.totals.amount;
+    var columns = state.venueColumns;
+
+    // Build per-column totals (for total row).
+    var colTotals = {};
+    columns.forEach(function (col) { colTotals[col.code] = 0; });
+    colTotals['__row_total__'] = 0;
+
+    // Group items by category and sort within category by sort_order then name.
+    var itemsByCategory = {};
+    Object.keys(state.byItem).forEach(function (itemId) {
+      var item = state.byItem[itemId];
+      var cat = item.income_category || 'adjustment';
+      if (!itemsByCategory[cat]) itemsByCategory[cat] = [];
+      itemsByCategory[cat].push(item);
+    });
+    Object.keys(itemsByCategory).forEach(function (cat) {
+      itemsByCategory[cat].sort(function (a, b) {
+        if (a.sort_order !== b.sort_order) return (a.sort_order || 0) - (b.sort_order || 0);
+        return (a.name || '').localeCompare(b.name || '');
+      });
+    });
+
+    // Update subtitle.
+    if (subtitle) {
+      var topN = columns.filter(function (c) { return !c.isOthers; }).length;
+      var hasOthers = columns.some(function (c) { return c.isOthers; });
+      subtitle.textContent = 'Top ' + topN + ' venues' + (hasOthers ? ' + Others' : '') +
+        ' · click any amount to see the underlying invoices';
+    }
+
+    // Build the table.
+    var html = '<table class="crosstab-table"><thead><tr>' +
+      '<th class="col-item">Item</th>';
+    columns.forEach(function (col) {
+      var displayCode = col.isOthers ? 'Others' : (col.code === '__no_venue__' ? '(no venue)' : col.code);
+      var displayFull = col.isOthers ? col.full_name : (col.full_name && col.full_name !== col.code ? col.full_name : '');
+      html += '<th>' + esc(displayCode) +
+        (displayFull ? '<span class="venue-fullname">' + esc(displayFull) + '</span>' : '') +
+        '</th>';
+    });
+    html += '<th class="col-total">Total</th>' +
+            '<th class="col-total">% of co</th>' +
+            '</tr></thead><tbody>';
+
+    // Render category groups in canonical order, then any unrecognized ones.
+    var categoriesSeen = {};
+    CATEGORY_ORDER.forEach(function (cat) {
+      if (!itemsByCategory[cat]) return;
+      categoriesSeen[cat] = true;
+      html += renderCategoryGroup(cat, itemsByCategory[cat], columns, companyTotal, colTotals);
+    });
+    Object.keys(itemsByCategory).forEach(function (cat) {
+      if (categoriesSeen[cat]) return;
+      html += renderCategoryGroup(cat, itemsByCategory[cat], columns, companyTotal, colTotals);
+    });
+
+    // Total row.
+    html += '<tr class="is-total-row">' +
+      '<td class="col-item"><strong>TOTAL</strong></td>';
+    columns.forEach(function (col) {
+      var amt = colTotals[col.code] || 0;
+      var pctOfCo = companyTotal ? (amt / companyTotal * 100) : 0;
+      var amtClass = amt < 0 ? ' is-negative' : (Math.abs(amt) < 0.005 ? ' is-zero' : '');
+      html += '<td>' +
+        '<span class="ct-cell-amt' + amtClass + '">' + esc(fmtMoney(amt)) + '</span>' +
+        '<span class="ct-cell-pct">' + fmtPct(pctOfCo) + ' of co</span>' +
+        '</td>';
+    });
+    var rowTotalAmtClass = companyTotal < 0 ? ' is-negative' : '';
+    html += '<td class="col-total">' +
+      '<span class="ct-cell-amt' + rowTotalAmtClass + '">' + esc(fmtMoney(companyTotal)) + '</span>' +
+      '</td>' +
+      '<td class="col-total">' +
+      '<span class="ct-cell-amt">100%</span>' +
+      '</td>' +
+      '</tr>';
+
+    html += '</tbody></table>';
+    host.innerHTML = html;
+  }
+
+  function renderCategoryGroup(category, items, columns, companyTotal, colTotals) {
+    var label = CATEGORY_LABELS[category] || category;
+    var colspan = 1 + columns.length + 2;  // item + venues + total + % of co
+    var html = '<tr class="is-cat-header"><td colspan="' + colspan + '">' + esc(label) + '</td></tr>';
+
+    items.forEach(function (item) {
+      var rowTotal = item.total;
+      if (Math.abs(rowTotal) < 0.005) return;  // zero rows don't render (per spec)
+
+      var venuesTouched = Object.keys(item.venuesTouched).length;
+      var sparseTag = '';
+      if (venuesTouched <= 2 && venuesTouched > 0) {
+        // Build a tag like "FMP-only" or "FMP, Mann"
+        var venueNames = Object.keys(item.venuesTouched).filter(function (c) { return c !== '__no_venue__'; });
+        if (venueNames.length === 1) {
+          sparseTag = venueNames[0] + '-only';
+        } else if (venueNames.length === 2) {
+          sparseTag = venueNames.join(', ');
+        }
+      }
+
+      html += '<tr>' +
+        '<td class="col-item">' + esc(item.name) +
+          (sparseTag ? '<span class="item-tag">' + esc(sparseTag) + '</span>' : '') +
+        '</td>';
+
+      // Per-venue cells
+      columns.forEach(function (col) {
+        var amt;
+        if (col.isOthers) {
+          amt = 0;
+          col.memberCodes.forEach(function (mc) {
+            amt += (item.byVenue[mc] || 0);
+          });
+        } else {
+          amt = item.byVenue[col.code] || 0;
+        }
+        colTotals[col.code] = (colTotals[col.code] || 0) + amt;
+
+        var isZero = Math.abs(amt) < 0.005;
+        var amtClass = isZero ? ' is-zero' : (amt < 0 ? ' is-negative' : '');
+        var pctOfRow = rowTotal ? (amt / rowTotal * 100) : 0;
+        // Hide the per-cell % when the cell is zero (declutters).
+        var pctClass = isZero ? ' is-hidden' : '';
+
+        if (isZero) {
+          html += '<td>' +
+            '<span class="ct-cell-amt is-zero">—</span>' +
+            '<span class="ct-cell-pct is-hidden">—</span>' +
+            '</td>';
+        } else {
+          var cellData = col.isOthers
+            ? 'data-others-codes="' + esc(col.memberCodes.join(',')) + '"'
+            : 'data-venue="' + esc(col.code) + '"';
+          html += '<td>' +
+            '<button type="button" class="ct-cell-btn" ' +
+              'data-action="drill" data-item-id="' + esc(item.id) + '" ' +
+              cellData +
+              ' aria-label="Drill into ' + esc(item.name) + ' at ' + esc(col.code) + '">' +
+              '<span class="ct-cell-amt' + amtClass + '">' + esc(fmtMoney(amt)) + '</span>' +
+              '<span class="ct-cell-pct' + pctClass + '">' + fmtPct(pctOfRow) + '</span>' +
+            '</button>' +
+            '</td>';
+        }
+      });
+
+      // Row total
+      var rowTotalClass = rowTotal < 0 ? ' is-negative' : '';
+      var pctOfCo = companyTotal ? (rowTotal / companyTotal * 100) : 0;
+      html += '<td class="col-total">' +
+        '<button type="button" class="ct-cell-btn" ' +
+          'data-action="drill" data-item-id="' + esc(item.id) + '" data-venue="__all__" ' +
+          'aria-label="Drill into ' + esc(item.name) + ' total">' +
+          '<span class="ct-cell-amt' + rowTotalClass + '">' + esc(fmtMoney(rowTotal)) + '</span>' +
+        '</button>' +
+        '</td>' +
+        '<td class="col-total">' +
+          '<span class="ct-cell-amt">' + fmtPct(pctOfCo) + '</span>' +
+        '</td>' +
+        '</tr>';
+    });
+
+    return html;
+  }
+
+  // =====================================================================
+  // DRILL-DOWN
+  //
+  // Clicking a cross-tab cell opens a modal listing the underlying invoices
+  // for that (item, venue) intersection. Each invoice row is click-through
+  // to the AR edit modal — opens in a new tab with ?invoice=<uuid>.
+  // =====================================================================
+
+  function drillFromCell(itemId, venueArg) {
+    var item = state.byItem[itemId];
+    var itemMeta = state.items[itemId];
+    if (!item || !itemMeta) return;
+
+    var venueCodes;
+    var venueLabel;
+    if (venueArg === '__all__') {
+      venueCodes = null;  // no filter — all venues
+      venueLabel = 'All venues';
+    } else if (typeof venueArg === 'string' && venueArg.indexOf(',') !== -1) {
+      // Others rollup — comma-separated codes from data-others-codes.
+      venueCodes = {};
+      venueArg.split(',').forEach(function (c) { venueCodes[c] = true; });
+      venueLabel = 'Others (' + venueArg.split(',').length + ' venues)';
+    } else {
+      venueCodes = {};
+      venueCodes[venueArg] = true;
+      var vMeta = state.venues[venueArg];
+      venueLabel = venueArg === '__no_venue__'
+        ? '(no venue)'
+        : (vMeta && vMeta.full_name && vMeta.full_name !== venueArg)
+          ? (venueArg + ' · ' + vMeta.full_name)
+          : venueArg;
+    }
+
+    // Filter lines to (item_id, venue_codes), then group by invoice.
+    var invById = {};
+    state.invoices.forEach(function (inv) { invById[inv.id] = inv; });
+
+    var byInvoice = {};
+    state.lines.forEach(function (line) {
+      if (line.item_id !== itemId) return;
+      var inv = invById[line.invoice_id];
+      if (!inv) return;
+      var vc = inv.venue_code || '__no_venue__';
+      if (venueCodes && !venueCodes[vc]) return;
+      if (!byInvoice[inv.id]) {
+        byInvoice[inv.id] = {
+          invoice: inv,
+          totalAmount: 0,
+          lineCount:   0
+        };
+      }
+      byInvoice[inv.id].totalAmount += Number(line.amount || 0);
+      byInvoice[inv.id].lineCount += 1;
+    });
+
+    var invoices = Object.keys(byInvoice).map(function (k) { return byInvoice[k]; });
+    invoices.sort(function (a, b) {
+      var da = a.invoice.period_start || '';
+      var db = b.invoice.period_start || '';
+      if (da !== db) return db < da ? -1 : 1;
+      return 0;
+    });
+
+    var grandTotal = 0;
+    invoices.forEach(function (i) { grandTotal += i.totalAmount; });
+
+    openDrilldownModal({
+      itemName: itemMeta.name,
+      venueLabel: venueLabel,
+      invoices: invoices,
+      grandTotal: grandTotal
+    });
+  }
+
+  function openDrilldownModal(ctx) {
+    var bd = document.getElementById('drillBackdrop');
+    if (!bd) return;
+
+    var rowsHtml = '';
+    if (ctx.invoices.length === 0) {
+      rowsHtml = '<div class="drill-empty">No invoices match this cell.</div>';
+    } else {
+      rowsHtml = '<table class="drill-table"><thead><tr>' +
+        '<th>Invoice #</th>' +
+        '<th>Client</th>' +
+        '<th>Venue</th>' +
+        '<th>Date</th>' +
+        '<th class="is-amount">Amount</th>' +
+        '</tr></thead><tbody>';
+      ctx.invoices.forEach(function (entry) {
+        var inv = entry.invoice;
+        var clientName = (inv.ar_clients && inv.ar_clients.name) || '(unknown)';
+        var amtClass = entry.totalAmount < 0 ? ' is-negative' : '';
+        rowsHtml += '<tr data-invoice-id="' + esc(inv.id) + '">' +
+          '<td class="col-inv">' + esc(inv.internal_invoice_number || '—') + '</td>' +
+          '<td>' + esc(clientName) + '</td>' +
+          '<td>' + esc(inv.venue_code || '—') + '</td>' +
+          '<td class="col-date">' + esc(fmtDateShort(inv.period_start)) + '</td>' +
+          '<td class="col-amt' + amtClass + '">' + esc(fmtMoney(entry.totalAmount)) + '</td>' +
+          '</tr>';
+      });
+      rowsHtml += '</tbody></table>';
+    }
+
+    bd.innerHTML =
+      '<div class="drill-modal" role="dialog" aria-labelledby="drillTitle">' +
+        '<div class="drill-head">' +
+          '<div>' +
+            '<div class="drill-title" id="drillTitle">' + esc(ctx.itemName) + '</div>' +
+            '<div class="drill-subtitle">' + esc(ctx.venueLabel) + ' · ' +
+              pluralize(ctx.invoices.length, 'invoice', 'invoices') + '</div>' +
+          '</div>' +
+          '<button type="button" class="drill-close" data-action="close-drill" aria-label="Close">×</button>' +
+        '</div>' +
+        '<div class="drill-body">' + rowsHtml + '</div>' +
+        '<div class="drill-footer">' +
+          '<span>Click any invoice to open it in Accounts Receivable</span>' +
+          '<span><strong>Total: ' + esc(fmtMoney(ctx.grandTotal)) + '</strong></span>' +
+        '</div>' +
+      '</div>';
+
+    bd.classList.add('is-open');
+  }
+
+  function closeDrilldownModal() {
+    var bd = document.getElementById('drillBackdrop');
+    if (!bd) return;
+    bd.classList.remove('is-open');
+    bd.innerHTML = '';
+  }
+
+  function wireDrilldown() {
+    // Cross-tab cell clicks → open drilldown
+    var ctBody = document.getElementById('crosstabBody');
+    if (ctBody) {
+      ctBody.addEventListener('click', function (ev) {
+        var t = ev.target;
+        if (!t || !t.closest) return;
+        var btn = t.closest('[data-action="drill"]');
+        if (!btn) return;
+        var itemId    = btn.getAttribute('data-item-id');
+        var venue     = btn.getAttribute('data-venue');
+        var othersStr = btn.getAttribute('data-others-codes');
+        if (othersStr) {
+          drillFromCell(itemId, othersStr);
+        } else {
+          drillFromCell(itemId, venue);
+        }
+      });
+    }
+
+    // Modal: close button + row click + backdrop click
+    var bd = document.getElementById('drillBackdrop');
+    if (bd) {
+      bd.addEventListener('click', function (ev) {
+        var t = ev.target;
+        if (!t || !t.closest) return;
+        // Backdrop click closes (when click is on the backdrop itself).
+        if (t === bd) { closeDrilldownModal(); return; }
+        var closer = t.closest('[data-action="close-drill"]');
+        if (closer) { closeDrilldownModal(); return; }
+        var row = t.closest('tr[data-invoice-id]');
+        if (row) {
+          var id = row.getAttribute('data-invoice-id');
+          // Open AR edit modal in a new tab via ?invoice=<uuid>.
+          window.open('/accounts-receivable/?invoice=' + encodeURIComponent(id), '_blank');
+        }
+      });
+    }
+
+    // Esc closes drilldown.
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape') closeDrilldownModal();
+    });
+  }
+
+  // =====================================================================
+  // BY-VENUE EXPAND/COLLAPSE WIRING
+  // =====================================================================
+  function wireByVenueExpansion() {
+    var host = document.getElementById('byVenueBody');
+    if (!host) return;
+    host.addEventListener('click', function (ev) {
+      var t = ev.target;
+      if (!t || !t.closest) return;
+      var row = t.closest('.by-venue-row');
+      if (!row) return;
+      var code = row.getAttribute('data-venue-code');
+      if (!code) return;
+      state.expandedVenue = (state.expandedVenue === code) ? null : code;
+      renderByVenue();
+    });
+  }
+
+  // =====================================================================
+  // CHIP WIRING
+  // =====================================================================
+  function wireChips() {
+    var chipRow = document.getElementById('chipRow');
+    var rangeWrap = document.getElementById('chipRangeWrap');
+    var fromEl = document.getElementById('chipFrom');
+    var toEl   = document.getElementById('chipTo');
+    if (!chipRow) return;
+
+    chipRow.addEventListener('click', function (ev) {
+      var t = ev.target;
+      if (!t || !t.closest) return;
+      var btn = t.closest('.chip');
+      if (!btn) return;
+      var chip = btn.getAttribute('data-chip');
+      if (!chip) return;
+
+      // Update active state
+      var chips = chipRow.querySelectorAll('.chip');
+      chips.forEach(function (c) {
+        var on = c === btn;
+        c.classList.toggle('is-active', on);
+        c.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
+      state.chip = chip;
+
+      if (chip === 'custom') {
+        // Show date inputs; pre-fill with current range if available.
+        rangeWrap.hidden = false;
+        if (!fromEl.value) fromEl.value = state.from || '';
+        if (!toEl.value)   toEl.value   = state.to   || '';
+        if (state.from && state.to) {
+          reload();
+        }
+        return;
+      } else {
+        rangeWrap.hidden = true;
+      }
+
+      reload();
+    });
+
+    function onDateChange() {
+      if (state.chip !== 'custom') return;
+      var f = fromEl.value;
+      var to = toEl.value;
+      if (!f || !to) return;
+      if (f > to) {
+        showToast('"From" date must be before "to" date');
+        return;
+      }
+      state.from = f;
+      state.to   = to;
+      reload();
+    }
+
+    if (fromEl) fromEl.addEventListener('change', onDateChange);
+    if (toEl)   toEl.addEventListener('change', onDateChange);
+  }
+
+  // =====================================================================
+  // RELOAD — the main "fetch + aggregate + render" cycle
+  // =====================================================================
+  function reload() {
+    var range = resolveChipRange(state.chip);
+    renderRangeBanner(range);
+
+    if (!range) {
+      // Custom chip without dates set — clear and wait for user input.
+      state.invoices = [];
+      state.lines = [];
+      state.totals = { amount: 0, invoiceCount: 0, venueCount: 0, itemCount: 0 };
+      state.byVenue = {};
+      state.byItem = {};
+      state.venueColumns = [];
+      renderTotalCard(null);
+      renderByVenue();
+      renderCrosstab();
+      return;
+    }
+
+    // Loading state
+    document.getElementById('totalCard').classList.add('is-loading');
+    document.getElementById('byVenueBody').innerHTML = '<div class="by-venue-empty">Loading…</div>';
+    document.getElementById('crosstabBody').innerHTML = '<div class="crosstab-empty">Loading…</div>';
+
+    state.from = range.from;
+    state.to   = range.to;
+    state.expandedVenue = null;
+
+    fetchInvoicesInRange(range.from, range.to)
+      .then(function (invs) {
+        state.invoices = invs || [];
+        if (state.invoices.length === 0) {
+          state.lines = [];
+          return null;
+        }
+        var ids = state.invoices.map(function (i) { return i.id; });
+        return fetchLinesForInvoices(ids);
+      })
+      .then(function (lines) {
+        state.lines = lines || [];
+        aggregate();
+        renderTotalCard(range);
+        renderByVenue();
+        renderCrosstab();
+      })
+      .catch(function (e) {
+        if (e && e.authFailed) { handleAuthFailure(); return; }
+        console.error('[sales-by-item] reload failed:', e);
+        showToast('Could not load data · ' + ((e && e.message) || ''), 3500);
+        state.invoices = [];
+        state.lines = [];
+        state.totals = { amount: 0, invoiceCount: 0, venueCount: 0, itemCount: 0 };
+        state.byVenue = {};
+        state.byItem = {};
+        state.venueColumns = [];
+        renderTotalCard(range);
+        renderByVenue();
+        renderCrosstab();
+      });
+  }
+
+  // =====================================================================
+  // BOOT
+  // =====================================================================
+  function onAuthReady(user) {
+    pcActivity.init('sales-by-item');
+    document.body.classList.remove('pre-auth');
+
+    checkFiscalCoverage();
+    wireChips();
+    wireByVenueExpansion();
+    wireDrilldown();
+
+    // Load items + venues once, then trigger first reload (defaults to YTD).
+    Promise.all([fetchItems(), fetchVenues()])
+      .then(function () {
+        reload();
+      })
+      .catch(function (e) {
+        if (e && e.authFailed) { handleAuthFailure(); return; }
+        console.error('[sales-by-item] initial load failed:', e);
+        showToast('Could not load reference data', 3000);
+      });
+
+    void user;
+  }
+
+  if (typeof pcAuth === 'undefined' || !pcAuth.require) {
+    document.body.innerHTML =
+      '<div style="padding:60px 22px;font-family:DM Sans,sans-serif;">' +
+      '<h1>Authentication unavailable</h1>' +
+      '<p>pc-auth.js failed to load.</p>' +
+      '</div>';
+  } else {
+    pcAuth.require({
+      pageSlug: 'sales-by-item',
+      onReady:  onAuthReady
+    });
+  }
+
+})();
+</script>
+
+</body>
+</html>
