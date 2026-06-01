@@ -57,6 +57,7 @@
     dashboards: { label: 'Staffing dashboard', href: '/dashboard/', slug: 'dashboard' },
     admin: [
       { label: 'Accounts receivable',            href: '/accounts-receivable/',    slug: 'accounts-receivable' },
+      { label: 'Sales by item',                  href: '/sales-by-item/',          slug: 'sales-by-item' },
       { label: 'Expense reports',                href: '/expense-reports/',        slug: 'expense-reports' },
       { label: 'Check writer',                   href: '/checks/',                 slug: 'checks' },
       { label: 'Bank review',                    href: '/bank-review/',            slug: 'bank-review' },
