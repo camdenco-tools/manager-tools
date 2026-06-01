@@ -2033,6 +2033,43 @@ function fmtCancelledAt(iso) {
     d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
+// Format an events.created_at timestamp as a short date string for the
+// summary bar chip. Returns "May 12" or "May 12, 2025" (year shown only
+// when not current year, to keep the chip compact in the common case).
+function fmtCreatedDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const now = new Date();
+  const sameYear = d.getFullYear() === now.getFullYear();
+  return d.toLocaleDateString('en-US', sameYear
+    ? { month: 'short', day: 'numeric' }
+    : { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+// Returns a human-readable relative time for a creation timestamp.
+// The "when the hell did this get created" signal — a 3-week-old empty
+// event reads very differently than a 2-day-old one.
+function fmtCreatedRelative(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const now = new Date();
+  const diffMs = now - d;
+  const diffDays = Math.floor(diffMs / 86400000);
+  if (diffDays < 1) return 'today';
+  if (diffDays === 1) return 'yesterday';
+  if (diffDays < 7) return diffDays + ' days ago';
+  const diffWeeks = Math.floor(diffDays / 7);
+  if (diffWeeks === 1) return '1 week ago';
+  if (diffWeeks < 5) return diffWeeks + ' weeks ago';
+  const diffMonths = Math.floor(diffDays / 30);
+  if (diffMonths === 1) return '1 month ago';
+  if (diffMonths < 12) return diffMonths + ' months ago';
+  const diffYears = Math.floor(diffDays / 365);
+  return diffYears === 1 ? '1 year ago' : diffYears + ' years ago';
+}
+
 // Initials from name
 function initials(name) {
   if (!name) return '?';
@@ -3211,6 +3248,19 @@ function renderSummaryBar(ev) {
   html += '<span class="summary-chip ' + fillCls + '"><span class="summary-chip-label">Filled</span><span class="num">' + totalFilled + '</span><span class="denom">/ ' + totalNeed + '</span></span>';
   html += '<span class="summary-chip neutral"><span class="summary-chip-label">Stands ready</span><span class="num">' + standsReady + '</span><span class="denom">/ ' + standGroups.length + '</span></span>';
   html += '<span class="summary-chip neutral"><span class="summary-chip-label">Locks</span><span class="num">12:01 AM</span><span class="denom">' + fmtDayHeader(ev.event_date).split(',')[0] + '</span></span>';
+  // Created chip — accessible but not prominent. Shows "Created May 12 ·
+  // 3 weeks ago" so the manager can answer "when did this event even get
+  // created" without leaving the expanded event view.
+  if (ev.created_at) {
+    const createdTip = 'Event added to the calendar on ' +
+      new Date(ev.created_at).toLocaleString('en-US',
+        { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    html += '<span class="summary-chip neutral" title="' + escapeAttr(createdTip) + '">' +
+      '<span class="summary-chip-label">Created</span>' +
+      '<span class="num" style="font-size:13px;font-weight:700;">' + escapeHtml(fmtCreatedDate(ev.created_at)) + '</span>' +
+      '<span class="denom">· ' + escapeHtml(fmtCreatedRelative(ev.created_at)) + '</span>' +
+    '</span>';
+  }
   html += '<span class="event-spacer"></span>';
   html += '<button class="audit-link" data-callable-event="' + ev.id + '" style="margin-right:14px;">📞 Available to call</button>';
   html += '<button class="audit-link" data-audit-event="' + ev.id + '">Open audit log</button>';
@@ -5733,6 +5783,22 @@ function openAuditLog(eventId) {
       }
       html += '</div>';
     });
+    // Synthetic "Event created" row at the bottom (oldest entry in
+    // DESC-sorted timeline). Not a real position_assignment_log row —
+    // we read events.created_at and render it inline so every audit log
+    // ends with "first thing that happened: it got created." Helps a
+    // manager looking at an empty event answer "when did this even get
+    // added" without leaving the audit log view.
+    if (ev && ev.created_at) {
+      html += '<div class="log-entry">' +
+        '<span class="log-time">' + fmtDateTime(ev.created_at) + '</span>' +
+        '<span class="log-action" style="color:var(--label);">event created</span>' +
+        '<span>Event added to the calendar ' +
+          '<span style="color:var(--label);">(' + escapeHtml(fmtCreatedRelative(ev.created_at)) + ')</span>' +
+        '</span>' +
+        '<span class="log-actor"></span>' +
+      '</div>';
+    }
     document.getElementById('audit-body').innerHTML = html;
   })
   .catch(err => {
