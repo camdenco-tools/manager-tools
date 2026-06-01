@@ -552,7 +552,81 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: #1a1a1a
 .recon-notfood-btn:hover:not(:disabled) { background: #eee; color: #444; }
 .recon-notfood-btn:disabled { background: #fafafa; color: #ccc; border-color: #eee; cursor: not-allowed; }
 
-.recon-empty { text-align: center; padding: 20px; font-size: 13px; color: #999; }
+/* ── Inquiry tray (admin asked managers about a charge) ── */
+.inquiry-bar { margin-bottom: 14px; }
+.inquiry-tray {
+  background: #EEEDFE; border: 1px solid #AFA9EC; border-top: 3px solid #534AB7;
+  border-radius: 16px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+}
+.inquiry-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 14px 20px; cursor: pointer; user-select: none;
+}
+.inquiry-header:hover { background: rgba(0,0,0,0.02); }
+.inquiry-title-area { display: flex; align-items: center; gap: 10px; }
+.inquiry-title { font-size: 14px; font-weight: 600; color: #3C3489; }
+.inquiry-badge { font-size: 11px; font-weight: 700; background: #534AB7; color: white; padding: 2px 9px; border-radius: 10px; }
+.inquiry-month { font-size: 11px; color: #534AB7; font-weight: 500; }
+.inquiry-chevron { font-size: 12px; color: #534AB7; transition: transform 0.2s; }
+.inquiry-chevron.open { transform: rotate(90deg); }
+.inquiry-body { display: none; padding: 0 20px 16px; }
+.inquiry-body.open { display: block; }
+.inquiry-list { background: white; border-radius: 12px; padding: 4px; }
+
+.inquiry-row {
+  padding: 14px;
+  border-bottom: 1px solid #F4F2FE;
+}
+.inquiry-row:last-child { border-bottom: none; }
+.inquiry-row-head {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 10px; margin-bottom: 8px; flex-wrap: wrap;
+}
+.inquiry-row-vendor { font-size: 16px; font-weight: 700; color: #1a1a1a; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.inquiry-row-amount { font-size: 18px; font-weight: 700; color: #1a1a1a; white-space: nowrap; }
+.inquiry-row-amount.credit { color: #27500A; }
+.inquiry-row-meta { font-size: 12px; color: #534AB7; margin-bottom: 8px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.inquiry-batch-pill {
+  display: inline-block; font-size: 10px; font-weight: 700;
+  padding: 2px 7px; border-radius: 5px;
+  background: #EEEDFE; color: #3C3489; border: 1px solid #AFA9EC;
+}
+.inquiry-question {
+  background: #F4F2FE; border-left: 3px solid #534AB7; border-radius: 6px;
+  padding: 9px 12px; margin-bottom: 10px;
+  font-size: 13px; color: #3C3489; line-height: 1.45; font-style: italic;
+}
+.inquiry-question strong { font-style: normal; font-weight: 700; }
+.inquiry-textarea {
+  width: 100%; padding: 10px 12px;
+  border: 1px solid #CECBF6; border-radius: 8px;
+  font-size: 14px; color: #1a1a1a; background: white;
+  font-family: inherit; resize: vertical; min-height: 60px;
+}
+.inquiry-textarea:focus { outline: none; border-color: #534AB7; }
+.inquiry-counter {
+  font-size: 11px; color: #888; margin-top: 4px; text-align: right;
+}
+.inquiry-counter.ok { color: #3B6D11; font-weight: 600; }
+.inquiry-row-actions {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  margin-top: 8px; justify-content: flex-end;
+}
+.inquiry-btn {
+  padding: 8px 16px; border-radius: 8px;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  font-family: inherit;
+}
+.inquiry-btn.primary {
+  background: #534AB7; color: white; border: 1px solid #3C3489;
+}
+.inquiry-btn.primary:hover:not(:disabled) { background: #3C3489; }
+.inquiry-btn.primary:disabled { background: #ccc; border-color: #ccc; cursor: not-allowed; }
+.inquiry-btn.secondary {
+  background: white; color: #A32D2D; border: 1px solid #f0c0c0;
+}
+.inquiry-btn.secondary:hover:not(:disabled) { background: #FCEBEB; }
+.inquiry-btn.secondary:disabled { color: #ccc; border-color: #eee; background: #fafafa; cursor: not-allowed; }
 
 @media (max-width: 600px) {
   header { padding: 0 16px; height: auto; flex-wrap: wrap; padding: 12px 16px; gap: 10px; }
@@ -842,6 +916,25 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: #1a1a1a
     </div>
 
     <div class="right-col">
+
+      <!-- Inquiry tray — charges admin sent over with a question ("what is this?") -->
+      <div class="inquiry-bar" id="inquiry-bar" style="display:none;">
+        <div class="inquiry-tray">
+          <div class="inquiry-header" onclick="toggleInquiryBar()">
+            <div class="inquiry-title-area">
+              <span class="inquiry-title">Admin asked about these charges</span>
+              <span class="inquiry-badge" id="inquiry-count">0</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;">
+              <span class="inquiry-month" id="inquiry-month-label"></span>
+              <span class="inquiry-chevron" id="inquiry-chevron">&#9654;</span>
+            </div>
+          </div>
+          <div class="inquiry-body" id="inquiry-body">
+            <div class="inquiry-list" id="inquiry-list"></div>
+          </div>
+        </div>
+      </div>
 
       <!-- Bank charge reconciliation bar (only shown when charges need assignment) -->
       <div class="recon-bar" id="recon-bar" style="display:none;">
@@ -3045,6 +3138,168 @@ async function saveReconAssignments() {
   loadMonthlySummary();
 }
 
+// ══════════════════════════════════════════════
+// ── Inquiry tray (admin -> managers, "what is this?") ──
+// ══════════════════════════════════════════════
+// When admin clicks "Ask" on a bank charge, the charge moves to status
+// 'awaiting_explanation' with the admin's question in inquiry_note. This
+// tray surfaces those charges so any manager with Purchases access can
+// answer. The answer goes back to the admin's Bank Review "Returned" section.
+
+var inquiryCharges = [];
+var INQUIRY_MIN_CHARS = 15;
+
+function toggleInquiryBar() {
+  var body = document.getElementById('inquiry-body');
+  var chev = document.getElementById('inquiry-chevron');
+  var isOpen = body.classList.contains('open');
+  body.classList.toggle('open', !isOpen);
+  chev.classList.toggle('open', !isOpen);
+}
+
+async function loadInquiryCharges() {
+  try {
+    var hdrs = apiHeaders();
+    var res = await fetch(SUPA_URL + '/rest/v1/bank_charges?status=eq.awaiting_explanation&select=id,charge_date,vendor_name,amount,batch_month,batch_note,inquiry_note,uploaded_by&order=charge_date.asc', {
+      headers: hdrs
+    });
+    if (!res.ok) return;
+    var rows = await res.json();
+    if (!Array.isArray(rows) || !rows.length) {
+      inquiryCharges = [];
+      document.getElementById('inquiry-bar').style.display = 'none';
+      return;
+    }
+    inquiryCharges = rows;
+    document.getElementById('inquiry-bar').style.display = 'block';
+    document.getElementById('inquiry-count').textContent = rows.length;
+
+    // Month label (single-month uploads are the common case)
+    var months = {};
+    rows.forEach(function(r) { if (r.batch_month) months[r.batch_month] = true; });
+    var monthKeys = Object.keys(months).sort();
+    if (monthKeys.length === 1) {
+      var mp = monthKeys[0].split('-');
+      var mDate = new Date(parseInt(mp[0]), parseInt(mp[1])-1, 1);
+      document.getElementById('inquiry-month-label').textContent = mDate.toLocaleString('en-US', {month:'short', year:'numeric'});
+    } else if (monthKeys.length > 1) {
+      document.getElementById('inquiry-month-label').textContent = monthKeys.length + ' months';
+    } else {
+      document.getElementById('inquiry-month-label').textContent = '';
+    }
+
+    renderInquiryList();
+  } catch(e) { /* table may not have inquiry_note column on older DBs — silently ignore */ }
+}
+
+function renderInquiryList() {
+  var listEl = document.getElementById('inquiry-list');
+  if (!inquiryCharges.length) {
+    listEl.innerHTML = '<div class="recon-empty">No questions waiting.</div>';
+    return;
+  }
+
+  var html = '';
+  for (var i = 0; i < inquiryCharges.length; i++) {
+    var c = inquiryCharges[i];
+    var ds = c.charge_date.slice(5,7) + '/' + c.charge_date.slice(8,10);
+    var isCredit = parseFloat(c.amount) < 0;
+    var displayAmt = isCredit ? '-$' + fmtMoney(Math.abs(c.amount)) : '$' + fmtMoney(c.amount);
+    var batchPill = c.batch_note ? '<span class="inquiry-batch-pill">' + escHtml(c.batch_note) + '</span>' : '';
+    var questionHtml = c.inquiry_note
+      ? '<strong>Admin asks:</strong> ' + escHtml(c.inquiry_note)
+      : '<strong>Admin asks:</strong> What is this charge?';
+
+    html += '<div class="inquiry-row" data-charge-id="' + c.id + '">';
+    html += '<div class="inquiry-row-head">';
+    html += '<span class="inquiry-row-vendor">' + escHtml(c.vendor_name || 'Unknown vendor') + '</span>';
+    html += '<span class="inquiry-row-amount' + (isCredit ? ' credit' : '') + '">' + displayAmt + '</span>';
+    html += '</div>';
+    html += '<div class="inquiry-row-meta">' + ds + batchPill + '</div>';
+    html += '<div class="inquiry-question">' + questionHtml + '</div>';
+    html += '<textarea class="inquiry-textarea" id="inquiry-ta-' + c.id + '" placeholder="Explain what this charge is for, who it belongs to, or any details that help..." oninput="onInquiryInput(\'' + c.id + '\')"></textarea>';
+    html += '<div class="inquiry-counter" id="inquiry-counter-' + c.id + '">0 / ' + INQUIRY_MIN_CHARS + ' characters minimum</div>';
+    html += '<div class="inquiry-row-actions">';
+    html += '<button class="inquiry-btn secondary" id="inquiry-notmine-' + c.id + '" disabled onclick="submitExplanation(\'' + c.id + '\', true)" title="Send back saying you don\'t recognize this charge">Not mine</button>';
+    html += '<button class="inquiry-btn primary" id="inquiry-submit-' + c.id + '" disabled onclick="submitExplanation(\'' + c.id + '\', false)">Submit explanation</button>';
+    html += '</div>';
+    html += '</div>';
+  }
+  listEl.innerHTML = html;
+}
+
+function onInquiryInput(chargeId) {
+  var ta = document.getElementById('inquiry-ta-' + chargeId);
+  var counter = document.getElementById('inquiry-counter-' + chargeId);
+  var submitBtn = document.getElementById('inquiry-submit-' + chargeId);
+  var notMineBtn = document.getElementById('inquiry-notmine-' + chargeId);
+  if (!ta || !counter || !submitBtn || !notMineBtn) return;
+
+  var len = ta.value.trim().length;
+  var meetsMin = len >= INQUIRY_MIN_CHARS;
+  counter.textContent = len + ' / ' + INQUIRY_MIN_CHARS + ' characters minimum';
+  counter.classList.toggle('ok', meetsMin);
+  submitBtn.disabled = !meetsMin;
+  notMineBtn.disabled = !meetsMin;
+}
+
+async function submitExplanation(chargeId, isNotMine) {
+  var ta = document.getElementById('inquiry-ta-' + chargeId);
+  if (!ta) return;
+  var note = ta.value.trim();
+  if (note.length < INQUIRY_MIN_CHARS) {
+    alert('Please type at least ' + INQUIRY_MIN_CHARS + ' characters so the admin gets a useful answer.');
+    return;
+  }
+
+  var submitBtn = document.getElementById('inquiry-submit-' + chargeId);
+  var notMineBtn = document.getElementById('inquiry-notmine-' + chargeId);
+  submitBtn.disabled = true;
+  notMineBtn.disabled = true;
+  var origLabel = isNotMine ? notMineBtn.textContent : submitBtn.textContent;
+  if (isNotMine) notMineBtn.textContent = 'Sending...';
+  else submitBtn.textContent = 'Sending...';
+
+  var userName = 'unknown';
+  if (typeof pcAuth !== 'undefined') {
+    var u = pcAuth.getUser();
+    if (u) userName = u.display_name;
+  }
+
+  try {
+    var hdrs = apiHeaders();
+    var payload = {
+      status: 'returned',
+      return_reason: isNotMine ? 'unknown' : 'explanation',
+      return_note: note,
+      returned_by: userName,
+      returned_at: new Date().toISOString()
+    };
+    var res = await fetch(SUPA_URL + '/rest/v1/bank_charges?id=eq.' + chargeId, {
+      method: 'PATCH',
+      headers: Object.assign({}, hdrs, {'Content-Type': 'application/json', 'Prefer': 'return=minimal'}),
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error(await res.text());
+
+    // Remove from local list and re-render
+    inquiryCharges = inquiryCharges.filter(function(c) { return c.id !== chargeId; });
+    document.getElementById('inquiry-count').textContent = inquiryCharges.length;
+    if (inquiryCharges.length === 0) {
+      document.getElementById('inquiry-bar').style.display = 'none';
+    } else {
+      renderInquiryList();
+    }
+  } catch(e) {
+    console.error('[purchases] submitExplanation failed', e);
+    alert('Could not send your answer. Try again.\n\n' + (e.message || ''));
+    submitBtn.disabled = false;
+    notMineBtn.disabled = false;
+    if (isNotMine) notMineBtn.textContent = origLabel;
+    else submitBtn.textContent = origLabel;
+  }
+}
+
 // ── Init ──
 function init() {
   document.getElementById('inv-date').value = todayLocal();
@@ -3059,6 +3314,7 @@ function init() {
 
   loadMonthlySummary();
   loadReconCharges();
+  loadInquiryCharges();
 }
 
 pcAuth.require({
