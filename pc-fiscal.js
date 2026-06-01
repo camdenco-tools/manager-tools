@@ -408,6 +408,170 @@
     return p ? p.key : null;
   }
 
+  /* ---------- quarters ---------- */
+
+  /* Internal: extract the fiscal year from a period.
+     We use the period NAME's trailing year ("January 2026" → 2026), not
+     start.slice(0,4), because "January 2030" starts on 2029-12-31. The
+     fiscal year follows the period's start MONTH convention, so the
+     name is the only reliable anchor.
+
+     Returns the year as a number, or null on a malformed name. */
+  function fiscalYearOfPeriod(p) {
+    if (!p || !p.name) return null;
+    var m = p.name.match(/(\d{4})$/);
+    return m ? parseInt(m[1], 10) : null;
+  }
+
+  /* Internal: return the array of 12 periods for a given fiscal year
+     (or [] on miss). Cheap O(N) scan — N is small and this is rarely
+     hot. Cached on first call per year. */
+  var _yearCache = {};
+  function periodsForFiscalYear(year) {
+    if (year == null) return [];
+    if (_yearCache[year]) return _yearCache[year];
+    var arr = [];
+    for (var i = 0; i < ALL_PERIODS.length; i++) {
+      if (fiscalYearOfPeriod(ALL_PERIODS[i]) === year) arr.push(ALL_PERIODS[i]);
+    }
+    _yearCache[year] = arr;
+    return arr;
+  }
+
+  /* Given a period object, name, or key, return the quarter object
+     containing it: { q, year, start, end, periods, name, key }.
+       q       — 1 | 2 | 3 | 4 (fiscal-period index basis: Q1=periods 1-3,
+                 Q2=4-6, Q3=7-9, Q4=10-12)
+       year    — fiscal year (number)
+       start   — first period's start ISO
+       end     — last period's end ISO  (note: CY2030 Q4 ends 2031-01-05
+                 because of the 53-week leap year; quarters always span
+                 their constituent periods exactly)
+       periods — [periodObj, periodObj, periodObj]  (always 3)
+       name    — 'Q2 2026'
+       key     — '2026-Q2'   (useful for filter state / URL params)
+     Returns null on unrecognized input or if the period's year is not
+     fully loaded (shouldn't happen in practice — all defined years have
+     12 periods each).
+     Accepts the same input shapes as getPriorPeriod/getNextPeriod. */
+  function getQuarterForPeriod(input) {
+    var p;
+    if (input && typeof input === 'object' && input.start) {
+      p = input;
+    } else if (typeof input === 'string') {
+      p = getPeriodByName(input) || getPeriodByKey(input);
+    } else {
+      return null;
+    }
+    if (!p) return null;
+
+    var year = fiscalYearOfPeriod(p);
+    if (year == null) return null;
+
+    var yearPeriods = periodsForFiscalYear(year);
+    if (yearPeriods.length === 0) return null;
+
+    // Find the period's local index within its year.
+    var localIdx = -1;
+    for (var i = 0; i < yearPeriods.length; i++) {
+      if (yearPeriods[i].start === p.start) { localIdx = i; break; }
+    }
+    if (localIdx === -1) return null;
+
+    // Quarter # = floor(localIdx / 3) + 1. Three periods per quarter.
+    var qIdx = Math.floor(localIdx / 3);   // 0-3
+    var qNum = qIdx + 1;                    // 1-4
+    var firstIdx = qIdx * 3;
+    var lastIdx  = firstIdx + 2;
+
+    // Safety — yearPeriods may not have 12 entries if we're in an
+    // edge year, in which case clamp. Real data always has 12.
+    if (lastIdx >= yearPeriods.length) lastIdx = yearPeriods.length - 1;
+
+    var qPeriods = yearPeriods.slice(firstIdx, lastIdx + 1);
+    if (qPeriods.length === 0) return null;
+
+    return {
+      q: qNum,
+      year: year,
+      start: qPeriods[0].start,
+      end: qPeriods[qPeriods.length - 1].end,
+      periods: qPeriods,
+      name: 'Q' + qNum + ' ' + year,
+      key: year + '-Q' + qNum
+    };
+  }
+
+  /* Today's quarter, or null if today is in a gap. */
+  function getCurrentQuarter() {
+    var p = getCurrentPeriod();
+    return p ? getQuarterForPeriod(p) : null;
+  }
+
+  /* Prior quarter — accepts a quarter object, a quarter key ('2026-Q2'),
+     or a period (anything getQuarterForPeriod accepts). Walks across
+     year boundaries: prior of Q1 2027 is Q4 2026. Returns null if the
+     prior quarter is outside loaded coverage. */
+  function getPriorQuarter(input) {
+    var q = _resolveQuarterInput(input);
+    if (!q) return null;
+    if (q.q > 1) {
+      // Look up the first period of (q.q - 1) of the same year.
+      var yearPeriods = periodsForFiscalYear(q.year);
+      var idx = (q.q - 2) * 3;  // q.q - 1 quarter starts at local idx (q.q - 2) * 3
+      if (idx < 0 || idx >= yearPeriods.length) return null;
+      return getQuarterForPeriod(yearPeriods[idx]);
+    }
+    // Q1 → Q4 of prior year.
+    var priorYear = periodsForFiscalYear(q.year - 1);
+    if (priorYear.length < 10) return null;  // need at least 10 periods for Q4
+    return getQuarterForPeriod(priorYear[9]);
+  }
+
+  /* Next quarter — symmetric with getPriorQuarter. */
+  function getNextQuarter(input) {
+    var q = _resolveQuarterInput(input);
+    if (!q) return null;
+    if (q.q < 4) {
+      var yearPeriods = periodsForFiscalYear(q.year);
+      var idx = q.q * 3;  // q.q + 1 quarter starts at local idx q.q * 3
+      if (idx < 0 || idx >= yearPeriods.length) return null;
+      return getQuarterForPeriod(yearPeriods[idx]);
+    }
+    // Q4 → Q1 of next year.
+    var nextYear = periodsForFiscalYear(q.year + 1);
+    if (nextYear.length === 0) return null;
+    return getQuarterForPeriod(nextYear[0]);
+  }
+
+  /* Internal: normalize quarter input (object | key string | period).
+     Returns a fresh quarter object or null. */
+  function _resolveQuarterInput(input) {
+    if (!input) return null;
+    if (typeof input === 'object' && input.q && input.year && input.periods) {
+      // Already a quarter object — re-resolve from its first period so
+      // we always return a freshly-computed quarter.
+      return getQuarterForPeriod(input.periods[0]);
+    }
+    if (typeof input === 'string') {
+      // Try 'YYYY-QN' first.
+      var qm = input.match(/^(\d{4})-Q([1-4])$/i);
+      if (qm) {
+        var year = parseInt(qm[1], 10);
+        var qNum = parseInt(qm[2], 10);
+        var yp = periodsForFiscalYear(year);
+        var idx = (qNum - 1) * 3;
+        if (idx >= yp.length) return null;
+        return getQuarterForPeriod(yp[idx]);
+      }
+      // Otherwise treat as a period name/key.
+      var p = getPeriodByName(input) || getPeriodByKey(input);
+      return p ? getQuarterForPeriod(p) : null;
+    }
+    // Treat as a period object.
+    return getQuarterForPeriod(input);
+  }
+
   /* Diagnostic — surface the defined coverage range. Useful for "you're
      looking at a year that isn't loaded" tooltip copy. */
   function getCoverage() {
@@ -431,6 +595,10 @@
     getPriorPeriod: getPriorPeriod,
     getNextPeriod: getNextPeriod,
     getWeekRanges: getWeekRanges,
-    getCoverage: getCoverage
+    getCoverage: getCoverage,
+    getQuarterForPeriod: getQuarterForPeriod,
+    getCurrentQuarter: getCurrentQuarter,
+    getPriorQuarter: getPriorQuarter,
+    getNextQuarter: getNextQuarter
   };
 })();
