@@ -116,12 +116,37 @@ header {
 .expense-list { background: #f8f8f8; border-radius: 10px; overflow: hidden; }
 .expense-row { display: flex; align-items: center; padding: 9px 12px; gap: 8px; border-bottom: 1px solid #eee; }
 .expense-row:last-child { border-bottom: none; }
+/* Highlight rows that have no category picked — prevents silent null saves */
+.expense-row.needs-category {
+  background: #FFF1E8;
+  border-left: 3px solid #BA7517;
+}
+.expense-cat-sel.empty {
+  border-color: #BA7517;
+  background: #FFF6E6;
+  color: #A06614;
+  font-style: italic;
+}
+.expense-cat-sel.empty option:disabled {
+  color: #BA7517;
+}
 .expense-check { width: 16px; height: 16px; accent-color: #534AB7; flex-shrink: 0; cursor: pointer; }
 .expense-date { font-size: 12px; color: #999; min-width: 42px; flex-shrink: 0; }
 .expense-vendor { font-size: 13px; font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .expense-amount { font-size: 13px; font-weight: 700; min-width: 60px; text-align: right; flex-shrink: 0; }
 .expense-amount.credit { color: #27500A; }
-.expense-cat-sel { padding: 4px 8px; border: 1px solid #CECBF6; border-radius: 6px; font-size: 12px; color: #3C3489; background: #EEEDFE; font-weight: 500; font-family: inherit; min-width: 130px; cursor: pointer; appearance: none; -webkit-appearance: none; }
+/* Batch note pill — shown on every charge row so admin can see which card/upload it came from */
+.batch-pill {
+  display: inline-block;
+  font-size: 10px; font-weight: 700;
+  padding: 2px 7px; border-radius: 5px;
+  background: #FFF7E8; color: #854F0B;
+  border: 1px solid #EF9F27;
+  white-space: nowrap; flex-shrink: 0;
+  margin-left: 4px;
+}
+.batch-pill.purple { background: #F4F2FE; color: #3C3489; border-color: #CECBF6; }
+.batch-pill.lavender { background: #EEEDFE; color: #3C3489; border-color: #AFA9EC; }
 .expense-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
 .expense-hint { font-size: 11px; color: #534AB7; opacity: 0.6; }
 .section-btn { padding: 8px 20px; color: white; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
@@ -520,6 +545,26 @@ header {
   </div>
 </div>
 
+<!-- Ask-managers modal: admin asks managers to explain a charge -->
+<div class="modal-overlay" id="ask-modal">
+  <div class="modal">
+    <h2>Ask managers about this charge</h2>
+    <div class="modal-summary" id="ask-summary"></div>
+    <div class="modal-field">
+      <label>What do you want to ask? <span style="color:#999;font-weight:400;">(optional)</span></label>
+      <textarea id="ask-note" placeholder="e.g. 'Is this someone's personal subscription?' or 'Anyone recognize this? Brian, is this you?'"></textarea>
+    </div>
+    <div style="font-size:12px;color:#888;line-height:1.45;background:#F4F2FE;border-radius:8px;padding:10px 12px;border-left:3px solid #534AB7;">
+      Managers will see this charge on the Purchases page with your question. Anyone can answer — the answer will come back here with the name of whoever responded. They'll be required to type at least 15 characters so you get a meaningful reply.
+    </div>
+    <div class="modal-error" id="ask-error"></div>
+    <div class="modal-actions">
+      <button class="modal-cancel" onclick="closeAskModal()">Cancel</button>
+      <button class="modal-save" style="background:#534AB7;" id="ask-save-btn" onclick="confirmAsk()">Send to managers</button>
+    </div>
+  </div>
+</div>
+
 <!-- Discard modal: admin soft-deletes a charge -->
 <div class="modal-overlay" id="discard-modal">
   <div class="modal">
@@ -852,15 +897,94 @@ async function processFile(file) {
 }
 
 // ── CSV parsing ──
+//
+// Supports two known checking-account CSV formats:
+//
+//   Format A: SINGLE-AMOUNT column (Wells Fargo style)
+//     "date","description","-82.99",,,"balance"
+//     Sign indicates direction: negative = expense, positive = deposit.
+//
+//   Format B: TWO-COLUMN debit/credit (Citizens-style, no header row)
+//     1, 06/01/2026, "GOOGLE*YOUTUBE TV", -82.99, , 0    ← debit (col D) = expense
+//     2, 06/01/2026, "WEB XFER FROM CHK", , 7500.00, 0   ← credit (col E) = deposit (skipped)
+//     Detection: 6 columns AND exactly one of cols D/E populated with a number.
+//
+// Format B is detected on the FIRST data row that has 6 columns and the
+// debit/credit exclusivity pattern. Once detected, the rest of the file is
+// parsed as Format B. If the first row doesn't fit, every row falls back to
+// the legacy single-column scanning loop (Format A).
 function parseCSV(file) {
   return new Promise(function(resolve, reject) {
     var reader = new FileReader();
     reader.onload = function(e) {
       var text = e.target.result;
       var rows = text.split('\n').map(function(r) { return r.trim(); }).filter(function(r) { return r; });
-      if (rows.length < 2) { resolve([]); return; }
+      if (rows.length < 1) { resolve([]); return; }
+
+      // ── Format detection: scan first few data rows for the 2-column pattern.
+      // We DON'T assume rows[0] is a header — Citizens-style exports have no
+      // header. So check rows[0..2] and look for the exclusive D/E signature.
+      var isFormatB = false;
+      var hasHeader = false;
+      for (var probe = 0; probe < Math.min(3, rows.length); probe++) {
+        var pCols = parseCSVRow(rows[probe]);
+        if (pCols.length !== 6) continue;
+        var pDebit = pCols[3].trim().replace(/^"|"$/g, '');
+        var pCredit = pCols[4].trim().replace(/^"|"$/g, '');
+        var debitIsNum = pDebit && /^-?\$?[\d,]+\.?\d*$/.test(pDebit.replace(/[()]/g, ''));
+        var creditIsNum = pCredit && /^-?\$?[\d,]+\.?\d*$/.test(pCredit.replace(/[()]/g, ''));
+        // Exclusive: exactly one of D/E is a number, the other is blank.
+        if ((debitIsNum && !pCredit) || (!pDebit && creditIsNum)) {
+          isFormatB = true;
+          // If we detected on row 0, there's no header. If we detected on row 1+,
+          // earlier rows were probably the header — skip them.
+          hasHeader = (probe > 0);
+          break;
+        }
+      }
 
       var lines = [];
+      var startIdx = hasHeader ? 1 : 0;
+
+      if (isFormatB) {
+        // ── Format B: 6 cols = [row#, date, description, debit, credit, balance]
+        for (var i = startIdx; i < rows.length; i++) {
+          var cols = parseCSVRow(rows[i]);
+          if (cols.length !== 6) continue;
+          var dateRaw = cols[1].trim().replace(/^"|"$/g, '');
+          var descRaw = cols[2].trim().replace(/^"|"$/g, '');
+          var debitRaw = cols[3].trim().replace(/^"|"$/g, '');
+          var creditRaw = cols[4].trim().replace(/^"|"$/g, '');
+
+          if (!/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(dateRaw)) continue;
+          if (!descRaw) continue;
+
+          // Skip credits entirely — deposits and refunds aren't reconciled here.
+          if (!debitRaw && creditRaw) continue;
+          if (!debitRaw) continue;
+
+          var debitClean = debitRaw.replace(/[$,()]/g, '').trim();
+          if (!debitClean || isNaN(parseFloat(debitClean))) continue;
+          var amt = parseFloat(debitClean);
+          if (debitRaw.indexOf('(') !== -1) amt = -amt;
+
+          // matchCharges() filters out positive amounts as deposits/transfers,
+          // so a debit listed as a positive number in col D needs to be flipped
+          // to negative here to survive that filter. Citizens uses negatives
+          // (-82.99) directly, so this is a safety net.
+          if (amt > 0) amt = -amt;
+
+          lines.push({
+            date: normalizeDate(dateRaw),
+            description: descRaw,
+            amount: amt
+          });
+        }
+        resolve(lines);
+        return;
+      }
+
+      // ── Format A: legacy single-column scan. Assume rows[0] is header.
       for (var i = 1; i < rows.length; i++) {
         var cols = parseCSVRow(rows[i]);
         if (cols.length < 3) continue;
@@ -1362,17 +1486,25 @@ function renderExpenses(items) {
     var ds = c.charge_date.slice(5,7) + '/' + c.charge_date.slice(8,10);
     var isCredit = c.amount < 0;
     var displayAmt = (isCredit ? '-' : '') + '$' + fmtMoney(c.amount);
-    html += '<div class="expense-row has-raw-tooltip" data-raw="' + escapeHtml(c.raw_description || '') + '">';
+    var noCategoryClass = c.category_id ? '' : ' needs-category';
+    html += '<div class="expense-row has-raw-tooltip' + noCategoryClass + '" data-raw="' + escapeHtml(c.raw_description || '') + '">';
     html += '<input type="checkbox" class="expense-check" ' + (expenseChecked[c.id] ? 'checked' : '') + ' onchange="toggleExpenseCheck(\'' + c.id + '\', this.checked)">';
     html += '<span class="expense-date">' + ds + '</span>';
-    html += '<span class="expense-vendor">' + escapeHtml(c.vendor_name) + '</span>';
+    var batchPill = c.batch_note ? '<span class="batch-pill purple">' + escapeHtml(c.batch_note) + '</span>' : '';
+    html += '<span class="expense-vendor">' + escapeHtml(c.vendor_name) + batchPill + '</span>';
     html += '<span class="expense-amount' + (isCredit ? ' credit' : '') + '">' + displayAmt + '</span>';
-    html += '<select class="expense-cat-sel" onchange="changeCategory(\'' + c.id + '\', this.value)">';
+    var selClass = 'expense-cat-sel' + (c.category_id ? '' : ' empty');
+    html += '<select class="' + selClass + '" onchange="changeCategory(\'' + c.id + '\', this.value)">';
+    // Placeholder option when category is null — prevents browser auto-selecting first option
+    if (!c.category_id) {
+      html += '<option value="" selected disabled>&mdash; pick category &mdash;</option>';
+    }
     for (var e = 0; e < EXPENSE_CATEGORIES.length; e++) {
       html += '<option value="' + EXPENSE_CATEGORIES[e].id + '"' + (c.category_id === EXPENSE_CATEGORIES[e].id ? ' selected' : '') + '>' + escapeHtml(EXPENSE_CATEGORIES[e].name) + '</option>';
     }
     html += '</select>';
     html += '<button class="move-btn" onclick="moveToFood(\'' + c.id + '\')" title="Reclassify as food (will appear in food section, save there)">&rarr; Food</button>';
+    html += '<button class="move-btn" onclick="openAskModal(\'' + c.id + '\', \'expense\')" title="Ask managers about this charge" style="color:#534AB7;border-color:#CECBF6;">? Ask</button>';
     html += '<button class="move-btn" onclick="openDiscardModal(\'' + c.id + '\', \'expense\')" title="Discard charge" style="color:#A32D2D;border-color:#f0c0c0;">&#128465;</button>';
     html += '</div>';
   }
@@ -1410,10 +1542,12 @@ function renderFood(items) {
     html += '<div class="food-row has-raw-tooltip" data-raw="' + escapeHtml(c.raw_description || '') + '">';
     html += '<input type="checkbox" class="expense-check" ' + (foodChecked[c.id] ? 'checked' : '') + ' onchange="toggleFoodCheck(\'' + c.id + '\', this.checked)" style="accent-color:#BA7517;">';
     html += '<span class="food-date">' + ds + '</span>';
-    html += '<span class="food-vendor">' + escapeHtml(c.vendor_name) + '</span>';
+    var batchPill = c.batch_note ? '<span class="batch-pill">' + escapeHtml(c.batch_note) + '</span>' : '';
+    html += '<span class="food-vendor">' + escapeHtml(c.vendor_name) + batchPill + '</span>';
     html += '<span class="food-amount' + (isCredit ? ' credit' : '') + '">' + displayAmt + '</span>';
     html += '<span class="food-cat">' + escapeHtml(c.category_name || 'Food Purchases') + '</span>';
     html += '<button class="move-btn" onclick="moveToExpense(\'' + c.id + '\')" title="Reclassify as non-food (will appear in expenses section, save there)">&rarr; Expense</button>';
+    html += '<button class="move-btn" onclick="openAskModal(\'' + c.id + '\', \'food\')" title="Ask managers about this charge" style="color:#534AB7;border-color:#CECBF6;">? Ask</button>';
     html += '<button class="move-btn" onclick="openDiscardModal(\'' + c.id + '\', \'food\')" title="Discard charge" style="color:#A32D2D;border-color:#f0c0c0;">&#128465;</button>';
     html += '</div>';
   }
@@ -1461,7 +1595,8 @@ function renderReturned() {
     html += '<div class="returned-row has-raw-tooltip" data-raw="' + escapeHtml(c.raw_description || '') + '">';
     html += '<input type="checkbox" class="returned-check" ' + (returnedChecked[c.id] ? 'checked' : '') + ' onchange="toggleReturnedCheck(\'' + c.id + '\', this.checked)">';
     html += '<span class="returned-date">' + ds + '</span>';
-    html += '<span class="returned-vendor">' + escapeHtml(c.vendor_name || 'Unknown') + '</span>';
+    var batchPill = c.batch_note ? '<span class="batch-pill lavender">' + escapeHtml(c.batch_note) + '</span>' : '';
+    html += '<span class="returned-vendor">' + escapeHtml(c.vendor_name || 'Unknown') + batchPill + '</span>';
     html += '<span class="returned-amount' + (isCredit ? ' credit' : '') + '">' + displayAmt + '</span>';
 
     // Meta row: reason badge, returned-by, optional note
@@ -1479,6 +1614,7 @@ function renderReturned() {
     }
     html += '</select>';
     html += '<button class="row-action-btn send-back" onclick="openSendBackModal(\'' + c.id + '\')" title="Send back to managers with a note">&larr; Send back</button>';
+    html += '<button class="row-action-btn" style="color:#534AB7;border-color:#CECBF6;" onclick="openAskModal(\'' + c.id + '\', \'returned\')" title="Ask managers about this charge">? Ask managers</button>';
     html += '<button class="row-action-btn discard" onclick="openDiscardModal(\'' + c.id + '\', \'returned\')" title="Discard (move to trash)">&#128465; Discard</button>';
     html += '</div>';
 
@@ -1525,7 +1661,7 @@ function toggleReturnedCheck(id, checked) {
 // ── Load returned charges from DB ──
 async function loadReturned() {
   try {
-    var res = await fetch(SUPA_URL + '/rest/v1/bank_charges?status=eq.returned&select=id,charge_date,vendor_name,amount,returned_by,returned_at,return_reason,return_note,category_id,raw_description&order=charge_date.asc', { headers: hdrs() });
+    var res = await fetch(SUPA_URL + '/rest/v1/bank_charges?status=eq.returned&select=id,charge_date,vendor_name,amount,returned_by,returned_at,return_reason,return_note,category_id,raw_description,batch_note&order=charge_date.asc', { headers: hdrs() });
     var rows = await res.json();
     if (!Array.isArray(rows)) { returnedCharges = []; renderReview(); return; }
     returnedCharges = rows;
@@ -2040,18 +2176,28 @@ function toggleExpenseCheck(id, checked) {
 }
 
 function changeCategory(id, catId) {
+  // Empty string from the placeholder option counts as null
+  var resolvedCatId = catId || null;
+  var changedToValid = false;
   for (var i = 0; i < currentCharges.length; i++) {
     if (currentCharges[i].id === id) {
-      currentCharges[i].category_id = catId;
+      var wasNull = !currentCharges[i].category_id;
+      currentCharges[i].category_id = resolvedCatId;
       for (var c = 0; c < ALL_CATEGORIES.length; c++) {
-        if (ALL_CATEGORIES[c].id === catId) {
+        if (ALL_CATEGORIES[c].id === resolvedCatId) {
           currentCharges[i].category_name = ALL_CATEGORIES[c].name;
           currentCharges[i].category_gl = ALL_CATEGORIES[c].gl_group;
           break;
         }
       }
+      // If row transitioned from no-category to category (or vice versa),
+      // re-render so the needs-category styling drops/appears.
+      if (wasNull !== !resolvedCatId) changedToValid = true;
       break;
     }
+  }
+  if (changedToValid) {
+    renderExpenses(currentCharges.filter(function(c) { return c.status === 'expense_pending'; }));
   }
 }
 
@@ -2071,35 +2217,93 @@ function changeReturnedCategory(id, catId) {
   }
 }
 
-function moveToFood(id) {
+// ── Move between food <-> expense sections ──
+// CRITICAL: these now persist the status flip to the database immediately.
+// Previously the move was local-only, which meant any subsequent reload
+// (Ask, Save, page refresh) wiped the move because the DB still had the
+// old status. That caused work to silently disappear and looked like
+// "saves aren't working" when really they were never persisted in the
+// first place. Fail loud on errors — never silent.
+
+async function moveToFood(id) {
+  var charge = null;
   for (var i = 0; i < currentCharges.length; i++) {
-    if (currentCharges[i].id === id) {
-      currentCharges[i].status = 'food_pending';
-      var foodCat = findCategoryByName('Food Purchases');
-      if (foodCat) {
-        currentCharges[i].category_id = foodCat.id;
-        currentCharges[i].category_name = foodCat.name;
-        currentCharges[i].category_gl = foodCat.gl_group;
-      }
-      delete expenseChecked[id];
-      foodChecked[id] = true;
-      showToast('Moved to food section &mdash; scroll down and click "Send to managers" to save');
-      break;
-    }
+    if (currentCharges[i].id === id) { charge = currentCharges[i]; break; }
   }
-  renderReview();
+  if (!charge) return;
+
+  var foodCat = findCategoryByName('Food Purchases');
+  var payload = { status: 'food_pending' };
+  if (foodCat) payload.category_id = foodCat.id;
+
+  try {
+    var res = await fetch(SUPA_URL + '/rest/v1/bank_charges?id=eq.' + id, {
+      method: 'PATCH',
+      headers: Object.assign({}, hdrs(), {'Content-Type': 'application/json', 'Prefer': 'return=minimal'}),
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error(await res.text());
+
+    // DB write succeeded — now mirror locally so the UI is consistent
+    charge.status = 'food_pending';
+    if (foodCat) {
+      charge.category_id = foodCat.id;
+      charge.category_name = foodCat.name;
+      charge.category_gl = foodCat.gl_group;
+    }
+    delete expenseChecked[id];
+    foodChecked[id] = true;
+    showToast('Moved to food section &mdash; saved');
+    renderReview();
+  } catch(e) {
+    console.error('[bank-review] moveToFood failed', e);
+    alert('Could not move to Food. Try again.\n\n' + (e.message || ''));
+  }
 }
-function moveToExpense(id) {
+
+async function moveToExpense(id) {
+  var charge = null;
   for (var i = 0; i < currentCharges.length; i++) {
-    if (currentCharges[i].id === id) {
-      currentCharges[i].status = 'expense_pending';
-      expenseChecked[id] = true;
-      delete foodChecked[id];
-      showToast('Moved to expenses &mdash; pick a category below and click "Save expenses" to finish');
-      break;
+    if (currentCharges[i].id === id) { charge = currentCharges[i]; break; }
+  }
+  if (!charge) return;
+
+  // Pick a sensible default expense category. Don't pick the first one in the
+  // dropdown (that's "Advertising & Promotion" and was a confirmed footgun).
+  // Try to keep whatever category was already set if it's a valid expense
+  // category; otherwise null it so the dropdown shows "<pick one>" forcing
+  // the user to choose.
+  var keepCategory = false;
+  if (charge.category_id) {
+    for (var c = 0; c < EXPENSE_CATEGORIES.length; c++) {
+      if (EXPENSE_CATEGORIES[c].id === charge.category_id) { keepCategory = true; break; }
     }
   }
-  renderReview();
+  var payload = { status: 'expense_pending' };
+  if (!keepCategory) payload.category_id = null;
+
+  try {
+    var res = await fetch(SUPA_URL + '/rest/v1/bank_charges?id=eq.' + id, {
+      method: 'PATCH',
+      headers: Object.assign({}, hdrs(), {'Content-Type': 'application/json', 'Prefer': 'return=minimal'}),
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error(await res.text());
+
+    charge.status = 'expense_pending';
+    if (!keepCategory) {
+      charge.category_id = null;
+      charge.category_name = '';
+      charge.category_gl = '';
+    }
+    expenseChecked[id] = true;
+    delete foodChecked[id];
+    showToast('Moved to expenses &mdash; pick a category and click Save');
+    renderReview();
+  } catch(e) {
+    console.error('[bank-review] moveToExpense failed', e);
+    alert('Could not move to Expenses. Try again.\n\n' + (e.message || ''));
+  }
 }
 
 // Small bottom-right confirmation; auto-hides
@@ -2207,6 +2411,74 @@ function findChargeAnywhere(id) {
   return null;
 }
 
+// ══════════════════════════════════════════════
+// ── Ask-managers modal (admin -> managers, "what is this charge?") ──
+// ══════════════════════════════════════════════
+var pendingAskId = null;
+var pendingAskSource = null;  // 'expense' | 'food' | 'returned'
+
+function openAskModal(chargeId, source) {
+  var c = findChargeAnywhere(chargeId);
+  if (!c) return;
+  pendingAskId = chargeId;
+  pendingAskSource = source;
+  var ds = c.charge_date.slice(5,7) + '/' + c.charge_date.slice(8,10);
+  document.getElementById('ask-summary').innerHTML =
+    '<strong>' + escapeHtml(c.vendor_name || 'Unknown') + '</strong> &middot; ' + ds + ' &middot; <strong>$' + fmtMoney(c.amount) + '</strong>';
+  document.getElementById('ask-note').value = '';
+  document.getElementById('ask-error').style.display = 'none';
+  document.getElementById('ask-save-btn').disabled = false;
+  document.getElementById('ask-save-btn').textContent = 'Send to managers';
+  document.getElementById('ask-modal').classList.add('open');
+}
+
+function closeAskModal() {
+  document.getElementById('ask-modal').classList.remove('open');
+  pendingAskId = null;
+  pendingAskSource = null;
+}
+
+async function confirmAsk() {
+  if (!pendingAskId) return;
+  var note = document.getElementById('ask-note').value.trim();
+
+  var btn = document.getElementById('ask-save-btn');
+  btn.disabled = true; btn.textContent = 'Sending...';
+
+  try {
+    var res = await fetch(SUPA_URL + '/rest/v1/bank_charges?id=eq.' + pendingAskId, {
+      method: 'PATCH',
+      headers: Object.assign({}, hdrs(), {'Content-Type': 'application/json', 'Prefer': 'return=minimal'}),
+      body: JSON.stringify({
+        status: 'awaiting_explanation',
+        inquiry_note: note || null,
+        // Clear any prior return state so this is a fresh ask
+        return_reason: null,
+        return_note: null,
+        returned_by: null,
+        returned_at: null
+      })
+    });
+    if (!res.ok) throw new Error();
+
+    var savedSource = pendingAskSource;
+    closeAskModal();
+    showToast('Sent to managers &mdash; they\'ll see it on the Purchases page');
+
+    // Refresh whichever list it came from
+    if (savedSource === 'returned') {
+      await loadReturned();
+    } else {
+      await loadPendingCharges();
+    }
+  } catch(e) {
+    var errEl = document.getElementById('ask-error');
+    errEl.textContent = 'Could not send. Try again.';
+    errEl.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Send to managers';
+  }
+}
+
 function openDiscardModal(chargeId, source) {
   var c = findChargeAnywhere(chargeId);
   if (!c) return;
@@ -2274,6 +2546,22 @@ async function confirmDiscard() {
 async function saveExpenses() {
   var toSave = currentCharges.filter(function(c) { return c.status === 'expense_pending' && expenseChecked[c.id]; });
   if (!toSave.length) return;
+
+  // ── Pre-flight: refuse to save any row without a category picked. ──
+  // The "→ Expense" move clears category when the source was a COGS row
+  // (Food Purchases), and the dropdown can visually show a default option
+  // without the underlying value being set. Saving a null-category row
+  // creates a useless expenses entry that has to be SQL-fixed later.
+  // Fail loud here instead.
+  var missingCategory = toSave.filter(function(c) { return !c.category_id; });
+  if (missingCategory.length) {
+    var names = missingCategory.slice(0, 4).map(function(c) { return c.vendor_name + ' ($' + fmtMoney(c.amount) + ')'; }).join(', ');
+    var more = missingCategory.length > 4 ? ' (+' + (missingCategory.length - 4) + ' more)' : '';
+    alert(missingCategory.length + ' row(s) need a category picked before saving:\n\n' + names + more + '\n\nThe affected rows are highlighted below.');
+    // Mark them in render so admin can spot them
+    renderExpenses(currentCharges.filter(function(c) { return c.status === 'expense_pending'; }));
+    return;
+  }
 
   var btn = document.querySelector('#expense-section .section-btn');
   btn.disabled = true; btn.textContent = 'Saving...';
@@ -2417,7 +2705,7 @@ async function loadHistory() {
 // ── Load pending charges from DB ──
 async function loadPendingCharges() {
   try {
-    var res = await fetch(SUPA_URL + '/rest/v1/bank_charges?status=in.(expense_pending,food_pending,matched)&select=id,batch_id,charge_date,raw_description,amount,vendor_name,category_id,status,matched_purchase_id,batch_month,uploaded_by&order=charge_date.asc', { headers: hdrs() });
+    var res = await fetch(SUPA_URL + '/rest/v1/bank_charges?status=in.(expense_pending,food_pending,matched)&select=id,batch_id,charge_date,raw_description,amount,vendor_name,category_id,status,matched_purchase_id,batch_month,batch_note,uploaded_by&order=charge_date.asc', { headers: hdrs() });
     var rows = await res.json();
     if (!Array.isArray(rows) || !rows.length) {
       currentCharges = [];
@@ -2442,7 +2730,8 @@ async function loadPendingCharges() {
         category_gl: cat ? cat.gl_group : 'cogs',
         status: r.status, matched_purchase: null,
         matched_purchase_id: r.matched_purchase_id,
-        batch_month: r.batch_month, uploaded_by: r.uploaded_by
+        batch_month: r.batch_month, batch_note: r.batch_note,
+        uploaded_by: r.uploaded_by
       };
     });
     if (currentCharges.length > 0) currentBatchId = currentCharges[0].batch_id;
