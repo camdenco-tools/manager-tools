@@ -354,10 +354,13 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: #1a1a1a
   gap: 4px 12px;
   align-items: center;
   padding: 12px 14px;
-  border-bottom: 1px solid #f2f2f2;
+  border-bottom: 2px solid #F4DDA8;
+  background: white;
 }
+.recon-row:nth-child(even) { background: #FFF7E8; }
 .recon-row:last-child { border-bottom: none; }
 .recon-row.is-checked { background: #FFFCF4; }
+.recon-row.is-checked:nth-child(even) { background: #FFF1D9; }
 
 .recon-check {
   width: 16px;
@@ -420,14 +423,34 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: #1a1a1a
   grid-column: 1 / -1;
   margin-top: 8px;
   padding: 7px 10px;
-  background: #FFF7E8;
-  border-left: 3px solid #EF9F27;
+  border-left: 3px solid;
   border-radius: 4px;
   font-size: 12px;
   font-style: italic;
-  color: #854F0B;
   line-height: 1.4;
 }
+
+/* ── Batch color palette ── Each batch_note string deterministically maps
+   to one of these 5 colors. Used in both recon and inquiry trays so that
+   "Keith Card" is the same color in both places, on every page load. */
+.batch-c0 { background: #FFF7E8; border-left-color: #EF9F27; color: #854F0B; }   /* amber */
+.batch-c1 { background: #E6F1FB; border-left-color: #5C9DDB; color: #0C447C; }   /* blue */
+.batch-c2 { background: #E6F4EA; border-left-color: #5BAA6F; color: #2D6B3F; }   /* green */
+.batch-c3 { background: #FCE9E9; border-left-color: #D87575; color: #8B2929; }   /* rose */
+.batch-c4 { background: #F0E6F8; border-left-color: #9B6BBE; color: #5B2D7E; }   /* purple */
+
+/* Row backgrounds get a faint tint of the batch color */
+.recon-row.batch-row-c0:nth-child(even) { background: #FFF1D9; }
+.recon-row.batch-row-c1:nth-child(even) { background: #E0EAF5; }
+.recon-row.batch-row-c2:nth-child(even) { background: #E0EDE5; }
+.recon-row.batch-row-c3:nth-child(even) { background: #F7E2E2; }
+.recon-row.batch-row-c4:nth-child(even) { background: #E9DEF3; }
+
+.inquiry-row.batch-row-c0:nth-child(even) { background: #FFF1D9; }
+.inquiry-row.batch-row-c1:nth-child(even) { background: #E0EAF5; }
+.inquiry-row.batch-row-c2:nth-child(even) { background: #E0EDE5; }
+.inquiry-row.batch-row-c3:nth-child(even) { background: #F7E2E2; }
+.inquiry-row.batch-row-c4:nth-child(even) { background: #E9DEF3; }
 .recon-venue-sel.assigned {
   background: #E6F1FB;
   border-color: #85B7EB;
@@ -575,8 +598,10 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: #1a1a1a
 
 .inquiry-row {
   padding: 14px;
-  border-bottom: 1px solid #F4F2FE;
+  border-bottom: 2px solid #CECBF6;
+  background: white;
 }
+.inquiry-row:nth-child(even) { background: #F4F2FE; }
 .inquiry-row:last-child { border-bottom: none; }
 .inquiry-row-head {
   display: flex; justify-content: space-between; align-items: center;
@@ -1049,6 +1074,21 @@ function fmtMoneySigned(n) {
 }
 function escHtml(s) {
   return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// ── Batch color picker ──
+// Deterministically maps a batch_note string to one of 5 color classes.
+// Same batch name always gets the same color, on every page load.
+// Returns the class suffix ("c0" through "c4").
+function batchColorClass(batchNote) {
+  if (!batchNote) return 'c0';
+  var hash = 0;
+  for (var i = 0; i < batchNote.length; i++) {
+    hash = ((hash << 5) - hash) + batchNote.charCodeAt(i);
+    hash = hash & hash;  // force to 32-bit
+  }
+  var idx = Math.abs(hash) % 5;
+  return 'c' + idx;
 }
 
 function isBlockedFile(file) {
@@ -2699,6 +2739,8 @@ function renderReconList() {
     var rowClass = 'recon-row';
     if (reconChecked[c.id]) rowClass += ' is-checked';
     if (reconSplits[c.id]) rowClass += ' has-split-open';
+    var batchColor = batchColorClass(c.batch_note);
+    rowClass += ' batch-row-' + batchColor;
 
     html += '<div class="' + rowClass + '" data-charge-id="' + c.id + '">';
     html += '<input type="checkbox" class="recon-check" ' + (reconChecked[c.id] ? 'checked' : '') + ' onchange="toggleReconCheck(\'' + c.id + '\', this.checked)">';
@@ -2752,7 +2794,7 @@ function renderReconList() {
     }
 
     if (c.batch_note) {
-      html += '<div class="recon-batch-note">&ldquo;' + escHtml(c.batch_note) + '&rdquo;</div>';
+      html += '<div class="recon-batch-note batch-' + batchColor + '">&ldquo;' + escHtml(c.batch_note) + '&rdquo;</div>';
     }
     html += '</div>';
   }
@@ -3205,12 +3247,13 @@ function renderInquiryList() {
     var ds = c.charge_date.slice(5,7) + '/' + c.charge_date.slice(8,10);
     var isCredit = parseFloat(c.amount) < 0;
     var displayAmt = isCredit ? '-$' + fmtMoney(Math.abs(c.amount)) : '$' + fmtMoney(c.amount);
-    var batchPill = c.batch_note ? '<span class="inquiry-batch-pill">' + escHtml(c.batch_note) + '</span>' : '';
+    var batchColor = batchColorClass(c.batch_note);
+    var batchPill = c.batch_note ? '<span class="inquiry-batch-pill batch-' + batchColor + '">' + escHtml(c.batch_note) + '</span>' : '';
     var questionHtml = c.inquiry_note
       ? '<strong>Admin asks:</strong> ' + escHtml(c.inquiry_note)
       : '<strong>Admin asks:</strong> What is this charge?';
 
-    html += '<div class="inquiry-row" data-charge-id="' + c.id + '">';
+    html += '<div class="inquiry-row batch-row-' + batchColor + '" data-charge-id="' + c.id + '">';
     html += '<div class="inquiry-row-head">';
     html += '<span class="inquiry-row-vendor">' + escHtml(c.vendor_name || 'Unknown vendor') + '</span>';
     html += '<span class="inquiry-row-amount' + (isCredit ? ' credit' : '') + '">' + displayAmt + '</span>';
