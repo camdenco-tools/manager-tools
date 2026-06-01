@@ -320,7 +320,7 @@ body {
   margin: 0 auto 16px;
   padding: 0 20px;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 12px;
 }
 .scorecard-card {
@@ -334,6 +334,21 @@ body {
   gap: 4px;
   cursor: pointer;
   transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+}
+/* Low-engagement tile — fourth scorecard. Same shape as the venue tiles
+   but with an amber accent so it reads as "attention needed" rather than
+   competing with the venue colors. Number stays muted gray-then-red to
+   avoid over-claiming — not all low-signup people are problems. */
+.scorecard-card.low-engagement {
+  background: var(--amber-50);
+  border-color: var(--amber-400);
+}
+.scorecard-card.low-engagement .scorecard-num {
+  color: var(--amber-800);
+}
+.scorecard-card.low-engagement .scorecard-num.is-zero {
+  color: var(--muted);
+  opacity: 0.55;
 }
 .scorecard-card:hover {
   transform: translateY(-1px);
@@ -1527,6 +1542,13 @@ body {
     gap: 12px;
     padding: 10px 12px;
   }
+  /* Low-engagement tile on mobile — uses a left amber accent bar so it
+     visually matches the venue tiles' left-border treatment. Otherwise
+     the venue tiles' border-left-color (set inline) wouldn't apply to
+     the amber tile and it'd look like an orphan card. */
+  .scorecard-card.low-engagement {
+    border-left: 3px solid var(--amber-400);
+  }
   .scorecard-head {
     flex: 1;
     flex-direction: column;
@@ -1813,9 +1835,12 @@ body {
     // established employees, open for cold-start.
     psSignalsOpen: false,
     // Venue roster modal: which venue's modal is open (or null), and
-    // whether to show inactive employees in that modal.
+    // whether to show inactive employees in that modal. rosterModalMode
+    // is 'venue' (default) or 'low-engagement' — both reuse the same
+    // modal markup with different filters and headers.
     rosterModalVenue: null,
     rosterModalShowInactive: false,
+    rosterModalMode: 'venue',
     // Cache of cert URLs from onboarding submissions, keyed by
     // employee_id. Populated lazily — only fetched the first time a
     // manager clicks "View cert" on a card. Shape:
@@ -2970,13 +2995,44 @@ body {
         '<div class="scorecard-pct">' + pctLabel + '</div>' +
       '</div>';
     });
+
+    // Fourth tile — low engagement. Counts all active employees with
+    // signup_count <= LOW_SIGNUP_THRESHOLD, regardless of home venue,
+    // excluding NA (managers/floaters who don't sign up anyway).
+    var lowCount = state.employees.filter(function(e) {
+      if (e.is_active !== true) return false;
+      if (e.home_venue === 'NA') return false;
+      var sc = state.signupCountsByName[fullName(e)];
+      var total = sc ? sc.total : 0;
+      return total <= LOW_SIGNUP_THRESHOLD;
+    }).length;
+    html += '<div class="scorecard-card low-engagement" data-roster-low-engagement="1">' +
+      '<div class="scorecard-head">' +
+        '<span class="scorecard-venue">Low engagement</span>' +
+        '<span class="scorecard-par">&le; ' + LOW_SIGNUP_THRESHOLD + ' signups</span>' +
+      '</div>' +
+      '<div class="scorecard-num' + (lowCount === 0 ? ' is-zero' : '') + '">' + lowCount + '</div>' +
+      '<div class="scorecard-label">need attention</div>' +
+      '<div class="scorecard-bar">' +
+        '<div class="scorecard-bar-fill" style="width:100%;background:var(--amber-400);"></div>' +
+      '</div>' +
+      '<div class="scorecard-pct">includes unset home venues</div>' +
+    '</div>';
+
     strip.innerHTML = html;
-    // Wire click handlers — each scorecard opens the venue roster modal.
-    var cards = strip.querySelectorAll('[data-roster-venue]');
-    for (var i = 0; i < cards.length; i++) {
-      cards[i].addEventListener('click', function(ev) {
+    // Wire click handlers — venue tiles open the venue roster, low-engagement
+    // tile opens the same roster modal in low-engagement mode.
+    var venueCards = strip.querySelectorAll('[data-roster-venue]');
+    for (var i = 0; i < venueCards.length; i++) {
+      venueCards[i].addEventListener('click', function(ev) {
         var v = ev.currentTarget.getAttribute('data-roster-venue');
         if (v) openRosterModal(v);
+      });
+    }
+    var lowCard = strip.querySelector('[data-roster-low-engagement]');
+    if (lowCard) {
+      lowCard.addEventListener('click', function() {
+        openLowEngagementModal();
       });
     }
   }
@@ -4516,44 +4572,139 @@ body {
   function openRosterModal(venue) {
     state.rosterModalVenue = venue;
     state.rosterModalShowInactive = false;
+    state.rosterModalMode = 'venue';
+    renderRosterModal();
+  }
+
+  // Opens the roster modal in low-engagement mode — shows every active
+  // employee with signup count <= LOW_SIGNUP_THRESHOLD, regardless of
+  // home venue. Same UI shell as the venue roster, different filter.
+  function openLowEngagementModal() {
+    state.rosterModalVenue = null;
+    state.rosterModalShowInactive = false;
+    state.rosterModalMode = 'low-engagement';
     renderRosterModal();
   }
 
   function closeRosterModal() {
     state.rosterModalVenue = null;
     state.rosterModalShowInactive = false;
+    state.rosterModalMode = 'venue';
     document.getElementById('cardModalRoot').innerHTML = '';
   }
 
   function renderRosterModal() {
-    if (!state.rosterModalVenue) return;
-    // We mount the roster modal into the cardModalRoot since only one of
-    // the two should be open at once. Opening an employee card from inside
-    // the roster will swap this for the card modal.
-    var venue = state.rosterModalVenue;
-    var color = VENUE_COLORS[venue] || '#666';
+    // Modal is open when either a venue is selected OR we're in
+    // low-engagement mode. Both reuse the same shell with different
+    // filter + header logic.
+    var isLowEng = state.rosterModalMode === 'low-engagement';
+    if (!isLowEng && !state.rosterModalVenue) return;
+
     var includeInactive = state.rosterModalShowInactive;
+    var matched, headerHtml, emptyMsg, inactiveCount;
 
-    var matched = state.employees.filter(function(e) {
-      if (e.home_venue !== venue) return false;
-      if (!includeInactive && e.is_active !== true) return false;
-      return true;
-    });
-    matched.sort(function(a, b) {
-      // Active first (when inactive is shown), then alphabetical by last name
-      if (a.is_active !== b.is_active) return a.is_active ? -1 : 1;
-      return fullName(a).localeCompare(fullName(b));
-    });
+    if (isLowEng) {
+      // Low-engagement mode: every active non-NA employee with signup
+      // count <= threshold, regardless of home venue.
+      matched = state.employees.filter(function(e) {
+        if (e.home_venue === 'NA') return false;
+        if (!includeInactive && e.is_active !== true) return false;
+        // Apply the signup threshold to active rows; if includeInactive
+        // is on, inactive rows show too (managers may want to see who
+        // was low-engaged before being deactivated).
+        if (e.is_active === true) {
+          var sc = state.signupCountsByName[fullName(e)];
+          var total = sc ? sc.total : 0;
+          if (total > LOW_SIGNUP_THRESHOLD) return false;
+        }
+        return true;
+      });
+      matched.sort(function(a, b) {
+        // Lowest signup count first — zeros at the top, then 1s, etc.
+        // Active rows first, then inactive within their own block.
+        if (a.is_active !== b.is_active) return a.is_active ? -1 : 1;
+        var sa = state.signupCountsByName[fullName(a)];
+        var sb = state.signupCountsByName[fullName(b)];
+        var ta = sa ? sa.total : 0;
+        var tb = sb ? sb.total : 0;
+        if (ta !== tb) return ta - tb;
+        return fullName(a).localeCompare(fullName(b));
+      });
 
-    var activeCount = state.employees.filter(function(e) {
-      return e.home_venue === venue && e.is_active === true;
-    }).length;
-    var inactiveCount = state.employees.filter(function(e) {
-      return e.home_venue === venue && e.is_active === false;
-    }).length;
+      // Inactive count for the toggle, scoped to low-engagement inactives
+      inactiveCount = state.employees.filter(function(e) {
+        if (e.home_venue === 'NA') return false;
+        if (e.is_active !== false) return false;
+        return true;
+      }).length;
+
+      var totalLow = state.employees.filter(function(e) {
+        if (e.is_active !== true) return false;
+        if (e.home_venue === 'NA') return false;
+        var sc2 = state.signupCountsByName[fullName(e)];
+        var total2 = sc2 ? sc2.total : 0;
+        return total2 <= LOW_SIGNUP_THRESHOLD;
+      }).length;
+      var zeroCount = state.employees.filter(function(e) {
+        if (e.is_active !== true) return false;
+        if (e.home_venue === 'NA') return false;
+        var sc3 = state.signupCountsByName[fullName(e)];
+        return !sc3 || sc3.total === 0;
+      }).length;
+
+      headerHtml =
+        '<div class="vr-modal-header">' +
+          '<span class="vr-venue-dot" style="background:var(--amber-400);"></span>' +
+          '<span class="vr-venue-name">Low engagement</span>' +
+          '<span class="vr-venue-count">' + totalLow + ' active' +
+            (zeroCount > 0 ? ' &middot; <span style="color:var(--red-600);font-weight:700;">' + zeroCount + ' with zero signups</span>' : '') +
+          '</span>' +
+          '<button class="card-header-close" data-close-roster title="Close">&times;</button>' +
+        '</div>';
+      emptyMsg = 'No active employees below the low-engagement threshold. &#127881;';
+    } else {
+      // Venue mode (original behavior).
+      var venue = state.rosterModalVenue;
+      var color = VENUE_COLORS[venue] || '#666';
+      matched = state.employees.filter(function(e) {
+        if (e.home_venue !== venue) return false;
+        if (!includeInactive && e.is_active !== true) return false;
+        return true;
+      });
+      matched.sort(function(a, b) {
+        if (a.is_active !== b.is_active) return a.is_active ? -1 : 1;
+        return fullName(a).localeCompare(fullName(b));
+      });
+
+      var activeCount = state.employees.filter(function(e) {
+        return e.home_venue === venue && e.is_active === true;
+      }).length;
+      inactiveCount = state.employees.filter(function(e) {
+        return e.home_venue === venue && e.is_active === false;
+      }).length;
+      var lowCount = state.employees.filter(function(e) {
+        if (e.home_venue !== venue) return false;
+        if (e.is_active !== true) return false;
+        var sc = state.signupCountsByName[fullName(e)];
+        var total = sc ? sc.total : 0;
+        return total <= LOW_SIGNUP_THRESHOLD;
+      }).length;
+
+      headerHtml =
+        '<div class="vr-modal-header">' +
+          '<span class="vr-venue-dot" style="background:' + color + ';"></span>' +
+          '<span class="vr-venue-name">' + escapeHtml(VENUE_LABELS[venue] || venue) + '</span>' +
+          '<span class="vr-venue-count">' + activeCount + ' active' +
+            (lowCount > 0 ? ' &middot; <span style="color:var(--red-600);font-weight:700;">' + lowCount + ' low signups</span>' : '') +
+            (includeInactive && inactiveCount > 0 ? ' &middot; ' + inactiveCount + ' inactive' : '') +
+          '</span>' +
+          '<button class="card-header-close" data-close-roster title="Close">&times;</button>' +
+        '</div>';
+      emptyMsg = 'No' + (includeInactive ? '' : ' active') + ' employees with ' + escapeHtml(venue) + ' as their home component.';
+    }
 
     var rowsHtml = matched.length === 0
-      ? '<div class="vr-empty">No' + (includeInactive ? '' : ' active') + ' employees with ' + escapeHtml(venue) + ' as their home component.</div>'
+      ? '<div class="vr-empty">' + emptyMsg + '</div>'
       : matched.map(renderRosterRow).join('');
 
     var toggleHtml = inactiveCount > 0
@@ -4568,14 +4719,7 @@ body {
     var html =
       '<div class="modal-overlay" data-roster-bg>' +
         '<div class="modal-box">' +
-          '<div class="vr-modal-header">' +
-            '<span class="vr-venue-dot" style="background:' + color + ';"></span>' +
-            '<span class="vr-venue-name">' + escapeHtml(VENUE_LABELS[venue] || venue) + '</span>' +
-            '<span class="vr-venue-count">' + activeCount + ' active' +
-              (includeInactive && inactiveCount > 0 ? ' &middot; ' + inactiveCount + ' inactive' : '') +
-            '</span>' +
-            '<button class="card-header-close" data-close-roster title="Close">&times;</button>' +
-          '</div>' +
+          headerHtml +
           toggleHtml +
           '<div class="vr-list">' + rowsHtml + '</div>' +
         '</div>' +
@@ -4589,8 +4733,34 @@ body {
       ? '<span class="status-pill active">Active</span>'
       : '<span class="status-pill inactive">Inactive</span>';
     var rowClass = 'vr-row' + (emp.is_active ? '' : ' is-inactive');
+
+    // Signup count badge — same rule as the main row list. Hidden on
+    // inactive rows (they don't sign up; would be noise). NA is already
+    // filtered out at the scorecard level since a roster modal opens
+    // for a specific venue, not for NA, but we keep the check for safety.
+    var signupBadge = '';
+    if (emp.is_active && emp.home_venue !== 'NA') {
+      var sc = state.signupCountsByName[fullName(emp)];
+      var total = sc ? sc.total : 0;
+      var badgeClass = 'signup-count-badge-row' + (total <= LOW_SIGNUP_THRESHOLD ? ' low' : '');
+      var tip = total === 0
+        ? 'Never signed up'
+        : total + ' lifetime signup' + (total === 1 ? '' : 's');
+      if (total > 0) {
+        signupBadge = '<button class="' + badgeClass + ' clickable" data-roster-signup-badge="' + emp.id + '" ' +
+          'title="' + escapeHtml(tip) + ' &mdash; click to see history">' +
+          total + ' signup' + (total === 1 ? '' : 's') +
+        '</button>';
+      } else {
+        signupBadge = '<span class="' + badgeClass + '" title="' + escapeHtml(tip) + '">' +
+          total + ' signup' + (total === 1 ? '' : 's') +
+        '</span>';
+      }
+    }
+
     return '<div class="' + rowClass + '">' +
       '<span class="vr-row-name">' + escapeHtml(fullName(emp)) + '</span>' +
+      signupBadge +
       statusPill +
       '<button class="card-btn" data-roster-card="' + emp.id + '" title="Open employee card">' +
         '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
@@ -4629,6 +4799,19 @@ body {
         state.rosterModalVenue = null;
         state.rosterModalShowInactive = false;
         openCardModal(empId);
+      });
+    }
+    // Signup badge clicks — same flow as card button, but also auto-expand
+    // the Signups section on the way in.
+    var sigBtns = root.querySelectorAll('[data-roster-signup-badge]');
+    for (var sb = 0; sb < sigBtns.length; sb++) {
+      sigBtns[sb].addEventListener('click', function(ev) {
+        var empId = ev.currentTarget.getAttribute('data-roster-signup-badge');
+        state.rosterModalVenue = null;
+        state.rosterModalShowInactive = false;
+        openCardModal(empId);
+        state.signupsOpen = true;
+        renderCardModal();
       });
     }
   }
