@@ -2213,6 +2213,63 @@ body {
   }
 
   // -------------------------------------------------------------
+  // ensureCandidateRow — return the employee's candidates row, creating
+  // one if it doesn't exist. Legacy employees who pre-date the apply-
+  // online flow may not have a candidates row, which historically caused
+  // silent save failures on the card editor. This function backfills the
+  // row on demand so saves to candidate-only fields (email, DOB,
+  // internal_notes, roles, etc.) succeed instead of failing silently.
+  //
+  // On create, the row is stamped with legacy_import=true and a
+  // pipeline_stage matching the employee's active/inactive status. The
+  // new row is mirrored into state.candidates[punch_id] so subsequent
+  // saves in the same session find it. An audit entry ('candidate_record'
+  // -> 'created') is appended to the card history.
+  //
+  // Known limitation: not atomic across concurrent managers. If two
+  // managers click Save on the same legacy employee at the same instant,
+  // both can INSERT a row (punch_id is not UNIQUE on candidates). Volume
+  // is too low to engineer around today; revisit if duplicates appear.
+  // -------------------------------------------------------------
+  function ensureCandidateRow(emp) {
+    if (!emp || !emp.id) return Promise.reject(new Error('No employee'));
+    var existing = getCandidateForEmployee(emp);
+    if (existing && existing.id) return Promise.resolve(existing);
+
+    var now = new Date().toISOString();
+    var body = {
+      first_name: emp.first_name,
+      last_name: emp.last_name,
+      punch_id: emp.punch_id,
+      phone: emp.phone || null,
+      pipeline_stage: emp.is_active ? 'active' : 'inactive',
+      legacy_import: true,
+      applied_at: now,
+      stage_updated_at: now,
+      updated_at: now
+    };
+    var url = SUPABASE_URL + '/rest/v1/candidates';
+    var headers = pcAuth.headers();
+    headers['Content-Type'] = 'application/json';
+    headers['Prefer'] = 'return=representation';
+    return authFetch(url, {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify(body)
+    }).then(function(rows) {
+      if (!rows || rows.length === 0) {
+        throw new Error('Candidate row INSERT returned no row');
+      }
+      var newCand = rows[0];
+      // Mirror into local state so subsequent saves see it without a refetch.
+      if (newCand.punch_id) state.candidates[newCand.punch_id] = newCand;
+      // Audit-log the creation. Fire-and-forget.
+      logCardChange(emp.id, 'candidate_record', null, 'created');
+      return newCand;
+    });
+  }
+
+  // -------------------------------------------------------------
   // logCardChange — write a single row to employee_card_changes and
   // mirror it into state.changeHistory so the card UI updates without
   // a refetch. Fire-and-forget: failures here shouldn't roll back the
@@ -4540,7 +4597,8 @@ body {
   // Field-name display labels. Add entries here as new fields get logged.
   var HISTORY_FIELD_LABELS = {
     home_venue: 'Home venue',
-    shirt_size: 'Uniform shirt size'
+    shirt_size: 'Uniform shirt size',
+    candidate_record: 'Candidate record'
   };
 
   function formatHistoryValue(fieldName, value) {
@@ -5075,77 +5133,98 @@ body {
   // Contact section save: writes phone + punch_id + shirt_size to BOTH employees
   // and candidates (mirror pattern), writes email/dob/start_date/is_minor to
   // candidates only.
+  //
+  // Legacy employees may not have a candidates row. If the user filled in any
+  // candidate-only field on such an employee, ensureCandidateRow auto-creates
+  // the row before the writes proceed — instead of the historical silent-fail
+  // where the modal closed and nothing saved.
+  //
+  // If after all the diffing nothing actually changed, the function now shows
+  // a "No changes to save" toast instead of silently closing — protects
+  // against future silent-fail bug surfaces (per fail-loud principle).
   function saveContactSection(emp, cand, draft, errEl) {
     var oldPunch = emp.punch_id;
     var newPunch = draft.punch_id || null;
     var oldShirt = emp.shirt_size || null;
     var newShirt = draft.shirt_size || null;
-    var empBody = {};
-    var candBody = {};
 
-    if (draft.phone !== emp.phone) empBody.phone = draft.phone || null;
-    if (newPunch !== oldPunch) empBody.punch_id = newPunch;
-    if (newShirt !== oldShirt) empBody.shirt_size = newShirt;
+    // Auto-create candidate row if user filled candidate-only content and
+    // no candidate exists yet. shirt_size / phone / punch_id changes alone
+    // do not trigger auto-create — they save to employees, and the
+    // candidate mirror is skipped quietly when no row exists (matches
+    // pre-existing behavior).
+    var hasCandidateOnlyContent = !!(
+      draft.email ||
+      draft.date_of_birth ||
+      draft.earliest_start_date ||
+      draft.is_minor === true
+    );
+    var ensurePromise = (hasCandidateOnlyContent && !(cand && cand.id))
+      ? ensureCandidateRow(emp)
+      : Promise.resolve(cand || null);
 
-    if (cand && cand.id) {
-      // Update candidate row
-      if (draft.email !== (cand.email || '')) candBody.email = draft.email || null;
-      if (draft.phone !== (cand.phone || '')) candBody.phone = draft.phone || null;
-      if (newPunch !== (cand.punch_id || null)) candBody.punch_id = newPunch;
-      if (draft.date_of_birth !== (cand.date_of_birth || '')) candBody.date_of_birth = draft.date_of_birth || null;
-      if (draft.earliest_start_date !== (cand.earliest_start_date || '')) candBody.earliest_start_date = draft.earliest_start_date || null;
-      if (draft.is_minor !== (cand.is_minor === true)) candBody.is_minor = draft.is_minor;
-      if (newShirt !== (cand.shirt_size || null)) candBody.shirt_size = newShirt;
-    }
+    ensurePromise.then(function(activeCand) {
+      var empBody = {};
+      var candBody = {};
 
-    var ops = [];
-    if (Object.keys(empBody).length > 0) {
-      empBody.updated_at = new Date().toISOString();
-      ops.push(patchEmployee(emp.id, empBody));
-    }
-    if (cand && cand.id && Object.keys(candBody).length > 0) {
-      candBody.updated_at = new Date().toISOString();
-      ops.push(patchCandidate(cand.id, candBody));
-    }
-    if (ops.length === 0) {
-      // Nothing changed
-      state.modalSection = null;
-      state.modalEditDraft = null;
-      renderCardModal();
-      return;
-    }
+      if (draft.phone !== emp.phone) empBody.phone = draft.phone || null;
+      if (newPunch !== oldPunch) empBody.punch_id = newPunch;
+      if (newShirt !== oldShirt) empBody.shirt_size = newShirt;
 
-    Promise.all(ops).then(function() {
-      // Reflect the changes in our local in-memory copies so the UI updates
-      // without refetching the whole list.
+      if (activeCand && activeCand.id) {
+        if (draft.email !== (activeCand.email || '')) candBody.email = draft.email || null;
+        if (draft.phone !== (activeCand.phone || '')) candBody.phone = draft.phone || null;
+        if (newPunch !== (activeCand.punch_id || null)) candBody.punch_id = newPunch;
+        if (draft.date_of_birth !== (activeCand.date_of_birth || '')) candBody.date_of_birth = draft.date_of_birth || null;
+        if (draft.earliest_start_date !== (activeCand.earliest_start_date || '')) candBody.earliest_start_date = draft.earliest_start_date || null;
+        if (draft.is_minor !== (activeCand.is_minor === true)) candBody.is_minor = draft.is_minor;
+        if (newShirt !== (activeCand.shirt_size || null)) candBody.shirt_size = newShirt;
+      }
+
+      var ops = [];
       if (Object.keys(empBody).length > 0) {
-        Object.keys(empBody).forEach(function(k) {
-          if (k !== 'updated_at') emp[k] = empBody[k];
-        });
+        empBody.updated_at = new Date().toISOString();
+        ops.push(patchEmployee(emp.id, empBody));
       }
-      if (cand && Object.keys(candBody).length > 0) {
-        Object.keys(candBody).forEach(function(k) {
-          if (k !== 'updated_at') cand[k] = candBody[k];
-        });
+      if (activeCand && activeCand.id && Object.keys(candBody).length > 0) {
+        candBody.updated_at = new Date().toISOString();
+        ops.push(patchCandidate(activeCand.id, candBody));
       }
-      // If punch_id changed, the candidate keying (state.candidates[punch_id])
-      // is now stale. Refresh it.
-      if (newPunch !== oldPunch && cand) {
-        if (oldPunch && state.candidates[oldPunch] === cand) {
-          delete state.candidates[oldPunch];
+      if (ops.length === 0) {
+        // Nothing changed. Fail loud rather than silently closing.
+        state.modalSection = null;
+        state.modalEditDraft = null;
+        showToast('No changes to save', null);
+        renderCardModal();
+        return;
+      }
+
+      return Promise.all(ops).then(function() {
+        if (Object.keys(empBody).length > 0) {
+          Object.keys(empBody).forEach(function(k) {
+            if (k !== 'updated_at') emp[k] = empBody[k];
+          });
         }
-        if (newPunch) state.candidates[newPunch] = cand;
-      }
-      // Audit-log shirt size changes (home_venue is logged where it's edited;
-      // other contact fields aren't currently tracked — see HISTORY_FIELD_LABELS).
-      if (newShirt !== oldShirt) {
-        logCardChange(emp.id, 'shirt_size', oldShirt, newShirt);
-      }
-      state.modalSection = null;
-      state.modalEditDraft = null;
-      showToast('Saved', 'success');
-      renderList();
-      renderCardModal();
+        if (activeCand && Object.keys(candBody).length > 0) {
+          Object.keys(candBody).forEach(function(k) {
+            if (k !== 'updated_at') activeCand[k] = candBody[k];
+          });
+        }
+        if (newPunch !== oldPunch && activeCand) {
+          if (oldPunch && state.candidates[oldPunch] === activeCand) {
+            delete state.candidates[oldPunch];
+          }
+          if (newPunch) state.candidates[newPunch] = activeCand;
+        }
+        if (newShirt !== oldShirt) {
+          logCardChange(emp.id, 'shirt_size', oldShirt, newShirt);
+        }
+        state.modalSection = null;
+        state.modalEditDraft = null;
+        showToast('Saved', 'success');
+        renderList();
+        renderCardModal();
+      });
     }).catch(function(err) {
       if (err && err.authFailed) { handleAuthFailure(); return; }
       console.error('Save failed:', err);
@@ -5155,11 +5234,10 @@ body {
 
   // Roles section save: writes assigned_venues, assigned_roles, and
   // recomputes starting_pay_rate JSON. All to candidates.
+  //
+  // Auto-creates the candidate row for legacy employees (replaces the
+  // previous loud-error path that left the manager stuck).
   function saveRolesSection(emp, cand, draft, errEl) {
-    if (!cand || !cand.id) {
-      if (errEl) errEl.textContent = 'No candidate record exists for this employee. Cannot save roles.';
-      return;
-    }
     var venues = draft.venues || [];
     var roles = draft.roles || [];
     // Recompute starting_pay_rate JSON: { roleName: { stateCode: rate } }
@@ -5185,14 +5263,17 @@ body {
       starting_pay_rate: JSON.stringify(rateObj),
       updated_at: new Date().toISOString()
     };
-    patchCandidate(cand.id, body).then(function() {
-      cand.assigned_venues = venues;
-      cand.assigned_roles = roles;
-      cand.starting_pay_rate = body.starting_pay_rate;
-      state.modalSection = null;
-      state.modalEditDraft = null;
-      showToast('Saved', 'success');
-      renderCardModal();
+
+    ensureCandidateRow(emp).then(function(activeCand) {
+      return patchCandidate(activeCand.id, body).then(function() {
+        activeCand.assigned_venues = venues;
+        activeCand.assigned_roles = roles;
+        activeCand.starting_pay_rate = body.starting_pay_rate;
+        state.modalSection = null;
+        state.modalEditDraft = null;
+        showToast('Saved', 'success');
+        renderCardModal();
+      });
     }).catch(function(err) {
       if (err && err.authFailed) { handleAuthFailure(); return; }
       console.error('Save failed:', err);
@@ -5201,25 +5282,27 @@ body {
   }
 
   function saveNotes(emp, cand) {
-    if (!cand || !cand.id) {
-      showToast('No candidate record — cannot save notes', 'error');
-      return;
-    }
     var ta = document.querySelector('[data-notes-field]');
     var fb = document.querySelector('[data-notes-feedback]');
     if (!ta) return;
     var notes = ta.value;
     if (fb) fb.textContent = '';
-    patchCandidate(cand.id, {
-      internal_notes: notes,
-      updated_at: new Date().toISOString()
-    }).then(function() {
-      cand.internal_notes = notes;
-      if (fb) {
-        fb.textContent = 'Saved';
-        fb.className = 'checklist-status done';
-        setTimeout(function() { if (fb) fb.textContent = ''; }, 1800);
-      }
+
+    // Notes live on candidates only. If the employee is legacy and has
+    // no candidate row, auto-create it before the write so the save
+    // lands instead of failing.
+    ensureCandidateRow(emp).then(function(activeCand) {
+      return patchCandidate(activeCand.id, {
+        internal_notes: notes,
+        updated_at: new Date().toISOString()
+      }).then(function() {
+        activeCand.internal_notes = notes;
+        if (fb) {
+          fb.textContent = 'Saved';
+          fb.className = 'checklist-status done';
+          setTimeout(function() { if (fb) fb.textContent = ''; }, 1800);
+        }
+      });
     }).catch(function(err) {
       if (err && err.authFailed) { handleAuthFailure(); return; }
       console.error('Notes save failed:', err);
