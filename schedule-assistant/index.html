@@ -2239,6 +2239,26 @@ function shirtSizeOf(staffName) {
   return emp.shirt_size;
 }
 
+// Format a staff name as "Last, First" for the Legends-merged staff list.
+// Prefers the employee record's first_name/last_name (handles compound
+// names like "Mary Jo Smith" correctly); falls back to a last-space split
+// for placeholders / JMAC / names with no employee row. DISPLAY ONLY —
+// every shirt-size and tally lookup still keys off the original "First Last".
+function formatLastFirst(staffName) {
+  if (!staffName) return '';
+  const name = staffName.trim();
+  if (!name) return '';
+  const emp = state.employees.find(e =>
+    ((e.first_name || '') + ' ' + (e.last_name || '')).trim() === name
+  );
+  if (emp && emp.first_name && emp.last_name) {
+    return emp.last_name.trim() + ', ' + emp.first_name.trim();
+  }
+  const idx = name.lastIndexOf(' ');
+  if (idx === -1) return name;
+  return name.slice(idx + 1).trim() + ', ' + name.slice(0, idx).trim();
+}
+
 // Build a shirt-size tally for a list of staff names. Returns an object:
 //   { counts: { S: 3, M: 5, ... }, unknown: 2, total: 10 }
 // counts only contains keys for sizes actually present (no zeros). unknown
@@ -5941,7 +5961,7 @@ function openEmailModal(eventId) {
   const realStaff = positions
     .filter(p => p.source !== 'jmac')
     .map(p => p.staff_name)
-    .sort((a, b) => a.localeCompare(b));
+    .sort((a, b) => formatLastFirst(a).localeCompare(formatLastFirst(b)));
   const jmacCount = positions.filter(p => p.source === 'jmac').length;
 
   if (realStaff.length === 0 && jmacCount === 0) {
@@ -5973,6 +5993,12 @@ function openEmailModal(eventId) {
 
   // Render the recipients list — venue contacts + global, plus "+ Other".
   renderEmailRecipientsList(ev.venue);
+
+  // Pre-check every saved recipient on open so "send to all saved contacts"
+  // is one click. Manager can untick any before Send. Applies to all venues.
+  document.querySelectorAll('#email-recipients-list [data-email-recipient]').forEach(cb => {
+    cb.checked = true;
+  });
 
   // Render the staff preview.
   renderEmailStaffPreview(realStaff, jmacCount);
@@ -6042,7 +6068,7 @@ function renderEmailStaffPreview(staffNames, jmacCount) {
       const sizeBadge = sz
         ? '<span style="color:var(--label);font-weight:600;margin-left:8px;">— ' + escapeHtml(sz) + '</span>'
         : '<span style="color:#b45309;font-weight:600;margin-left:8px;font-style:italic;">— size unknown</span>';
-      html += '<div class="preview-name">' + escapeHtml(n) + sizeBadge + '</div>';
+      html += '<div class="preview-name">' + escapeHtml(formatLastFirst(n)) + sizeBadge + '</div>';
     });
   }
   if (jmacCount > 0) {
@@ -6063,7 +6089,7 @@ function renderEmailStaffPreview(staffNames, jmacCount) {
     html += '<div style="margin-top:12px;padding-top:8px;border-top:1px solid #e5e7eb;">' +
       '<div style="font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--label);margin-bottom:6px;">Management</div>';
     managers.forEach(m => {
-      html += '<div class="preview-name">' + escapeHtml(m.display_name) + '</div>';
+      html += '<div class="preview-name">' + escapeHtml(formatLastFirst(m.display_name)) + '</div>';
     });
     html += '</div>';
   }
@@ -6159,7 +6185,7 @@ function sendStaffListEmail() {
   const realStaff = positions
     .filter(p => p.source !== 'jmac')
     .map(p => p.staff_name)
-    .sort((a, b) => a.localeCompare(b));
+    .sort((a, b) => formatLastFirst(a).localeCompare(formatLastFirst(b)));
   const jmacCount = positions.filter(p => p.source === 'jmac').length;
 
   const reportT = getReportTime(ev);
@@ -6172,8 +6198,8 @@ function sendStaffListEmail() {
   // is updated to consume the richer payload. shirt_tally drives the
   // "Shirts needed" line at the bottom of the email body.
   const staffWithSizes = realStaff.map(n => ({
-    name: n,
-    shirt_size: shirtSizeOf(n)   // null when not on file
+    name: formatLastFirst(n),
+    shirt_size: shirtSizeOf(n)   // lookup by original "First Last"; display is "Last, First"
   }));
   const shirtTally = buildShirtTally(realStaff);
 
@@ -6188,7 +6214,7 @@ function sendStaffListEmail() {
       if (so !== 0) return so;
       return (a.display_name || '').localeCompare(b.display_name || '');
     })
-    .map(m => m.display_name);
+    .map(m => formatLastFirst(m.display_name));
 
   const payload = {
     to: allTo,
@@ -6199,7 +6225,7 @@ function sendStaffListEmail() {
     event_name: ev.event_name,
     event_date: ev.event_date,
     report_time: reportStr,
-    staff_names: realStaff,
+    staff_names: realStaff.map(formatLastFirst),
     staff_with_sizes: staffWithSizes,
     shirt_tally: shirtTally,
     shirt_tally_display: formatShirtTally(shirtTally),
