@@ -331,7 +331,8 @@ var currentPeriodIdx = 0;
 var pendingNameAction = null;
 var isLocked = false;
 
-var cachedSales=[],cachedPurchases=[],cachedInventory={},cachedPriorInventory={},cachedStaffing=[],cachedPayRates=[],cachedDealTemplates=[],cachedStandDeals=[],cachedBillingRates=[],cachedPayroll=[],cachedManual=[],cachedSnapshot=null,cachedEvents=[];
+var cachedSales=[],cachedPurchases=[],cachedInventory={},cachedPriorInventory={},cachedStaffing=[],cachedPayRates=[],cachedDealTemplates=[],cachedStandDeals=[],cachedBillingRates=[],cachedPayroll=[],cachedManual=[],cachedSnapshot=null,cachedEvents=[],cachedArLines=[];
+var arActualsByVenue={};
 
 function apiHeaders() {
   return pcAuth.headers();
@@ -478,7 +479,8 @@ async function loadAllData() {
       supa('client_billing_rates?select=*'),supa('eom_payroll?select=*&fiscal_period=eq.'+pk),
       supa('eom_manual_entries?select=*&fiscal_period=eq.'+pk),supa('eom_snapshots?select=*&fiscal_period=eq.'+pk),
       supa('events?select=*&event_date=gte.'+p.start+'&event_date=lte.'+p.end),
-      supa('staffing_requests?select=*&submitted_at=gte.'+p.start+'T00:00:00&submitted_at=lte.'+p.end+'T23:59:59')
+      supa('staffing_requests?select=*&submitted_at=gte.'+p.start+'T00:00:00&submitted_at=lte.'+p.end+'T23:59:59'),
+      supa('ar_invoice_lines?select=amount,ar_items!inner(cos_class),ar_invoices!inner(id,venue_code,period_start,status)&ar_invoices.status=neq.voided&ar_invoices.period_start=gte.'+p.start+'&ar_invoices.period_start=lte.'+p.end+'&limit=50000').catch(function(e){console.warn('[cos-labor] AR actuals fetch failed (non-fatal):',e);return [];})
     ]);
     cachedSales=Array.isArray(results[0])?results[0]:[];cachedPurchases=Array.isArray(results[1])?results[1]:[];
     var currentInv=Array.isArray(results[2])?results[2]:[];cachedDealTemplates=Array.isArray(results[3])?results[3]:[];
@@ -487,6 +489,8 @@ async function loadAllData() {
     cachedManual=Array.isArray(results[8])?results[8]:[];var snapshots=Array.isArray(results[9])?results[9]:[];
     cachedSnapshot=snapshots.length>0?snapshots[0]:null;cachedEvents=Array.isArray(results[10])?results[10]:[];
     cachedStaffing=Array.isArray(results[11])?results[11]:[];
+    cachedArLines=Array.isArray(results[12])?results[12]:[];
+    arActualsByVenue=buildArActuals(); logArActuals(p);
     isLocked=!!cachedSnapshot;
     cachedInventory={};currentInv.forEach(function(row){var vc=resolveVenueCode(row.venue);if(!cachedInventory[vc])cachedInventory[vc]=0;cachedInventory[vc]+=parseFloat(row.value_on_hand||0);});
     var prior=pcFiscal.getPriorPeriod(p);
@@ -503,6 +507,43 @@ async function loadAllData() {
       msg.replace(/</g,'&lt;')+
       '</code><br><br>See browser console for more detail.</div>';
   }
+}
+
+/* AR-derived actuals — sums stored (signed) line amounts per venue by cos_class. 'exclude' and unclassified skipped. */
+function buildArActuals() {
+  var byVenue = {};
+  (cachedArLines || []).forEach(function(row) {
+    var inv = row.ar_invoices, item = row.ar_items;
+    if (!inv || !item) return;
+    var cls = item.cos_class;
+    if (cls !== 'cos_relatable' && cls !== 'other_sales' && cls !== 'labor_credit') return;
+    var vc = resolveVenueCode(inv.venue_code);
+    if (!byVenue[vc]) byVenue[vc] = { cos_relatable:0, other_sales:0, labor_credit:0, invoiceIds:{} };
+    byVenue[vc][cls] += parseFloat(row.amount || 0);
+    if (inv.id) byVenue[vc].invoiceIds[inv.id] = true;
+  });
+  Object.keys(byVenue).forEach(function(vc) {
+    var b = byVenue[vc];
+    b.invoiceCount = Object.keys(b.invoiceIds).length;
+    b.cos_relatable = Math.round(b.cos_relatable * 100) / 100;
+    b.other_sales   = Math.round(b.other_sales   * 100) / 100;
+    b.labor_credit  = Math.round(b.labor_credit  * 100) / 100;
+  });
+  return byVenue;
+}
+
+function logArActuals(period) {
+  try {
+    var rows = Object.keys(arActualsByVenue).map(function(vc) {
+      var b = arActualsByVenue[vc];
+      return { venue: vc, invoices: b.invoiceCount, cos_relatable: b.cos_relatable, other_sales: b.other_sales, labor_credit: b.labor_credit };
+    });
+    console.group('[cos-labor] AR actuals for ' + period.name + ' (' + period.start + ' to ' + period.end + ')');
+    console.log('AR invoice lines fetched (non-voided, period_start in window):', cachedArLines.length);
+    if (rows.length) { console.table(rows); } else { console.log('No AR invoice lines in this period.'); }
+    window._arActuals = arActualsByVenue;
+    console.groupEnd();
+  } catch (e) { try { console.error('[cos-labor] logArActuals failed:', e); } catch(_) {} }
 }
 
 /* Revenue calculation */
@@ -560,32 +601,37 @@ function buildVenueData(venueCode) {
   var actPayrollWeeks=weeks.map(function(w){var entry=cachedPayroll.filter(function(pr){return pr.venue===venueCode&&pr.week_start===w.start;});return entry.length>0?parseFloat(entry[0].amount||0):null;});
   var actPayrollTotal=actPayrollWeeks.reduce(function(s,v){return s+(v||0);},0);var hasAnyPayroll=actPayrollWeeks.some(function(v){return v!==null;});
   var estLaborCredit=calcEstimatedLaborCredit(venueCode);var lcEntry=cachedManual.filter(function(m){return m.venue===venueCode&&m.fiscal_period===pk&&m.entry_type==='labor_credit';});
-  var laborCreditOverride=lcEntry.length>0?parseFloat(lcEntry[0].amount):null;var laborCredit=laborCreditOverride!==null?laborCreditOverride:estLaborCredit;
+  var ar=arActualsByVenue[venueCode]||null;var hasAr=!!ar;var arCos=ar?ar.cos_relatable:0;var arOther=ar?ar.other_sales:0;var arLabor=ar?ar.labor_credit:0;var arInvoiceCount=ar?ar.invoiceCount:0;
+  var laborCreditOverride=lcEntry.length>0?parseFloat(lcEntry[0].amount):null;
+  var laborCredit,laborCreditSource;if(laborCreditOverride!==null){laborCredit=laborCreditOverride;laborCreditSource='manual';}else if(hasAr){laborCredit=arLabor;laborCreditSource='ar';}else{laborCredit=estLaborCredit;laborCreditSource='estimate';}
   var lcNote=lcEntry.length>0?lcEntry[0].note:null;var lcEnteredBy=lcEntry.length>0?lcEntry[0].entered_by:null;
   var actCosEntry=cachedManual.filter(function(m){return m.venue===venueCode&&m.fiscal_period===pk&&m.entry_type==='actual_cos_revenue';});
   var actOtherEntry=cachedManual.filter(function(m){return m.venue===venueCode&&m.fiscal_period===pk&&m.entry_type==='actual_other_revenue';});
   var actualCosRevenue=actCosEntry.length>0?parseFloat(actCosEntry[0].amount):null;var actualOtherRevenue=actOtherEntry.length>0?parseFloat(actOtherEntry[0].amount):null;
   var actRevEnteredBy=actCosEntry.length>0?actCosEntry[0].entered_by:null;
-  var activeCosRelatable=actualCosRevenue!==null?actualCosRevenue:cosRelatable;var activeOtherSales=actualOtherRevenue!==null?actualOtherRevenue:otherSalesTotal;var activeTotalSales=activeCosRelatable+activeOtherSales;
+  var activeCosRelatable,cosSource;if(actualCosRevenue!==null){activeCosRelatable=actualCosRevenue;cosSource='manual';}else if(hasAr){activeCosRelatable=arCos;cosSource='ar';}else{activeCosRelatable=cosRelatable;cosSource='estimate';}
+  var activeOtherSales,otherSource;if(actualOtherRevenue!==null){activeOtherSales=actualOtherRevenue;otherSource='manual';}else if(hasAr){activeOtherSales=arOther;otherSource='ar';}else{activeOtherSales=otherSalesTotal;otherSource='estimate';}
+  var activeTotalSales=activeCosRelatable+activeOtherSales;
   var cosPercent=activeCosRelatable>0?consumption/activeCosRelatable:0;var laborPercent=activeTotalSales>0?actPayrollTotal/activeTotalSales:0;
   var correctedLabor=actPayrollTotal-laborCredit;var correctedLaborPct=activeCosRelatable>0?correctedLabor/activeCosRelatable:0;var payrollVariance=actPayrollTotal-estPayrollTotal;
-  return {venueCode:venueCode,cosRelatable:cosRelatable,otherSales:otherSalesTotal,totalSales:totalSales,begInv:begInv,weeklyPurchases:weeklyPurchases,totalPurchases:totalPurchases,allInvoices:allInvoices,transfers:transfers,endInv:endInv,consumption:consumption,cosPercent:cosPercent,weeks:weeks,estPayrollWeeks:estPayrollWeeks,estPayrollTotal:estPayrollTotal,actPayrollWeeks:actPayrollWeeks,actPayrollTotal:actPayrollTotal,hasAnyPayroll:hasAnyPayroll,laborPercent:laborPercent,estLaborCredit:estLaborCredit,laborCreditOverride:laborCreditOverride,laborCredit:laborCredit,lcNote:lcNote,lcEnteredBy:lcEnteredBy,correctedLabor:correctedLabor,correctedLaborPct:correctedLaborPct,payrollVariance:payrollVariance,actualCosRevenue:actualCosRevenue,actualOtherRevenue:actualOtherRevenue,actRevEnteredBy:actRevEnteredBy,activeCosRelatable:activeCosRelatable,activeOtherSales:activeOtherSales,activeTotalSales:activeTotalSales,salesDiag:salesDiag};
+  return {venueCode:venueCode,cosRelatable:cosRelatable,otherSales:otherSalesTotal,totalSales:totalSales,begInv:begInv,weeklyPurchases:weeklyPurchases,totalPurchases:totalPurchases,allInvoices:allInvoices,transfers:transfers,endInv:endInv,consumption:consumption,cosPercent:cosPercent,weeks:weeks,estPayrollWeeks:estPayrollWeeks,estPayrollTotal:estPayrollTotal,actPayrollWeeks:actPayrollWeeks,actPayrollTotal:actPayrollTotal,hasAnyPayroll:hasAnyPayroll,laborPercent:laborPercent,estLaborCredit:estLaborCredit,laborCreditOverride:laborCreditOverride,laborCredit:laborCredit,lcNote:lcNote,lcEnteredBy:lcEnteredBy,correctedLabor:correctedLabor,correctedLaborPct:correctedLaborPct,payrollVariance:payrollVariance,actualCosRevenue:actualCosRevenue,actualOtherRevenue:actualOtherRevenue,actRevEnteredBy:actRevEnteredBy,activeCosRelatable:activeCosRelatable,activeOtherSales:activeOtherSales,activeTotalSales:activeTotalSales,hasAr:hasAr,arCos:arCos,arOther:arOther,arLabor:arLabor,arInvoiceCount:arInvoiceCount,cosSource:cosSource,otherSource:otherSource,laborCreditSource:laborCreditSource,salesDiag:salesDiag};
 }
 
 /* Merge venue data */
 function mergeVenueData(codes) {
   var all=codes.map(function(c){return buildVenueData(c);});if(all.length===1)return all[0];
-  var merged={venueCode:'COMBINED',cosRelatable:0,otherSales:0,totalSales:0,begInv:0,totalPurchases:0,transfers:0,endInv:0,consumption:0,weeklyPurchases:[],allInvoices:[],weeks:all[0].weeks,estPayrollWeeks:[],estPayrollTotal:0,actPayrollWeeks:[],actPayrollTotal:0,hasAnyPayroll:false,estLaborCredit:0,laborCreditOverride:null,laborCredit:0,correctedLabor:0,lcNote:null,lcEnteredBy:null,salesDiag:{totalSaleRows:0,grossSales:0,unmatchedSaleCount:0,unmatchedGross:0,unmatchedStands:{}}};
+  var merged={venueCode:'COMBINED',cosRelatable:0,otherSales:0,totalSales:0,begInv:0,totalPurchases:0,transfers:0,endInv:0,consumption:0,weeklyPurchases:[],allInvoices:[],weeks:all[0].weeks,estPayrollWeeks:[],estPayrollTotal:0,actPayrollWeeks:[],actPayrollTotal:0,hasAnyPayroll:false,estLaborCredit:0,laborCreditOverride:null,laborCredit:0,correctedLabor:0,lcNote:null,lcEnteredBy:null,hasAr:false,arCos:0,arOther:0,arLabor:0,arInvoiceCount:0,activeCosRelatable:0,activeOtherSales:0,cosSource:'estimate',otherSource:'estimate',laborCreditSource:'estimate',salesDiag:{totalSaleRows:0,grossSales:0,unmatchedSaleCount:0,unmatchedGross:0,unmatchedStands:{}}};
   var numWeeks=merged.weeks.length;for(var w=0;w<numWeeks;w++){merged.weeklyPurchases.push({label:merged.weeks[w].label,start:merged.weeks[w].start,end:merged.weeks[w].end,total:0,invoices:[]});merged.estPayrollWeeks.push(0);merged.actPayrollWeeks.push(null);}
   var hasAnyOverride=false;var totalOverride=0;
-  all.forEach(function(vd){merged.cosRelatable+=vd.cosRelatable;merged.otherSales+=vd.otherSales;merged.totalSales+=vd.totalSales;merged.begInv+=vd.begInv;merged.totalPurchases+=vd.totalPurchases;merged.transfers+=vd.transfers;merged.endInv+=vd.endInv;merged.consumption+=vd.consumption;merged.allInvoices=merged.allInvoices.concat(vd.allInvoices);merged.estPayrollTotal+=vd.estPayrollTotal;merged.actPayrollTotal+=vd.actPayrollTotal;merged.estLaborCredit+=vd.estLaborCredit;if(vd.hasAnyPayroll)merged.hasAnyPayroll=true;if(vd.laborCreditOverride!==null){hasAnyOverride=true;totalOverride+=vd.laborCreditOverride;}else{totalOverride+=vd.estLaborCredit;}for(var w=0;w<numWeeks;w++){merged.weeklyPurchases[w].total+=vd.weeklyPurchases[w].total;merged.weeklyPurchases[w].invoices=merged.weeklyPurchases[w].invoices.concat(vd.weeklyPurchases[w].invoices);merged.estPayrollWeeks[w]+=vd.estPayrollWeeks[w];if(vd.actPayrollWeeks[w]!==null){if(merged.actPayrollWeeks[w]===null)merged.actPayrollWeeks[w]=0;merged.actPayrollWeeks[w]+=vd.actPayrollWeeks[w];}}
+  all.forEach(function(vd){merged.cosRelatable+=vd.cosRelatable;merged.otherSales+=vd.otherSales;merged.totalSales+=vd.totalSales;merged.begInv+=vd.begInv;merged.totalPurchases+=vd.totalPurchases;merged.transfers+=vd.transfers;merged.endInv+=vd.endInv;merged.consumption+=vd.consumption;merged.allInvoices=merged.allInvoices.concat(vd.allInvoices);merged.estPayrollTotal+=vd.estPayrollTotal;merged.actPayrollTotal+=vd.actPayrollTotal;merged.estLaborCredit+=vd.estLaborCredit;if(vd.hasAnyPayroll)merged.hasAnyPayroll=true;if(vd.hasAr)merged.hasAr=true;merged.arCos+=vd.arCos;merged.arOther+=vd.arOther;merged.arLabor+=vd.arLabor;merged.arInvoiceCount+=vd.arInvoiceCount;merged.activeCosRelatable+=vd.activeCosRelatable;merged.activeOtherSales+=vd.activeOtherSales;merged.laborCredit+=vd.laborCredit;for(var w=0;w<numWeeks;w++){merged.weeklyPurchases[w].total+=vd.weeklyPurchases[w].total;merged.weeklyPurchases[w].invoices=merged.weeklyPurchases[w].invoices.concat(vd.weeklyPurchases[w].invoices);merged.estPayrollWeeks[w]+=vd.estPayrollWeeks[w];if(vd.actPayrollWeeks[w]!==null){if(merged.actPayrollWeeks[w]===null)merged.actPayrollWeeks[w]=0;merged.actPayrollWeeks[w]+=vd.actPayrollWeeks[w];}}
     if(vd.salesDiag){merged.salesDiag.totalSaleRows+=vd.salesDiag.totalSaleRows;merged.salesDiag.grossSales+=vd.salesDiag.grossSales;merged.salesDiag.unmatchedSaleCount+=vd.salesDiag.unmatchedSaleCount;merged.salesDiag.unmatchedGross+=vd.salesDiag.unmatchedGross;Object.keys(vd.salesDiag.unmatchedStands).forEach(function(k){if(!merged.salesDiag.unmatchedStands[k])merged.salesDiag.unmatchedStands[k]={count:0,gross:0};merged.salesDiag.unmatchedStands[k].count+=vd.salesDiag.unmatchedStands[k].count;merged.salesDiag.unmatchedStands[k].gross+=vd.salesDiag.unmatchedStands[k].gross;});}
   });
-  merged.laborCredit=hasAnyOverride?totalOverride:merged.estLaborCredit;merged.laborCreditOverride=hasAnyOverride?totalOverride:null;
+  merged.laborCreditOverride=null;merged.laborCreditSource=merged.hasAr?'ar':'estimate';
   var mergedActCos=null;var mergedActOther=null;var anyActCos=false;var anyActOther=false;
   all.forEach(function(vd){if(vd.actualCosRevenue!==null){anyActCos=true;if(mergedActCos===null)mergedActCos=0;mergedActCos+=vd.actualCosRevenue;}if(vd.actualOtherRevenue!==null){anyActOther=true;if(mergedActOther===null)mergedActOther=0;mergedActOther+=vd.actualOtherRevenue;}});
   merged.actualCosRevenue=anyActCos?mergedActCos:null;merged.actualOtherRevenue=anyActOther?mergedActOther:null;merged.actRevEnteredBy=null;
-  merged.activeCosRelatable=merged.actualCosRevenue!==null?merged.actualCosRevenue:merged.cosRelatable;merged.activeOtherSales=merged.actualOtherRevenue!==null?merged.actualOtherRevenue:merged.otherSales;merged.activeTotalSales=merged.activeCosRelatable+merged.activeOtherSales;
+  merged.cosSource=merged.hasAr?'ar':'estimate';merged.otherSource=merged.hasAr?'ar':'estimate';
+  merged.activeTotalSales=merged.activeCosRelatable+merged.activeOtherSales;
   merged.cosPercent=merged.activeCosRelatable>0?merged.consumption/merged.activeCosRelatable:0;merged.laborPercent=merged.activeTotalSales>0?merged.actPayrollTotal/merged.activeTotalSales:0;merged.correctedLabor=merged.actPayrollTotal-merged.laborCredit;merged.correctedLaborPct=merged.activeCosRelatable>0?merged.correctedLabor/merged.activeCosRelatable:0;merged.payrollVariance=merged.actPayrollTotal-merged.estPayrollTotal;
   return merged;
 }
@@ -597,30 +643,49 @@ function renderReport() {
 
   /* COS SECTION */
   html+='<div class="sec-head">Cost of sales</div>';
-  var hasCosActual=data.actualCosRevenue!==null;var hasOtherActual=data.actualOtherRevenue!==null;var hasAnyActual=hasCosActual||hasOtherActual;
-  var cosVariance=hasCosActual?data.actualCosRevenue-data.cosRelatable:0;var cosVariancePct=hasCosActual?(data.cosRelatable>0?Math.abs(cosVariance/data.cosRelatable*100):0):0;var revThreshold=1;
+  var hasCosActual=data.actualCosRevenue!==null;var hasOtherActual=data.actualOtherRevenue!==null;var hasManual=hasCosActual||hasOtherActual;
+  var hasAr=data.hasAr;var revThreshold=1;
+  var arCosVar=hasAr?data.arCos-data.cosRelatable:0;var arCosVarPct=(hasAr&&data.cosRelatable>0)?Math.abs(arCosVar/data.cosRelatable*100):0;
+  var arOtherVar=hasAr?data.arOther-data.otherSales:0;
+  var arCount=data.arInvoiceCount||0;var arCountTxt=arCount+' invoice'+(arCount!==1?'s':'');
 
-  if(!hasAnyActual){html+='<div class="rv-bar" onclick="toggleRevValidation()"><div class="rv-bar-icon rv-icon-muted">--</div><div class="rv-bar-text">Revenue validation — no actuals entered</div>';if(isSingleVenue&&!isLocked){html+='<button class="btn-outline" style="padding:4px 10px;font-size:11px;" onclick="event.stopPropagation();enterActualRevenue(\''+(venueCode||'')+'\')">Enter actuals</button>';}html+='<div class="rv-bar-chev">&#9654;</div></div>';}
-  else if(hasCosActual&&cosVariancePct<=revThreshold){html+='<div class="rv-bar" onclick="toggleRevValidation()"><div class="rv-bar-icon rv-icon-ok">&#10003;</div><div class="rv-bar-text">Revenue verified — within '+cosVariancePct.toFixed(1)+'% of estimate</div><div class="rv-bar-chev">&#9654;</div></div>';}
-  else if(hasCosActual){var barClass=cosVariancePct>5?'rv-danger':'rv-alert';var iconClass=cosVariancePct>5?'rv-icon-bad':'rv-icon-warn';var textClass=cosVariancePct>5?'rv-text-danger':'rv-text-alert';html+='<div class="rv-bar '+barClass+'" onclick="toggleRevValidation()"><div class="rv-bar-icon '+iconClass+'">!</div><div class="rv-bar-text '+textClass+'">Revenue variance: COS relatable is '+fmtMoney(Math.abs(cosVariance))+' '+(cosVariance<0?'below':'above')+' estimate ('+cosVariancePct.toFixed(1)+'%)</div><div class="rv-bar-chev">&#9654;</div></div>';}
+  if(hasAr){
+    var arBarClass=arCosVarPct<=revThreshold?'':(arCosVarPct>5?'rv-danger':'rv-alert');
+    var arIconClass=arCosVarPct<=revThreshold?'rv-icon-ok':(arCosVarPct>5?'rv-icon-bad':'rv-icon-warn');
+    var arTextClass=arCosVarPct<=revThreshold?'':(arCosVarPct>5?'rv-text-danger':'rv-text-alert');
+    var arIcon=arCosVarPct<=revThreshold?'&#10003;':'!';
+    var barMsg=arCosVarPct<=revThreshold
+      ? 'Revenue from AR ('+arCountTxt+') &mdash; within '+arCosVarPct.toFixed(1)+'% of estimate'
+      : 'Revenue from AR ('+arCountTxt+'): COS relatable is '+fmtMoney(Math.abs(arCosVar))+' '+(arCosVar<0?'below':'above')+' estimate ('+arCosVarPct.toFixed(1)+'%)';
+    html+='<div class="rv-bar '+arBarClass+'" onclick="toggleRevValidation()"><div class="rv-bar-icon '+arIconClass+'">'+arIcon+'</div><div class="rv-bar-text '+arTextClass+'">'+barMsg+'</div><div class="rv-bar-chev">&#9654;</div></div>';
+  } else if(hasManual){
+    html+='<div class="rv-bar" onclick="toggleRevValidation()"><div class="rv-bar-icon rv-icon-warn">!</div><div class="rv-bar-text rv-text-alert">No AR invoices this period &mdash; using manual override</div><div class="rv-bar-chev">&#9654;</div></div>';
+  } else {
+    html+='<div class="rv-bar" onclick="toggleRevValidation()"><div class="rv-bar-icon rv-icon-muted">--</div><div class="rv-bar-text">No AR invoices this period &mdash; showing estimate from sales log</div>';if(isSingleVenue&&!isLocked){html+='<button class="btn-outline" style="padding:4px 10px;font-size:11px;" onclick="event.stopPropagation();enterActualRevenue(\''+(venueCode||'')+'\')">Override</button>';}html+='<div class="rv-bar-chev">&#9654;</div></div>';
+  }
 
   html+='<div class="rv-expand" id="rv-detail"><div class="rv-expand-head"><div class="rv-expand-title">Revenue validation</div>';
-  if(isSingleVenue&&!isLocked){html+='<button class="btn-outline" style="padding:4px 10px;font-size:11px;" onclick="enterActualRevenue(\''+(venueCode||'')+'\')">Enter actuals (admin)</button>';}
+  if(isSingleVenue&&!isLocked){html+='<button class="btn-outline" style="padding:4px 10px;font-size:11px;" onclick="enterActualRevenue(\''+(venueCode||'')+'\')">Override (admin)</button>';}
   html+='<span class="rv-expand-close" onclick="toggleRevValidation()">x</span></div>';
-  html+='<div class="rv-grid"><div class="rv-cell"><div class="rv-cell-label">COS relatable (estimated)</div><div class="rv-cell-val">'+fmtMoney(data.cosRelatable)+'</div><div class="rv-cell-note">Sales log + deal structure</div></div>';
-  html+='<div class="rv-cell"><div class="rv-cell-label">COS relatable (actual)</div>';if(hasCosActual){html+='<div class="rv-cell-val">'+fmtMoney(data.actualCosRevenue)+'</div><div class="rv-cell-note">Commission statements <span class="rv-badge">manual</span></div>';}else{html+='<div class="rv-cell-val dim">--</div><div class="rv-cell-note">Not yet entered</div>';}html+='</div>';
-  html+='<div class="rv-cell"><div class="rv-cell-label">Variance</div>';if(hasCosActual){var varCls=cosVariancePct<=revThreshold?'rv-good':cosVariancePct>5?'rv-bad':'rv-warn';var varSign=cosVariance>=0?'+':'';html+='<div class="rv-cell-val '+varCls+'">'+varSign+fmtMoney(cosVariance)+'</div><div class="rv-cell-note">'+cosVariancePct.toFixed(1)+'% '+(cosVariancePct<=revThreshold?'— within tolerance':'')+'</div>';}else{html+='<div class="rv-cell-val dim">--</div>';}html+='</div></div>';
-  var otherVariance=hasOtherActual?data.actualOtherRevenue-data.otherSales:0;
-  html+='<div class="rv-grid" style="border-top:1px solid #f0f0f0;"><div class="rv-cell"><div class="rv-cell-label">Other sales (estimated)</div><div class="rv-cell-val">'+fmtMoney(data.otherSales)+'</div></div>';
-  html+='<div class="rv-cell"><div class="rv-cell-label">Other sales (actual)</div>';if(hasOtherActual){html+='<div class="rv-cell-val">'+fmtMoney(data.actualOtherRevenue)+'</div><div class="rv-cell-note"><span class="rv-badge">manual</span></div>';}else{html+='<div class="rv-cell-val dim">--</div><div class="rv-cell-note">Not yet entered</div>';}html+='</div>';
-  html+='<div class="rv-cell"><div class="rv-cell-label">Variance</div>';if(hasOtherActual){var oSign=otherVariance>=0?'+':'';html+='<div class="rv-cell-val">'+oSign+fmtMoney(otherVariance)+'</div>';}else{html+='<div class="rv-cell-val dim">--</div>';}html+='</div></div>';
-  if(hasCosActual&&cosVariancePct>revThreshold){html+='<div class="rv-flag rv-flag-warn">COS relatable revenue is '+fmtMoney(Math.abs(cosVariance))+' '+(cosVariance<0?'below':'above')+' what the sales log estimated. This could indicate missing sales entries, an incorrect deal structure on one or more stands, or a commission statement discrepancy. COS % below uses the actual revenue figure ('+fmtMoney(data.activeCosRelatable)+').</div>';}
-  else if(hasCosActual){html+='<div class="rv-flag rv-flag-ok">Revenue is within '+revThreshold+'% of estimate. No action needed.</div>';}
+  html+='<div class="rv-grid"><div class="rv-cell"><div class="rv-cell-label">COS relatable (estimate)</div><div class="rv-cell-val dim">'+fmtMoney(data.cosRelatable)+'</div><div class="rv-cell-note">Sales log + deal structure</div></div>';
+  html+='<div class="rv-cell"><div class="rv-cell-label">COS relatable (AR)</div>';if(hasAr){html+='<div class="rv-cell-val">'+fmtMoney(data.arCos)+'</div><div class="rv-cell-note">Accounts receivable <span class="rv-badge">live</span></div>';}else{html+='<div class="rv-cell-val dim">--</div><div class="rv-cell-note">No AR this period</div>';}html+='</div>';
+  html+='<div class="rv-cell"><div class="rv-cell-label">Variance (AR &minus; est.)</div>';if(hasAr){var vCls=arCosVarPct<=revThreshold?'rv-good':(arCosVarPct>5?'rv-bad':'rv-warn');var vSign=arCosVar>=0?'+':'';html+='<div class="rv-cell-val '+vCls+'">'+vSign+fmtMoney(arCosVar)+'</div><div class="rv-cell-note">'+arCosVarPct.toFixed(1)+'%'+(arCosVarPct<=revThreshold?' &mdash; within tolerance':'')+'</div>';}else{html+='<div class="rv-cell-val dim">--</div>';}html+='</div></div>';
+  html+='<div class="rv-grid" style="border-top:1px solid #f0f0f0;"><div class="rv-cell"><div class="rv-cell-label">Other sales (estimate)</div><div class="rv-cell-val dim">'+fmtMoney(data.otherSales)+'</div></div>';
+  html+='<div class="rv-cell"><div class="rv-cell-label">Other sales (AR)</div>';if(hasAr){html+='<div class="rv-cell-val">'+fmtMoney(data.arOther)+'</div><div class="rv-cell-note"><span class="rv-badge">live</span></div>';}else{html+='<div class="rv-cell-val dim">--</div><div class="rv-cell-note">No AR this period</div>';}html+='</div>';
+  html+='<div class="rv-cell"><div class="rv-cell-label">Variance (AR &minus; est.)</div>';if(hasAr){var oSign=arOtherVar>=0?'+':'';html+='<div class="rv-cell-val">'+oSign+fmtMoney(arOtherVar)+'</div>';}else{html+='<div class="rv-cell-val dim">--</div>';}html+='</div></div>';
+  if(hasManual){html+='<div class="rv-flag rv-flag-warn">Manual override in effect &mdash; COS % uses the forced value'+(hasCosActual?' '+fmtMoney(data.actualCosRevenue)+' (COS relatable)':'')+(hasOtherActual?(hasCosActual?' and ':' ')+fmtMoney(data.actualOtherRevenue)+' (other sales)':'')+', not AR. Clear the override to fall back to AR.</div>';}
+  else if(hasAr&&arCosVarPct>revThreshold){html+='<div class="rv-flag rv-flag-warn">AR COS relatable is '+fmtMoney(Math.abs(arCosVar))+' '+(arCosVar<0?'below':'above')+' the sales-log estimate. The estimate misses any stand without a deal-structure row; AR reflects what was actually billed. COS % below uses the AR figure ('+fmtMoney(data.activeCosRelatable)+').</div>';}
+  else if(hasAr){html+='<div class="rv-flag rv-flag-ok">AR is within '+revThreshold+'% of the estimate. No action needed.</div>';}
   html+='</div>';
 
-  html+='<div class="met-row c3"><div class="met"><div class="met-label">COS relatable sales</div><div class="met-val">'+fmtMoney(data.activeCosRelatable)+'</div>';if(hasCosActual){html+='<div class="met-note">Actual (was '+fmtMoney(data.cosRelatable)+' est.)</div>';}else{html+='<div class="met-note">Estimated from sales log</div>';}html+='</div>';
-  html+='<div class="met"><div class="met-label">Other sales</div><div class="met-val">'+fmtMoney(data.activeOtherSales)+'</div>';if(hasOtherActual){html+='<div class="met-note">Actual</div>';}else{html+='<div class="met-note">Estimated</div>';}html+='</div>';
+  var cosNote=data.cosSource==='manual'?('Manual override (AR '+fmtMoney(data.arCos)+')'):(data.cosSource==='ar'?('From AR (est. '+fmtMoney(data.cosRelatable)+')'):'Estimated from sales log');
+  var otherNote=data.otherSource==='manual'?'Manual override':(data.otherSource==='ar'?'From AR':'Estimated');
+  html+='<div class="met-row c3"><div class="met"><div class="met-label">COS relatable sales</div><div class="met-val">'+fmtMoney(data.activeCosRelatable)+'</div><div class="met-note">'+cosNote+'</div></div>';
+  html+='<div class="met"><div class="met-label">Other sales</div><div class="met-val">'+fmtMoney(data.activeOtherSales)+'</div><div class="met-note">'+otherNote+'</div></div>';
   html+='<div class="met"><div class="met-label">Total sales</div><div class="met-val">'+fmtMoney(data.activeTotalSales)+'</div></div></div>';
+  var cosVenueCodes={};VENUES.forEach(function(v){cosVenueCodes[v.code]=true;});
+  var orphan=[];Object.keys(arActualsByVenue).forEach(function(vc){if(!cosVenueCodes[vc]){var b=arActualsByVenue[vc];var t=(b.cos_relatable||0)+(b.other_sales||0)+(b.labor_credit||0);if(Math.abs(t)>0.005)orphan.push(vc+' ('+fmtMoney(t)+')');}});
+  if(orphan.length){html+='<div class="inv-callout partial"><div class="inv-callout-icon">!</div><div>Billing-only venue dollars not in any tracked venue: '+orphan.join(', ')+'.<div class="inv-callout-detail">Billed under a venue this report doesn\'t track (e.g. product made elsewhere). Revenue routing is a later build.</div></div></div>';}
 
   /* Sales-to-deal-structure diagnostic */
   var sd=data.salesDiag;
@@ -733,7 +798,8 @@ function renderReport() {
 
   html+='<div class="lc-box"><div class="lc-top"><div class="lc-label">Labor credit (client staffing)</div>';if(isSingleVenue&&!isLocked){html+='<button class="btn-outline" style="padding:4px 10px;font-size:11px;" onclick="overrideLaborCredit(\''+venueCode+'\')">Override (admin)</button>';}html+='</div>';
   html+='<div class="lc-row"><div class="lc-k">System estimate</div><div class="lc-v dim">'+fmtMoney(data.estLaborCredit)+'</div></div>';
-  if(data.laborCreditOverride!==null){html+='<div class="lc-row"><div class="lc-k">Active value</div><div class="lc-v">'+fmtMoney(data.laborCredit)+'</div><span class="lc-badge">manual override</span></div>';if(data.lcEnteredBy){html+='<div class="lc-note">Override by '+data.lcEnteredBy+'</div>';}}else{html+='<div class="lc-row"><div class="lc-k">Active value</div><div class="lc-v">'+fmtMoney(data.laborCredit)+'</div></div>';}html+='</div>';
+  if(data.hasAr){html+='<div class="lc-row"><div class="lc-k">From AR</div><div class="lc-v dim">'+fmtMoney(data.arLabor)+'</div></div>';}
+  if(data.laborCreditSource==='manual'){html+='<div class="lc-row"><div class="lc-k">Active value</div><div class="lc-v">'+fmtMoney(data.laborCredit)+'</div><span class="lc-badge">manual override</span></div>';if(data.lcEnteredBy){html+='<div class="lc-note">Override by '+data.lcEnteredBy+'</div>';}}else if(data.laborCreditSource==='ar'){html+='<div class="lc-row"><div class="lc-k">Active value</div><div class="lc-v">'+fmtMoney(data.laborCredit)+'</div><span class="lc-badge">from AR</span></div>';}else{html+='<div class="lc-row"><div class="lc-k">Active value</div><div class="lc-v">'+fmtMoney(data.laborCredit)+'</div></div>';}html+='</div>';
 
   html+='<table class="tb"><thead><tr><th>Labor summary</th><th>Amount</th></tr></thead><tbody><tr><td>Total payroll (actual)</td><td>'+fmtMoney(data.actPayrollTotal)+'</td></tr><tr><td>Labor credit</td><td>-'+fmtMoney(data.laborCredit)+'</td></tr><tr class="tot"><td>Corrected labor</td><td>'+fmtMoney(data.correctedLabor)+'</td></tr></tbody></table>';
 
