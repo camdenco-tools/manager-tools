@@ -2959,6 +2959,26 @@ function shirtSizeOf(staffName) {
   return emp.shirt_size;
 }
 
+// Format a staff name as "Last, First" for the Legends-merged staff list.
+// Prefers the employee record's first_name/last_name (handles compound
+// names like "Mary Jo Smith" correctly); falls back to a last-space split
+// for placeholders / JMAC / names with no employee row. DISPLAY ONLY —
+// every shirt-size and tally lookup still keys off the original "First Last".
+function formatLastFirst(staffName) {
+  if (!staffName) return '';
+  const name = staffName.trim();
+  if (!name) return '';
+  const emp = state.employees.find(e =>
+    ((e.first_name || '') + ' ' + (e.last_name || '')).trim() === name
+  );
+  if (emp && emp.first_name && emp.last_name) {
+    return emp.last_name.trim() + ', ' + emp.first_name.trim();
+  }
+  const idx = name.lastIndexOf(' ');
+  if (idx === -1) return name;
+  return name.slice(idx + 1).trim() + ', ' + name.slice(0, idx).trim();
+}
+
 // Build a shirt-size tally for a list of staff names. Returns an object:
 //   { counts: { S: 3, M: 5, ... }, unknown: 2, total: 10 }
 // counts only contains keys for sizes actually present (no zeros). unknown
@@ -4972,6 +4992,19 @@ function renderSummaryBar(ev) {
   html += '<span class="summary-chip ' + fillCls + '"><span class="summary-chip-label">Filled</span><span class="num">' + totalFilled + '</span><span class="denom">/ ' + totalNeed + '</span></span>';
   html += '<span class="summary-chip neutral"><span class="summary-chip-label">Stands ready</span><span class="num">' + standsReady + '</span><span class="denom">/ ' + standGroups.length + '</span></span>';
   html += '<span class="summary-chip neutral"><span class="summary-chip-label">Locks</span><span class="num">12:01 AM</span><span class="denom">' + fmtDayHeader(ev.event_date).split(',')[0] + '</span></span>';
+  // Created chip — accessible but not prominent. Shows "Created May 12 ·
+  // 3 weeks ago" so the manager can answer "when did this event even get
+  // created" without leaving the expanded event view. Hidden when
+  // created_at is missing (legacy events from before the column existed,
+  // though all events should have it given the DEFAULT now()).
+  if (ev.created_at) {
+    const createdTip = 'Event added to the calendar on ' + fmtCreatedDateTime(ev.created_at);
+    html += '<span class="summary-chip neutral" title="' + escapeAttr(createdTip) + '">' +
+      '<span class="summary-chip-label">Created</span>' +
+      '<span class="num" style="font-size:13px;font-weight:700;">' + escapeHtml(fmtCreatedDate(ev.created_at)) + '</span>' +
+      '<span class="denom">· ' + escapeHtml(fmtCreatedRelative(ev.created_at)) + '</span>' +
+    '</span>';
+  }
   html += '<span class="event-spacer"></span>';
   html += '<button class="audit-link" data-callable-event="' + ev.id + '">📞 Available to call</button>';
   // Note: audit-log button moved into the tab strip (May 25, 2026 — Session 1).
@@ -7831,6 +7864,30 @@ function renderAuditLogBody() {
     html += '</div>';
   });
 
+  // Synthetic "Event created" row — appended last when sort is DESC
+  // (newest first), so the oldest event in the timeline sits at the
+  // bottom; prepended when sort is ASC. This isn't a real DB row in
+  // position_assignment_log; we read events.created_at and render it
+  // inline so the audit log opens with "first thing that happened on
+  // this event: it got created." Only rendered when the filter is
+  // 'all' since it doesn't fit any of the action categories cleanly
+  // — manager filtering to "Plan" or "Staff" wants those actions
+  // only, not the creation marker.
+  const ev = state.events.find(e => e.id === _auditState.eventId);
+  if (ev && ev.created_at && _auditState.filter === 'all') {
+    const createdRow = '<div class="log-entry cat-other">' +
+      '<span class="log-time">' + fmtDateTime(ev.created_at) + '</span>' +
+      '<span class="log-pill cat-other">Event created</span>' +
+      '<span class="log-desc">Event added to the calendar ' +
+        '<span style="color:var(--label);">(' + escapeHtml(fmtCreatedRelative(ev.created_at)) + ')</span>' +
+      '</span>' +
+      '<span class="log-actor"></span>' +
+    '</div>';
+    // DESC sort: oldest at end → append. ASC sort: oldest at top → prepend.
+    if (_auditState.sort === 'desc') html += createdRow;
+    else html = createdRow + html.substring(html.indexOf('<div class="log-entry'));
+  }
+
   body.innerHTML = html;
   attachAuditControlHandlers();
 }
@@ -7988,7 +8045,7 @@ function openEmailModal(eventId) {
   const realStaff = positions
     .filter(p => p.source !== 'jmac')
     .map(p => p.staff_name)
-    .sort((a, b) => a.localeCompare(b));
+    .sort((a, b) => formatLastFirst(a).localeCompare(formatLastFirst(b)));
   const jmacCount = positions.filter(p => p.source === 'jmac').length;
 
   if (realStaff.length === 0 && jmacCount === 0) {
@@ -8020,6 +8077,12 @@ function openEmailModal(eventId) {
 
   // Render the recipients list — venue contacts + global, plus "+ Other".
   renderEmailRecipientsList(ev.venue);
+
+  // Pre-check every saved recipient on open so "send to all saved contacts"
+  // is one click. Manager can untick any before Send. Applies to all venues.
+  document.querySelectorAll('#email-recipients-list [data-email-recipient]').forEach(cb => {
+    cb.checked = true;
+  });
 
   // Render the staff preview.
   renderEmailStaffPreview(realStaff, jmacCount);
@@ -8089,7 +8152,7 @@ function renderEmailStaffPreview(staffNames, jmacCount) {
       const sizeBadge = sz
         ? '<span style="color:var(--label);font-weight:600;margin-left:8px;">— ' + escapeHtml(sz) + '</span>'
         : '<span style="color:#b45309;font-weight:600;margin-left:8px;font-style:italic;">— size unknown</span>';
-      html += '<div class="preview-name">' + escapeHtml(n) + sizeBadge + '</div>';
+      html += '<div class="preview-name">' + escapeHtml(formatLastFirst(n)) + sizeBadge + '</div>';
     });
   }
   if (jmacCount > 0) {
@@ -8110,7 +8173,7 @@ function renderEmailStaffPreview(staffNames, jmacCount) {
     html += '<div style="margin-top:12px;padding-top:8px;border-top:1px solid #e5e7eb;">' +
       '<div style="font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--label);margin-bottom:6px;">Management</div>';
     managers.forEach(m => {
-      html += '<div class="preview-name">' + escapeHtml(m.display_name) + '</div>';
+      html += '<div class="preview-name">' + escapeHtml(formatLastFirst(m.display_name)) + '</div>';
     });
     html += '</div>';
   }
@@ -8219,8 +8282,8 @@ function sendStaffListEmail() {
   // is updated to consume the richer payload. shirt_tally drives the
   // "Shirts needed" line at the bottom of the email body.
   const staffWithSizes = realStaff.map(n => ({
-    name: n,
-    shirt_size: shirtSizeOf(n)   // null when not on file
+    name: formatLastFirst(n),
+    shirt_size: shirtSizeOf(n)   // lookup by original "First Last"; display is "Last, First"
   }));
   const shirtTally = buildShirtTally(realStaff);
 
@@ -8235,7 +8298,7 @@ function sendStaffListEmail() {
       if (so !== 0) return so;
       return (a.display_name || '').localeCompare(b.display_name || '');
     })
-    .map(m => m.display_name);
+    .map(m => formatLastFirst(m.display_name));
 
   const payload = {
     to: allTo,
@@ -8246,7 +8309,7 @@ function sendStaffListEmail() {
     event_name: ev.event_name,
     event_date: ev.event_date,
     report_time: reportStr,
-    staff_names: realStaff,
+    staff_names: realStaff.map(formatLastFirst),
     staff_with_sizes: staffWithSizes,
     shirt_tally: shirtTally,
     shirt_tally_display: formatShirtTally(shirtTally),
