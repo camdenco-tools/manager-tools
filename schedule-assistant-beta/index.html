@@ -401,6 +401,25 @@ body {
   border-style: solid;
   border-color: var(--blue);
 }
+.plan-stand-card.defaulted .plan-forecast-input:disabled,
+.plan-stand-card.defaulted .plan-role-input:disabled {
+  cursor: not-allowed;
+}
+.plan-open-stand-btn {
+  background: var(--primary);
+  color: white;
+  border: 1px solid var(--primary);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-left: 8px;
+}
+.plan-open-stand-btn:hover { background: #000; }
 
 .plan-stand-pill {
   display: inline-flex; align-items: center;
@@ -656,6 +675,21 @@ body {
   border-color: var(--green-dark);
 }
 .plan-submit-btn.has-changes:hover { background: var(--green); }
+.plan-discard-btn {
+  background: transparent;
+  color: var(--label);
+  border: 1px solid var(--border-strong);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 9px 16px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.plan-discard-btn:hover {
+  background: #f0f0ec;
+  color: var(--primary);
+}
 .plan-validation-msg {
   font-size: 11px;
   color: var(--red);
@@ -2738,6 +2772,42 @@ function fmtCancelledAt(iso) {
     d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
+// Created-timestamp helpers — used by the "Created" summary chip on the
+// expanded event head and the audit log's synthetic "Event created" row.
+// (Session 4 referenced these but never defined them — defined here Jun 3.)
+// fmtCreatedDate    → prominent short date, e.g. "May 13"
+// fmtCreatedRelative→ "today" / "3 days ago" / "2 weeks ago" / "1 year ago"
+// fmtCreatedDateTime→ full tooltip date+time, e.g. "May 13, 2026 at 3:53 PM"
+function fmtCreatedDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+function fmtCreatedRelative(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const diffDays = Math.floor((new Date() - d) / 86400000);
+  if (diffDays <= 0) return 'today';
+  if (diffDays === 1) return 'yesterday';
+  if (diffDays < 7) return diffDays + ' days ago';
+  if (diffDays < 14) return '1 week ago';
+  if (diffDays < 30) return Math.floor(diffDays / 7) + ' weeks ago';
+  if (diffDays < 60) return '1 month ago';
+  if (diffDays < 365) return Math.floor(diffDays / 30) + ' months ago';
+  const years = Math.floor(diffDays / 365);
+  return years === 1 ? '1 year ago' : years + ' years ago';
+}
+function fmtCreatedDateTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) +
+    ' at ' +
+    d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
+
 // Initials from name
 function initials(name) {
   if (!name) return '?';
@@ -4090,6 +4160,17 @@ function markPlanDirty(eventId) {
   if (state.planEdits[eventId]) state.planEdits[eventId].dirty = true;
 }
 
+// Discard all unsaved Plan edits — rebuilds the edit state fresh from the
+// DB (staffing_requests + par_levels), clearing the dirty flag and reverting
+// every in-progress change (forecasts, counts, activations). The escape
+// hatch for an edit the manager can't or doesn't want to save.
+function discardPlanEdits(eventId) {
+  const ev = state.events.find(e => e.id === eventId);
+  if (!ev) return;
+  buildPlanEdits(ev); // overwrites state.planEdits[ev.id], dirty=false
+  render();
+}
+
 // Submit bar at the bottom of the Plan tab. Status text on left,
 // Submit/Resubmit button on right. Validation message rendered below
 // when submit is blocked. Returns HTML string for the bar.
@@ -4116,6 +4197,12 @@ function renderPlanSubmitBar(ev, edits) {
 
   html += '<span class="plan-submit-spacer"></span>';
 
+  // Discard changes — only when there are unsaved edits. Reverts to the
+  // last-saved DB values so the manager can back out of an edit.
+  if (edits.dirty && !edits.submitting) {
+    html += '<button class="plan-discard-btn" data-plan-discard="' + ev.id + '">Discard changes</button>';
+  }
+
   const btnLabel = isResubmit ? 'Resubmit' : 'Submit plan';
   const btnCls = 'plan-submit-btn' + (edits.dirty && validation.ok ? ' has-changes' : '');
   html += '<button class="' + btnCls + '"' +
@@ -4138,12 +4225,16 @@ function renderPlanSubmitBar(ev, edits) {
 function validatePlanEdits(edits) {
   let anyActive = false;
   const emptyActiveStands = [];
+  const noForecastStands = [];
   Object.keys(edits.stands).forEach(standName => {
     const s = edits.stands[standName];
     if (!s.isActive) return;
     anyActive = true;
     const totalStaff = Object.values(s.roles).reduce((acc, r) => acc + (r.count || 0), 0);
     if (totalStaff === 0) emptyActiveStands.push(standName);
+    // Forecast required on staffed revenue stands (Support Staff / Hawking exempt).
+    const isRevenue = standName !== SUPPORT_STAND && standName !== HAWKING_STAND;
+    if (isRevenue && totalStaff > 0 && !(s.forecast > 0)) noForecastStands.push(standName);
   });
   if (!anyActive) return { ok: false, msg: 'No active stands. Add staff to at least one stand before submitting.' };
   if (emptyActiveStands.length > 0) {
@@ -4152,6 +4243,14 @@ function validatePlanEdits(edits) {
       msg: 'Active stand' + (emptyActiveStands.length === 1 ? '' : 's') +
         ' with no staff: ' + emptyActiveStands.join(', ') +
         '. Set a headcount or clear the stand.'
+    };
+  }
+  if (noForecastStands.length > 0) {
+    return {
+      ok: false,
+      msg: 'Sales forecast required on staffed stand' + (noForecastStands.length === 1 ? '' : 's') +
+        ': ' + noForecastStands.join(', ') +
+        '. Enter a forecast amount or clear the stand.'
     };
   }
   return { ok: true, msg: null };
@@ -4179,6 +4278,18 @@ function parsePlanCount(raw) {
   const n = parseInt(String(raw).replace(/[,\s]/g, ''), 10);
   if (isNaN(n) || n < 0) return 0;
   return n;
+}
+
+// Open (activate) a defaulted stand. The explicit alternative to the old
+// type-into-a-grey-box auto-promote. Sets active, marks dirty, re-renders
+// (which sorts it up with the other active stands).
+function openPlanStand(eventId, stand) {
+  const edits = state.planEdits[eventId];
+  if (!edits || !edits.stands[stand]) return;
+  if (edits.stands[stand].isActive) return;
+  edits.stands[stand].isActive = true;
+  markPlanDirty(eventId);
+  render();
 }
 
 // Handle a forecast input change. Auto-promotes the stand to active
@@ -4839,6 +4950,7 @@ function renderPlanTab(ev) {
       ' data-plan-event="' + ev.id + '"' +
       ' data-plan-stand="' + escapeAttr(stand) + '"' +
       ' value="' + escapeAttr(forecastValue) + '"' +
+      (isActive ? '' : ' disabled') +
       ' placeholder="$0">';
     html += '</span>';
 
@@ -4848,6 +4960,15 @@ function renderPlanTab(ev) {
         standStaffTotal + ' staff</span>';
     } else {
       html += '<span class="plan-stand-pill defaulted">' + standStaffTotal + ' staff</span>';
+    }
+
+    // Open stand — explicit activate affordance on a defaulted card.
+    // Replaces the old "type into a grey box to auto-promote" behavior.
+    if (!isActive) {
+      html += '<button class="plan-open-stand-btn"' +
+        ' data-plan-open-stand="' + escapeAttr(stand) + '"' +
+        ' data-plan-event="' + ev.id + '"' +
+        ' title="Open this stand so you can set staff and a forecast">Open stand</button>';
     }
 
     // Per-stand action buttons. CSS hides them on defaulted stands so
@@ -4882,6 +5003,7 @@ function renderPlanTab(ev) {
           ' data-plan-event="' + ev.id + '"' +
           ' data-plan-stand="' + escapeAttr(stand) + '"' +
           ' data-plan-role="' + escapeAttr(role) + '"' +
+          (isActive ? '' : ' disabled') +
           ' value="' + roleEdit.count + '">';
         html += '</div>';
       });
@@ -5643,6 +5765,23 @@ function attachEventHandlers() {
       if (btn.disabled) return;
       const eventId = btn.getAttribute('data-plan-submit');
       onSubmitPlanClick(eventId);
+    });
+  });
+
+  document.querySelectorAll('[data-plan-open-stand]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const eventId = btn.getAttribute('data-plan-event');
+      const stand = btn.getAttribute('data-plan-open-stand');
+      openPlanStand(eventId, stand);
+    });
+  });
+
+  document.querySelectorAll('[data-plan-discard]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const eventId = btn.getAttribute('data-plan-discard');
+      discardPlanEdits(eventId);
     });
   });
 
