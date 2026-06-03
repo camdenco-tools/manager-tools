@@ -5,9 +5,13 @@
  * `roles` and `venue_roles` catalog tables (seeded May 14, 2026 — Phase -2).
  *
  * This is the role-side sibling of pc-catalog.js (Phase -2b,
- * stands + venues). It is a PURE READ LAYER — it never writes. Pages that
- * edit venue_roles (e.g. the Venue Roles admin page) issue their own
- * fetch() writes and then call pcRoles.refresh() to invalidate the cache.
+ * stands + venues). The roles/venue_roles CATALOG half is read-only —
+ * pages that edit venue_roles (e.g. the Venue Roles admin page) issue
+ * their own fetch() writes and then call pcRoles.refresh() to invalidate
+ * the cache. The employee_venue_roles ELIGIBILITY half (added June 3, 2026)
+ * is read + write via getEmployeeVenueRoles / setEmployeeVenueRoles.
+ * Eligibility writes never touch pay_rate_override — wages are a separate
+ * feature layered on top.
  *
  * Usage:
  *   <script src="/pc-auth.js"></script>
@@ -19,6 +23,11 @@
  *       var fmp   = pcRoles.getRolesForVenue('FMP');    // active roles at FMP
  *       var rate  = pcRoles.getPayRate('FMP', 'Bartender');
  *       var canon = pcRoles.legacyToCanonical('Concessions Cashier'); // -> 'Cashier'
+ *
+ *       // Employee eligibility layer (employee_venue_roles, read + write):
+ *       pcRoles.getEmployeeVenueRoles(empId).then(function (rows) { ... });
+ *       pcRoles.setEmployeeVenueRoles(empId,
+ *         [{ venueCode: 'FMP', roleName: 'Cashier' }], 'Keith K');
  *     });
  *   }});
  *
@@ -144,6 +153,34 @@
         });
       }
       return r.json();
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // Internal: one authenticated write (POST/PATCH) against PostgREST.
+  // Used only by the employee_venue_roles eligibility writer below — the
+  // roles/venue_roles catalog stays read-only.
+  // ---------------------------------------------------------------------
+  function sbWrite(path, method, body, prefer) {
+    if (typeof pcAuth === 'undefined' || !pcAuth.headers) {
+      return Promise.reject(new Error('pc-roles.js: pc-auth.js must load first'));
+    }
+    var headers = Object.assign({}, pcAuth.headers(), { 'Content-Type': 'application/json' });
+    if (prefer) headers['Prefer'] = prefer;
+    return fetch(REST + path, {
+      method: method,
+      headers: headers,
+      body: JSON.stringify(body)
+    }).then(function (r) {
+      if (!r.ok) {
+        return r.text().then(function (t) {
+          var err = new Error('pc-roles.js HTTP ' + r.status + ' on ' + method + ' ' + path +
+            (t ? ' -- ' + t.slice(0, 200) : ''));
+          err.status = r.status;
+          throw err;
+        });
+      }
+      return r;
     });
   }
 
@@ -324,6 +361,163 @@
         if (vr.venue_code) seen[vr.venue_code] = true;
       });
       return Object.keys(seen).sort();
+    },
+
+    /*
+     * getEmployeeVenueRoles(employeeId, { includeRetired }) — every
+     * (venue, role) this employee is assigned, with override-aware pay.
+     * Active rows only by default. Returns a promise; calls ready()
+     * internally so the live venue_roles rate is available to compute
+     * effective_rate.
+     *
+     * Each item: { id, employee_id, venue_id, role_id, venue_code,
+     *   role_name, is_active, pay_rate_override, default_rate,
+     *   effective_rate }
+     *     default_rate      — live venue_roles rate for the pair, or null
+     *                         if the pair is no longer a mapped venue_role
+     *     pay_rate_override — per-person rate, or null (inherits default)
+     *     effective_rate    — pay_rate_override when set, else default_rate
+     *
+     * NOT cached — employee assignments are mutable per-person data,
+     * unlike the catalog. Re-call after a write to refresh.
+     */
+    getEmployeeVenueRoles: function (employeeId, opts) {
+      var includeRetired = opts && opts.includeRetired;
+      return pcRoles.ready().then(function () {
+        var path = 'employee_venue_roles?employee_id=eq.' +
+          encodeURIComponent(employeeId) +
+          '&select=id,employee_id,venue_id,role_id,pay_rate_override,is_active,' +
+          'venues(code),roles(name)';
+        if (!includeRetired) path += '&is_active=eq.true';
+        return sbGet(path);
+      }).then(function (rows) {
+        return (rows || []).map(function (r) {
+          var code = (r.venues || {}).code || null;
+          var roleName = (r.roles || {}).name || null;
+          var override = r.pay_rate_override == null ? null : Number(r.pay_rate_override);
+          var def = (code && roleName) ? pcRoles.getPayRate(code, roleName) : null;
+          return {
+            id: r.id,
+            employee_id: r.employee_id,
+            venue_id: r.venue_id,
+            role_id: r.role_id,
+            venue_code: code,
+            role_name: roleName,
+            is_active: r.is_active !== false,
+            pay_rate_override: override,
+            default_rate: def,
+            effective_rate: override != null ? override : def
+          };
+        }).sort(function (a, b) {
+          if (a.venue_code === b.venue_code) {
+            return (a.role_name || '').localeCompare(b.role_name || '');
+          }
+          return (a.venue_code || '').localeCompare(b.venue_code || '');
+        });
+      });
+    },
+
+    /*
+     * setEmployeeVenueRoles(employeeId, desiredPairs, actor) — diffs the
+     * employee's current eligibility against the desired (ticked) set and
+     * writes only the difference. ELIGIBILITY ONLY — never touches
+     * pay_rate_override, so a per-person wage survives an untick/retick
+     * (the retired row keeps its override and comes back on reactivate).
+     *
+     *   desiredPairs — [{ venueCode, roleName }, ...]
+     *   actor        — string stamped into created_by / updated_by
+     *                  (pass pcAuth.getUser().display_name)
+     *
+     * Per pair: absent -> INSERT; present+retired -> reactivate;
+     * present+active -> no-op. Active row not in desired -> soft-retire.
+     * Resolves to { added, reactivated, retired, unchanged }. Rejects if
+     * a desired pair isn't a legal venue_role (caller bug).
+     */
+    setEmployeeVenueRoles: function (employeeId, desiredPairs, actor) {
+      desiredPairs = desiredPairs || [];
+      var now = new Date().toISOString();
+      return pcRoles.ready().then(function () {
+        var desired = desiredPairs.map(function (p) {
+          var match = null;
+          for (var i = 0; i < _venueRoles.length; i++) {
+            var vr = _venueRoles[i];
+            if (vr.venue_code === p.venueCode && vr.role_name === p.roleName) {
+              match = vr; break;
+            }
+          }
+          if (!match) {
+            throw new Error('pc-roles.js setEmployeeVenueRoles: no venue_role for ' +
+              p.venueCode + ' / ' + p.roleName + ' — illegal pair.');
+          }
+          return {
+            venue_id: match.venue_id,
+            role_id: match.role_id,
+            key: match.venue_id + '|' + match.role_id
+          };
+        });
+        var desiredKeys = {};
+        desired.forEach(function (d) { desiredKeys[d.key] = true; });
+
+        return sbGet('employee_venue_roles?employee_id=eq.' +
+            encodeURIComponent(employeeId) +
+            '&select=id,venue_id,role_id,is_active')
+          .then(function (rows) {
+            rows = rows || [];
+            var existing = {};
+            rows.forEach(function (r) { existing[r.venue_id + '|' + r.role_id] = r; });
+
+            var toInsert = [], toReactivate = [], toRetire = [], unchanged = 0;
+
+            desired.forEach(function (d) {
+              var ex = existing[d.key];
+              if (!ex) {
+                toInsert.push({
+                  employee_id: employeeId,
+                  venue_id: d.venue_id,
+                  role_id: d.role_id,
+                  is_active: true,
+                  created_by: actor || null,
+                  updated_by: actor || null
+                });
+              } else if (!ex.is_active) {
+                toReactivate.push(ex.id);
+              } else {
+                unchanged++;
+              }
+            });
+
+            rows.forEach(function (r) {
+              if (r.is_active && !desiredKeys[r.venue_id + '|' + r.role_id]) {
+                toRetire.push(r.id);
+              }
+            });
+
+            var ops = [];
+            if (toInsert.length) {
+              ops.push(sbWrite('employee_venue_roles', 'POST', toInsert, 'return=minimal'));
+            }
+            if (toReactivate.length) {
+              ops.push(sbWrite('employee_venue_roles?id=in.(' + toReactivate.join(',') + ')',
+                'PATCH',
+                { is_active: true, updated_by: actor || null, updated_at: now },
+                'return=minimal'));
+            }
+            if (toRetire.length) {
+              ops.push(sbWrite('employee_venue_roles?id=in.(' + toRetire.join(',') + ')',
+                'PATCH',
+                { is_active: false, updated_by: actor || null, updated_at: now },
+                'return=minimal'));
+            }
+            return Promise.all(ops).then(function () {
+              return {
+                added: toInsert.length,
+                reactivated: toReactivate.length,
+                retired: toRetire.length,
+                unchanged: unchanged
+              };
+            });
+          });
+      });
     },
 
     /*
