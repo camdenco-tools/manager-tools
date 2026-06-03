@@ -1024,6 +1024,110 @@ body {
 }
 
 /* ============================================================
+   PER-VENUE ROLE EDITOR (employee_venue_roles) — two-pane picker.
+   Left column lists venues with a count badge of selected roles;
+   right pane shows that venue's legal roles as toggle pills with
+   their inherited pay. Replaces the old flat venue/role pill groups.
+   Desktop-first (assignment is done on desktop) but stacks on narrow
+   screens so it doesn't break the modal.
+   ============================================================ */
+.evr-editor {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  min-height: 220px;
+}
+.evr-venue-col {
+  width: 150px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border-lt);
+  padding: 6px;
+  background: #fafaf8;
+  max-height: 300px;
+  overflow-y: auto;
+}
+.evr-venue-row {
+  width: 100%;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 6px;
+  padding: 7px 9px;
+  margin-bottom: 2px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  text-align: left;
+}
+.evr-venue-row:hover { background: var(--bg); }
+.evr-venue-row.sel { background: var(--blue-50); color: var(--blue-600); }
+.evr-venue-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.evr-venue-badge {
+  font-size: 10px; font-weight: 700;
+  min-width: 18px; text-align: center;
+  padding: 1px 6px; border-radius: 10px;
+  background: var(--green-50); color: var(--green-800);
+  flex-shrink: 0;
+}
+.evr-venue-badge.zero { background: transparent; color: var(--light); font-weight: 600; }
+.evr-role-pane {
+  flex: 1; min-width: 0;
+  padding: 10px 12px;
+}
+.evr-rolepane-head {
+  font-size: 11px; font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.06em;
+  margin-bottom: 8px;
+}
+.evr-rolepane-empty {
+  font-size: 12px; color: var(--muted);
+  font-style: italic;
+  padding: 12px 4px;
+}
+.evr-role-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.evr-role-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #444;
+  background: var(--surface);
+  cursor: pointer;
+  font-family: inherit;
+}
+.evr-role-pill:hover { border-color: var(--muted); }
+.evr-role-pill.on {
+  background: var(--green-50);
+  border-color: #7dc98a;
+  color: var(--green-800);
+  font-weight: 600;
+}
+.evr-role-pill.disabled-role {
+  opacity: 0.4; cursor: not-allowed; pointer-events: none;
+}
+.evr-role-check {
+  font-size: 12px; font-weight: 700;
+  width: 12px; text-align: center;
+  color: inherit;
+}
+.evr-role-pill .evr-rate { color: var(--muted); font-weight: 500; }
+.evr-role-pill.on .evr-rate { color: var(--green-600); }
+@media (max-width: 520px) {
+  .evr-editor { flex-direction: column; }
+  .evr-venue-col {
+    width: 100%; max-height: 160px;
+    border-right: none; border-bottom: 1px solid var(--border-lt);
+  }
+}
+
+/* ============================================================
    PERFORMANCE SIGNALS — internal-only employee rating display.
    Lives in the card modal between Contact & basics and Roles &
    venues. Open by default. Built around a single 5-star headline
@@ -1638,6 +1742,7 @@ body {
 <div class="toast" id="toast"></div>
 
 <script src="/pc-auth.js"></script>
+<script src="/pc-roles.js"></script>
 <script src="/pc-nav.js"></script>
 <script src="/pc-activity.js"></script>
 <script>
@@ -1672,8 +1777,10 @@ body {
     DE: 'DE', SATB: 'DE', Kirkwood: 'DE'
   };
 
-  // Roles that minors can't be assigned (alcohol-handling).
-  var ALCOHOL_ROLES = ['Bartender', 'Beer Tender'];
+  // Roles that minors can't be assigned (alcohol-handling). Canonical role
+  // names: "Beer Tender" collapsed into "Bartender" in the catalog, and
+  // "Bar Lead" (bar supervisory) is also alcohol-handling. Both blocked.
+  var ALCOHOL_ROLES = ['Bartender', 'Bar Lead'];
 
   // Three venues that get a top-of-page scorecard.
   var SCORECARD_VENUES = ['Mann', 'FMP', 'SATB'];
@@ -1850,6 +1957,14 @@ body {
     // boot. The four helper columns on employees drive section visibility;
     // the actual submission row is fetched only when needed.
     cardSubmissionByEmpId: {},
+
+    // Per-venue role eligibility (employee_venue_roles), lazy-loaded per
+    // card open via pcRoles.getEmployeeVenueRoles. Keyed by employee_id;
+    // each value is the array of override-aware assignment rows from
+    // pc-roles.js. This replaces the old flat assigned_roles/assigned_venues
+    // read for the Roles & venues section. Presence of a key (even an empty
+    // array) means "loaded"; absence means "not fetched yet".
+    evrByEmpId: {},
 
     // Lifetime signup counts per employee — derived from state.signups
     // at boot time, alongside the existing rating data assembly. Used
@@ -3201,6 +3316,22 @@ body {
           if (state.modalEmpId === empId) renderCardModal();
         });
       }
+
+      // Lazy-load this employee's per-venue role assignments
+      // (employee_venue_roles) so the Roles & venues section renders real
+      // per-venue data. Cached in state.evrByEmpId; fetched once per
+      // employee per session. Re-renders when it lands.
+      if (!state.evrByEmpId.hasOwnProperty(empId)) {
+        pcRoles.getEmployeeVenueRoles(empId).then(function(rows) {
+          state.evrByEmpId[empId] = rows || [];
+          if (state.modalEmpId === empId) renderCardModal();
+        }).catch(function(err) {
+          if (err && err.authFailed) { handleAuthFailure(); return; }
+          console.warn('Employee venue roles fetch failed (non-blocking):', err);
+          state.evrByEmpId[empId] = [];
+          if (state.modalEmpId === empId) renderCardModal();
+        });
+      }
     }
     renderCardModal();
   }
@@ -3879,32 +4010,50 @@ body {
   }
 
   // ---- Roles & venues ----
+
+  // Group an employee's ACTIVE venue-role rows (from the loaded
+  // employee_venue_roles cache) into { venueCode: [ row, row, ... ] }.
+  // Rows carry role_name + effective_rate (override-aware) from pc-roles.js.
+  function evrByVenue(empId) {
+    var rows = state.evrByEmpId[empId] || [];
+    var byVenue = {};
+    rows.forEach(function(r) {
+      if (!r.is_active) return;
+      if (!r.venue_code || !r.role_name) return;
+      if (!byVenue[r.venue_code]) byVenue[r.venue_code] = [];
+      byVenue[r.venue_code].push(r);
+    });
+    return byVenue;
+  }
+
   function renderRolesSection(emp, cand) {
     var inEdit = state.modalSection === 'roles';
     var c = cand || {};
     if (inEdit) {
       return renderRolesSectionEdit(emp, c);
     }
-    var roles = c.assigned_roles || [];
-    var venues = c.assigned_venues || [];
-    var payHtml = renderStartingPayDisplay(c.starting_pay_rate);
 
-    // Worklist state: any incomplete combo (missing venues, missing roles,
-    // or both) shows the prompt instead of columns. The prompt lives inside
-    // the sub-card so the section header / Edit button stay in the same
-    // place a manager expects.
-    var incomplete = (roles.length === 0 || venues.length === 0);
+    // Display mode reads the per-venue assignments cache. Three states:
+    //   not-loaded  -> brief loading line (the lazy fetch will re-render)
+    //   loaded+empty -> worklist prompt
+    //   loaded+rows  -> per-venue columns with inherited pay
+    var loaded = state.evrByEmpId.hasOwnProperty(emp.id);
     var bodyHtml;
-    if (incomplete) {
-      bodyHtml = '<div class="rv-prompt">' +
-        '<div class="rv-prompt-icon">!</div>' +
-        '<div class="rv-prompt-text">' +
-          '<strong>Needs venue and role assignments.</strong> ' +
-          'Click <strong>Edit</strong> above to assign which venues this employee works and what roles they perform.' +
-        '</div>' +
-      '</div>';
+    if (!loaded) {
+      bodyHtml = '<div class="card-subcard"><div class="card-subcard-empty">Loading role assignments…</div></div>';
     } else {
-      bodyHtml = renderRolesVenuesColumns(venues, roles);
+      var byVenue = evrByVenue(emp.id);
+      if (Object.keys(byVenue).length === 0) {
+        bodyHtml = '<div class="rv-prompt">' +
+          '<div class="rv-prompt-icon">!</div>' +
+          '<div class="rv-prompt-text">' +
+            '<strong>No roles assigned yet.</strong> ' +
+            'Click <strong>Edit</strong> above to assign which venues this employee works and what roles they perform there.' +
+          '</div>' +
+        '</div>';
+      } else {
+        bodyHtml = renderRolesVenuesColumns(byVenue);
+      }
     }
 
     return '<div class="card-section">' +
@@ -3913,20 +4062,16 @@ body {
         '<button class="section-edit-btn" data-section-edit="roles">Edit</button>' +
       '</div>' +
       bodyHtml +
-      payHtml +
     '</div>';
   }
 
-  // Column layout for assigned venues + roles. Each venue is a column
-  // headed by its code with its strong color; the same role list is
-  // listed under every column. NOTE: the underlying data model today is
-  // a flat assigned_roles list (every role applies to every venue). The
-  // column layout is intentionally a forward-compatible visual — when
-  // per-venue roles ship, only the column body content changes; the
-  // markup shape stays the same.
-  function renderRolesVenuesColumns(venues, roles) {
-    // Sort venues alphabetically by their human label so output is stable.
-    var sorted = venues.slice().sort(function(a, b) {
+  // Column layout for per-venue assignments. Each venue is a column headed
+  // by its label in the venue's strong color; under it, only the roles this
+  // employee actually holds AT THAT VENUE, each with its inherited rate
+  // (effective_rate from pc-roles.js — override if set, else venue default).
+  // Takes the { venueCode: [rows] } map from evrByVenue().
+  function renderRolesVenuesColumns(byVenue) {
+    var sorted = Object.keys(byVenue).sort(function(a, b) {
       var la = VENUE_LABELS[a] || a;
       var lb = VENUE_LABELS[b] || b;
       return la.localeCompare(lb);
@@ -3934,14 +4079,23 @@ body {
     var cols = sorted.map(function(code) {
       var color = VENUE_COLORS[code] || '#666';
       var bg = hexToRgba(color, 0.12);
+      var roles = byVenue[code].slice().sort(function(a, b) {
+        return (a.role_name || '').localeCompare(b.role_name || '');
+      });
       var rolesHtml = roles.length > 0
         ? roles.map(function(r) {
-            return '<span class="rv-role">' + escapeHtml(r) + '</span>';
+            var rate = r.effective_rate;
+            var rateLabel = (rate == null)
+              ? ''
+              : (rate === 0
+                  ? ' <span style="color:var(--muted);">comm.</span>'
+                  : ' <span style="color:var(--muted);">$' + Number(rate).toFixed(2) + '</span>');
+            return '<span class="rv-role">' + escapeHtml(r.role_name) + rateLabel + '</span>';
           }).join('')
         : '<span class="rv-empty-roles">no roles</span>';
       return '<div class="rv-column">' +
         '<div class="rv-column-head" style="background:' + bg + ';color:' + color + ';">' +
-          escapeHtml(code) +
+          escapeHtml(VENUE_LABELS[code] || code) +
         '</div>' +
         '<div class="rv-column-body">' + rolesHtml + '</div>' +
       '</div>';
@@ -3949,46 +4103,83 @@ body {
     return '<div class="rv-columns">' + cols + '</div>';
   }
 
+  // Per-venue role editor (two-pane). Left: every venue with a count badge
+  // of selected roles. Right: the selected venue's legal roles (from
+  // pcRoles.getRolesForVenue) as toggle pills with inherited pay. Minors
+  // can't tick alcohol-handling roles. Draft shape:
+  //   { selectedVenue: <code|null>, pairs: { 'FMP||Cashier': true, ... } }
+  // The modal re-renders on every venue switch / role toggle (scroll is
+  // preserved by renderCardModal), keeping the handlers trivial.
   function renderRolesSectionEdit(emp, c) {
-    var draft = state.modalEditDraft || { roles: [], venues: [] };
+    var draft = state.modalEditDraft || { selectedVenue: null, pairs: {} };
     var isMinor = c.is_minor === true;
-    // Venue pills
-    var venueHtml = '';
+
+    // Count selected roles per venue for the left-column badges.
+    var counts = {};
+    Object.keys(draft.pairs).forEach(function(key) {
+      if (!draft.pairs[key]) return;
+      var vc = key.split('||')[0];
+      counts[vc] = (counts[vc] || 0) + 1;
+    });
+
+    // Left column — all venues.
+    var venuesHtml = '';
     for (var i = 0; i < VENUE_ORDER.length; i++) {
       var code = VENUE_ORDER[i];
-      var on = draft.venues.indexOf(code) > -1;
-      venueHtml += '<label class="ms-pill' + (on ? ' on' : '') + '">' +
-        '<input type="checkbox" data-edit-venue="' + code + '"' + (on ? ' checked' : '') + ' />' +
-        VENUE_LABELS[code] +
-      '</label>';
+      var isSel = draft.selectedVenue === code;
+      var n = counts[code] || 0;
+      var badge = n > 0
+        ? '<span class="evr-venue-badge">' + n + '</span>'
+        : '<span class="evr-venue-badge zero">&mdash;</span>';
+      venuesHtml += '<button type="button" class="evr-venue-row' + (isSel ? ' sel' : '') + '" data-evr-venue="' + code + '">' +
+        '<span class="evr-venue-label">' + escapeHtml(VENUE_LABELS[code] || code) + '</span>' +
+        badge +
+      '</button>';
     }
-    // Role pills
-    var roleHtml = '';
-    for (var j = 0; j < state.pcRoles.length; j++) {
-      var role = state.pcRoles[j];
-      var isAlc = ALCOHOL_ROLES.indexOf(role) !== -1;
-      var disabled = isMinor && isAlc;
-      var on2 = draft.roles.indexOf(role) > -1;
-      roleHtml += '<label class="ms-pill' + (on2 ? ' on' : '') + (disabled ? ' disabled-role' : '') + '">' +
-        '<input type="checkbox" data-edit-role="' + escapeHtml(role) + '"' + (on2 ? ' checked' : '') + (disabled ? ' disabled' : '') + ' />' +
-        escapeHtml(role) + (disabled ? ' (minor restriction)' : '') +
-      '</label>';
+
+    // Right pane — roles for the selected venue.
+    var rightHtml;
+    if (!draft.selectedVenue) {
+      rightHtml = '<div class="evr-rolepane-empty">Select a venue on the left to choose roles.</div>';
+    } else {
+      var vcode = draft.selectedVenue;
+      var legal = [];
+      try { legal = pcRoles.getRolesForVenue(vcode) || []; } catch (e) { legal = []; }
+      if (legal.length === 0) {
+        rightHtml = '<div class="evr-rolepane-empty">No roles are configured for ' +
+          escapeHtml(VENUE_LABELS[vcode] || vcode) + ' yet.</div>';
+      } else {
+        var pillsHtml = legal.map(function(vr) {
+          var key = vcode + '||' + vr.role_name;
+          var on = !!draft.pairs[key];
+          var disabled = isMinor && ALCOHOL_ROLES.indexOf(vr.role_name) !== -1;
+          var rate = vr.pay_rate;
+          var rateLabel = (rate == null) ? ''
+            : (rate === 0
+                ? ' <span class="evr-rate">comm.</span>'
+                : ' <span class="evr-rate">$' + Number(rate).toFixed(2) + '</span>');
+          return '<button type="button" class="evr-role-pill' + (on ? ' on' : '') + (disabled ? ' disabled-role' : '') + '"' +
+            (disabled ? ' disabled' : ' data-evr-role="' + escapeHtml(vr.role_name) + '"') + '>' +
+            '<span class="evr-role-check">' + (on ? '&#10003;' : '+') + '</span>' +
+            escapeHtml(vr.role_name) + rateLabel +
+            (disabled ? ' <span class="evr-rate">(minor)</span>' : '') +
+          '</button>';
+        }).join('');
+        rightHtml = '<div class="evr-rolepane-head">Roles at ' + escapeHtml(VENUE_LABELS[vcode] || vcode) + '</div>' +
+          '<div class="evr-role-pills">' + pillsHtml + '</div>';
+      }
     }
+
     return '<div class="card-section">' +
       '<div class="card-section-head">' +
         '<span class="section-title">Roles &amp; venues</span>' +
       '</div>' +
-      '<div class="detail-item" style="margin-bottom:10px;">' +
-        '<div class="detail-label">Assigned venues</div>' +
-        '<div class="ms-pill-group">' + venueHtml + '</div>' +
+      '<div class="evr-editor">' +
+        '<div class="evr-venue-col">' + venuesHtml + '</div>' +
+        '<div class="evr-role-pane">' + rightHtml + '</div>' +
       '</div>' +
-      '<div class="detail-item">' +
-        '<div class="detail-label">Assigned roles</div>' +
-        '<div class="ms-pill-group">' + roleHtml + '</div>' +
-      '</div>' +
-      '<div id="rolesPayLookup"></div>' +
       '<div class="section-action-row">' +
-        '<button class="btn btn-primary" data-section-save="roles">Save</button>' +
+        '<button class="btn btn-primary" data-section-save="roles">Save roles</button>' +
         '<button class="btn" data-section-cancel="roles">Cancel</button>' +
       '</div>' +
       '<div class="deact-err" data-section-err="roles"></div>' +
@@ -4950,14 +5141,27 @@ body {
       editFields[ef].addEventListener('input', onContactDraftChange);
       editFields[ef].addEventListener('change', onContactDraftChange);
     }
-    // Roles edit checkboxes
-    var venueChecks = root.querySelectorAll('[data-edit-venue]');
-    for (var vc = 0; vc < venueChecks.length; vc++) {
-      venueChecks[vc].addEventListener('change', onRolesDraftChange);
+    // Per-venue role editor: venue selection (left) + role toggles (right).
+    // Both just mutate the draft and re-render; scroll is preserved.
+    var evrVenueBtns = root.querySelectorAll('[data-evr-venue]');
+    for (var vc = 0; vc < evrVenueBtns.length; vc++) {
+      evrVenueBtns[vc].addEventListener('click', function(ev) {
+        if (!state.modalEditDraft) return;
+        state.modalEditDraft.selectedVenue = ev.currentTarget.getAttribute('data-evr-venue');
+        renderCardModal();
+      });
     }
-    var roleChecks = root.querySelectorAll('[data-edit-role]');
-    for (var rc = 0; rc < roleChecks.length; rc++) {
-      roleChecks[rc].addEventListener('change', onRolesDraftChange);
+    var evrRoleBtns = root.querySelectorAll('[data-evr-role]');
+    for (var rc = 0; rc < evrRoleBtns.length; rc++) {
+      evrRoleBtns[rc].addEventListener('click', function(ev) {
+        if (!state.modalEditDraft) return;
+        var roleName = ev.currentTarget.getAttribute('data-evr-role');
+        var vcode = state.modalEditDraft.selectedVenue;
+        if (!vcode || !roleName) return;
+        var key = vcode + '||' + roleName;
+        state.modalEditDraft.pairs[key] = !state.modalEditDraft.pairs[key];
+        renderCardModal();
+      });
     }
     // Notes save
     var notesBtn = root.querySelector('[data-notes-save]');
@@ -5048,14 +5252,25 @@ body {
         shirt_size: emp.shirt_size || c.shirt_size || ''
       };
     } else if (section === 'roles') {
+      // Build the per-venue selection from the loaded assignments. Each
+      // active (venue, role) becomes a true entry in pairs, keyed
+      // 'venueCode||roleName'. Open pane defaults to the first venue the
+      // person already works, else the first venue in the list.
+      var pairs = {};
+      var rows = state.evrByEmpId[emp.id] || [];
+      var firstVenue = null;
+      rows.forEach(function(r) {
+        if (!r.is_active || !r.venue_code || !r.role_name) return;
+        pairs[r.venue_code + '||' + r.role_name] = true;
+        if (!firstVenue) firstVenue = r.venue_code;
+      });
       state.modalEditDraft = {
-        roles: (c.assigned_roles || []).slice(),
-        venues: (c.assigned_venues || []).slice()
+        selectedVenue: firstVenue || (VENUE_ORDER.length ? VENUE_ORDER[0] : null),
+        pairs: pairs
       };
     }
     state.modalSection = section;
     renderCardModal();
-    if (section === 'roles') updateRolesPayLookup();
   }
 
   function onContactDraftChange(ev) {
@@ -5232,53 +5447,78 @@ body {
     });
   }
 
-  // Roles section save: writes assigned_venues, assigned_roles, and
-  // recomputes starting_pay_rate JSON. All to candidates.
+  // Roles section save: writes per-venue eligibility to employee_venue_roles
+  // via pcRoles.setEmployeeVenueRoles (the source of truth), then mirrors the
+  // flat assigned_venues / assigned_roles arrays onto candidates so the
+  // pipeline and event workspace (which still read those) stay correct during
+  // the transition. starting_pay_rate is intentionally NOT written — pay now
+  // lives in venue_roles / pay_rate_override and nothing live reads that field.
+  // Eligibility only: this never touches anyone's pay.
   //
-  // Auto-creates the candidate row for legacy employees (replaces the
-  // previous loud-error path that left the manager stuck).
+  // Auto-creates the candidate row for legacy employees (for the mirror write).
   function saveRolesSection(emp, cand, draft, errEl) {
-    var venues = draft.venues || [];
-    var roles = draft.roles || [];
-    // Recompute starting_pay_rate JSON: { roleName: { stateCode: rate } }
-    var sv = {};
-    for (var v = 0; v < venues.length; v++) {
-      var st = VENUE_STATE[venues[v]];
-      if (st) sv[st] = true;
-    }
-    var statesList = Object.keys(sv);
-    var rateObj = {};
-    for (var r = 0; r < roles.length; r++) {
-      var role = roles[r];
-      var rr = {};
-      for (var s = 0; s < statesList.length; s++) {
-        var rt = getPayRateByState(statesList[s], role);
-        if (rt !== null) rr[statesList[s]] = rt;
-      }
-      rateObj[role] = rr;
-    }
-    var body = {
-      assigned_venues: venues,
-      assigned_roles: roles,
-      starting_pay_rate: JSON.stringify(rateObj),
-      updated_at: new Date().toISOString()
-    };
+    draft = draft || { pairs: {} };
 
-    ensureCandidateRow(emp).then(function(activeCand) {
-      return patchCandidate(activeCand.id, body).then(function() {
-        activeCand.assigned_venues = venues;
-        activeCand.assigned_roles = roles;
-        activeCand.starting_pay_rate = body.starting_pay_rate;
+    // Desired (venue, role) pairs from the picker + derived flat mirrors.
+    var desiredPairs = [];
+    var venueSet = {};
+    var roleSet = {};
+    Object.keys(draft.pairs).forEach(function(key) {
+      if (!draft.pairs[key]) return;
+      var bits = key.split('||');
+      if (bits.length !== 2) return;
+      desiredPairs.push({ venueCode: bits[0], roleName: bits[1] });
+      venueSet[bits[0]] = true;
+      roleSet[bits[1]] = true;
+    });
+    var venuesMirror = Object.keys(venueSet);
+    var rolesMirror = Object.keys(roleSet);
+
+    var actor = (pcAuth.getUser && pcAuth.getUser()) || null;
+    var actorName = actor ? (actor.display_name || actor.email || 'Unknown') : 'Unknown';
+
+    var saveBtn = document.querySelector('[data-section-save="roles"]');
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
+
+    // 1) Per-venue eligibility — the source of truth.
+    pcRoles.setEmployeeVenueRoles(emp.id, desiredPairs, actorName)
+      // 2) Mirror the flat arrays onto candidates (transition support).
+      .then(function(result) {
+        return ensureCandidateRow(emp).then(function(activeCand) {
+          return patchCandidate(activeCand.id, {
+            assigned_venues: venuesMirror,
+            assigned_roles: rolesMirror,
+            updated_at: new Date().toISOString()
+          }).then(function() {
+            activeCand.assigned_venues = venuesMirror;
+            activeCand.assigned_roles = rolesMirror;
+            return result;
+          });
+        });
+      })
+      // 3) Refresh the cache from the DB so display mode reflects the truth.
+      .then(function(result) {
+        return pcRoles.getEmployeeVenueRoles(emp.id).then(function(rows) {
+          state.evrByEmpId[emp.id] = rows || [];
+          return result;
+        });
+      })
+      .then(function(result) {
         state.modalSection = null;
         state.modalEditDraft = null;
-        showToast('Saved', 'success');
+        var bits = [];
+        if (result && result.added) bits.push(result.added + ' added');
+        if (result && result.reactivated) bits.push(result.reactivated + ' restored');
+        if (result && result.retired) bits.push(result.retired + ' removed');
+        showToast(bits.length ? ('Roles saved — ' + bits.join(', ')) : 'No role changes', 'success');
         renderCardModal();
+      })
+      .catch(function(err) {
+        if (err && err.authFailed) { handleAuthFailure(); return; }
+        console.error('Roles save failed:', err);
+        if (errEl) errEl.textContent = 'Save failed. Please try again. ' + (err.message || '');
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save roles'; }
       });
-    }).catch(function(err) {
-      if (err && err.authFailed) { handleAuthFailure(); return; }
-      console.error('Save failed:', err);
-      if (errEl) errEl.textContent = 'Save failed. Please try again.';
-    });
   }
 
   function saveNotes(emp, cand) {
@@ -5649,6 +5889,14 @@ body {
         loadCertTypes().catch(function(err) {
           console.warn('Cert types fetch failed (non-blocking):', err);
           return [];
+        }),
+        // Role catalog (roles + venue_roles). Needed so the per-venue
+        // Roles & venues editor can call pcRoles.getRolesForVenue /
+        // getPayRate synchronously once a card opens. Result is ignored
+        // here (results[8]) — pc-roles.js holds the cache internally.
+        pcRoles.ready().catch(function(err) {
+          console.warn('Role catalog fetch failed (non-blocking):', err);
+          return null;
         })
       ]).then(function(results) {
         state.employees = results[0] || [];
