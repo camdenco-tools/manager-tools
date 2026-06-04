@@ -168,7 +168,7 @@ body { background: var(--bg); font-family: var(--font); color: var(--primary); m
   text-decoration: none !important;
 }
 
-.row-actions { display: flex; gap: 6px; white-space: nowrap; flex-shrink: 0; }
+.row-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; flex-shrink: 0; }
 .action-btn { font-size: 11px; font-weight: 700; padding: 5px 10px; border-radius: 6px; border: 1.5px solid var(--primary); background: var(--primary); color: white; cursor: pointer; font-family: var(--font); transition: all 0.12s; white-space: nowrap; }
 .action-btn.danger { border-color: #e05c5c; background: #e05c5c; color: white; }
 .action-btn.warn { border-color: var(--amber); background: var(--amber); color: white; }
@@ -365,6 +365,7 @@ body { background: var(--bg); font-family: var(--font); color: var(--primary); m
         <button class="filter-btn active" data-filter="upcoming" onclick="setFilter('upcoming',this)">Upcoming</button>
         <button class="filter-btn" data-filter="all" onclick="setFilter('all',this)">All</button>
         <button class="filter-btn" data-filter="past" onclick="setFilter('past',this)">Past</button>
+        <button class="filter-btn" data-filter="trash" onclick="setFilter('trash',this)">Trash</button>
         <select class="filter-btn" id="venue-filter" onchange="renderTable()" style="font-size:12px;"><option value="">All Venues</option></select>
       </div>
       <button class="btn-secondary" onclick="exportCSV()">Export CSV</button>
@@ -376,7 +377,7 @@ body { background: var(--bg); font-family: var(--font); color: var(--primary); m
           <tr>
             <th>Date</th><th>Venue</th><th>Event Name</th><th>Gates Open</th>
             <th>Est. End Time</th><th>Exp. Attendance</th><th>Act. Attendance</th>
-            <th>Notes</th><th style="min-width:170px;"></th>
+            <th>Notes</th><th style="min-width:130px;"></th>
           </tr>
         </thead>
         <tbody id="event-tbody"></tbody>
@@ -656,7 +657,7 @@ function authFetch(url, options) {
 }
 
 // Legacy sbFetch kept for non-destructive operations the rest of
-// the page uses. Replaced for DELETE — see deleteEvent below.
+// the page uses. Destructive paths now go through trashEvent (soft delete).
 function sbFetch(method,path,body){return fetch(SB_URL+'/rest/v1/'+path,{method:method,headers:Object.assign(pcAuth.headers(),{'Content-Type':'application/json','Prefer':'return=representation'}),body:body?JSON.stringify(body):undefined}).then(function(res){if(!res.ok)return res.text().then(function(t){throw new Error(t);});return res.status===204?null:res.json();});}
 function sbGet(path){return fetch(SB_URL+'/rest/v1/'+path,{headers:pcAuth.headers()}).then(function(res){if(!res.ok)return res.text().then(function(t){throw new Error(t);});return res.json();});}
 
@@ -669,6 +670,12 @@ function escapeHtml(str){if(str===null||str===undefined)return'';return String(s
 // Helper: is the event cancelled? Treats non-null cancelled_at as cancelled.
 function isCancelled(evt) {
   return evt && evt.cancelled_at;
+}
+
+// Helper: is the event in the trash? Non-null deleted_at means trashed.
+// Trash is a soft-delete (hide-only) — nothing is removed from the DB.
+function isTrashed(evt) {
+  return evt && evt.deleted_at;
 }
 
 // Format a timestamptz for the inline cancellation meta line. Returns
@@ -694,7 +701,7 @@ function toggleDrill(which){drillState[which]=!drillState[which];document.getEle
 // Stats EXCLUDE cancelled events from all four counters — they shouldn't
 // inflate "upcoming" or get counted as missing-request / unconfirmed.
 function renderStats(today,twoWeeksOut,submittedEvtIds,confirmedKeys){
-  var liveEvents=pcEvents.filter(function(e){return !isCancelled(e);});
+  var liveEvents=pcEvents.filter(function(e){return !isCancelled(e)&&!isTrashed(e);});
   var next14=liveEvents.filter(function(e){return e.event_date>=today&&e.event_date<=twoWeeksOut;});
   var withActuals=liveEvents.filter(function(e){return e.actual_attendance;});
   var outstanding=next14.filter(function(e){return!submittedEvtIds[e.id];});
@@ -709,17 +716,39 @@ function renderStats(today,twoWeeksOut,submittedEvtIds,confirmedKeys){
 function renderTable(){
   var today=todayStr();
   var venueFilter=document.getElementById('venue-filter').value;
-  var filtered=pcEvents.filter(function(e){if(currentFilter==='upcoming')return e.event_date>=today;if(currentFilter==='past')return e.event_date<today;return true;});
+  var filtered;
+  if(currentFilter==='trash'){
+    filtered=pcEvents.filter(function(e){return isTrashed(e);});
+  }else{
+    filtered=pcEvents.filter(function(e){
+      if(isTrashed(e))return false;
+      if(currentFilter==='upcoming')return e.event_date>=today;
+      if(currentFilter==='past')return e.event_date<today;
+      return true;
+    });
+  }
   if(venueFilter)filtered=filtered.filter(function(e){return e.venue===venueFilter;});
-  if(currentFilter==='past')filtered.sort(function(a,b){return b.event_date.localeCompare(a.event_date);});else filtered.sort(function(a,b){return a.event_date.localeCompare(b.event_date);});
+  if(currentFilter==='trash')filtered.sort(function(a,b){return String(b.deleted_at||'').localeCompare(String(a.deleted_at||''));});
+  else if(currentFilter==='past')filtered.sort(function(a,b){return b.event_date.localeCompare(a.event_date);});
+  else filtered.sort(function(a,b){return a.event_date.localeCompare(b.event_date);});
   var tbody=document.getElementById('event-tbody');
   var empty=document.getElementById('empty-state');
-  if(!filtered.length){tbody.innerHTML='';empty.style.display='block';return;}
+  if(!filtered.length){
+    tbody.innerHTML='';
+    if(currentFilter==='trash'){
+      empty.innerHTML='<div class="empty-state-icon">&#128465;</div><h3>Trash is empty</h3><p>Events you move to trash will appear here, and can be restored anytime.</p>';
+    }else{
+      empty.innerHTML='<div class="empty-state-icon">&#128197;</div><h3>No events</h3><p>Click "Add Event" to create one.</p>';
+    }
+    empty.style.display='block';
+    return;
+  }
   empty.style.display='none';
   var wdays=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   tbody.innerHTML=filtered.map(function(evt){
     var isPast=evt.event_date<today;
     var isCx=isCancelled(evt);
+    var isTr=isTrashed(evt);
     var dateObj=new Date(evt.event_date+'T12:00:00');
     var dateFormatted=dateObj.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
     var gatesDisplay=evt.gates_open?formatTime(evt.gates_open):'<span style="color:var(--label)">--</span>';
@@ -730,14 +759,18 @@ function renderTable(){
     // Build row CSS classes.
     var rowClasses = [];
     if (isPast && !isCx) rowClasses.push('past-row');
-    if (isCx) rowClasses.push('cancelled-row');
+    if (isCx || isTr) rowClasses.push('cancelled-row');
     var rowClassAttr = rowClasses.length ? ' class="' + rowClasses.join(' ') + '"' : '';
 
     // Build the Notes cell. If cancelled, it shows the reason + meta
     // INSTEAD of the original notes (we keep both in the DB; this is a
     // display-layer choice to make cancellation context primary).
     var notesCell;
-    if (isCx) {
+    if (isTr) {
+      var trashMeta = 'Trashed ' + fmtCancelledAt(evt.deleted_at);
+      if (evt.deleted_by) trashMeta += ' by ' + escapeHtml(evt.deleted_by);
+      notesCell = '<div class="cancelled-reason-meta">' + escapeHtml(trashMeta) + '</div>';
+    } else if (isCx) {
       var cancelMeta = 'Cancelled ' + fmtCancelledAt(evt.cancelled_at);
       if (evt.cancelled_by) cancelMeta += ' by ' + escapeHtml(evt.cancelled_by);
       notesCell =
@@ -749,19 +782,22 @@ function renderTable(){
       notesCell = '<span style="font-size:12px;color:var(--label);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;">' + escapeHtml(evt.notes || '') + '</span>';
     }
 
-    // Build the action cell. Cancelled rows show Restore + Del. Live
-    // rows show Edit + Cancel + Del. Past events with no cancellation
-    // still get Edit/Del (someone might be back-filling actual attendance).
+    // Build the action cell. Trashed rows show only Restore (un-trash).
+    // Cancelled rows show Restore (uncancel) + Move to Trash. Live rows
+    // show Edit + Cancel + Move to Trash.
     var actionsCell;
-    if (isCx) {
+    if (isTr) {
+      actionsCell =
+        '<button class="action-btn success" onclick="untrashEvent(\'' + evt.id + '\')" title="Restore from Trash">Restore</button>';
+    } else if (isCx) {
       actionsCell =
         '<button class="action-btn success" onclick="restoreEvent(\'' + evt.id + '\')" title="Restore this event">Restore</button>' +
-        '<button class="action-btn danger" onclick="deleteEvent(\'' + evt.id + '\')" title="Permanently delete">Del</button>';
+        '<button class="action-btn danger" onclick="trashEvent(\'' + evt.id + '\')" title="Move to Trash">Move to Trash</button>';
     } else {
       actionsCell =
         '<button class="action-btn" onclick="openEditModal(\'' + evt.id + '\')">Edit</button>' +
         '<button class="action-btn warn" onclick="openCancelModal(\'' + evt.id + '\')" title="Cancel this event">Cancel</button>' +
-        '<button class="action-btn danger" onclick="deleteEvent(\'' + evt.id + '\')" title="Permanently delete (use Cancel for active events)">Del</button>';
+        '<button class="action-btn danger" onclick="trashEvent(\'' + evt.id + '\')" title="Move to Trash">Move to Trash</button>';
     }
 
     return '<tr' + rowClassAttr + '>' +
@@ -795,27 +831,26 @@ function clearForm(){['f-venue','f-name','f-date','f-gates','f-show-time','f-end
 function saveEvent(){var venue=document.getElementById('f-venue').value;var name=document.getElementById('f-name').value.trim();var date=document.getElementById('f-date').value;if(!venue){showToast('Please select a venue.');return;}if(!name){showToast('Please enter an event name.');return;}if(!date){showToast('Please select a date.');return;}var tierSel=document.getElementById('f-tier');var staffingTier=TIERED_VENUES[venue]?tierSel.value:'full';var payload={venue:venue,event_name:name,event_date:date,gates_open:document.getElementById('f-gates').value||null,show_time:document.getElementById('f-show-time').value||null,estimated_end_time:document.getElementById('f-end-time').value||null,expected_attendance:parseInt(document.getElementById('f-exp-att').value)||null,actual_attendance:parseInt(document.getElementById('f-act-att').value)||null,notes:document.getElementById('f-notes').value.trim()||null,staffing_tier:staffingTier,event_type:'calendar'};var method=editingId?'PATCH':'POST';var path=editingId?'events?id=eq.'+editingId:'events';sbFetch(method,path,payload).then(function(){showToast(editingId?'Event updated':'Event added',true);closeModal();init();}).catch(function(e){showToast('Error saving event.');console.error(e);});}
 
 // ============================================================
-// DELETE — fixed May 13, 2026
+// MOVE TO TRASH (soft delete) — Jun 2026
 // ------------------------------------------------------------
-// The legacy implementation used sbFetch with Prefer: return=representation.
-// If RLS silently filtered the row out, the response was 200 OK with an
-// empty array — sbFetch returned that array as a success, and the page
-// showed "Event deleted" even though nothing was deleted.
+// Replaces the old hard delete. A hard DELETE was blocked anyway by
+// NO ACTION foreign keys on staffing_request_log, position_assignment_log
+// and (critically) ar_invoices — we do NOT want to cascade-delete a billed
+// event's invoice. So "delete" now just stamps deleted_at / deleted_by on
+// the event row (same shape as the cancel fields). RLS is untouched: this
+// is an UPDATE, which the existing events policy already allows.
 //
-// The new implementation:
-//   1. Surfaces the row count from the returned representation.
-//   2. If the count is 0, throws an explicit error.
-//   3. Catches and reports the actual error message instead of a
-//      generic "Error deleting event" toast.
-//   4. Detects JWT expiry and reloads cleanly.
+// Trashed events drop out of every list (stats, Upcoming/All/Past, CSV)
+// and live in the Trash tab, where Restore clears the stamps. Nothing is
+// removed from the database; staffing requests, signups, placements,
+// invoices and logs all stay intact.
 //
-// FK CASCADE rules on staffing_requests, availability,
-// availability_assignments, event_staffing_status, position_assignments
-// handle the cleanup automatically. position_assignment_log and
-// staffing_request_log are NO ACTION FKs — they preserve audit history
-// when an event is deleted, which is correct.
+// The confirm dialog reads the event's own placement / signup / invoice
+// records first so the warning reflects real state. seven_shifts_synced is
+// the closest signal to "live in 7shifts" (blind spot: staff added
+// directly in 7shifts, bypassing the Position Board, won't show here).
 // ============================================================
-function deleteEvent(id) {
+function trashEvent(id) {
   var evt = null;
   for (var i = 0; i < pcEvents.length; i++) {
     if (pcEvents[i].id == id) { evt = pcEvents[i]; break; }
@@ -824,31 +859,102 @@ function deleteEvent(id) {
     showToast('Event not found in current list.', 'red');
     return;
   }
-  var msg = 'Permanently delete "' + (evt.event_name || 'this event') + '"?\n\n' +
-    'This is a hard delete. Staffing requests, signups, placements, and assignment ' +
-    'history for this event will be removed with it.\n\n' +
-    'If staff have been placed and/or synced to 7shifts, use Cancel instead — ' +
-    'cancellation preserves the record and notifies staffing.\n\n' +
-    'Continue with delete?';
-  if (!confirm(msg)) return;
 
-  authFetch(SB_URL + '/rest/v1/events?id=eq.' + id, {
-    method: 'DELETE',
-    headers: apiHeadersJson()
-  }).then(function(rows) {
-    if (!rows || rows.length === 0) {
-      throw new Error('Delete returned no rows. This usually means RLS blocked the request, or the row was already gone. Refresh and try again.');
+  var base = SB_URL + '/rest/v1/';
+  function safeGet(path) {
+    return authFetch(base + path, { headers: apiHeadersJson() }).catch(function() { return []; });
+  }
+  Promise.all([
+    safeGet('position_assignments?event_id=eq.' + id + '&removed_at=is.null&select=id,seven_shifts_synced'),
+    safeGet('availability?event_id=eq.' + id + '&removed_at=is.null&select=id'),
+    safeGet('ar_invoices?event_id=eq.' + id + '&select=id')
+  ]).then(function(res) {
+    var placements = res[0] || [];
+    var signups = res[1] || [];
+    var invoices = res[2] || [];
+    var placed = placements.length;
+    var synced = placements.filter(function(p) { return p.seven_shifts_synced; }).length;
+    var signed = signups.length;
+    var billed = invoices.length;
+
+    var risk = '';
+    if (synced > 0) {
+      risk += '\u26A0 ' + synced + ' placement' + (synced !== 1 ? 's' : '') + ' on this event ' +
+        (synced !== 1 ? 'are' : 'is') + ' marked SYNCED TO 7SHIFTS.\n' +
+        'Trashing hides the event here but does NOT touch 7shifts -- clear them there too.\n\n';
+    } else if (placed > 0) {
+      risk += placed + ' staff ' + (placed !== 1 ? 'are' : 'is') + ' placed on this event (none synced to 7shifts).\n\n';
     }
-    showToast('Event deleted', true);
-    init();
+    if (signed > 0) {
+      risk += signed + ' signup' + (signed !== 1 ? 's' : '') + ' will be hidden with the event.\n\n';
+    }
+    if (billed > 0) {
+      risk += '\u26A0 ' + billed + ' AR invoice' + (billed !== 1 ? 's are' : ' is') + ' attached to this event.\n' +
+        'The invoice' + (billed !== 1 ? 's stay' : ' stays') + ' intact -- but the event will be hidden from this list.\n\n';
+    }
+    if (placed === 0 && signed === 0 && billed === 0) {
+      risk = 'No staff, signups, or invoices are attached -- safe to trash.\n\n';
+    }
+
+    var msg = 'Move "' + (evt.event_name || 'this event') + '" to Trash?\n\n' +
+      risk +
+      'Nothing is deleted. The event is hidden from all lists; staffing requests, ' +
+      'signups, placements, invoices and history stay intact, and you can restore it ' +
+      'anytime from the Trash tab.\n\n' +
+      'Continue?';
+    if (!confirm(msg)) return;
+
+    var actor = (currentUser && (currentUser.display_name || currentUser.email)) || 'unknown';
+    return authFetch(base + 'events?id=eq.' + id, {
+      method: 'PATCH',
+      headers: apiHeadersJson(),
+      body: JSON.stringify({ deleted_at: new Date().toISOString(), deleted_by: actor })
+    }).then(function(rows) {
+      if (!rows || rows.length === 0) {
+        throw new Error('Trash returned no rows. This usually means RLS blocked the request, or the row was already gone. Refresh and try again.');
+      }
+      showToast('Moved to Trash', true);
+      init();
+    });
   }).catch(function(e) {
     if (e && e.authFailed) { handleAuthFailure(); return; }
-    console.error('[delete event] failed:', e);
-    showToast('Could not delete: ' + (e.message || 'unknown error'), 'red');
+    console.error('[trash event] failed:', e);
+    showToast('Could not move to Trash: ' + (e.message || 'unknown error'), 'red');
   });
 }
 
-function exportCSV(){var headers=['Date','Day','Venue','Event Name','Status','Gates Open','Show Time','Est. End Time','Expected Attendance','Actual Attendance','Notes','Cancellation Reason'];var wdays=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];var rows=pcEvents.map(function(e){var d=new Date(e.event_date+'T12:00:00');var status=isCancelled(e)?'CANCELLED':'Active';return[e.event_date,wdays[d.getDay()],e.venue,e.event_name,status,e.gates_open||'',e.show_time||'',e.estimated_end_time||'',e.expected_attendance||'',e.actual_attendance||'',e.notes||'',e.cancellation_reason||''].map(function(v){return'"'+String(v).replace(/"/g,'""')+'"';}).join(',');});var csv=[headers.join(',')].concat(rows).join('\n');var a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='popcorn-chez-events-'+todayStr()+'.csv';a.click();showToast('CSV exported',true);}
+function untrashEvent(id) {
+  var evt = null;
+  for (var i = 0; i < pcEvents.length; i++) {
+    if (pcEvents[i].id == id) { evt = pcEvents[i]; break; }
+  }
+  if (!evt) {
+    showToast('Event not found.', 'red');
+    return;
+  }
+  var msg = 'Restore "' + (evt.event_name || 'this event') + '" from Trash?\n\n' +
+    'It will reappear in the event lists. If it was cancelled before being ' +
+    'trashed, it comes back cancelled.\n\nContinue?';
+  if (!confirm(msg)) return;
+
+  authFetch(SB_URL + '/rest/v1/events?id=eq.' + id, {
+    method: 'PATCH',
+    headers: apiHeadersJson(),
+    body: JSON.stringify({ deleted_at: null, deleted_by: null })
+  }).then(function(rows) {
+    if (!rows || rows.length === 0) {
+      throw new Error('Restore returned no rows. RLS may have blocked it, or the row was already gone.');
+    }
+    showToast('Restored from Trash', true);
+    init();
+  }).catch(function(e) {
+    if (e && e.authFailed) { handleAuthFailure(); return; }
+    console.error('[untrash event] failed:', e);
+    showToast('Could not restore: ' + (e.message || 'unknown error'), 'red');
+  });
+}
+
+function exportCSV(){var headers=['Date','Day','Venue','Event Name','Status','Gates Open','Show Time','Est. End Time','Expected Attendance','Actual Attendance','Notes','Cancellation Reason'];var wdays=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];var rows=pcEvents.filter(function(e){return !isTrashed(e);}).map(function(e){var d=new Date(e.event_date+'T12:00:00');var status=isCancelled(e)?'CANCELLED':'Active';return[e.event_date,wdays[d.getDay()],e.venue,e.event_name,status,e.gates_open||'',e.show_time||'',e.estimated_end_time||'',e.expected_attendance||'',e.actual_attendance||'',e.notes||'',e.cancellation_reason||''].map(function(v){return'"'+String(v).replace(/"/g,'""')+'"';}).join(',');});var csv=[headers.join(',')].concat(rows).join('\n');var a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='popcorn-chez-events-'+todayStr()+'.csv';a.click();showToast('CSV exported',true);}
 
 function onVenueChange(venue){var tr=document.getElementById('f-tier-row');if(tr)tr.style.display=TIERED_VENUES[venue]?'block':'none';}
 function onReviewVenueChange(venue){var tr=document.getElementById('r-tier-row');if(tr)tr.style.display=TIERED_VENUES[venue]?'block':'none';}
