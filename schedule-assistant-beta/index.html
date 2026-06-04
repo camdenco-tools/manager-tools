@@ -3089,6 +3089,7 @@ function loadAll() {
   const eventsUrl = SUPABASE_URL + '/rest/v1/events?event_type=neq.adhoc'
     + '&event_date=gte.' + range.from
     + '&event_date=lte.' + range.to
+    + '&deleted_at=is.null'
     + '&order=event_date.asc,gates_open.asc';
 
   // Past placements query — used to compute venueExperience for the NEW HIRE badge.
@@ -3305,7 +3306,7 @@ function loadAll() {
     if (missingEventIds.length > 0) {
       const missingInList = '(' + missingEventIds.map(id => '"' + id + '"').join(',') + ')';
       resolveMissingEvents = authFetch(
-        SUPABASE_URL + '/rest/v1/events?select=id,event_name,venue,event_date,cancelled_at&id=in.' + missingInList,
+        SUPABASE_URL + '/rest/v1/events?select=id,event_name,venue,event_date,cancelled_at&deleted_at=is.null&id=in.' + missingInList,
         { headers: apiHeaders() }
       ).then(rows => {
         (rows || []).forEach(e => { state.recentSignupEvents[e.id] = e; });
