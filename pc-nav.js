@@ -43,6 +43,7 @@
     operations: [
       { label: 'Submit event',                   href: '/submit-event/',           slug: 'submit-event' },
       { label: 'Event planning',                 href: '/event-planning/',         slug: 'event-planning' },
+      { label: 'Prep & production planning',     href: '/prep-production-planning/', slugAny: ['prep-planning', 'prep-production'] },
       { label: 'Schedule assistant',             href: '/schedule-assistant/',     slug: 'schedule-assistant' },
       { label: 'Log sales',                      href: '/log-sales/',              slug: 'log-sales' },
       { label: 'Sales history',                  href: '/sales-history/',          slug: 'sales-history' },
@@ -163,9 +164,12 @@
 
     var dropdownInner = items.map(function (it) {
       var current = isCurrentPath(it.href) ? ' pc-nav-current' : '';
+      var slugAnyAttr = (it.slugAny && it.slugAny.length)
+        ? ' data-pc-nav-slug-any="' + esc(it.slugAny.join(',')) + '"'
+        : '';
       return (
         '<a href="' + esc(it.href) +
-        '" data-pc-nav-slug="' + esc(it.slug) + '" class="pc-nav-link' + current + '">' +
+        '" data-pc-nav-slug="' + esc(it.slug) + '"' + slugAnyAttr + ' class="pc-nav-link' + current + '">' +
         '<span class="pc-nav-link-label">' + esc(it.label) + '</span>' +
         '</a>'
       );
@@ -245,7 +249,18 @@
     for (var j = 0; j < links.length; j++) {
       var a = links[j];
       var slug = a.getAttribute('data-pc-nav-slug');
-      if (!hasSlugAccess(slug)) {
+      var slugAnyRaw = a.getAttribute('data-pc-nav-slug-any');
+      var granted;
+      if (slugAnyRaw) {
+        granted = isAdmin;
+        var anyList = slugAnyRaw.split(',');
+        for (var k = 0; k < anyList.length && !granted; k++) {
+          if (access.indexOf(anyList[k].replace(/^\s+|\s+$/g, '')) !== -1) granted = true;
+        }
+      } else {
+        granted = hasSlugAccess(slug);
+      }
+      if (!granted) {
         a.classList.add('pc-nav-no-access');
         a.setAttribute('aria-disabled', 'true');
         var label = a.querySelector('.pc-nav-link-label');
