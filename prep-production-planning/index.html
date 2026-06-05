@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prep &amp; Production Planning — Popcorn Chez</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>
+  /* ============================================================
+     Prep & Production Planning — page styles
+     pc-nav.js injects the header bar, ribbon, and back-to-top.
+     Everything below is page-body only.
+     ============================================================ */
+  :root {
+    --pc-ink:        #1a1a1a;
+    --pc-muted:      #6b6b66;
+    --pc-faint:      #9a9a94;
+    --pc-line:       #e8e8e4;
+    --pc-line-soft:  #f0f0ec;
+    --pc-bg:         #fafaf8;
+    --pc-card:       #ffffff;
+    --pc-ops:        #185FA5;  /* Operations swim-lane blue */
+    --pc-ops-soft:   #eaf1f8;
+    --pc-amber:      #BA7517;
+    --pc-amber-soft: #fbf2e6;
+    --pc-red:        #b3261e;
+    --pc-red-soft:   #fbeceb;
+    --pc-green:      #639922;
+    --radius:        10px;
+    --radius-sm:     7px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: var(--pc-ink);
+    background: var(--pc-bg);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .pc-page {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 26px 22px 90px;
+  }
+
+  /* ---- Page heading ---- */
+  .pc-page-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 18px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+  }
+  .pc-page-title {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0 0 4px;
+  }
+  .pc-page-sub {
+    font-size: 13px;
+    color: var(--pc-muted);
+    margin: 0;
+    max-width: 560px;
+    line-height: 1.5;
+  }
+
+  /* ---- Segmented Plan/Production toggle ---- */
+  .pc-toggle {
+    display: inline-flex;
+    background: var(--pc-card);
+    border: 1px solid var(--pc-line);
+    border-radius: 22px;
+    padding: 3px;
+    gap: 2px;
+  }
+  .pc-toggle-btn {
+    appearance: none;
+    border: none;
+    background: transparent;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--pc-muted);
+    padding: 7px 18px;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: background 0.14s ease, color 0.14s ease;
+    white-space: nowrap;
+  }
+  .pc-toggle-btn:hover { color: var(--pc-ink); }
+  .pc-toggle-btn.is-active {
+    background: var(--pc-ink);
+    color: #fff;
+  }
+  .pc-toggle-btn .pc-toggle-dot {
+    display: inline-block;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    margin-right: 7px;
+    vertical-align: middle;
+    background: currentColor;
+    opacity: 0.55;
+  }
+
+  /* ---- View containers ---- */
+  .pc-view { display: none; }
+  .pc-view.is-active { display: block; }
+
+  /* ---- Toolbar (week picker / actions live here) ---- */
+  .pc-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    background: var(--pc-card);
+    border: 1px solid var(--pc-line);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    margin-bottom: 18px;
+  }
+  .pc-toolbar-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--pc-faint);
+  }
+
+  /* ---- Generic card ---- */
+  .pc-card {
+    background: var(--pc-card);
+    border: 1px solid var(--pc-line);
+    border-radius: var(--radius);
+    padding: 22px;
+  }
+
+  /* ---- Empty / placeholder states ---- */
+  .pc-empty {
+    text-align: center;
+    padding: 54px 24px;
+    color: var(--pc-faint);
+  }
+  .pc-empty-icon {
+    width: 44px; height: 44px;
+    margin: 0 auto 14px;
+    border-radius: 12px;
+    background: var(--pc-line-soft);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--pc-faint);
+  }
+  .pc-empty-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--pc-muted);
+    margin: 0 0 4px;
+  }
+  .pc-empty-text {
+    font-size: 13px;
+    margin: 0 auto;
+    max-width: 380px;
+    line-height: 1.5;
+  }
+
+  /* ---- Access denied panel ---- */
+  .pc-denied {
+    max-width: 520px;
+    margin: 60px auto;
+    text-align: center;
+    background: var(--pc-card);
+    border: 1px solid var(--pc-line);
+    border-radius: var(--radius);
+    padding: 40px 32px;
+  }
+  .pc-denied h2 { font-size: 17px; margin: 0 0 8px; }
+  .pc-denied p  { font-size: 13px; color: var(--pc-muted); line-height: 1.5; margin: 0; }
+
+  /* ---- Loading shimmer ---- */
+  .pc-loading {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: var(--pc-muted);
+    padding: 40px 0;
+    justify-content: center;
+  }
+  .pc-loading.is-on { display: flex; }
+  .pc-spinner {
+    width: 16px; height: 16px;
+    border: 2px solid var(--pc-line);
+    border-top-color: var(--pc-ops);
+    border-radius: 50%;
+    animation: pc-spin 0.7s linear infinite;
+  }
+  @keyframes pc-spin { to { transform: rotate(360deg); } }
+
+  /* ---- Toast ---- */
+  .pc-toast {
+    position: fixed;
+    bottom: 22px;
+    left: 50%;
+    transform: translateX(-50%) translateY(14px);
+    background: var(--pc-ink);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 11px 18px;
+    border-radius: 22px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.18);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.18s ease, transform 0.18s ease;
+    z-index: 960;
+    max-width: 90vw;
+  }
+  .pc-toast.is-on {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  .pc-toast.is-error { background: var(--pc-red); }
+
+  /* ---- Hide page chrome until auth resolves (anti-flicker) ---- */
+  #pcMain { display: none; }
+  body.pc-ready #pcMain { display: block; }
+</style>
+</head>
+<body>
+
+<!-- Header + ribbon + back-to-top injected by pc-nav.js -->
+<!-- Activity tracking (page_load / heartbeat / page_unload) handled by pc-activity.js -->
+
+<div class="pc-page">
+
+  <!-- Access-denied panel: shown when the user holds neither side's slug -->
+  <div id="pcDenied" class="pc-denied" style="display:none;">
+    <h2>No access to Prep &amp; Production Planning</h2>
+    <p>This page has two sides — Planning and Production — each granted separately.
+       Ask an admin to enable the side you need on the User Access page.</p>
+  </div>
+
+  <!-- Main content (revealed after auth + access check) -->
+  <main id="pcMain">
+
+    <div class="pc-page-head">
+      <div>
+        <h1 class="pc-page-title">Prep &amp; Production Planning</h1>
+        <p class="pc-page-sub" id="pcSubtitle">
+          Turn the week's schedule into a prep make-list. Planned numbers, not gut-feel.
+        </p>
+      </div>
+      <!-- Toggle buttons are injected by JS based on the user's access -->
+      <div class="pc-toggle" id="pcToggle" role="tablist" aria-label="Planning or Production view"></div>
+    </div>
+
+    <!-- ============================================================
+         PLANNING VIEW
+         ============================================================ -->
+    <section id="pcViewPlan" class="pc-view" role="tabpanel" aria-label="Planning">
+
+      <!-- PATCH ANCHOR: PLAN_TOOLBAR -->
+      <div class="pc-toolbar" id="pcPlanToolbar">
+        <span class="pc-toolbar-label">Week</span>
+        <span style="font-size:13px;color:var(--pc-faint);">Week picker wired in section P1.</span>
+      </div>
+      <!-- END PATCH ANCHOR: PLAN_TOOLBAR -->
+
+      <div class="pc-loading" id="pcPlanLoading">
+        <span class="pc-spinner"></span> Loading…
+      </div>
+
+      <!-- PATCH ANCHOR: PLAN_BODY -->
+      <div id="pcPlanBody">
+        <div class="pc-card">
+          <div class="pc-empty">
+            <div class="pc-empty-icon" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
+            </div>
+            <p class="pc-empty-title">Pick a week to start planning</p>
+            <p class="pc-empty-text">Events from the schedule load here with their forecasts already filled. You accept or override a planned quantity per item, per stand.</p>
+          </div>
+        </div>
+      </div>
+      <!-- END PATCH ANCHOR: PLAN_BODY -->
+
+    </section>
+
+    <!-- ============================================================
+         PRODUCTION VIEW (results / make-list — built after planning)
+         ============================================================ -->
+    <section id="pcViewProd" class="pc-view" role="tabpanel" aria-label="Production">
+
+      <!-- PATCH ANCHOR: PROD_TOOLBAR -->
+      <div class="pc-toolbar" id="pcProdToolbar">
+        <span class="pc-toolbar-label">Week</span>
+        <span style="font-size:13px;color:var(--pc-faint);">Production sheet built after the Planning side ships.</span>
+      </div>
+      <!-- END PATCH ANCHOR: PROD_TOOLBAR -->
+
+      <div class="pc-loading" id="pcProdLoading">
+        <span class="pc-spinner"></span> Loading…
+      </div>
+
+      <!-- PATCH ANCHOR: PROD_BODY -->
+      <div id="pcProdBody">
+        <div class="pc-card">
+          <div class="pc-empty">
+            <div class="pc-empty-icon" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            </div>
+            <p class="pc-empty-title">The weekly make-list lives here</p>
+            <p class="pc-empty-text">Once planning is committed, this becomes the read-only checklist by item and need-by date, rolled up across every venue.</p>
+          </div>
+        </div>
+      </div>
+      <!-- END PATCH ANCHOR: PROD_BODY -->
+
+    </section>
+
+  </main>
+</div>
+
+<div class="pc-toast" id="pcToast"></div>
+
+<!-- ============================================================
+     SCRIPTS — pc-auth first, pc-nav second, pc-activity third.
+     pc-catalog + pc-fiscal are needed by the section patches.
+     ============================================================ -->
+<script src="/pc-auth.js"></script>
+<script src="/pc-nav.js"></script>
+<script src="/pc-activity.js"></script>
+<script src="/pc-catalog.js"></script>
+<script src="/pc-fiscal.js"></script>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---- Constants -----------------------------------------------------
+  var SUPABASE_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
+
+  // The two independently-granted access slugs for this page.
+  var SLUG_PLAN = 'prep-planning';
+  var SLUG_PROD = 'prep-production';
+  // Activity / instrumentation slug for the page as a whole.
+  var ACTIVITY_SLUG = 'prep-production-planning';
+
+  // ---- Shared page state (patches read/write this) -------------------
+  var PC = window.PCPrep = {
+    user:        null,
+    isAdmin:     false,
+    canPlan:     false,
+    canProduce:  false,
+    view:        null,    // 'plan' | 'prod'
+    weekKey:     null,    // set by the week picker (section P1)
+    events:      [],      // events for the selected week (section P1)
+    planLines:   {},      // committed/dirty planned quantities (section P2/P4)
+    SUPABASE_URL: SUPABASE_URL
+  };
+
+  // ---- Tiny DOM helper ----------------------------------------------
+  function $(id) { return document.getElementById(id); }
+
+  // ---- Toast ---------------------------------------------------------
+  var toastTimer = null;
+  function toast(msg, isError) {
+    var el = $('pcToast');
+    el.textContent = msg;
+    el.classList.toggle('is-error', !!isError);
+    el.classList.add('is-on');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { el.classList.remove('is-on'); }, 3200);
+  }
+  PC.toast = toast;
+
+  // ---- Auth-aware fetch (fail loud, never silent) --------------------
+  // Patches use PC.authFetch for all PostgREST + edge-function calls.
+  PC.authFetch = function (path, opts) {
+    opts = opts || {};
+    var url = path.charAt(0) === '/' ? (SUPABASE_URL + path) : path;
+    var headers = Object.assign(
+      { 'Content-Type': 'application/json' },
+      (typeof pcAuth !== 'undefined' && pcAuth.headers) ? pcAuth.headers() : {},
+      opts.headers || {}
+    );
+    return fetch(url, Object.assign({}, opts, { headers: headers })).then(function (res) {
+      if (!res.ok) {
+        return res.text().then(function (body) {
+          throw new Error('Request failed (' + res.status + '): ' + body.slice(0, 300));
+        });
+      }
+      if (res.status === 204) return null;
+      var ct = res.headers.get('content-type') || '';
+      return ct.indexOf('application/json') !== -1 ? res.json() : res.text();
+    });
+  };
+
+  // ---- Loading helpers (patches toggle these) -----------------------
+  PC.setLoading = function (which, on) {
+    var el = which === 'prod' ? $('pcProdLoading') : $('pcPlanLoading');
+    if (el) el.classList.toggle('is-on', !!on);
+  };
+
+  // ---- View switching ------------------------------------------------
+  function setView(view) {
+    // Guard: never switch to a side the user can't access.
+    if (view === 'plan' && !PC.canPlan) return;
+    if (view === 'prod' && !PC.canProduce) return;
+
+    PC.view = view;
+    $('pcViewPlan').classList.toggle('is-active', view === 'plan');
+    $('pcViewProd').classList.toggle('is-active', view === 'prod');
+
+    var btns = document.querySelectorAll('.pc-toggle-btn');
+    for (var i = 0; i < btns.length; i++) {
+      var v = btns[i].getAttribute('data-view');
+      btns[i].classList.toggle('is-active', v === view);
+      btns[i].setAttribute('aria-selected', v === view ? 'true' : 'false');
+    }
+
+    // PATCH ANCHOR: VIEW_SWITCH_HOOK
+    // Section patches hang lazy-load logic here, e.g.:
+    //   if (view === 'plan') PCPrep.refreshPlan();
+    //   if (view === 'prod') PCPrep.refreshProduction();
+    // END PATCH ANCHOR: VIEW_SWITCH_HOOK
+  }
+  PC.setView = setView;
+
+  // ---- Build the toggle from the user's access ----------------------
+  function buildToggle() {
+    var host = $('pcToggle');
+    host.innerHTML = '';
+
+    function addBtn(view, label) {
+      var b = document.createElement('button');
+      b.className = 'pc-toggle-btn';
+      b.type = 'button';
+      b.setAttribute('role', 'tab');
+      b.setAttribute('data-view', view);
+      b.innerHTML = '<span class="pc-toggle-dot"></span>' + label;
+      b.addEventListener('click', function () { setView(view); });
+      host.appendChild(b);
+    }
+
+    if (PC.canPlan)    addBtn('plan', 'Planning');
+    if (PC.canProduce) addBtn('prod', 'Production');
+
+    // If only one side is available, the toggle reads as a single label.
+    if (host.children.length === 1) {
+      host.style.opacity = '0.85';
+      host.firstChild.style.cursor = 'default';
+    }
+  }
+
+  // ---- Access-denied state ------------------------------------------
+  function showDenied() {
+    $('pcDenied').style.display = 'block';
+    $('pcMain').style.display = 'none';
+  }
+
+  // ---- Boot ----------------------------------------------------------
+  // Login-only gate (no pageSlug): entry is allowed for anyone signed in,
+  // then the two slugs decide which side(s) they actually see. A user with
+  // neither slug gets the access-denied panel.
+  pcAuth.require({
+    onReady: function (user) {
+      // First line per the new-page checklist.
+      if (typeof pcActivity !== 'undefined' && pcActivity.init) {
+        pcActivity.init(ACTIVITY_SLUG);
+      }
+
+      PC.user    = user || pcAuth.getUser();
+      PC.isAdmin = (typeof pcAuth.isAdmin === 'function') ? pcAuth.isAdmin() : false;
+
+      var access = (PC.user && Array.isArray(PC.user.page_access)) ? PC.user.page_access : [];
+      PC.canPlan    = PC.isAdmin || access.indexOf(SLUG_PLAN) !== -1;
+      PC.canProduce = PC.isAdmin || access.indexOf(SLUG_PROD) !== -1;
+
+      // No access to either side → stop here.
+      if (!PC.canPlan && !PC.canProduce) {
+        document.body.classList.add('pc-ready');
+        showDenied();
+        return;
+      }
+
+      buildToggle();
+
+      // Default to Planning when available (this build's focus), else Production.
+      setView(PC.canPlan ? 'plan' : 'prod');
+
+      document.body.classList.add('pc-ready');
+
+      // PATCH ANCHOR: BOOT_HOOK
+      // Section P1 initializes the week picker here, e.g.:
+      //   PCPrep.initWeekPicker();
+      // END PATCH ANCHOR: BOOT_HOOK
+    }
+  });
+
+})();
+</script>
+</body>
+</html>
