@@ -831,7 +831,8 @@ function openInventoryExport(){
   if(!cachedInventoryRows||cachedInventoryRows.length===0){ alert('No ending inventory submitted for this period yet — nothing to export.'); return; }
   var existing=document.getElementById('inv-export-overlay'); if(existing) existing.remove();
   var ov=document.createElement('div'); ov.id='inv-export-overlay'; ov.className='name-overlay open';
-  ov.innerHTML='<div class="name-box"><h3>Export ending inventory</h3><p>'+pcFiscal.getPeriods()[currentPeriodIdx].name+' &mdash; all venues</p>'+
+  var scopeTxt=selectedVenues.indexOf('ALL')>=0?'all venues':getSelectedVenueCodes().join(', ');
+  ov.innerHTML='<div class="name-box"><h3>Export ending inventory</h3><p>'+pcFiscal.getPeriods()[currentPeriodIdx].name+' &mdash; '+scopeTxt+'</p>'+
     '<button class="btn-dark" style="width:100%;margin-bottom:8px;" onclick="exportInventory(\'totals\')">Venue totals</button>'+
     '<button class="btn-dark" style="width:100%;margin-bottom:8px;" onclick="exportInventory(\'detail\')">Venue detail (every item)</button>'+
     '<button class="btn-outline" style="width:100%;" onclick="closeInventoryExport()">Cancel</button></div>';
@@ -842,7 +843,14 @@ function closeInventoryExport(){ var ov=document.getElementById('inv-export-over
 function exportInventory(mode){
   var p=pcFiscal.getPeriods()[currentPeriodIdx];
   var tag=p.name.replace(/[^A-Za-z0-9]+/g,'-');
-  var rows=cachedInventoryRows||[];
+  // Scope to the selected pill(s). "Overall" → all venues; otherwise only the
+  // venue(s) currently selected, so exporting from BWH gives just BWH.
+  var scopeCodes=getSelectedVenueCodes();
+  var scopeAll=selectedVenues.indexOf('ALL')>=0;
+  if(!scopeAll){ tag=scopeCodes.join('-')+'_'+tag; }
+  var rows=(cachedInventoryRows||[]).filter(function(r){
+    return scopeAll || scopeCodes.indexOf(resolveVenueCode(r.venue))>=0;
+  });
   if(mode==='totals'){
     var prior=pcFiscal.getPriorPeriod(p);
     var priorLabel=prior?prior.name:'Prior';
@@ -852,7 +860,7 @@ function exportInventory(mode){
     // that submitted last month but not this one (or vice versa) still shows.
     var allCodes={};
     Object.keys(byVenue).forEach(function(vc){ allCodes[vc]=true; });
-    Object.keys(cachedPriorInventory).forEach(function(vc){ allCodes[vc]=true; });
+    Object.keys(cachedPriorInventory).forEach(function(vc){ if(scopeAll || scopeCodes.indexOf(vc)>=0) allCodes[vc]=true; });
     var out=[['Venue Code','Venue',priorLabel+' Ending Value',p.name+' Ending Value','Change']];
     var grandCur=0, grandPrior=0;
     Object.keys(allCodes).sort().forEach(function(vc){
