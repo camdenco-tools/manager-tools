@@ -161,13 +161,16 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
     <input type="hidden" id="edit-id">
     <div id="edit-window-notice" class="window-notice" style="display:none;"></div>
     <div class="modal-row">
-      <div class="modal-field"><label>Event date</label><input type="date" id="edit-date"></div>
+      <div class="modal-field"><label>Event date</label><input type="date" id="edit-date" onchange="reloadEditEvents()"></div>
       <div class="modal-field"><label>Amount ($)</label><input type="number" id="edit-amount" step="0.01" min="0"></div>
     </div>
-    <div class="modal-field"><label>Event name</label><input type="text" id="edit-event"></div>
+    <div class="modal-field"><label>Event name</label>
+      <select id="edit-event"><option value="">Select event...</option></select>
+      <div id="edit-event-note" style="font-size:11px;color:#c0392b;margin-top:4px;display:none;"></div>
+    </div>
     <div class="modal-row">
       <div class="modal-field"><label>Venue</label>
-        <select id="edit-venue" onchange="updateEditStands()">
+        <select id="edit-venue" onchange="updateEditStands();reloadEditEvents();">
           <option value="">Select...</option>
         </select>
       </div>
@@ -898,12 +901,14 @@ function openEditModal(id) {
   document.getElementById('edit-id').value = id;
   document.getElementById('edit-date').value = row.event_date;
   document.getElementById('edit-amount').value = row.amount;
-  document.getElementById('edit-event').value = row.event_name || '';
   document.getElementById('edit-venue').value = row.venue;
   document.getElementById('edit-staff').value = row.staff_count || '';
   document.getElementById('edit-tip').value = row.tip_amount !== null && row.tip_amount !== undefined ? row.tip_amount : '';
   document.getElementById('edit-submitted-by').value = row.submitted_by || '—';
+  document.getElementById('edit-date').dataset.origDate = row.event_date;
+  document.getElementById('edit-venue').dataset.origVenue = row.venue;
   updateEditStands(row.stand);
+  reloadEditEvents(row.event_name || '');
 
   var noticeEl = document.getElementById('edit-window-notice');
   if (isAdmin && !withinWindow) {
@@ -943,6 +948,62 @@ function openEditModal(id) {
 
   document.getElementById('edit-error').style.display = 'none';
   document.getElementById('edit-modal').classList.add('open');
+}
+
+// Option B: a sale must belong to a real scheduled event, so the Event name
+// dropdown is driven entirely by events on the selected date+venue. No free
+// text. Empty list = no event here = Save is blocked (see saveEdit).
+async function reloadEditEvents(selectName) {
+  var date = document.getElementById('edit-date').value;
+  var venue = document.getElementById('edit-venue').value;
+  var sel = document.getElementById('edit-event');
+  var note = document.getElementById('edit-event-note');
+  if (selectName === undefined) selectName = sel.value; // keep selection if caller didn't override
+
+  sel.innerHTML = '<option value="">Select event...</option>';
+  note.style.display = 'none';
+  if (!date || !venue) return;
+
+  try {
+    var url = SUPA_URL + '/rest/v1/events?event_date=eq.' + encodeURIComponent(date) +
+              '&venue=eq.' + encodeURIComponent(venue) +
+              '&cancelled_at=is.null&select=event_name&order=event_name.asc&limit=20';
+    var res = await fetch(url, { headers: apiHeaders() });
+    var rows = await res.json();
+    var names = [];
+    if (Array.isArray(rows)) {
+      rows.forEach(function(r) {
+        var n = (r.event_name || '').trim();
+        if (n && names.indexOf(n) === -1) names.push(n);
+      });
+    }
+    names.forEach(function(n) {
+      var o = document.createElement('option');
+      o.value = n; o.textContent = n;
+      if (n === selectName) o.selected = true;
+      sel.appendChild(o);
+    });
+
+    var date0 = document.getElementById('edit-date').dataset.origDate || '';
+    var venue0 = document.getElementById('edit-venue').dataset.origVenue || '';
+    var onOriginal = (date === date0 && venue === venue0);
+
+    if (names.length === 0) {
+      note.textContent = 'No scheduled event at this venue on this date. A sale must belong to an event \u2014 add it in Events Admin first, or pick a different date/venue.';
+      note.style.display = 'block';
+    } else if (onOriginal && selectName && names.indexOf(selectName) === -1) {
+      // Mismatch on the sale's own date/venue — worth naming, it's a wrong-log signal.
+      note.textContent = 'This sale\u2019s saved name (\u201c' + selectName + '\u201d) isn\u2019t scheduled here. Pick the correct event.';
+      note.style.display = 'block';
+    } else if (!sel.value) {
+      // Moved to a new date/venue (or just nothing chosen yet) — neutral prompt.
+      note.textContent = 'Pick the scheduled event for this date and venue.';
+      note.style.display = 'block';
+    }
+  } catch (e) {
+    note.textContent = 'Could not load events for this date/venue. Try again.';
+    note.style.display = 'block';
+  }
 }
 
 function updateEditStands(selectedStand) {
@@ -1030,6 +1091,11 @@ async function saveEdit() {
 
   if (!date || !venue || !stand || !amount || isNaN(amount)) {
     errEl.textContent = 'Please fill in all required fields.';
+    errEl.style.display = 'block';
+    return;
+  }
+  if (!evtName) {
+    errEl.textContent = 'Pick a scheduled event for this date and venue. A sale must belong to an event.';
     errEl.style.display = 'block';
     return;
   }
