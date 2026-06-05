@@ -288,6 +288,7 @@ var currentMonth = '';
 var isResubmit = false;
 var newItemTargetCatId = '';
 var priorRolloverMonth = '';
+var loggedInName = '';
 
 function apiHeaders() {
   return Object.assign({}, pcAuth.headers(), {'Content-Type':'application/json'});
@@ -822,7 +823,9 @@ function renderSubmit() {
     total += parseFloat(pcCurrentCounts[i].value_on_hand) || 0;
   }
   var html = '<div class="submit-card"><div class="submit-top"><div><div class="submit-label">Total ending inventory value</div><div class="submit-venue">' + venueLabel + ' -- ' + monthLabel + '</div></div><div class="total-val" id="grand-total-val">' + fmt(total) + '</div></div>';
-  html += '<div class="submit-row"><input class="name-input" id="submitter-name" placeholder="Your name" type="text"><button class="submit-btn" id="submit-count-btn" onclick="submitCount()">' + (isResubmit ? 'Resubmit count' : 'Submit count') + '</button></div>';
+  var nameVal = (loggedInName || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+  html += '<div class="submit-row"><input class="name-input" id="submitter-name" placeholder="Your name" type="text" value="' + nameVal + '"><button class="submit-btn" id="submit-count-btn" onclick="submitCount()">' + (isResubmit ? 'Resubmit count' : 'Submit count') + '</button></div>';
+  html += '<label style="display:flex;align-items:flex-start;gap:8px;margin-top:12px;font-size:12px;color:#555;line-height:1.5;cursor:pointer;"><input type="checkbox" id="zero-certify" style="margin-top:2px;flex-shrink:0;"><span>This venue is <strong>empty</strong> — I certify the ending inventory here is <strong>$0.00</strong> (everything was removed or moved to another venue). Check this only if you are submitting a zero count.</span></label>';
   html += '<div style="margin-top:10px;text-align:right;"><button onclick="clearAllCounts()" style="font-size:12px;color:#A32D2D;background:none;border:none;cursor:pointer;font-family:inherit;padding:4px 0;">Clear all entries</button></div>';
   html += '<div class="error-msg" id="submit-error"></div></div>';
   document.getElementById('submit-wrap').innerHTML = html;
@@ -831,10 +834,11 @@ function renderSubmit() {
 async function submitCount() {
   var nameEl = document.getElementById('submitter-name');
   var name = nameEl ? nameEl.value.trim() : '';
+  if (!name) name = loggedInName;
   var errEl = document.getElementById('submit-error');
   if (errEl) errEl.style.display = 'none';
   if (!name) {
-    if (errEl) { errEl.textContent = 'Please enter your name before submitting.'; errEl.style.display = 'block'; }
+    if (errEl) { errEl.textContent = 'Could not determine your name. Please type it before submitting.'; errEl.style.display = 'block'; }
     return;
   }
   var monthDate = currentMonth + '-01';
@@ -858,9 +862,24 @@ async function submitCount() {
       rows.push({id:crypto.randomUUID(), venue:currentVenue, item_id:c.item_id, count_month:monthDate, case_count:countVal, loose_count:0, total_units:countVal, value_on_hand:Math.round(value * 10000) / 10000, submitted_by:name, submitted_at:new Date().toISOString()});
     }
     if (rows.length === 0) {
-      if (errEl) { errEl.textContent = 'No counts entered. Please fill in at least one item.'; errEl.style.display = 'block'; }
-      if (btn) { btn.disabled = false; btn.textContent = isResubmit ? 'Resubmit count' : 'Submit count'; }
-      return;
+      var certifyEl = document.getElementById('zero-certify');
+      var certified = certifyEl && certifyEl.checked;
+      if (!certified) {
+        if (errEl) { errEl.textContent = 'No counts entered. Enter at least one item, or check the "$0.00 — venue is empty" box to certify a zero count for this venue.'; errEl.style.display = 'block'; }
+        if (btn) { btn.disabled = false; btn.textContent = isResubmit ? 'Resubmit count' : 'Submit count'; }
+        return;
+      }
+      // Certified zero: write a 0-value row for every profiled item so the period
+      // is recorded as counted-and-empty. Sentinel-free — same row shape, zeros.
+      var zeroItems = getVenueItems();
+      for (var zi = 0; zi < zeroItems.length; zi++) {
+        rows.push({id:crypto.randomUUID(), venue:currentVenue, item_id:zeroItems[zi].id, count_month:monthDate, case_count:0, loose_count:0, total_units:0, value_on_hand:0, submitted_by:name, submitted_at:new Date().toISOString()});
+      }
+      if (rows.length === 0) {
+        if (errEl) { errEl.textContent = 'This venue has no items profiled, so there is nothing to record as zero. Add items to the venue first.'; errEl.style.display = 'block'; }
+        if (btn) { btn.disabled = false; btn.textContent = isResubmit ? 'Resubmit count' : 'Submit count'; }
+        return;
+      }
     }
     var CHUNK = 50;
     for (var start = 0; start < rows.length; start += CHUNK) {
@@ -1225,6 +1244,7 @@ pcAuth.require({
   pageSlug: 'ending-inventory',
   onReady: function(user) {
     pcActivity.init('ending-inventory');
+    loggedInName = (user && (user.display_name || user.email)) || '';
 
     // Load catalog → populate VENUES → kick off render + data load.
     // Fallback path used only if the catalog fails to load.
