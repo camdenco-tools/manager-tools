@@ -90,6 +90,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .met-row.c3 { grid-template-columns: repeat(3, 1fr); }
 .met-row.c2 { grid-template-columns: repeat(2, 1fr); }
 .met { background: white; border-radius: 12px; padding: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+.met.clickable { cursor: pointer; transition: box-shadow 0.15s; }
+.met.clickable:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
 .met-label { font-size: 11px; color: #999; margin-bottom: 3px; }
 .met-val { font-size: 20px; font-weight: 700; color: #1a1a1a; }
 .met-val.warn { color: #BA7517; }
@@ -333,7 +335,7 @@ var currentPeriodIdx = 0;
 var pendingNameAction = null;
 var isLocked = false;
 
-var cachedSales=[],cachedPurchases=[],cachedInventory={},cachedPriorInventory={},cachedStaffing=[],cachedPayRates=[],cachedDealTemplates=[],cachedStandDeals=[],cachedBillingRates=[],cachedPayroll=[],cachedManual=[],cachedSnapshot=null,cachedEvents=[],cachedArLines=[];
+var cachedSales=[],cachedPurchases=[],cachedInventory={},cachedPriorInventory={},cachedStaffing=[],cachedPayRates=[],cachedDealTemplates=[],cachedStandDeals=[],cachedBillingRates=[],cachedPayroll=[],cachedManual=[],cachedSnapshot=null,cachedEvents=[],cachedArLines=[],cachedInventoryRows=[];
 var arActualsByVenue={};
 
 function apiHeaders() {
@@ -476,7 +478,7 @@ async function loadAllData() {
     var results=await Promise.all([
       supa('sales?select=*&event_date=gte.'+p.start+'&event_date=lte.'+p.end),
       supa('purchases?select=*&invoice_date=gte.'+p.start+'&invoice_date=lte.'+p.end),
-      supa('inventory_counts?select=*&count_month=eq.'+p.start.slice(0,8)+'01&item_id=neq.e2bf5cd1-5f50-4b11-b4b3-30c06907bffc'),
+      supa('inventory_counts?select=*,inventory_items(name,unit_label,cost_per_unit)&count_month=eq.'+p.start.slice(0,8)+'01&item_id=neq.e2bf5cd1-5f50-4b11-b4b3-30c06907bffc'),
       supa('deal_templates?select=*'),supa('stand_deals?select=*'),supa('pay_rates?select=*'),
       supa('client_billing_rates?select=*'),supa('eom_payroll?select=*&fiscal_period=eq.'+pk),
       supa('eom_manual_entries?select=*&fiscal_period=eq.'+pk),supa('eom_snapshots?select=*&fiscal_period=eq.'+pk),
@@ -485,7 +487,7 @@ async function loadAllData() {
       supa('ar_invoice_lines?select=amount,ar_items!inner(cos_class),ar_invoices!inner(id,venue_code,period_start,status)&ar_invoices.status=neq.voided&ar_invoices.period_start=gte.'+p.start+'&ar_invoices.period_start=lte.'+p.end+'&limit=50000').catch(function(e){console.warn('[cos-labor] AR actuals fetch failed (non-fatal):',e);return [];})
     ]);
     cachedSales=Array.isArray(results[0])?results[0]:[];cachedPurchases=Array.isArray(results[1])?results[1]:[];
-    var currentInv=Array.isArray(results[2])?results[2]:[];cachedDealTemplates=Array.isArray(results[3])?results[3]:[];
+    var currentInv=Array.isArray(results[2])?results[2]:[];cachedInventoryRows=currentInv;cachedDealTemplates=Array.isArray(results[3])?results[3]:[];
     cachedStandDeals=Array.isArray(results[4])?results[4]:[];cachedPayRates=Array.isArray(results[5])?results[5]:[];
     cachedBillingRates=Array.isArray(results[6])?results[6]:[];cachedPayroll=Array.isArray(results[7])?results[7]:[];
     cachedManual=Array.isArray(results[8])?results[8]:[];var snapshots=Array.isArray(results[9])?results[9]:[];
@@ -685,7 +687,7 @@ function renderReport() {
   html+='<div class="met-row c4"><div class="met"><div class="met-label">COS relatable sales</div><div class="met-val">'+fmtMoney(data.activeCosRelatable)+'</div><div class="met-note">'+cosNote+'</div></div>';
   html+='<div class="met"><div class="met-label">Other sales</div><div class="met-val">'+fmtMoney(data.activeOtherSales)+'</div><div class="met-note">'+otherNote+'</div></div>';
   html+='<div class="met"><div class="met-label">Total sales</div><div class="met-val">'+fmtMoney(data.activeTotalSales)+'</div></div>';
-  html+='<div class="met"><div class="met-label">Ending inventory</div><div class="met-val">'+fmtMoney(data.endInv)+'</div><div class="met-note">'+(data.endInv>0?'On-hand value':'Not yet submitted')+'</div></div></div>';
+  html+='<div class="met clickable" onclick="openInventoryExport()"><div class="met-label">Ending inventory</div><div class="met-val">'+fmtMoney(data.endInv)+'</div><div class="met-note">'+(data.endInv>0?'On-hand value':'Not yet submitted')+' &middot; <span style="color:#0C447C;font-weight:600;">Export &#9662;</span></div></div></div>';
   var cosVenueCodes={};VENUES.forEach(function(v){cosVenueCodes[v.code]=true;});
   var orphan=[];Object.keys(arActualsByVenue).forEach(function(vc){if(!cosVenueCodes[vc]){var b=arActualsByVenue[vc];var t=(b.cos_relatable||0)+(b.other_sales||0)+(b.labor_credit||0);if(Math.abs(t)>0.005)orphan.push(vc+' ('+fmtMoney(t)+')');}});
   if(orphan.length){html+='<div class="inv-callout partial"><div class="inv-callout-icon">!</div><div>Billing-only venue dollars not in any tracked venue: '+orphan.join(', ')+'.<div class="inv-callout-detail">Billed under a venue this report doesn\'t track (e.g. product made elsewhere). Revenue routing is a later build.</div></div></div>';}
@@ -814,6 +816,69 @@ function renderReport() {
   document.getElementById('report-content').innerHTML=html;
   if(!isLocked){document.getElementById('lock-section').style.display='block';document.getElementById('lock-title').textContent='Finalize '+p.name;}else{document.getElementById('lock-section').style.display='none';}
   window._reportData=data;updateCOSDiag();updateLaborDiag();
+}
+
+function csvCell(v){ if(v===null||v===undefined) return ''; var s=String(v); if(/[",\n]/.test(s)) s='"'+s.replace(/"/g,'""')+'"'; return s; }
+function downloadCsv(filename, rows){
+  var csv=rows.map(function(r){return r.map(csvCell).join(',');}).join('\r\n');
+  var blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'}); // BOM so Excel reads UTF-8
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a'); a.href=url; a.download=filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function(){URL.revokeObjectURL(url);},1000);
+}
+function openInventoryExport(){
+  if(!cachedInventoryRows||cachedInventoryRows.length===0){ alert('No ending inventory submitted for this period yet — nothing to export.'); return; }
+  var existing=document.getElementById('inv-export-overlay'); if(existing) existing.remove();
+  var ov=document.createElement('div'); ov.id='inv-export-overlay'; ov.className='name-overlay open';
+  ov.innerHTML='<div class="name-box"><h3>Export ending inventory</h3><p>'+pcFiscal.getPeriods()[currentPeriodIdx].name+' &mdash; all venues</p>'+
+    '<button class="btn-dark" style="width:100%;margin-bottom:8px;" onclick="exportInventory(\'totals\')">Venue totals</button>'+
+    '<button class="btn-dark" style="width:100%;margin-bottom:8px;" onclick="exportInventory(\'detail\')">Venue detail (every item)</button>'+
+    '<button class="btn-outline" style="width:100%;" onclick="closeInventoryExport()">Cancel</button></div>';
+  ov.addEventListener('click',function(e){ if(e.target===ov) closeInventoryExport(); });
+  document.body.appendChild(ov);
+}
+function closeInventoryExport(){ var ov=document.getElementById('inv-export-overlay'); if(ov) ov.remove(); }
+function exportInventory(mode){
+  var p=pcFiscal.getPeriods()[currentPeriodIdx];
+  var tag=p.name.replace(/[^A-Za-z0-9]+/g,'-');
+  var rows=cachedInventoryRows||[];
+  if(mode==='totals'){
+    var prior=pcFiscal.getPriorPeriod(p);
+    var priorLabel=prior?prior.name:'Prior';
+    var byVenue={};
+    rows.forEach(function(r){ var vc=resolveVenueCode(r.venue); if(!byVenue[vc])byVenue[vc]=0; byVenue[vc]+=parseFloat(r.value_on_hand||0); });
+    // Union of venues that appear in either current or prior month, so a venue
+    // that submitted last month but not this one (or vice versa) still shows.
+    var allCodes={};
+    Object.keys(byVenue).forEach(function(vc){ allCodes[vc]=true; });
+    Object.keys(cachedPriorInventory).forEach(function(vc){ allCodes[vc]=true; });
+    var out=[['Venue Code','Venue',priorLabel+' Ending Value',p.name+' Ending Value','Change']];
+    var grandCur=0, grandPrior=0;
+    Object.keys(allCodes).sort().forEach(function(vc){
+      var cur=byVenue[vc]||0; var pri=cachedPriorInventory[vc]||0;
+      grandCur+=cur; grandPrior+=pri;
+      out.push([vc, VENUE_FULL[vc]||vc, pri.toFixed(2), cur.toFixed(2), (cur-pri).toFixed(2)]);
+    });
+    out.push(['','TOTAL', grandPrior.toFixed(2), grandCur.toFixed(2), (grandCur-grandPrior).toFixed(2)]);
+    downloadCsv('ending-inventory-totals_'+tag+'.csv',out);
+    showToast('Exported venue totals',true);
+  } else {
+    var out=[['Venue Code','Venue','Item','Count Month','Cases','Loose','Total Units','Unit Cost','Value on Hand']];
+    var sorted=rows.slice().sort(function(a,b){
+      var va=resolveVenueCode(a.venue),vb=resolveVenueCode(b.venue);
+      if(va!==vb) return va<vb?-1:1;
+      var na=(a.inventory_items&&a.inventory_items.name)||'', nb=(b.inventory_items&&b.inventory_items.name)||'';
+      return na<nb?-1:(na>nb?1:0);
+    });
+    sorted.forEach(function(r){
+      var vc=resolveVenueCode(r.venue); var ii=r.inventory_items||{};
+      out.push([vc,VENUE_FULL[vc]||vc,ii.name||r.item_id,r.count_month,r.case_count,r.loose_count,r.total_units,(ii.cost_per_unit!=null?ii.cost_per_unit:''),parseFloat(r.value_on_hand||0).toFixed(2)]);
+    });
+    downloadCsv('ending-inventory-detail_'+tag+'.csv',out);
+    showToast('Exported venue detail ('+(out.length-1)+' rows)',true);
+  }
+  closeInventoryExport();
 }
 
 function buildVendorSummary(invoices) {
