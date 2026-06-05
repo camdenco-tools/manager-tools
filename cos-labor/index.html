@@ -86,6 +86,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .sec-head { font-size: 11px; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #e0e0e0; }
 
 .met-row { display: grid; gap: 10px; margin-bottom: 14px; }
+.met-row.c4 { grid-template-columns: repeat(4, 1fr); }
 .met-row.c3 { grid-template-columns: repeat(3, 1fr); }
 .met-row.c2 { grid-template-columns: repeat(2, 1fr); }
 .met { background: white; border-radius: 12px; padding: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
@@ -219,6 +220,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .name-box input:focus { outline: none; border-color: #1a1a1a; }
 
 @media (max-width: 500px) {
+  .met-row.c4 { grid-template-columns: 1fr 1fr; }
   .met-row.c3 { grid-template-columns: 1fr; }
   .met-row.c2 { grid-template-columns: 1fr; }
   .pct-row { flex-direction: column; align-items: flex-start; }
@@ -680,9 +682,10 @@ function renderReport() {
 
   var cosNote=data.cosSource==='manual'?('Manual override (AR '+fmtMoney(data.arCos)+')'):(data.cosSource==='ar'?('From AR (est. '+fmtMoney(data.cosRelatable)+')'):'Estimated from sales log');
   var otherNote=data.otherSource==='manual'?'Manual override':(data.otherSource==='ar'?'From AR':'Estimated');
-  html+='<div class="met-row c3"><div class="met"><div class="met-label">COS relatable sales</div><div class="met-val">'+fmtMoney(data.activeCosRelatable)+'</div><div class="met-note">'+cosNote+'</div></div>';
+  html+='<div class="met-row c4"><div class="met"><div class="met-label">COS relatable sales</div><div class="met-val">'+fmtMoney(data.activeCosRelatable)+'</div><div class="met-note">'+cosNote+'</div></div>';
   html+='<div class="met"><div class="met-label">Other sales</div><div class="met-val">'+fmtMoney(data.activeOtherSales)+'</div><div class="met-note">'+otherNote+'</div></div>';
-  html+='<div class="met"><div class="met-label">Total sales</div><div class="met-val">'+fmtMoney(data.activeTotalSales)+'</div></div></div>';
+  html+='<div class="met"><div class="met-label">Total sales</div><div class="met-val">'+fmtMoney(data.activeTotalSales)+'</div></div>';
+  html+='<div class="met"><div class="met-label">Ending inventory</div><div class="met-val">'+fmtMoney(data.endInv)+'</div><div class="met-note">'+(data.endInv>0?'On-hand value':'Not yet submitted')+'</div></div></div>';
   var cosVenueCodes={};VENUES.forEach(function(v){cosVenueCodes[v.code]=true;});
   var orphan=[];Object.keys(arActualsByVenue).forEach(function(vc){if(!cosVenueCodes[vc]){var b=arActualsByVenue[vc];var t=(b.cos_relatable||0)+(b.other_sales||0)+(b.labor_credit||0);if(Math.abs(t)>0.005)orphan.push(vc+' ('+fmtMoney(t)+')');}});
   if(orphan.length){html+='<div class="inv-callout partial"><div class="inv-callout-icon">!</div><div>Billing-only venue dollars not in any tracked venue: '+orphan.join(', ')+'.<div class="inv-callout-detail">Billed under a venue this report doesn\'t track (e.g. product made elsewhere). Revenue routing is a later build.</div></div></div>';}
