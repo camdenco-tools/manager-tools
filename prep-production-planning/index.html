@@ -377,6 +377,24 @@
   .pc-bub-done-body { padding:9px 13px 12px; text-align:center; }
   .pc-bub-pct { font-size:26px; font-weight:700; font-variant-numeric:tabular-nums; color:var(--pc-green); }
   .pc-bub-frac { font-size:11px; color:var(--pc-muted); margin-top:2px; }
+  .pc-ws-bar { background:var(--pc-card); border:1px solid var(--pc-line); border-radius:var(--radius); overflow:hidden; margin-top:14px; }
+  .pc-ws-head { display:flex; align-items:center; gap:12px; padding:12px 16px; border-bottom:1px solid var(--pc-line); flex-wrap:wrap; }
+  .pc-ws-ttl { font-size:14px; font-weight:600; }
+  .pc-ws-cap { font-size:12px; color:var(--pc-faint); }
+  .pc-ws-btn { margin-left:auto; appearance:none; border:1px solid var(--pc-ops); background:var(--pc-ops-soft); color:var(--pc-ops); border-radius:7px; padding:7px 13px; font-family:inherit; font-size:13px; font-weight:600; cursor:pointer; }
+  .pc-ws-empty { padding:14px 16px; font-size:13px; color:var(--pc-faint); }
+  .pc-ws-row { display:flex; align-items:center; gap:12px; padding:10px 16px; border-top:1px solid var(--pc-line-soft); cursor:pointer; }
+  .pc-ws-row:hover { background:rgba(0,0,0,0.02); }
+  .pc-ws-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+  .pc-ws-venue { font-size:13.5px; font-weight:500; min-width:52px; }
+  .pc-ws-date { font-size:12px; color:var(--pc-muted); min-width:78px; }
+  .pc-ws-items { font-size:13px; color:var(--pc-muted); flex:1; }
+  .pc-ws-items b { color:var(--pc-ink); font-weight:500; }
+  .pc-ws-edit { font-size:12px; color:var(--pc-faint); }
+  .pc-ws-irow { display:flex; align-items:center; gap:12px; padding:9px 4px; border-bottom:1px solid var(--pc-line-soft); }
+  .pc-ws-irow .nm { flex:1; font-size:13.5px; }
+  .pc-ws-irow .u { font-size:10px; color:var(--pc-faint); text-transform:uppercase; margin-left:6px; }
+  .pc-ws-qty { width:96px; padding:7px 9px; border:1px solid var(--pc-line); border-radius:7px; font-family:inherit; font-size:13px; text-align:right; }
   @media (max-width: 760px) { .pc-prod-row { grid-template-columns:1fr 90px; } .pc-prod-days { display:none; } }
 </style>
 </head>
@@ -514,6 +532,34 @@
         <button class="pc-btn-ghost" id="pcProfileCopyBtn" type="button" disabled>Copy to&hellip;</button>
         <button class="pc-btn-ghost" id="pcProfileCancel" type="button">Cancel</button>
         <button class="pc-btn-primary" id="pcProfileSave" type="button" disabled>Save profile</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="pc-modal-backdrop" id="pcWholesaleBackdrop">
+  <div class="pc-modal" role="dialog" aria-label="Create wholesale needs">
+    <div class="pc-modal-head">
+      <div>
+        <div class="pc-modal-title">Wholesale needs</div>
+        <div class="pc-modal-sub">Direct production quantities for an account with no scheduled event. Slots into the production make-list on the need-by date.</div>
+      </div>
+      <button class="pc-modal-x" id="pcWsClose" type="button" aria-label="Close">&times;</button>
+    </div>
+    <div class="pc-modal-selectors">
+      <div><label class="pc-fld-label">Venue</label><select id="pcWsVenue" class="pc-fld"></select></div>
+      <div><label class="pc-fld-label">Stand</label><select id="pcWsStand" class="pc-fld"><option value="">Select a venue first</option></select></div>
+      <div><label class="pc-fld-label">Need by</label><input type="date" id="pcWsDate" class="pc-fld"></div>
+    </div>
+    <div class="pc-modal-body">
+      <div class="pc-modal-empty" id="pcWsEmpty">Choose a venue and stand to enter quantities.</div>
+      <div id="pcWsRows"></div>
+    </div>
+    <div class="pc-modal-foot">
+      <button class="pc-btn-ghost" id="pcWsDelete" type="button" style="display:none;color:var(--pc-red);border-color:var(--pc-red);">Delete this order</button>
+      <div style="display:flex;gap:10px;align-items:center;margin-left:auto;">
+        <button class="pc-btn-ghost" id="pcWsCancel" type="button">Cancel</button>
+        <button class="pc-btn-primary" id="pcWsSave" type="button" disabled>Save wholesale needs</button>
       </div>
     </div>
   </div>
@@ -891,8 +937,211 @@
     }
     hdr += '</div>'; grid += '</div>';
     body.innerHTML = hdr + grid +
-      '<div class="pc-cal-panel" id="pcCalPanel" style="display:none;"><span class="pc-cal-caret" id="pcCalCaret"></span><div class="pc-cal-pcard" id="pcCalCard"></div></div>';
+      '<div class="pc-cal-panel" id="pcCalPanel" style="display:none;"><span class="pc-cal-caret" id="pcCalCaret"></span><div class="pc-cal-pcard" id="pcCalCard"></div></div>' +
+      '<div id="pcWholesaleBar"></div>';
     PC.wireCalPills();
+    PC.ensureWholesale();
+  };
+
+  // ---- Wholesale needs (accounts with no scheduled event) -----------
+  PC._wholesale = [];
+  PC._wholesaleWeek = null;
+
+  PC.ensureWholesale = function () {
+    var w = PC.weeks[PC.weekIndex]; if (!w) return;
+    if (PC._wholesaleWeek === w.start) { PC.renderWholesaleBar(); return; }
+    var url = '/rest/v1/prep_wholesale_needs?select=id,need_date,venue_code,stand_id,item_id,qty,prep_items(name,unit,sort_order)' +
+      '&need_date=gte.' + w.start + '&need_date=lte.' + w.end + '&deleted_at=is.null&order=need_date.asc&limit=2000';
+    PC.authFetch(url).then(function (rows) {
+      PC._wholesale = (rows || []).filter(function (r) { return r.prep_items; });
+      PC._wholesaleWeek = w.start;
+      PC.renderWholesaleBar();
+    }).catch(function (err) {
+      PC._wholesale = []; PC._wholesaleWeek = w.start;
+      PC.renderWholesaleBar();
+      PC.toast(err.message || 'Failed to load wholesale needs', true);
+    });
+  };
+
+  PC.renderWholesaleBar = function () {
+    var host = document.getElementById('pcWholesaleBar'); if (!host) return;
+    var filter = PC.venueFilter || '';
+    var rows = filter ? PC._wholesale.filter(function (r) { return r.venue_code === filter; }) : PC._wholesale;
+    var groups = {};
+    rows.forEach(function (r) {
+      var dt = String(r.need_date).slice(0, 10);
+      var k = r.venue_code + '|' + dt;
+      if (!groups[k]) groups[k] = { venue: r.venue_code, date: dt, items: [] };
+      groups[k].items.push(r);
+    });
+    var keys = Object.keys(groups).sort();
+    var head = '<div class="pc-ws-head"><span class="pc-ws-ttl">Wholesale needs</span>' +
+      '<span class="pc-ws-cap">Accounts with no scheduled event</span>' +
+      '<button class="pc-ws-btn" id="pcWsCreate" type="button">+ Create wholesale needs</button></div>';
+    var bodyHtml;
+    if (!keys.length) {
+      bodyHtml = '<div class="pc-ws-empty">No wholesale needs this week' + (filter ? ' for ' + escAttr(filter) : '') + '.</div>';
+    } else {
+      bodyHtml = keys.map(function (k) {
+        var g = groups[k], vc = venueColor(g.venue);
+        var itemsTxt = g.items.sort(function (a, b) {
+          return ((a.prep_items.sort_order || 0) - (b.prep_items.sort_order || 0));
+        }).map(function (it) {
+          return '<b>' + escAttr(it.prep_items.name) + '</b> ' + Number(it.qty).toLocaleString() + ' ' + escAttr(it.prep_items.unit || '');
+        }).join(' \u00b7 ');
+        return '<div class="pc-ws-row" data-venue="' + escAttr(g.venue) + '" data-date="' + g.date + '">' +
+          '<span class="pc-ws-dot" style="background:' + vc + ';"></span>' +
+          '<span class="pc-ws-venue">' + escAttr(g.venue) + '</span>' +
+          '<span class="pc-ws-date">' + PC.dowName(g.date) + ' ' + fmtMD(g.date) + '</span>' +
+          '<span class="pc-ws-items">' + itemsTxt + '</span>' +
+          '<span class="pc-ws-edit">edit</span></div>';
+      }).join('');
+    }
+    host.innerHTML = '<div class="pc-ws-bar">' + head + bodyHtml + '</div>';
+    var cb = document.getElementById('pcWsCreate');
+    if (cb) cb.addEventListener('click', function () { PC.openWholesale(null, null); });
+    host.querySelectorAll('.pc-ws-row').forEach(function (row) {
+      row.addEventListener('click', function () { PC.openWholesale(row.getAttribute('data-venue'), row.getAttribute('data-date')); });
+    });
+  };
+
+  PC.initWholesale = function () {
+    function wire(id, fn) { var el = document.getElementById(id); if (el && !el._wired) { el.addEventListener('click', fn); el._wired = true; } }
+    wire('pcWsClose', PC.closeWholesale);
+    wire('pcWsCancel', PC.closeWholesale);
+    wire('pcWsSave', PC.saveWholesale);
+    wire('pcWsDelete', PC.deleteWholesale);
+    var bd = document.getElementById('pcWholesaleBackdrop');
+    if (bd && !bd._wired) { bd.addEventListener('click', function (e) { if (e.target === bd) PC.closeWholesale(); }); bd._wired = true; }
+    var v = document.getElementById('pcWsVenue');
+    if (v && !v._wired) { v.addEventListener('change', PC.onWsVenue); v._wired = true; }
+    var s = document.getElementById('pcWsStand');
+    if (s && !s._wired) { s.addEventListener('change', PC.onWsStand); s._wired = true; }
+  };
+
+  PC.closeWholesale = function () { document.getElementById('pcWholesaleBackdrop').classList.remove('is-on'); };
+
+  PC.openWholesale = function (venueCode, dateStr) {
+    var bd = document.getElementById('pcWholesaleBackdrop');
+    bd.classList.add('is-on');
+    document.getElementById('pcWsDelete').style.display = (venueCode && dateStr) ? 'inline-block' : 'none';
+    PC.ensureProfiles().then(function () {
+      if (typeof pcCatalog !== 'undefined' && pcCatalog.ready) return pcCatalog.ready();
+    }).then(function () {
+      var vsel = document.getElementById('pcWsVenue');
+      var venues = (typeof pcCatalog !== 'undefined' && pcCatalog.getActiveVenues) ? pcCatalog.getActiveVenues() : [];
+      vsel.innerHTML = venues.map(function (vv) {
+        return '<option value="' + escAttr(vv.code) + '">' + escAttr(vv.full_name || vv.code) + '</option>';
+      }).join('');
+      vsel.value = venueCode || (venues.some(function (vv) { return vv.code === 'PNC'; }) ? 'PNC' : (venues[0] ? venues[0].code : ''));
+      var dsel = document.getElementById('pcWsDate');
+      dsel.value = dateStr || todayISO();
+      PC.onWsVenue();
+      if (venueCode && dateStr) {
+        PC.authFetch('/rest/v1/prep_wholesale_needs?select=item_id,qty&need_date=eq.' + dateStr + '&venue_code=eq.' + encodeURIComponent(venueCode) + '&deleted_at=is.null&limit=200')
+          .then(function (rows) {
+            (rows || []).forEach(function (r) {
+              var inp = document.querySelector('#pcWsRows .pc-ws-qty[data-item="' + r.item_id + '"]');
+              if (inp) inp.value = r.qty;
+            });
+          }).catch(function () {});
+      }
+    }).catch(function (err) { PC.toast(err.message || 'Failed to open', true); });
+  };
+
+  PC.onWsVenue = function () {
+    var code = document.getElementById('pcWsVenue').value;
+    var ssel = document.getElementById('pcWsStand');
+    var stands = (typeof pcCatalog !== 'undefined' && pcCatalog.getActiveStandsForVenue) ? (pcCatalog.getActiveStandsForVenue(code) || []) : [];
+    ssel.innerHTML = (stands.length ? '' : '<option value="">No stands</option>') +
+      stands.map(function (s) { return '<option value="' + escAttr(s.id) + '" data-name="' + escAttr(s.stand_name) + '">' + escAttr(s.stand_name) + '</option>'; }).join('');
+    PC.onWsStand();
+  };
+
+  PC.onWsStand = function () {
+    var venueCode = document.getElementById('pcWsVenue').value;
+    var ssel = document.getElementById('pcWsStand');
+    var opt = ssel.options[ssel.selectedIndex];
+    var standName = opt ? opt.getAttribute('data-name') : '';
+    var rows = document.getElementById('pcWsRows');
+    var empty = document.getElementById('pcWsEmpty');
+    var save = document.getElementById('pcWsSave');
+    var prof = standName ? PC._standMix[venueCode + '|' + standName] : null;
+    var itemIds = prof ? PC._itemOrder.filter(function (id) { return (id in prof.items); }) : [];
+    if (!itemIds.length) {
+      rows.innerHTML = '';
+      empty.style.display = 'block';
+      empty.textContent = standName
+        ? 'This stand carries no items yet \u2014 add them in Item setup first.'
+        : 'Choose a venue and stand to enter quantities.';
+      save.disabled = true;
+      return;
+    }
+    empty.style.display = 'none';
+    rows.innerHTML = itemIds.map(function (id) {
+      var m = PC._itemMeta[id] || {};
+      return '<div class="pc-ws-irow"><span class="nm">' + escAttr(m.name || '') + '<span class="u">' + escAttr(m.unit || '') + '</span></span>' +
+        '<input class="pc-ws-qty" type="number" min="0" step="1" placeholder="0" data-item="' + id + '"></div>';
+    }).join('');
+    save.disabled = false;
+  };
+
+  PC.saveWholesale = function () {
+    var venueCode = document.getElementById('pcWsVenue').value;
+    var ssel = document.getElementById('pcWsStand');
+    var standId = ssel.value;
+    var date = document.getElementById('pcWsDate').value;
+    if (!venueCode || !standId || !date) { PC.toast('Pick venue, stand and date', true); return; }
+    var who = PC.myName(), now = new Date().toISOString();
+    var active = [], zeros = [];
+    document.querySelectorAll('#pcWsRows .pc-ws-qty').forEach(function (inp) {
+      var itemId = inp.getAttribute('data-item');
+      var q = parseInt(inp.value, 10);
+      if (q > 0) active.push({ need_date: date, venue_code: venueCode, stand_id: standId, item_id: itemId, qty: q, updated_by: who, updated_at: now, deleted_at: null, deleted_by: null });
+      else zeros.push(itemId);
+    });
+    var btn = document.getElementById('pcWsSave');
+    btn.disabled = true; btn.textContent = 'Saving\u2026';
+    var calls = [];
+    if (active.length) {
+      calls.push(PC.authFetch('/rest/v1/prep_wholesale_needs?on_conflict=need_date,stand_id,item_id', {
+        method: 'POST', headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(active) }));
+    }
+    if (zeros.length) {
+      calls.push(PC.authFetch('/rest/v1/prep_wholesale_needs?need_date=eq.' + date + '&stand_id=eq.' + standId + '&item_id=in.(' + zeros.join(',') + ')&deleted_at=is.null', {
+        method: 'PATCH', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify({ deleted_at: now, deleted_by: who }) }));
+    }
+    Promise.all(calls).then(function () {
+      btn.disabled = false; btn.textContent = 'Save wholesale needs';
+      PC.closeWholesale();
+      PC._wholesaleWeek = null;
+      PC.ensureWholesale();
+      PC.toast('Wholesale needs saved');
+    }).catch(function (err) {
+      btn.disabled = false; btn.textContent = 'Save wholesale needs';
+      PC.toast(err.message || 'Save failed', true);
+    });
+  };
+
+  PC.deleteWholesale = function () {
+    var standId = document.getElementById('pcWsStand').value;
+    var date = document.getElementById('pcWsDate').value;
+    if (!standId || !date) return;
+    var who = PC.myName(), now = new Date().toISOString();
+    var btn = document.getElementById('pcWsDelete');
+    btn.disabled = true;
+    PC.authFetch('/rest/v1/prep_wholesale_needs?need_date=eq.' + date + '&stand_id=eq.' + standId + '&deleted_at=is.null', {
+      method: 'PATCH', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify({ deleted_at: now, deleted_by: who })
+    }).then(function () {
+      btn.disabled = false;
+      PC.closeWholesale();
+      PC._wholesaleWeek = null;
+      PC.ensureWholesale();
+      PC.toast('Wholesale order removed');
+    }).catch(function (err) {
+      btn.disabled = false;
+      PC.toast(err.message || 'Delete failed', true);
+    });
   };
 
   PC.renderStandBlock = function (e, s) {
@@ -1921,6 +2170,7 @@
       if (PC.canPlan) PC.initPlanSaveBar();
       if (PC.canPlan) PC.initVenueFilter();
       if (PC.canPlan) PC.initProfileCopy();
+      if (PC.canPlan) PC.initWholesale();
       if (PC.canProduce) PC.initBuildBar();
       // END PATCH ANCHOR: BOOT_HOOK
     }
