@@ -43,7 +43,7 @@
     operations: [
       { label: 'Submit event',                   href: '/submit-event/',           slug: 'submit-event' },
       { label: 'Event planning',                 href: '/event-planning/',         slug: 'event-planning' },
-      { label: 'Prep & production planning',     href: '/prep-production-planning/', slugAny: ['prep-planning', 'prep-production'] },
+      { label: 'Prep & Production Planning',     href: '/prep-production-planning/', slugAny: ['prep-planning', 'prep-production'] },
       { label: 'Schedule assistant',             href: '/schedule-assistant/',     slug: 'schedule-assistant' },
       { label: 'Log sales',                      href: '/log-sales/',              slug: 'log-sales' },
       { label: 'Sales history',                  href: '/sales-history/',          slug: 'sales-history' },
