@@ -217,6 +217,36 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: #1a1a1a
 .tp-autoprofile-text strong { font-weight: 700; }
 .tp-autoprofile-text .tp-ap-note { display: block; color: #6B4FA0; font-style: italic; margin-top: 2px; font-size: 11px; }
 
+/* ── Vendor picker (select-first typeahead on the invoice form) ── */
+.vp-wrap { position: relative; }
+.vp-dropdown {
+  position: absolute; top: 100%; left: 0; right: 0;
+  background: white; border: 1px solid #1a1a1a; border-top: none;
+  border-radius: 0 0 10px 10px; max-height: 260px; overflow-y: auto;
+  z-index: 60; box-shadow: 0 4px 12px rgba(0,0,0,0.08); display: none;
+}
+.vp-dropdown.open { display: block; }
+.vp-item {
+  padding: 10px 12px; cursor: pointer; border-bottom: 1px solid #f3f3f3;
+  font-size: 14px; color: #1a1a1a;
+}
+.vp-item:last-child { border-bottom: none; }
+.vp-item:hover, .vp-item.kb-focused { background: #f5f5f5; }
+.vp-item-add {
+  color: #0C447C; font-weight: 600; background: #E6F1FB;
+}
+.vp-item-add:hover, .vp-item-add.kb-focused { background: #D6E8F8; }
+.vp-empty { padding: 12px; text-align: center; font-size: 12px; color: #999; font-style: italic; }
+.vp-selected {
+  margin-top: 6px; font-size: 12px; color: #27500A; font-weight: 600;
+  display: flex; align-items: center; gap: 6px;
+}
+.vp-selected .vp-clear {
+  background: none; border: none; color: #A32D2D; font-size: 12px;
+  font-weight: 700; cursor: pointer; text-decoration: underline; padding: 0;
+}
+.vp-unmatched { margin-top: 6px; font-size: 11px; color: #BA7517; font-style: italic; }
+
 /* Monthly summary */
 .month-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px; }
 .month-label { font-size: 10px; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 0.08em; }
@@ -575,6 +605,31 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: #1a1a1a
 .recon-notfood-btn:hover:not(:disabled) { background: #eee; color: #444; }
 .recon-notfood-btn:disabled { background: #fafafa; color: #ccc; border-color: #eee; cursor: not-allowed; }
 
+/* Plan A — per-row possible-duplicate banner (held back from batch save) */
+.recon-dup-flag {
+  grid-row: 5;
+  grid-column: 1 / -1;
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: #FAEEDA;
+  border: 1px solid #EF9F27;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #854F0B;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.recon-dup-flag .recon-dup-text { font-weight: 600; flex: 1; min-width: 150px; }
+.recon-dup-flag .recon-dup-review {
+  background: #BA7517; color: white; border: none;
+  border-radius: 6px; padding: 5px 12px; font-size: 12px;
+  font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.recon-dup-flag .recon-dup-review:hover { background: #8C5811; }
+
 /* ── Inquiry tray (admin asked managers about a charge) ── */
 .inquiry-bar { margin-bottom: 14px; }
 .inquiry-tray {
@@ -815,7 +870,15 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: #1a1a1a
 
         <div id="invoice-fields">
           <div class="field"><label>Invoice / delivery date</label><input type="date" id="inv-date"></div>
-          <div class="field"><label>Vendor</label><input type="text" id="vendor" placeholder="e.g. Pepsi, Hershey, US Foods..."></div>
+          <div class="field"><label>Vendor</label>
+            <div class="vp-wrap">
+              <input type="text" id="vendor" placeholder="Start typing a vendor name..." autocomplete="off" oninput="onVendorInput()" onfocus="onVendorInput()" onkeydown="onVendorKeydown(event)">
+              <input type="hidden" id="vendor-id">
+              <div class="vp-dropdown" id="vendor-dropdown"></div>
+            </div>
+            <div class="vp-selected" id="vendor-selected" style="display:none;"></div>
+            <div class="vp-unmatched" id="vendor-unmatched" style="display:none;"></div>
+          </div>
           <div class="field"><label>Amount ($)</label><input type="number" id="amount" placeholder="0.00" step="0.01" min="0" oninput="updateSplitStatus()"></div>
 
           <div class="split-toggle-row" onclick="toggleSplitMode(event)">
@@ -1036,6 +1099,8 @@ var reconCharges = [];
 var reconVenueSelections = {};
 var reconChecked = {};
 var reconSplits = {};
+var reconDupFlags = {};       // chargeId -> array of matching purchases rows (pre-flight dup scan, Plan A)
+var reconDupOverridden = {};  // chargeId -> true once admin reviews and chooses "save anyway"
 
 // Transfer item-picker state
 // itemCatalog: array of {id, name, count_unit, case_cost, cost_per_unit, units_per_case, active}
@@ -1047,6 +1112,12 @@ var transferLines = [];
 var editTransferLines = [];
 var tpDropdownFocusedIdx = -1;
 var venueProfileItemIds = {};
+
+// Vendor picker state (select-first on the invoice form)
+// knownVendors: array of {id, display_name}
+var knownVendors = [];
+var knownVendorsReady = false;
+var vendorDropdownFocusedIdx = -1;
 
 // ── Auth helpers (ungated pattern) ──
 function apiHeaders() {
@@ -1525,30 +1596,247 @@ function normVendor(s) {
   return String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
-// Query purchases for likely duplicates of a candidate invoice.
-// Match rule: same vendor (fuzzy), amount within $1.00, date within +/-5 days.
-// Returns array of matching rows (empty if none).
-async function findDuplicateInvoices(vendor, amount, dateStr) {
+// ── Vendor picker (select-first typeahead, reads known_vendors) ──
+// The list is small (~100 rows) so we load it once and filter client-side,
+// the same pattern as the transfer item-picker.
+async function loadKnownVendors() {
   try {
+    var hdrs = apiHeaders();
+    var url = SUPA_URL + '/rest/v1/known_vendors?select=id,display_name&order=display_name.asc&limit=2000';
+    var res = await fetch(url, { headers: hdrs });
+    if (!res.ok) { console.error('[purchases] known_vendors load failed', await res.text()); return; }
+    knownVendors = await res.json();
+    knownVendorsReady = Array.isArray(knownVendors);
+    if (!knownVendorsReady) knownVendors = [];
+  } catch(e) { console.error('[purchases] known_vendors load exception', e); }
+}
+
+// Find a vendor by exact display_name (case-insensitive). Returns the row or null.
+function findVendorByName(name) {
+  var n = String(name == null ? '' : name).trim().toLowerCase();
+  if (!n) return null;
+  for (var i = 0; i < knownVendors.length; i++) {
+    if ((knownVendors[i].display_name || '').toLowerCase() === n) return knownVendors[i];
+  }
+  return null;
+}
+
+function vpFilter(q) {
+  if (!q) return knownVendors.slice(0, 50);
+  var ql = q.toLowerCase();
+  var out = [];
+  for (var i = 0; i < knownVendors.length; i++) {
+    if ((knownVendors[i].display_name || '').toLowerCase().indexOf(ql) !== -1) {
+      out.push(knownVendors[i]);
+      if (out.length >= 50) break;
+    }
+  }
+  return out;
+}
+
+// Typing means the user is searching again — drop any prior selection until they re-pick.
+function onVendorInput() {
+  var input = document.getElementById('vendor');
+  var dd = document.getElementById('vendor-dropdown');
+  var q = input.value;
+  document.getElementById('vendor-id').value = '';
+  document.getElementById('vendor-selected').style.display = 'none';
+  vendorDropdownFocusedIdx = -1;
+
+  if (!knownVendorsReady) {
+    dd.innerHTML = '<div class="vp-empty">Loading vendors...</div>';
+    dd.classList.add('open');
+    return;
+  }
+
+  var matches = vpFilter(q);
+  var html = '';
+  for (var i = 0; i < matches.length; i++) {
+    html += '<div class="vp-item" data-idx="' + i + '" onmousedown="vpPick(\'' + matches[i].id + '\');return false;">' + escHtml(matches[i].display_name) + '</div>';
+  }
+  var typed = q.trim();
+  var exact = findVendorByName(typed);
+  if (typed && !exact) {
+    html += '<div class="vp-item vp-item-add" data-idx="' + matches.length + '" onmousedown="vpAddNew();return false;">+ Add &ldquo;' + escHtml(typed) + '&rdquo; as a new vendor</div>';
+  }
+  if (!html) html = '<div class="vp-empty">Type a vendor name...</div>';
+  dd.innerHTML = html;
+  dd.classList.add('open');
+
+  var um = document.getElementById('vendor-unmatched');
+  if (typed && !exact) {
+    um.textContent = 'Not a saved vendor yet — pick a match above or add it.';
+    um.style.display = 'block';
+  } else {
+    um.style.display = 'none';
+  }
+}
+
+function onVendorKeydown(e) {
+  var dd = document.getElementById('vendor-dropdown');
+  if (!dd.classList.contains('open')) return;
+  var items = dd.querySelectorAll('.vp-item');
+  if (!items.length) return;
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    vendorDropdownFocusedIdx = Math.min(vendorDropdownFocusedIdx + 1, items.length - 1);
+    vpHighlight(items);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    vendorDropdownFocusedIdx = Math.max(vendorDropdownFocusedIdx - 1, 0);
+    vpHighlight(items);
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (vendorDropdownFocusedIdx >= 0 && vendorDropdownFocusedIdx < items.length) {
+      items[vendorDropdownFocusedIdx].dispatchEvent(new MouseEvent('mousedown'));
+    } else if (items.length === 1) {
+      items[0].dispatchEvent(new MouseEvent('mousedown'));
+    }
+  } else if (e.key === 'Escape') {
+    dd.classList.remove('open');
+  }
+}
+
+function vpHighlight(items) {
+  for (var i = 0; i < items.length; i++) items[i].classList.toggle('kb-focused', i === vendorDropdownFocusedIdx);
+  if (vendorDropdownFocusedIdx >= 0 && items[vendorDropdownFocusedIdx]) {
+    items[vendorDropdownFocusedIdx].scrollIntoView({ block: 'nearest' });
+  }
+}
+
+function vpPick(vendorId) {
+  var vendor = null;
+  for (var i = 0; i < knownVendors.length; i++) { if (knownVendors[i].id === vendorId) { vendor = knownVendors[i]; break; } }
+  if (!vendor) return;
+  document.getElementById('vendor').value = vendor.display_name;
+  document.getElementById('vendor-id').value = vendor.id;
+  document.getElementById('vendor-dropdown').classList.remove('open');
+  document.getElementById('vendor-unmatched').style.display = 'none';
+  var sel = document.getElementById('vendor-selected');
+  sel.innerHTML = 'Vendor: ' + escHtml(vendor.display_name) + ' <button type="button" class="vp-clear" onclick="vpClear()">change</button>';
+  sel.style.display = 'flex';
+}
+
+function vpClear() {
+  document.getElementById('vendor').value = '';
+  document.getElementById('vendor-id').value = '';
+  document.getElementById('vendor-selected').style.display = 'none';
+  document.getElementById('vendor-unmatched').style.display = 'none';
+  document.getElementById('vendor').focus();
+}
+
+// Create a new known_vendors row from the typed text, then select it.
+async function vpAddNew() {
+  var typed = document.getElementById('vendor').value.trim();
+  if (!typed) return;
+  var existing = findVendorByName(typed);
+  if (existing) { vpPick(existing.id); return; }
+
+  var dd = document.getElementById('vendor-dropdown');
+  dd.innerHTML = '<div class="vp-empty">Adding vendor...</div>';
+
+  var userName = 'unknown';
+  if (typeof pcAuth !== 'undefined') { var u = pcAuth.getUser(); if (u) userName = u.display_name; }
+
+  try {
+    var hdrs = apiHeaders();
+    var newId = crypto.randomUUID();
+    var res = await fetch(SUPA_URL + '/rest/v1/known_vendors', {
+      method: 'POST',
+      headers: Object.assign({}, hdrs, {'Content-Type': 'application/json', 'Prefer': 'return=minimal'}),
+      body: JSON.stringify({ id: newId, display_name: typed, created_by: userName })
+    });
+    if (!res.ok) {
+      // Most likely a UNIQUE collision — re-fetch and select the canonical row.
+      console.warn('[purchases] add vendor failed, re-checking', await res.text());
+      await loadKnownVendors();
+      var again = findVendorByName(typed);
+      if (again) { vpPick(again.id); return; }
+      alert('Could not add that vendor. Try again.');
+      dd.classList.remove('open');
+      return;
+    }
+    var vendorRow = { id: newId, display_name: typed };
+    knownVendors.push(vendorRow);
+    knownVendors.sort(function(a,b) { return (a.display_name || '').localeCompare(b.display_name || ''); });
+    vpPick(newId);
+  } catch(e) {
+    console.error('[purchases] add vendor exception', e);
+    alert('Could not add that vendor. Try again.');
+    dd.classList.remove('open');
+  }
+}
+
+// Resolve the vendor for submit: returns {id, name}. Uses the explicit selection
+// if present; otherwise tries an exact (case-insensitive) match on the typed text.
+function resolveVendorForSubmit() {
+  var typed = document.getElementById('vendor').value.trim();
+  var pickedId = document.getElementById('vendor-id').value || null;
+  if (pickedId) {
+    var picked = null;
+    for (var i = 0; i < knownVendors.length; i++) { if (knownVendors[i].id === pickedId) { picked = knownVendors[i]; break; } }
+    if (picked) return { id: picked.id, name: picked.display_name };
+  }
+  var exact = findVendorByName(typed);
+  if (exact) return { id: exact.id, name: exact.display_name };
+  return { id: null, name: typed };  // free-text fallback (legacy)
+}
+
+// Close vendor dropdown on outside click
+document.addEventListener('mousedown', function(e) {
+  if (!e.target.closest('.vp-wrap')) {
+    var dd = document.getElementById('vendor-dropdown');
+    if (dd) dd.classList.remove('open');
+  }
+});
+
+// ── Shared duplicate detection (every purchases write path uses this) ──
+// One function so detection logic can never drift between entry paths again.
+// Two tiers, both "warn, don't block":
+//   Tier 1 (vendor-agnostic): same venue + exact amount + exact invoice_date.
+//   Tier 2 (vendor-aware): same vendor_id + amount within $1 + date within +/-5d.
+// opts: { venue, amount, dateStr, vendorId (optional), excludeId (optional) }
+// Returns matching rows, each tagged with _dupTier (1 or 2).
+async function checkPurchaseDuplicate(opts) {
+  try {
+    var amount = parseFloat(opts.amount);
+    var dateStr = opts.dateStr;
+    if (!dateStr || isNaN(amount)) return [];
     var hdrs = apiHeaders();
     var d = new Date(dateStr + 'T00:00:00');
     var from = new Date(d); from.setDate(from.getDate() - 5);
     var to = new Date(d); to.setDate(to.getDate() + 5);
     var fromStr = from.toISOString().slice(0,10);
     var toStr = to.toISOString().slice(0,10);
-    var lo = (parseFloat(amount) - 1).toFixed(2);
-    var hi = (parseFloat(amount) + 1).toFixed(2);
+    var lo = (amount - 1).toFixed(2);
+    var hi = (amount + 1).toFixed(2);
     var url = SUPA_URL + '/rest/v1/purchases?type=eq.invoice'
             + '&deleted_at=is.null'
             + '&invoice_date=gte.' + fromStr + '&invoice_date=lte.' + toStr
             + '&amount=gte.' + lo + '&amount=lte.' + hi
-            + '&select=id,invoice_date,vendor,venue,amount,photo_url,allocation_group_id';
+            + '&select=id,invoice_date,vendor,vendor_id,venue,amount,photo_url,allocation_group_id'
+            + '&limit=200';
     var res = await fetch(url, { headers: hdrs });
-    if (!res.ok) return [];
+    if (!res.ok) { console.error('[purchases] dup check query failed', await res.text()); return []; }
     var rows = await res.json();
     if (!Array.isArray(rows)) return [];
-    var nv = normVendor(vendor);
-    return rows.filter(function(r) { return normVendor(r.vendor) === nv; });
+
+    var matches = [];
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      if (opts.excludeId && r.id === opts.excludeId) continue;
+      var ra = parseFloat(r.amount);
+      var sameAmountExact = Math.abs(ra - amount) < 0.005;
+      var sameAmountFuzzy = Math.abs(ra - amount) <= 1.00;
+      var sameDateExact = r.invoice_date === dateStr;
+      if (opts.venue && r.venue === opts.venue && sameAmountExact && sameDateExact) {
+        r._dupTier = 1; matches.push(r); continue;
+      }
+      if (opts.vendorId && r.vendor_id && r.vendor_id === opts.vendorId && sameAmountFuzzy) {
+        r._dupTier = 2; matches.push(r);
+      }
+    }
+    return matches;
   } catch(e) { console.error('[purchases] dup check failed', e); return []; }
 }
 
@@ -1600,14 +1888,23 @@ function confirmDupOverride() {
 
 // ── Submit ──
 async function submitForm() {
-  if (currentMode === 'invoice') await submitInvoice();
-  else if (currentMode === 'transfer') await submitTransfer();
-  else await submitExpense();
+  var btn = document.getElementById('submit-btn');
+  if (btn.dataset.busy === '1') return;   // re-entrancy guard — closes the double-click race
+  btn.dataset.busy = '1';
+  try {
+    if (currentMode === 'invoice') await submitInvoice();
+    else if (currentMode === 'transfer') await submitTransfer();
+    else await submitExpense();
+  } finally {
+    btn.dataset.busy = '0';
+  }
 }
 
 async function submitInvoice(skipDupCheck) {
   var date = document.getElementById('inv-date').value;
-  var vendor = document.getElementById('vendor').value.trim();
+  var vendorResolved = resolveVendorForSubmit();
+  var vendor = vendorResolved.name;       // canonical display_name if matched, else typed text
+  var vendorId = vendorResolved.id;        // known_vendors id, or null for free-text fallback
   var amount = parseFloat(document.getElementById('amount').value);
   var note = document.getElementById('note').value.trim();
   var isSplit = document.getElementById('split-toggle').checked;
@@ -1661,8 +1958,18 @@ async function submitInvoice(skipDupCheck) {
   }
 
   // ── Duplicate check (runs before save; skipped on override re-run) ──
+  // Shared two-tier checker. Tier 2 now activates when a vendor was picked (vendorId set).
   if (skipDupCheck !== true) {
-    var dupMatches = await findDuplicateInvoices(vendor, amount, date);
+    var dupMatches;
+    if (!isSplit) {
+      dupMatches = await checkPurchaseDuplicate({ venue: venue, amount: amount, dateStr: date, vendorId: vendorId });
+    } else {
+      var legA = await checkPurchaseDuplicate({ venue: splitVenue1, amount: splitAmount1, dateStr: date, vendorId: vendorId });
+      var legB = await checkPurchaseDuplicate({ venue: splitVenue2, amount: splitAmount2, dateStr: date, vendorId: vendorId });
+      var dupSeen = {};
+      dupMatches = [];
+      legA.concat(legB).forEach(function(m) { if (!dupSeen[m.id]) { dupSeen[m.id] = true; dupMatches.push(m); } });
+    }
     if (dupMatches.length) {
       var newSummary;
       if (!isSplit) {
@@ -1702,7 +2009,7 @@ async function submitInvoice(skipDupCheck) {
       var res = await fetch(SUPA_URL + '/rest/v1/purchases', {
         method: 'POST',
         headers: Object.assign({}, hdrs, {'Content-Type': 'application/json', 'Prefer': 'return=minimal'}),
-        body: JSON.stringify({id: id, type: 'invoice', invoice_date: date, vendor: vendor, venue: venue, amount: amount, note: fullNote || null, photo_url: photoUrl})
+        body: JSON.stringify({id: id, type: 'invoice', invoice_date: date, vendor: vendor, vendor_id: vendorId, venue: venue, amount: amount, note: fullNote || null, photo_url: photoUrl})
       });
       if (!res.ok) throw new Error(await res.text());
       document.getElementById('form-card').style.display = 'none';
@@ -1716,8 +2023,8 @@ async function submitInvoice(skipDupCheck) {
       var id2 = crypto.randomUUID();
       var splitNote = (fullNote ? fullNote + '\n' : '') + '[Split invoice: ' + splitVenue1 + ' $' + fmtMoney(splitAmount1) + ' / ' + splitVenue2 + ' $' + fmtMoney(splitAmount2) + ']';
       var payload = [
-        {id: id1, type: 'invoice', invoice_date: date, vendor: vendor, venue: splitVenue1, amount: splitAmount1, note: splitNote, photo_url: photoUrl, allocation_group_id: groupId},
-        {id: id2, type: 'invoice', invoice_date: date, vendor: vendor, venue: splitVenue2, amount: splitAmount2, note: splitNote, photo_url: photoUrl, allocation_group_id: groupId}
+        {id: id1, type: 'invoice', invoice_date: date, vendor: vendor, vendor_id: vendorId, venue: splitVenue1, amount: splitAmount1, note: splitNote, photo_url: photoUrl, allocation_group_id: groupId},
+        {id: id2, type: 'invoice', invoice_date: date, vendor: vendor, vendor_id: vendorId, venue: splitVenue2, amount: splitAmount2, note: splitNote, photo_url: photoUrl, allocation_group_id: groupId}
       ];
       var res2 = await fetch(SUPA_URL + '/rest/v1/purchases', {
         method: 'POST',
@@ -1974,6 +2281,10 @@ function resetForm() {
   document.getElementById('success-card').style.display = 'none';
   document.getElementById('inv-date').value = todayLocal();
   document.getElementById('vendor').value = '';
+  document.getElementById('vendor-id').value = '';
+  document.getElementById('vendor-selected').style.display = 'none';
+  document.getElementById('vendor-unmatched').style.display = 'none';
+  document.getElementById('vendor-dropdown').classList.remove('open');
   document.getElementById('venue-sel').value = '';
   document.getElementById('amount').value = '';
   document.getElementById('note').value = '';
@@ -2637,13 +2948,23 @@ async function confirmDelete(id) {
 
   try {
     var hdrs = apiHeaders();
+    var userName = 'unknown';
+    if (typeof pcAuth !== 'undefined') {
+      var u = pcAuth.getUser();
+      if (u) userName = u.display_name;
+    }
     var url;
     if (deleteWholeGroup) {
-      url = SUPA_URL + '/rest/v1/purchases?' + groupColumn + '=eq.' + row[groupColumn];
+      url = SUPA_URL + '/rest/v1/purchases?' + groupColumn + '=eq.' + row[groupColumn] + '&deleted_at=is.null';
     } else {
-      url = SUPA_URL + '/rest/v1/purchases?id=eq.' + id;
+      url = SUPA_URL + '/rest/v1/purchases?id=eq.' + id + '&deleted_at=is.null';
     }
-    var res = await fetch(url, { method: 'DELETE', headers: Object.assign({}, hdrs, {'Prefer': 'return=minimal'}) });
+    // Soft-delete only: stamp deleted_at/deleted_by. No hard DELETE — every reader filters deleted_at=is.null.
+    var res = await fetch(url, {
+      method: 'PATCH',
+      headers: Object.assign({}, hdrs, {'Content-Type': 'application/json', 'Prefer': 'return=minimal'}),
+      body: JSON.stringify({ deleted_at: new Date().toISOString(), deleted_by: userName })
+    });
     if (!res.ok) throw new Error();
     searchPurchases(); loadMonthlySummary();
   } catch(e) { alert('Delete failed. Try again.'); }
@@ -2696,6 +3017,8 @@ async function loadReconCharges() {
     reconCharges = rows;
     reconVenueSelections = {};
     reconChecked = {};
+    reconDupFlags = {};
+    reconDupOverridden = {};
     document.getElementById('recon-bar').style.display = 'block';
     document.getElementById('recon-count').textContent = rows.length;
 
@@ -2797,6 +3120,13 @@ function renderReconList() {
     if (c.batch_note) {
       html += '<div class="recon-batch-note batch-' + batchColor + '">&ldquo;' + escHtml(c.batch_note) + '&rdquo;</div>';
     }
+    if (reconDupFlags[c.id] && !reconDupOverridden[c.id]) {
+      var dupN = reconDupFlags[c.id].length;
+      html += '<div class="recon-dup-flag">';
+      html += '<span class="recon-dup-text">Possible duplicate &mdash; ' + dupN + ' match' + (dupN !== 1 ? 'es' : '') + ' already in purchases. Held back from this save.</span>';
+      html += '<button class="recon-dup-review" onclick="reviewReconDup(\'' + c.id + '\')">Review</button>';
+      html += '</div>';
+    }
     html += '</div>';
   }
   listEl.innerHTML = html;
@@ -2806,8 +3136,10 @@ function renderReconList() {
 
 function updateReconFooter() {
   var checkedIds = Object.keys(reconChecked).filter(function(k) { return reconChecked[k]; });
-  var checkedWithVenue = checkedIds.filter(function(id) { return reconVenueSelections[id]; });
-  var checkedWithValidSplit = checkedIds.filter(function(id) { return reconSplits[id] && validateReconSplit(id).ok; });
+  function isHeld(id) { return reconDupFlags[id] && !reconDupOverridden[id]; }
+  var checkedWithVenue = checkedIds.filter(function(id) { return reconVenueSelections[id] && !isHeld(id); });
+  var checkedWithValidSplit = checkedIds.filter(function(id) { return reconSplits[id] && validateReconSplit(id).ok && !isHeld(id); });
+  var heldCount = checkedIds.filter(isHeld).length;
   var totalReady = checkedWithVenue.length + checkedWithValidSplit.length;
   var footerEl = document.getElementById('recon-footer');
   var noteEl = document.getElementById('recon-footer-note');
@@ -2839,6 +3171,7 @@ function updateReconFooter() {
   } else {
     var noteParts = [checkedIds.length + ' selected'];
     if (totalReady > 0 && totalReady < checkedIds.length) noteParts.push(totalReady + ' ready');
+    if (heldCount > 0) noteParts.push(heldCount + ' held -- review duplicate' + (heldCount !== 1 ? 's' : ''));
     noteEl.textContent = noteParts.join(' -- ');
   }
 }
@@ -2849,12 +3182,20 @@ function toggleAllRecon(checked) {
 }
 
 function toggleReconCheck(chargeId, checked) {
-  if (checked) reconChecked[chargeId] = true;
-  else delete reconChecked[chargeId];
+  if (checked) {
+    reconChecked[chargeId] = true;
+  } else {
+    delete reconChecked[chargeId];
+    delete reconDupFlags[chargeId];
+    delete reconDupOverridden[chargeId];
+  }
   renderReconList();
 }
 
 function reconVenueChanged(chargeId, selectEl) {
+  // Any change to the assignment invalidates a prior dup ruling — re-evaluate on next save.
+  delete reconDupFlags[chargeId];
+  delete reconDupOverridden[chargeId];
   if (selectEl.value) {
     reconVenueSelections[chargeId] = selectEl.value;
     selectEl.className = 'recon-venue-sel assigned';
@@ -2868,6 +3209,8 @@ function reconVenueChanged(chargeId, selectEl) {
 
 function openReconSplit(chargeId) {
   delete reconVenueSelections[chargeId];
+  delete reconDupFlags[chargeId];
+  delete reconDupOverridden[chargeId];
   reconSplits[chargeId] = {v1: '', a1: '', v2: '', a2: ''};
   if (!reconChecked[chargeId]) reconChecked[chargeId] = true;
   renderReconList();
@@ -2875,12 +3218,17 @@ function openReconSplit(chargeId) {
 
 function closeReconSplit(chargeId) {
   delete reconSplits[chargeId];
+  delete reconDupFlags[chargeId];
+  delete reconDupOverridden[chargeId];
   renderReconList();
 }
 
 function reconSplitFieldChanged(chargeId, field, value) {
   if (!reconSplits[chargeId]) return;
   reconSplits[chargeId][field] = value;
+  // Changing a split leg invalidates a prior dup ruling.
+  delete reconDupFlags[chargeId];
+  delete reconDupOverridden[chargeId];
   updateReconSplitStatusInPlace(chargeId);
   updateReconFooter();
 }
@@ -3066,9 +3414,39 @@ async function confirmReturn() {
   }
 }
 
+// Open the shared dup modal for a flagged recon charge. "Save anyway" marks the
+// charge overridden so the next "Save assignments" includes it.
+function reviewReconDup(chargeId) {
+  var matches = reconDupFlags[chargeId];
+  if (!matches || !matches.length) return;
+  var charge = null;
+  for (var i = 0; i < reconCharges.length; i++) {
+    if (reconCharges[i].id === chargeId) { charge = reconCharges[i]; break; }
+  }
+  if (!charge) return;
+
+  var amt = Math.abs(parseFloat(charge.amount || 0));
+  var venueText;
+  if (reconSplits[chargeId]) {
+    var sp = reconSplits[chargeId];
+    venueText = 'split ' + (sp.v1 || '?') + '/' + (sp.v2 || '?');
+  } else {
+    venueText = reconVenueSelections[chargeId] || '';
+  }
+  var summary = escHtml(charge.vendor_name || 'Unknown') + ' &middot; ' + charge.charge_date
+              + ' &middot; ' + escHtml(venueText) + ' &middot; <strong>$' + fmtMoney(amt) + '</strong>';
+
+  openDupModal(matches, summary, function() {
+    reconDupOverridden[chargeId] = true;
+    delete reconDupFlags[chargeId];
+    renderReconList();
+  });
+}
+
+
 async function saveReconAssignments() {
-  var toSaveSingle = [];
-  var toSaveSplit = [];
+  // ── Build candidate list (single + split), preserving kind ──
+  var candidates = [];
   var checkedIds = Object.keys(reconChecked).filter(function(k) { return reconChecked[k]; });
   for (var ci = 0; ci < checkedIds.length; ci++) {
     var chargeId = checkedIds[ci];
@@ -3080,17 +3458,51 @@ async function saveReconAssignments() {
 
     if (reconSplits[chargeId]) {
       var v = validateReconSplit(chargeId);
-      if (v.ok) toSaveSplit.push({charge: charge, split: reconSplits[chargeId]});
+      if (v.ok) candidates.push({ chargeId: chargeId, charge: charge, kind: 'split', split: reconSplits[chargeId] });
     } else if (reconVenueSelections[chargeId]) {
-      toSaveSingle.push({charge: charge, venue: reconVenueSelections[chargeId]});
+      candidates.push({ chargeId: chargeId, charge: charge, kind: 'single', venue: reconVenueSelections[chargeId] });
     }
   }
-  if (!toSaveSingle.length && !toSaveSplit.length) return;
+  if (!candidates.length) return;
 
   var saveBtn = document.getElementById('recon-save-btn');
   var notFoodBtn = document.getElementById('recon-notfood-btn');
   saveBtn.disabled = true;
   notFoodBtn.disabled = true;
+  saveBtn.textContent = 'Checking for duplicates...';
+
+  // ── Pre-flight dup scan (Plan A) ──
+  // Tier 1 only matters here: recon charges have no vendor_id. Overridden charges skip the check.
+  // Flagged charges are held back (no write); clean + overridden charges proceed.
+  var clean = [];
+  for (var cn = 0; cn < candidates.length; cn++) {
+    var cand = candidates[cn];
+    if (reconDupOverridden[cand.chargeId]) { clean.push(cand); continue; }
+    var matches = [];
+    try {
+      if (cand.kind === 'single') {
+        matches = await checkPurchaseDuplicate({
+          venue: cand.venue,
+          amount: Math.abs(parseFloat(cand.charge.amount)),
+          dateStr: cand.charge.charge_date
+        });
+      } else {
+        var mA = await checkPurchaseDuplicate({ venue: cand.split.v1, amount: parseFloat(cand.split.a1), dateStr: cand.charge.charge_date });
+        var mB = await checkPurchaseDuplicate({ venue: cand.split.v2, amount: parseFloat(cand.split.a2), dateStr: cand.charge.charge_date });
+        var seen = {};
+        mA.concat(mB).forEach(function(m) { if (!seen[m.id]) { seen[m.id] = true; matches.push(m); } });
+      }
+    } catch(e) { matches = []; }  // fail open on a scan error -- never block a save on the checker itself
+    if (matches.length) { reconDupFlags[cand.chargeId] = matches; }
+    else { delete reconDupFlags[cand.chargeId]; clean.push(cand); }
+  }
+
+  // If every candidate got flagged, write nothing and surface the badges (fail loud, no silent save).
+  if (!clean.length) {
+    renderReconList();  // re-renders rows + recomputes footer (Save disabled, held count shown)
+    return;
+  }
+
   saveBtn.textContent = 'Saving...';
 
   var hdrs = apiHeaders();
@@ -3101,9 +3513,11 @@ async function saveReconAssignments() {
   }
 
   var errors = 0;
+  var savedIds = [];
 
-  for (var s = 0; s < toSaveSingle.length; s++) {
-    var item = toSaveSingle[s];
+  for (var s = 0; s < clean.length; s++) {
+    var c0 = clean[s];
+    if (c0.kind !== 'single') continue;
     try {
       var purchaseId = crypto.randomUUID();
       var purchaseRes = await fetch(SUPA_URL + '/rest/v1/purchases', {
@@ -3112,32 +3526,34 @@ async function saveReconAssignments() {
         body: JSON.stringify({
           id: purchaseId,
           type: 'invoice',
-          invoice_date: item.charge.charge_date,
-          vendor: item.charge.vendor_name || 'Unknown',
-          venue: item.venue,
-          amount: Math.abs(parseFloat(item.charge.amount)) * (parseFloat(item.charge.amount) < 0 ? -1 : 1),
+          invoice_date: c0.charge.charge_date,
+          vendor: c0.charge.vendor_name || 'Unknown',
+          venue: c0.venue,
+          amount: Math.abs(parseFloat(c0.charge.amount)) * (parseFloat(c0.charge.amount) < 0 ? -1 : 1),
           note: 'From bank statement reconciliation'
         })
       });
       if (!purchaseRes.ok) throw new Error();
 
-      var chargeRes = await fetch(SUPA_URL + '/rest/v1/bank_charges?id=eq.' + item.charge.id, {
+      var chargeRes = await fetch(SUPA_URL + '/rest/v1/bank_charges?id=eq.' + c0.charge.id, {
         method: 'PATCH',
         headers: Object.assign({}, hdrs, {'Content-Type': 'application/json', 'Prefer': 'return=minimal'}),
         body: JSON.stringify({
           status: 'reconciled',
-          venue: item.venue,
+          venue: c0.venue,
           created_purchase_id: purchaseId,
           reconciled_by: userName || 'unknown',
           reconciled_at: new Date().toISOString()
         })
       });
       if (!chargeRes.ok) throw new Error();
+      savedIds.push(c0.chargeId);
     } catch(e) { errors++; }
   }
 
-  for (var sp = 0; sp < toSaveSplit.length; sp++) {
-    var splitItem = toSaveSplit[sp];
+  for (var sp = 0; sp < clean.length; sp++) {
+    var splitItem = clean[sp];
+    if (splitItem.kind !== 'split') continue;
     try {
       var groupId = crypto.randomUUID();
       var pId1 = crypto.randomUUID();
@@ -3172,12 +3588,29 @@ async function saveReconAssignments() {
         })
       });
       if (!splitChargeRes.ok) throw new Error();
+      savedIds.push(splitItem.chargeId);
     } catch(e) { errors++; }
   }
 
-  if (errors) alert(errors + ' assignment(s) failed. Refreshing list.');
+  // Drop saved charges from local state (keep flagged ones with their badges intact).
+  for (var k = 0; k < savedIds.length; k++) {
+    var sid = savedIds[k];
+    reconCharges = reconCharges.filter(function(c) { return c.id !== sid; });
+    delete reconChecked[sid];
+    delete reconVenueSelections[sid];
+    delete reconSplits[sid];
+    delete reconDupFlags[sid];
+    delete reconDupOverridden[sid];
+  }
 
-  loadReconCharges();
+  if (errors) alert(errors + ' assignment(s) failed. The list has been refreshed.');
+
+  document.getElementById('recon-count').textContent = reconCharges.length;
+  if (!reconCharges.length) {
+    document.getElementById('recon-bar').style.display = 'none';
+  } else {
+    renderReconList();
+  }
   loadMonthlySummary();
 }
 
@@ -3359,6 +3792,7 @@ function init() {
   loadMonthlySummary();
   loadReconCharges();
   loadInquiryCharges();
+  loadKnownVendors();
 }
 
 pcAuth.require({
