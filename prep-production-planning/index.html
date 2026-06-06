@@ -349,9 +349,34 @@
   .pc-prod-daycell { font-size:12px; text-align:center; font-variant-numeric:tabular-nums; color:var(--pc-ink); }
   .pc-prod-daycell.is-zero { color:var(--pc-line); }
   .pc-prod-venues { background:var(--pc-bg); border-top:1px solid var(--pc-line-soft); padding:4px 16px 8px 34px; }
-  .pc-prod-vrow { display:flex; align-items:center; justify-content:space-between; padding:5px 0; font-size:13px; max-width:420px; }
-  .pc-prod-vname { color:var(--pc-muted); display:flex; align-items:center; }
-  .pc-prod-vqty { font-variant-numeric:tabular-nums; }
+  .pc-prod-vrow { display:flex; align-items:center; gap:10px; padding:7px 0; font-size:13px; max-width:540px; }
+  .pc-prod-vrow.selectable { cursor:pointer; }
+  .pc-prod-vname { color:var(--pc-muted); display:flex; align-items:center; flex:1; }
+  .pc-prod-vqty { font-variant-numeric:tabular-nums; min-width:74px; text-align:right; }
+  .pc-prod-vrow.sel .pc-prod-vname, .pc-prod-vrow.sel .pc-prod-vqty,
+  .pc-prod-vrow.mine .pc-prod-vname, .pc-prod-vrow.mine .pc-prod-vqty,
+  .pc-prod-vrow.taken .pc-prod-vname, .pc-prod-vrow.taken .pc-prod-vqty { text-decoration:line-through; text-decoration-thickness:1px; color:var(--pc-faint); }
+  .pc-prod-vcb { width:18px; height:18px; cursor:pointer; accent-color:var(--pc-ops); flex-shrink:0; }
+  .pc-prod-vcheck { width:18px; text-align:center; color:var(--pc-green); flex-shrink:0; }
+  .pc-prod-vown { font-size:12px; color:var(--pc-green); display:inline-flex; align-items:center; gap:7px; min-width:120px; justify-content:flex-end; }
+  .pc-prod-vrelease { appearance:none; border:none; background:var(--pc-line-soft); color:var(--pc-muted); border-radius:5px; width:20px; height:20px; font-size:13px; line-height:1; cursor:pointer; flex-shrink:0; }
+  .pc-prod-vrelease:hover { background:var(--pc-line); color:var(--pc-red); }
+  .pc-prod-selall { display:flex; align-items:center; gap:8px; padding:4px 0 8px; font-size:12.5px; color:var(--pc-muted); max-width:540px; }
+  .pc-prod-selall input { width:16px; height:16px; cursor:pointer; accent-color:var(--pc-ops); }
+  .pc-prod-vrow.est { color:var(--pc-faint); }
+  .pc-prod-esttag { font-size:9px; font-weight:600; letter-spacing:0.05em; text-transform:uppercase; color:var(--pc-ops); background:var(--pc-ops-soft); padding:2px 6px; border-radius:5px; margin-left:8px; }
+  .pc-bubbles { display:flex; gap:12px; margin-bottom:18px; flex-wrap:wrap; }
+  .pc-bub { flex:1; min-width:150px; background:var(--pc-card); border:1px solid var(--pc-line); border-radius:var(--radius); overflow:hidden; }
+  .pc-bub-nm { font-size:13px; font-weight:600; padding:9px 13px 7px; border-bottom:1px solid var(--pc-line); }
+  .pc-bub-split { display:flex; }
+  .pc-bub-half { flex:1; padding:9px 12px 12px; text-align:center; }
+  .pc-bub-half + .pc-bub-half { border-left:1px solid var(--pc-line); }
+  .pc-bub-lbl { font-size:10px; letter-spacing:0.05em; text-transform:uppercase; color:var(--pc-faint); }
+  .pc-bub-num { font-size:22px; font-weight:700; margin-top:3px; font-variant-numeric:tabular-nums; }
+  .pc-bub-num.is-zero { color:var(--pc-faint); }
+  .pc-bub-done-body { padding:9px 13px 12px; text-align:center; }
+  .pc-bub-pct { font-size:26px; font-weight:700; font-variant-numeric:tabular-nums; color:var(--pc-green); }
+  .pc-bub-frac { font-size:11px; color:var(--pc-muted); margin-top:2px; }
   @media (max-width: 760px) { .pc-prod-row { grid-template-columns:1fr 90px; } .pc-prod-days { display:none; } }
 </style>
 </head>
@@ -500,6 +525,12 @@
   <button class="pc-sb-discard" id="pcDiscardBtn" type="button">Discard</button>
 </div>
 
+<div class="pc-savebar" id="pcBuildBar">
+  <span id="pcBuildCount">0 selected</span>
+  <button class="pc-sb-save" id="pcBuildBtn" type="button">Build production sheet</button>
+  <button class="pc-sb-discard" id="pcBuildClear" type="button">Clear</button>
+</div>
+
 <div class="pc-toast" id="pcToast"></div>
 
 <!-- ============================================================
@@ -608,6 +639,11 @@
     if (view === 'plan' && PC.canPlan && PC.weekIndex === -1) PC.initWeekPicker();
     if (view === 'prod' && PC.canProduce && PC.prodWeekIndex === -1) PC.initProdWeek();
     // END PATCH ANCHOR: VIEW_SWITCH_HOOK
+
+    // Keep the two bottom bars on their own side.
+    var sb = document.getElementById('pcSaveBar');
+    if (sb && view !== 'plan') sb.classList.remove('is-on');
+    if (PC.updateBuildBar) PC.updateBuildBar();
   }
   PC.setView = setView;
 
@@ -748,7 +784,7 @@
       });
       PC._itemMeta = {}; PC._itemOrder = [];
       (r[2] || []).forEach(function (it) {
-        PC._itemMeta[it.id] = { name: it.name, unit: it.unit, production_mode: it.production_mode };
+        PC._itemMeta[it.id] = { name: it.name, unit: it.unit, production_mode: it.production_mode, sort_order: it.sort_order };
         PC._itemOrder.push(it.id);
       });
       PC._profilesLoaded = true;
@@ -1382,11 +1418,15 @@
     }
   };
 
-  // ---- Production rollup (read-only) --------------------------------
+  // ---- Production rollup --------------------------------------------
   PC.prodWeekIndex = -1;
   PC.prodVenue = '';
   PC._prodLines = [];     // raw plan lines for the week (with event_date, venue)
   PC._prodExpanded = {};  // item_id -> bool (venue drill-down open)
+  PC._prodClaims = {};    // 'item_id|venue_code' -> { claimed_by }  (active claims, this week)
+  PC._sel = {};           // 'item_id|venue_code' -> true  (pending picks, not yet built)
+  PC._prodEvents = [];    // events + staffing_requests for the week (feeds estimates)
+  PC.myName = function () { return (PC.user && (PC.user.display_name || PC.user.email)) || 'unknown'; };
 
   PC.initProdWeek = function () {
     // Reuse the same fiscal weeks the Planning picker builds.
@@ -1442,13 +1482,26 @@
     document.getElementById('pcProdBody').innerHTML = '';
     // Plan lines joined to their event (date + venue) and item (name/unit/mode),
     // scoped to the week by the embedded event's date. One call.
-    var url = '/rest/v1/prep_plan_lines?select=planned_qty,item_id,' +
+    var url = '/rest/v1/prep_plan_lines?select=planned_qty,item_id,event_id,stand_id,' +
       'events!inner(event_date,venue,deleted_at),prep_items(name,unit,production_mode,sort_order)' +
       '&events.event_date=gte.' + w.start + '&events.event_date=lte.' + w.end +
       '&events.deleted_at=is.null&deleted_at=is.null&limit=20000';
-    PC.ensureProfiles().then(function () { return PC.authFetch(url); }).then(function (lines) {
-      PC._prodLines = (lines || []).filter(function (l) { return l.events && l.prep_items; });
+    var claimsUrl = '/rest/v1/prep_claims?select=item_id,venue_code,claimed_by&week_start=eq.' + w.start + '&is_active=is.true&limit=5000';
+    // Events + forecasts for the same week — feeds the mix-based estimate (the
+    // "what production would be" quick-view for stands not yet planned).
+    var evUrl = '/rest/v1/events?select=id,venue,event_date,' +
+      'staffing_requests(stand,venue,sales_forecast)' +
+      '&staffing_requests.sales_forecast=gt.0' +
+      '&event_date=gte.' + w.start + '&event_date=lte.' + w.end +
+      '&deleted_at=is.null&order=event_date.asc&limit=1000';
+    PC.ensureProfiles().then(function () { return Promise.all([PC.authFetch(url), PC.authFetch(claimsUrl), PC.authFetch(evUrl)]); }).then(function (res) {
+      PC._prodLines = (res[0] || []).filter(function (l) { return l.events && l.prep_items; });
+      PC._prodClaims = {};
+      (res[1] || []).forEach(function (c) { PC._prodClaims[c.item_id + '|' + c.venue_code] = { claimed_by: c.claimed_by }; });
+      PC._prodEvents = res[2] || [];
+      PC._sel = {};                       // pending picks never carry across a week change
       PC.setLoading('prod', false);
+      PC.updateBuildBar();
       PC.renderProd();
     }).catch(function (err) {
       PC.setLoading('prod', false);
@@ -1458,13 +1511,109 @@
     });
   };
 
+  // Mix-based estimate from the week's forecasts. Mirrors Planning's suggest:
+  // ceil(forecast * mix / price * 1.05). Tubs and on-site items get none.
+  PC.computeEstimates = function (filter) {
+    var byItem = {}, byItemVenue = {}, meta = {};
+    (PC._prodEvents || []).forEach(function (e) {
+      (e.staffing_requests || []).forEach(function (r) {
+        var f = Number(r.sales_forecast); if (!(f > 0)) return;
+        var venue = r.venue || e.venue;
+        if (filter && venue !== filter) return;
+        var prof = PC._standMix[venue + '|' + (r.stand || '')];
+        if (!prof) return;
+        var prices = PC._prices[venue] || {};
+        Object.keys(prof.items).forEach(function (itemId) {
+          var m = PC._itemMeta[itemId];
+          if (!m || m.unit === 'tub' || m.production_mode === 'on_site') return;
+          var sug = PC.suggestQty(f, prof.items[itemId], prices[itemId]);
+          if (sug == null) return;
+          byItem[itemId] = (byItem[itemId] || 0) + sug;
+          if (!byItemVenue[itemId]) byItemVenue[itemId] = {};
+          byItemVenue[itemId][venue] = (byItemVenue[itemId][venue] || 0) + sug;
+          if (!meta[itemId]) meta[itemId] = m;
+        });
+      });
+    });
+    return { byItem: byItem, byItemVenue: byItemVenue, meta: meta };
+  };
+
+  // Top-of-page bubbles. Three "made from scratch" items (make_ship, non-tub)
+  // each split Estimated | Planned, plus a Plan-completed bubble (built cells
+  // / planned cells across all claimable items this week).
+  PC.renderBubbles = function (items, est) {
+    function metaOf(id) { return (items[id] ? items[id].meta : est.meta[id]); }
+    function isBubbleItem(m) { return m && m.production_mode === 'make_ship' && m.unit !== 'tub'; }
+
+    var ids = {};
+    Object.keys(items).forEach(function (id) { ids[id] = true; });
+    Object.keys(est.byItem).forEach(function (id) { ids[id] = true; });
+
+    var bubbleIds = Object.keys(ids).filter(function (id) {
+      var m = metaOf(id); if (!isBubbleItem(m)) return false;
+      var planned = items[id] ? items[id].total : 0;
+      return planned > 0 || (est.byItem[id] || 0) > 0;
+    }).sort(function (a, b) {
+      var sa = (metaOf(a) && metaOf(a).sort_order) || 0, sb = (metaOf(b) && metaOf(b).sort_order) || 0;
+      return sa - sb;
+    });
+
+    // Plan completed: a forecasted, prep-relevant STAND counts as done once it
+    // has ANY planned item. Stand-level, not item-level — a cotton-candy-only
+    // stand is complete even if kettle corn wasn't needed there.
+    var plannedUnits = {};
+    (PC._prodLines || []).forEach(function (l) {
+      if (l.event_id && l.stand_id) plannedUnits[l.event_id + '|' + l.stand_id] = true;
+    });
+    var filter = PC.prodVenue || '';
+    var totalStands = 0, doneStands = 0, seen = {};
+    (PC._prodEvents || []).forEach(function (e) {
+      (e.staffing_requests || []).forEach(function (r) {
+        var f = Number(r.sales_forecast); if (!(f > 0)) return;
+        var venue = r.venue || e.venue;
+        if (filter && venue !== filter) return;
+        var key = venue + '|' + (r.stand || '');
+        if (!PC._carry[key]) return;                       // not a prep-relevant stand
+        var prof = PC._standMix[key]; if (!prof) return;
+        var unit = e.id + '|' + key;
+        if (seen[unit]) return; seen[unit] = true;          // one count per stand per event
+        totalStands++;
+        if (plannedUnits[e.id + '|' + prof.stand_id]) doneStands++;
+      });
+    });
+
+    if (!bubbleIds.length && totalStands === 0) return '';
+
+    var html = '<div class="pc-bubbles">';
+    bubbleIds.forEach(function (id) {
+      var m = metaOf(id);
+      var planned = items[id] ? items[id].total : 0;
+      var estVal = est.byItem[id] || 0;
+      html += '<div class="pc-bub">' +
+        '<div class="pc-bub-nm">' + escAttr(m.name) + '</div>' +
+        '<div class="pc-bub-split">' +
+          '<div class="pc-bub-half"><div class="pc-bub-lbl">Estimated</div><div class="pc-bub-num">' + estVal.toLocaleString() + '</div></div>' +
+          '<div class="pc-bub-half"><div class="pc-bub-lbl">Planned</div><div class="pc-bub-num' + (planned > 0 ? '' : ' is-zero') + '">' + planned.toLocaleString() + '</div></div>' +
+        '</div></div>';
+    });
+    if (totalStands > 0) {
+      var pct = Math.round((doneStands / totalStands) * 100);
+      html += '<div class="pc-bub pc-bub-done">' +
+        '<div class="pc-bub-nm">Plan completed</div>' +
+        '<div class="pc-bub-done-body"><div class="pc-bub-pct">' + pct + '%</div>' +
+        '<div class="pc-bub-frac">' + doneStands + ' of ' + totalStands + ' stands planned</div></div></div>';
+    }
+    html += '</div>';
+    return html;
+  };
+
   PC.renderProd = function () {
     var w = PC.weeks[PC.prodWeekIndex];
     var body = document.getElementById('pcProdBody'); if (!body || !w) return;
     var filter = PC.prodVenue || '';
     var lines = filter ? PC._prodLines.filter(function (l) { return l.events.venue === filter; }) : PC._prodLines;
 
-    // Aggregate: item -> { meta, weekTotal, byDay[7], byVenue{} }
+    // --- Planned aggregation: item -> { meta, total, byDay[7], byVenue{} } ---
     var items = {};
     lines.forEach(function (l) {
       var q = Number(l.planned_qty) || 0; if (q <= 0) return;
@@ -1477,16 +1626,25 @@
       it.byVenue[l.events.venue] = (it.byVenue[l.events.venue] || 0) + q;
     });
 
-    var ids = Object.keys(items).sort(function (a, b) {
-      return (items[a].meta.sort_order || 0) - (items[b].meta.sort_order || 0);
-    });
+    // --- Estimate aggregation from forecasts (mix-based "what production
+    //     would be" for stands not yet planned). Same math as Planning's
+    //     suggestion. Tubs and on-site (popcorn) get no estimate. ---
+    var est = PC.computeEstimates(filter);
+
+    // Union of item ids that have either a plan or an estimate.
+    var allIds = {};
+    Object.keys(items).forEach(function (id) { allIds[id] = true; });
+    Object.keys(est.byItem).forEach(function (id) { allIds[id] = true; });
+    function sortOf(id) { return (items[id] ? items[id].meta.sort_order : (est.meta[id] ? est.meta[id].sort_order : 0)) || 0; }
+    var ids = Object.keys(allIds).sort(function (a, b) { return sortOf(a) - sortOf(b); });
+
     var countEl = document.getElementById('pcProdCount');
     if (countEl) countEl.textContent = ids.length + ' item' + (ids.length === 1 ? '' : 's') + (filter ? ' \u00b7 ' + filter : '');
 
     if (!ids.length) {
       body.innerHTML = '<div class="pc-card"><div class="pc-empty">' +
-        '<p class="pc-empty-title">Nothing planned' + (filter ? ' for ' + escAttr(filter) : '') + ' this week</p>' +
-        '<p class="pc-empty-text">Production totals appear once quantities are committed on the Planning side.</p></div></div>';
+        '<p class="pc-empty-title">Nothing planned or forecasted' + (filter ? ' for ' + escAttr(filter) : '') + ' this week</p>' +
+        '<p class="pc-empty-text">Totals appear once events are forecasted, or quantities committed on the Planning side.</p></div></div>';
       return;
     }
 
@@ -1497,29 +1655,102 @@
       dayHdr += '<span class="pc-prod-day">' + PC.dowName(ds) + '<b>' + parseInt(ds.slice(8, 10), 10) + '</b></span>';
     }
 
-    var html = '<div class="pc-card" style="padding:0;">';
+    var me = PC.myName();
+    PC._cellQty = {};   // 'item|venue' -> planned qty, for the build-bar total
+
+    var html = '';
+    html += PC.renderBubbles(items, est);   // Estimated|Planned bubbles + Plan-completed
+
+    html += '<div class="pc-card" style="padding:0;">';
     html += '<div class="pc-prod-row pc-prod-head"><span class="pc-prod-item">Item</span><span class="pc-prod-total">Week</span><span class="pc-prod-days">' + dayHdr + '</span></div>';
 
     ids.forEach(function (id) {
-      var it = items[id], meta = it.meta;
+      var it = items[id];
+      var meta = it ? it.meta : est.meta[id];
+      if (!meta) return;
       var unit = meta.unit || '';
       var onsite = meta.production_mode === 'on_site';
+      var plannedTotal = it ? it.total : 0;
+      var byDay = it ? it.byDay : [0,0,0,0,0,0,0];
+      var plannedVenues = it ? it.byVenue : {};
+      var estVenues = est.byItemVenue[id] || {};
+
       var dayCells = '';
       for (var d = 0; d < 7; d++) {
-        dayCells += '<span class="pc-prod-daycell' + (it.byDay[d] > 0 ? '' : ' is-zero') + '">' + (it.byDay[d] > 0 ? it.byDay[d] : '\u00b7') + '</span>';
+        dayCells += '<span class="pc-prod-daycell' + (byDay[d] > 0 ? '' : ' is-zero') + '">' + (byDay[d] > 0 ? byDay[d] : '\u00b7') + '</span>';
+      }
+      // Item-row total: planned number if any; else the estimate, tagged.
+      var totalCell;
+      if (plannedTotal > 0) {
+        totalCell = '<b>' + plannedTotal.toLocaleString() + '</b> <span class="pc-prod-unit">' + escAttr(unit) + '</span>';
+      } else if ((est.byItem[id] || 0) > 0) {
+        totalCell = '<b style="color:var(--pc-faint);">' + est.byItem[id].toLocaleString() + '</b> <span class="pc-prod-unit">est</span>';
+      } else {
+        totalCell = '<b style="color:var(--pc-line);">0</b>';
       }
       html += '<div class="pc-prod-row pc-prod-item-row" data-item="' + id + '">' +
         '<span class="pc-prod-item"><span class="pc-prod-chev"></span>' + escAttr(meta.name) +
         (onsite ? '<span class="pc-prod-tag">on-site</span>' : '') + '</span>' +
-        '<span class="pc-prod-total"><b>' + it.total.toLocaleString() + '</b> <span class="pc-prod-unit">' + escAttr(unit) + '</span></span>' +
+        '<span class="pc-prod-total">' + totalCell + '</span>' +
         '<span class="pc-prod-days">' + dayCells + '</span></div>';
-      // Venue drill-down
-      var venues = Object.keys(it.byVenue).sort();
+
+      // Venue drill-down: union of planned + estimate venues.
+      var vset = {};
+      Object.keys(plannedVenues).forEach(function (v) { vset[v] = true; });
+      Object.keys(estVenues).forEach(function (v) { vset[v] = true; });
+      var venues = Object.keys(vset).sort();
       html += '<div class="pc-prod-venues" id="pvz_' + id + '" style="display:' + (PC._prodExpanded[id] ? 'block' : 'none') + ';">';
+
+      if (!onsite) {
+        var openCount = 0;
+        venues.forEach(function (vcode) {
+          if ((plannedVenues[vcode] || 0) > 0 && !PC._prodClaims[id + '|' + vcode]) openCount++;
+        });
+        if (openCount > 0) {
+          html += '<label class="pc-prod-selall"><input type="checkbox" class="pc-prod-selall-cb" data-item="' + id + '"> Select all open (' + openCount + ')</label>';
+        }
+      }
+
       venues.forEach(function (vcode) {
         var vc = venueColor(vcode);
-        html += '<div class="pc-prod-vrow"><span class="pc-prod-vname"><span style="width:8px;height:8px;border-radius:50%;background:' + vc + ';display:inline-block;margin-right:7px;"></span>' + escAttr(vcode) + '</span>' +
-          '<span class="pc-prod-vqty">' + it.byVenue[vcode].toLocaleString() + ' <span class="pc-prod-unit">' + escAttr(unit) + '</span></span></div>';
+        var pq = plannedVenues[vcode] || 0;
+        var eq = estVenues[vcode] || 0;
+
+        // Estimate-only (forecasted, not yet planned): muted, "est", not claimable.
+        if (pq <= 0) {
+          var edot = '<span style="width:8px;height:8px;border-radius:50%;background:' + vc + ';opacity:.5;display:inline-block;margin-right:7px;"></span>';
+          html += '<div class="pc-prod-vrow est"><span class="pc-prod-vname">' + edot + escAttr(vcode) +
+            '<span class="pc-prod-esttag">est</span></span>' +
+            '<span class="pc-prod-vqty">' + eq.toLocaleString() + ' <span class="pc-prod-unit">' + escAttr(unit) + '</span></span></div>';
+          return;
+        }
+
+        var dot = '<span style="width:8px;height:8px;border-radius:50%;background:' + vc + ';display:inline-block;margin-right:7px;"></span>';
+        var qty = '<span class="pc-prod-vqty">' + pq.toLocaleString() + ' <span class="pc-prod-unit">' + escAttr(unit) + '</span></span>';
+
+        if (onsite) {
+          html += '<div class="pc-prod-vrow"><span class="pc-prod-vname">' + dot + escAttr(vcode) + '</span>' + qty + '</div>';
+          return;
+        }
+
+        var key = id + '|' + vcode;
+        PC._cellQty[key] = pq;
+        var claim = PC._prodClaims[key];
+        if (claim) {
+          var mine = (claim.claimed_by === me);
+          var rel = (mine || PC.isAdmin)
+            ? '<button class="pc-prod-vrelease" data-item="' + id + '" data-venue="' + escAttr(vcode) + '" title="Release" aria-label="Release">\u00d7</button>'
+            : '';
+          html += '<div class="pc-prod-vrow ' + (mine ? 'mine' : 'taken') + '">' +
+            '<span class="pc-prod-vcheck">\u2713</span>' +
+            '<span class="pc-prod-vname">' + dot + escAttr(vcode) + '</span>' + qty +
+            '<span class="pc-prod-vown">' + escAttr(mine ? 'You' : (claim.claimed_by || '')) + rel + '</span></div>';
+        } else {
+          var on = !!PC._sel[key];
+          html += '<div class="pc-prod-vrow selectable' + (on ? ' sel' : '') + '" data-item="' + id + '" data-venue="' + escAttr(vcode) + '">' +
+            '<input type="checkbox" class="pc-prod-vcb"' + (on ? ' checked' : '') + '>' +
+            '<span class="pc-prod-vname">' + dot + escAttr(vcode) + '</span>' + qty + '</div>';
+        }
       });
       html += '</div>';
     });
@@ -1536,6 +1767,119 @@
         row.classList.toggle('is-open', open);
       });
     });
+
+    // Open venue rows: click row or checkbox to pick/unpick (in place, no rerender).
+    body.querySelectorAll('.pc-prod-vrow.selectable').forEach(function (row) {
+      function toggle() {
+        var key = row.getAttribute('data-item') + '|' + row.getAttribute('data-venue');
+        var on = !PC._sel[key];
+        if (on) PC._sel[key] = true; else delete PC._sel[key];
+        row.classList.toggle('sel', on);
+        var cb = row.querySelector('.pc-prod-vcb'); if (cb) cb.checked = on;
+        PC.syncSelAll(row.getAttribute('data-item'));
+        PC.updateBuildBar();
+      }
+      row.addEventListener('click', function (e) { if (e.target.classList.contains('pc-prod-vcb')) return; toggle(); });
+      var cb = row.querySelector('.pc-prod-vcb');
+      if (cb) cb.addEventListener('click', function (e) { e.stopPropagation(); toggle(); });
+    });
+
+    // Per-item "select all open".
+    body.querySelectorAll('.pc-prod-selall-cb').forEach(function (master) {
+      master.addEventListener('click', function (e) { e.stopPropagation(); });
+      master.addEventListener('change', function () {
+        var id = master.getAttribute('data-item');
+        var want = master.checked;
+        body.querySelectorAll('.pc-prod-vrow.selectable[data-item="' + id + '"]').forEach(function (row) {
+          var key = id + '|' + row.getAttribute('data-venue');
+          if (want) PC._sel[key] = true; else delete PC._sel[key];
+          row.classList.toggle('sel', want);
+          var cb = row.querySelector('.pc-prod-vcb'); if (cb) cb.checked = want;
+        });
+        PC.updateBuildBar();
+      });
+      PC.syncSelAll(master.getAttribute('data-item'));
+    });
+
+    // Release (owner or admin).
+    body.querySelectorAll('.pc-prod-vrelease').forEach(function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        PC.releaseClaim(b.getAttribute('data-item'), b.getAttribute('data-venue'));
+      });
+    });
+  };
+
+  // Keep a per-item "select all open" master checkbox in sync with its rows.
+  PC.syncSelAll = function (itemId) {
+    var master = document.querySelector('.pc-prod-selall-cb[data-item="' + itemId + '"]');
+    if (!master) return;
+    var rows = document.querySelectorAll('.pc-prod-vrow.selectable[data-item="' + itemId + '"]');
+    if (!rows.length) { master.checked = false; return; }
+    var all = true;
+    rows.forEach(function (r) { if (!PC._sel[itemId + '|' + r.getAttribute('data-venue')]) all = false; });
+    master.checked = all;
+  };
+
+  // Build-bar visibility + count (only on the Production side, only when picks exist).
+  PC.updateBuildBar = function () {
+    var bar = document.getElementById('pcBuildBar');
+    if (!bar) return;
+    var keys = Object.keys(PC._sel);
+    bar.classList.toggle('is-on', (PC.view === 'prod') && keys.length > 0);
+    var total = 0, qmap = PC._cellQty || {};
+    keys.forEach(function (k) { total += qmap[k] || 0; });
+    var c = document.getElementById('pcBuildCount');
+    if (c) c.textContent = keys.length + ' selected' + (total > 0 ? ' \u00b7 ' + total.toLocaleString() : '');
+    var btn = document.getElementById('pcBuildBtn');
+    if (btn) btn.disabled = (keys.length === 0);
+  };
+
+  // Commit the picks as claims under the logged-in manager. Cumulative:
+  // prior claims stay; this only adds the newly-picked cells.
+  PC.buildSheet = function () {
+    var w = PC.weeks[PC.prodWeekIndex]; if (!w) return;
+    var keys = Object.keys(PC._sel); if (!keys.length) return;
+    var who = PC.myName(), now = new Date().toISOString();
+    var rows = keys.map(function (k) {
+      var p = k.split('|');
+      return { week_start: w.start, item_id: p[0], venue_code: p[1], claimed_by: who, is_active: true, claimed_at: now, updated_by: who, updated_at: now };
+    });
+    var btn = document.getElementById('pcBuildBtn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Building\u2026'; }
+    PC.authFetch('/rest/v1/prep_claims?on_conflict=week_start,item_id,venue_code', {
+      method: 'POST', headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(rows)
+    }).then(function () {
+      keys.forEach(function (k) { PC._prodClaims[k] = { claimed_by: who }; });
+      PC._sel = {};
+      if (btn) { btn.disabled = false; btn.textContent = 'Build production sheet'; }
+      PC.updateBuildBar();
+      PC.renderProd();
+      PC.toast('Production sheet built \u00b7 ' + keys.length + ' added');
+    }).catch(function (err) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Build production sheet'; }
+      PC.toast(err.message || 'Build failed', true);
+    });
+  };
+
+  PC.releaseClaim = function (itemId, venueCode) {
+    var w = PC.weeks[PC.prodWeekIndex]; if (!w) return;
+    var who = PC.myName(), now = new Date().toISOString();
+    PC.authFetch('/rest/v1/prep_claims?week_start=eq.' + w.start + '&item_id=eq.' + itemId + '&venue_code=eq.' + encodeURIComponent(venueCode), {
+      method: 'PATCH', headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ is_active: false, updated_by: who, updated_at: now })
+    }).then(function () {
+      delete PC._prodClaims[itemId + '|' + venueCode];
+      PC.renderProd();
+      PC.toast('Released');
+    }).catch(function (err) { PC.toast(err.message || 'Release failed', true); });
+  };
+
+  PC.initBuildBar = function () {
+    var b = document.getElementById('pcBuildBtn');
+    var c = document.getElementById('pcBuildClear');
+    if (b && !b._wired) { b.addEventListener('click', PC.buildSheet); b._wired = true; }
+    if (c && !c._wired) { c.addEventListener('click', function () { PC._sel = {}; PC.updateBuildBar(); PC.renderProd(); }); c._wired = true; }
   };
 
   // ---- Boot ----------------------------------------------------------
@@ -1577,6 +1921,7 @@
       if (PC.canPlan) PC.initPlanSaveBar();
       if (PC.canPlan) PC.initVenueFilter();
       if (PC.canPlan) PC.initProfileCopy();
+      if (PC.canProduce) PC.initBuildBar();
       // END PATCH ANCHOR: BOOT_HOOK
     }
   });
