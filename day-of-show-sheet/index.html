@@ -207,20 +207,64 @@ body { background: #f6f6f3; margin: 0; }
   .dos-poprow, .dos-popadd { grid-template-columns: 1fr 90px auto; }
 }
 
-/* ===================== PRINT (basic — step 4 will refine) =====================
-   Print the sheet content; hide all chrome, controls, and editing affordances.
-   Inputs render as their values via the print-mirror spans the JS keeps in sync. */
+/* ===================== RENDERED SHEET (print + preview) =====================
+   The builder is the editing surface. The rendered sheet is produced on demand
+   from the saved values and is what prints / previews / (later) broadcasts.
+   One render, fixed letter width — what you see is what prints. */
+#dosPrintSheet {
+  display: none;
+  font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #1a1a1a;
+}
+body.dos-previewing #dosPrintSheet {
+  display: block; position: fixed; inset: 0; z-index: 400;
+  background: rgba(26,26,26,0.45); overflow: auto; padding: 22px;
+}
+.dos-preview-bar {
+  max-width: 7.5in; margin: 0 auto 12px; display: flex; gap: 8px; justify-content: flex-end;
+}
+.dos-preview-bar button {
+  font: inherit; font-size: 13px; font-weight: 600; padding: 8px 16px; border-radius: 8px;
+  border: none; cursor: pointer;
+}
+.dos-pv-print { background: #639922; color: #fff; }
+.dos-pv-close { background: #fff; color: #1a1a1a; }
+
+.dos-sheet {
+  background: #fff; max-width: 7.5in; margin: 0 auto; padding: 0.5in;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.25); line-height: 1.4; font-size: 12pt;
+}
+.dos-sheet .s-top { border-bottom: 2px solid #1a1a1a; padding-bottom: 10px; margin-bottom: 14px; }
+.dos-sheet .s-event { font-size: 22pt; font-weight: 700; letter-spacing: -0.01em; line-height: 1.1; }
+.dos-sheet .s-meta { font-size: 11pt; color: #444; margin-top: 4px; font-weight: 500; }
+.dos-sheet .s-sec { margin: 13px 0; page-break-inside: avoid; }
+.dos-sheet .s-label { font-size: 9pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #777; margin-bottom: 4px; }
+.dos-sheet .s-logi { font-size: 13pt; font-weight: 600; }
+.dos-sheet .s-logi b { font-weight: 700; }
+.dos-sheet .s-logi .sep { color: #bbb; margin: 0 8px; }
+.dos-sheet .s-crew {
+  border: 2px solid #1a1a1a; border-radius: 8px; padding: 12px 14px;
+  font-size: 13.5pt; font-weight: 600; white-space: pre-wrap;
+}
+.dos-sheet .s-text { white-space: pre-wrap; font-size: 12pt; }
+.dos-sheet .s-img { max-width: 100%; max-height: 4.5in; border: 1px solid #ccc; border-radius: 6px; margin-top: 6px; display: block; }
+.dos-sheet ul.s-list { margin: 2px 0 0; padding-left: 20px; }
+.dos-sheet ul.s-list li { margin: 2px 0; font-size: 12pt; }
+.dos-sheet .s-pop { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.dos-sheet .s-pop .pp { font-size: 12pt; }
+.dos-sheet .s-pop .pp b { font-weight: 700; }
+.dos-sheet .s-noplan { font-size: 12pt; font-weight: 700; }
+.dos-sheet .s-standing { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 24px; }
+.dos-sheet .s-standing .sk { font-size: 9pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #777; }
+.dos-sheet .s-standing .sv { font-size: 11pt; }
+.dos-sheet .dos-wx-strip { margin-top: 2px; }
+
 @media print {
   body { background: #fff; }
-  .pc-nav-header, .pc-nav-ribbon, .pc-nav-totop, #pc-nav-root { display: none !important; }
-  .dos-pills, .dos-modebar, .dos-savebar, .dos-toast, .dos-upwarn,
-  .dos-filebtn, .dos-img-clear, .dos-poprow .pdel, .dos-popadd,
-  .dos-chip .cdel, .dos-mini, .dos-note, .dos-screen-only { display: none !important; }
-  .dos-pop-noplan-warn { color: #000 !important; background: none !important; border: none !important; padding: 0 !important; }
-  .dos-root { max-width: 100%; padding: 0; }
-  .dos-card { border: none; border-bottom: 1px solid #ccc; border-radius: 0; padding: 10px 0; margin: 0; page-break-inside: avoid; }
-  .dos-input, .dos-textarea, .dos-chip input { border: none; padding: 0; background: none; box-shadow: none; resize: none; }
-  .dos-title { margin-top: 0; }
+  .dos-root, #dosSaveBar, #dosToast, #pc-nav-root, .pc-nav-header, .pc-nav-ribbon, .pc-nav-totop { display: none !important; }
+  #dosPrintSheet { display: block !important; position: static; background: none; padding: 0; overflow: visible; }
+  .dos-preview-bar { display: none !important; }
+  .dos-sheet { max-width: 100%; margin: 0; padding: 0; box-shadow: none; }
 }
 </style>
 </head>
@@ -255,10 +299,20 @@ body { background: #f6f6f3; margin: 0; }
 <div class="dos-savebar" id="dosSaveBar">
   <span class="msg" id="dosSaveMsg"></span>
   <button class="dos-btn dos-btn-save" id="dosSaveBtn">Save</button>
+  <button class="dos-btn dos-btn-print" id="dosPreviewBtn" disabled title="Save first to preview">Preview</button>
   <button class="dos-btn dos-btn-print" id="dosPrintBtn" disabled title="Save first to print">Print</button>
 </div>
 
 <div class="dos-toast" id="dosToast"></div>
+
+<!-- Rendered sheet — produced on demand from saved values; what prints / previews -->
+<div id="dosPrintSheet" aria-hidden="true">
+  <div class="dos-preview-bar">
+    <button class="dos-pv-print" id="dosPvPrintBtn" type="button">Print</button>
+    <button class="dos-pv-close" id="dosPvCloseBtn" type="button">Close</button>
+  </div>
+  <div class="dos-sheet" id="dosSheetBody"></div>
+</div>
 
 <!-- shared toolkit scripts (auth first, then nav, then activity) -->
 <script src="/pc-auth.js"></script>
@@ -465,8 +519,19 @@ body { background: #f6f6f3; margin: 0; }
     });
     $('dosEventSel').onchange = function () { selectEvent(this.value); };
     $('dosSaveBtn').onclick = onSave;
-    $('dosPrintBtn').onclick = function () { window.print(); };
+    $('dosPrintBtn').onclick = function () { renderSheetNow(); window.print(); };
+    $('dosPreviewBtn').onclick = openPreview;
+    $('dosPvPrintBtn').onclick = function () { window.print(); };
+    $('dosPvCloseBtn').onclick = closePreview;
   }
+
+  function openPreview() {
+    if (!ST.saved) return;
+    renderSheetNow();
+    document.body.classList.add('dos-previewing');
+  }
+  function closePreview() { document.body.classList.remove('dos-previewing'); }
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closePreview(); });
 
   function setMode(mode) {
     ST.mode = mode;
@@ -768,7 +833,7 @@ body { background: #f6f6f3; margin: 0; }
     // report time (editable per spine, seeded from event)
     var rt = el('div', 'dos-kv');
     rt.appendChild(el('span', 'k', 'Crew report time'));
-    var rtIn = inputEl('dosReportTime', prettyTime(ev.report_time) || prettyTime(ev.gates_open) || '');
+    var rtIn = inputEl('dosReportTime', (s.report_time != null && s.report_time !== '') ? s.report_time : (prettyTime(ev.report_time) || prettyTime(ev.gates_open) || ''));
     rtIn.placeholder = 'e.g. 4:30 PM';
     rt.appendChild(rtIn);
     hg.appendChild(rt);
@@ -1072,6 +1137,146 @@ body { background: #f6f6f3; margin: 0; }
   }
 
   // =====================================================================
+  // RENDERED SHEET — produced on demand from the saved snapshot.
+  // Resolves doors/cut-off/attendance against the event + venue sources,
+  // so the printed sheet shows real values (not placeholders). Reusable for
+  // the Sales History attachment (step 5) and v2 broadcast.
+  // =====================================================================
+  function resolvedSheet() {
+    var ev = ST.event || {}, d = ST.defaults || {}, s = ST.sheet || {};
+    var reportLive = $('dosReportTime') ? String($('dosReportTime').value || '').trim() : '';
+    return {
+      venue: venueLabel(ST.venueCode),
+      event: ev.event_name || 'Untitled',
+      date: prettyDate(ev.event_date),
+      report: reportLive || (s.report_time || '') || prettyTime(ev.report_time) || prettyTime(ev.gates_open) || '',
+      doors: (s.doors != null && s.doors !== '') ? s.doors : (prettyTime(ev.gates_open) || d.doors_default || ''),
+      cutoff: (s.alcohol_cutoff != null && s.alcohol_cutoff !== '') ? s.alcohol_cutoff : (d.alcohol_cutoff_default || '10:15 PM'),
+      attendance: (s.expected_attendance != null) ? s.expected_attendance : (ev.expected_attendance != null ? ev.expected_attendance : null),
+      ros: s.run_of_show_text || '',
+      image: s.run_of_show_image_path || null,
+      crew: s.crew_note || '',
+      managers: (s.managers_override != null && s.managers_override !== '') ? s.managers_override : (ST._autoManagers || ''),
+      headsUp: (ST.headsUp || []).map(function (x) { return (x || '').trim(); }).filter(function (x) { return x; }),
+      popcorn: (ST.popcorn || []).filter(function (p) { return p.stand_id; }),
+      standing: { parking: d.parking_note, dress: d.dress_note, arrival: d.arrival_note, shelter: d.shelter_in_place_note }
+    };
+  }
+
+  function renderSheetNow() { renderSheet(resolvedSheet()); }
+
+  function renderSheet(v) {
+    var body = $('dosSheetBody');
+    body.innerHTML = '';
+
+    // top
+    var top = el('div', 's-top');
+    top.appendChild(el('div', 's-event', v.event));
+    var meta = el('div', 's-meta');
+    meta.textContent = v.venue + ' \u00b7 ' + v.date + (v.report ? ' \u00b7 Crew report ' + v.report : '');
+    top.appendChild(meta);
+    body.appendChild(top);
+
+    // weather strip (reuse the same data the builder uses)
+    if (ST.wx && ST.wx.strip && ST.wx.strip.length) {
+      var ws = sheetSec('Weather');
+      var strip = el('div', 'dos-wx-strip');
+      ST.wx.strip.forEach(function (col) {
+        var c = el('div', 'dos-wx-col' + (col.shaded ? ' shaded' : ''));
+        c.innerHTML = '<div class="h">' + esc(col.label) + '</div><div class="em">' + col.emoji +
+          '</div><div class="t">' + (col.temp != null ? col.temp + '\u00b0' : '\u2014') +
+          '</div><div class="p">' + (col.precip != null ? col.precip + '%' : '') + '</div>';
+        strip.appendChild(c);
+      });
+      if (ST.wx.more > 0) strip.appendChild(el('div', 'dos-wx-col more', '+' + ST.wx.more));
+      ws.appendChild(strip);
+      body.appendChild(ws);
+    }
+
+    // logistics line
+    var logi = sheetSec('Tonight');
+    var line = el('div', 's-logi');
+    var parts = [];
+    parts.push('<span>Doors <b>' + esc(v.doors || '\u2014') + '</b></span>');
+    parts.push('<span>Alcohol cut-off <b>' + esc(v.cutoff || '\u2014') + '</b></span>');
+    parts.push('<span>Expected <b>' + (v.attendance != null ? esc(String(v.attendance)) : '\u2014') + '</b></span>');
+    line.innerHTML = parts.join('<span class="sep">|</span>');
+    logi.appendChild(line);
+    body.appendChild(logi);
+
+    // crew note (always present — required)
+    var crew = sheetSec('Crew note');
+    var box = el('div', 's-crew'); box.textContent = v.crew || '';
+    crew.appendChild(box);
+    body.appendChild(crew);
+
+    // run of show (optional)
+    if (v.ros || v.image) {
+      var ros = sheetSec('Run of show');
+      if (v.ros) { var t = el('div', 's-text'); t.textContent = v.ros; ros.appendChild(t); }
+      if (v.image) { var img = document.createElement('img'); img.className = 's-img'; img.src = publicUrl(v.image); ros.appendChild(img); }
+      body.appendChild(ros);
+    }
+
+    // popcorn
+    var pop = sheetSec('Popcorn to pop');
+    if (v.popcorn.length) {
+      var wrap = el('div', 's-pop');
+      v.popcorn.forEach(function (p) {
+        var span = el('span', 'pp');
+        var boxes = (p.boxes === '' || p.boxes == null) ? '\u2014' : p.boxes;
+        span.innerHTML = esc(p.stand_name) + ' <b>' + esc(String(boxes)) + '</b>';
+        wrap.appendChild(span);
+      });
+      pop.appendChild(wrap);
+    } else {
+      pop.appendChild(el('div', 's-noplan', '\u26a0 Your manager did not create a popcorn plan for this event.'));
+    }
+    body.appendChild(pop);
+
+    // on-site managers
+    if (v.managers) {
+      var mgr = sheetSec('On-site managers');
+      var mt = el('div', 's-text'); mt.textContent = v.managers; mgr.appendChild(mt);
+      body.appendChild(mgr);
+    }
+
+    // heads-up
+    if (v.headsUp.length) {
+      var hu = sheetSec('Heads-up');
+      var ul = el('ul', 's-list');
+      v.headsUp.forEach(function (h) { ul.appendChild(el('li', null, h)); });
+      hu.appendChild(ul);
+      body.appendChild(hu);
+    }
+
+    // standing notes
+    var st = v.standing;
+    if (st && (st.parking || st.dress || st.arrival || st.shelter)) {
+      var sn = sheetSec('Good to know');
+      var grid = el('div', 's-standing');
+      if (st.arrival) grid.appendChild(standingPair('Where to report', st.arrival));
+      if (st.parking) grid.appendChild(standingPair('Parking', st.parking));
+      if (st.dress) grid.appendChild(standingPair('Dress', st.dress));
+      if (st.shelter) grid.appendChild(standingPair('Shelter-in-place', st.shelter));
+      sn.appendChild(grid);
+      body.appendChild(sn);
+    }
+  }
+
+  function sheetSec(label) {
+    var s = el('div', 's-sec');
+    s.appendChild(el('div', 's-label', label));
+    return s;
+  }
+  function standingPair(k, v) {
+    var d = el('div');
+    d.appendChild(el('div', 'sk', k));
+    d.appendChild(el('div', 'sv', v));
+    return d;
+  }
+
+  // =====================================================================
   // SAVE
   // =====================================================================
   function updateSaveBar() {
@@ -1084,9 +1289,13 @@ body { background: #f6f6f3; margin: 0; }
       $('dosPrintBtn').style.display = '';
       $('dosPrintBtn').disabled = !ST.saved;
       $('dosPrintBtn').title = ST.saved ? 'Print this sheet' : 'Save first to print';
+      $('dosPreviewBtn').style.display = '';
+      $('dosPreviewBtn').disabled = !ST.saved;
+      $('dosPreviewBtn').title = ST.saved ? 'Preview the printed sheet' : 'Save first to preview';
     } else {
       $('dosSaveBtn').textContent = 'Save defaults';
       $('dosPrintBtn').style.display = 'none';
+      $('dosPreviewBtn').style.display = 'none';
     }
   }
 
@@ -1165,6 +1374,7 @@ body { background: #f6f6f3; margin: 0; }
         doors: valOrNull('dosDoors'),
         alcohol_cutoff: valOrNull('dosCutoff'),
         expected_attendance: intOrNull('dosAtt'),
+        report_time: valOrNull('dosReportTime'),
         run_of_show_text: valOrNull('dosRos'),
         run_of_show_image_path: imagePath,
         crew_note: crew,
