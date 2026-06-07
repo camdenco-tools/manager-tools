@@ -50,7 +50,7 @@
   var _venues = null;   // [{ code, full_name, state, city, is_tiered,
                         //    is_active, sort_order }, ...]
   var _stands = null;   // [{ id, venue_code, stand_name, stand_type,
-                        //    is_active, sort_order }, ...]
+                        //    category_id, is_active, sort_order }, ...]
   var _readyPromise = null;
 
   // ---------------------------------------------------------------------
@@ -87,7 +87,7 @@
     );
 
     var standsReq = sbGet(
-      'stands?select=id,venue_code,stand_name,stand_type,is_active,sort_order' +
+      'stands?select=id,venue_code,stand_name,stand_type,category_id,is_active,sort_order' +
       '&order=venue_code.asc,sort_order.asc,stand_name.asc&limit=10000'
     );
 
@@ -110,6 +110,7 @@
           venue_code: s.venue_code,
           stand_name: s.stand_name,
           stand_type: s.stand_type || 'revenue',
+          category_id: s.category_id || null,
           is_active: s.is_active !== false,
           sort_order: typeof s.sort_order === 'number' ? s.sort_order : 0
         };
@@ -338,6 +339,7 @@
       venue_code: s.venue_code,
       stand_name: s.stand_name,
       stand_type: s.stand_type,
+      category_id: s.category_id,
       is_active: s.is_active,
       sort_order: s.sort_order
     };
