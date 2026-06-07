@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Weather Impacts — Popcorn Chez Manager Toolkit</title>
+
+<!-- Shared chrome. pc-auth MUST load before pc-nav. -->
+<script src="/pc-auth.js"></script>
+<script src="/pc-nav.js"></script>
+<script src="/pc-activity.js"></script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
+
+<style>
+  /* ============================================================
+     Weather Impacts — page styles
+     Matches the toolkit visual language (DM Sans, #1a1a1a text,
+     #e8e8e4 borders, #f6f6f3 hover, white cards). Dashboards lane
+     identity = amber (#BA7517).
+     ============================================================ */
+  :root {
+    --ink:#1a1a1a; --muted:#6b6b66; --faint:#9a988f; --hairline:#e8e8e4;
+    --paper:#faf9f6; --card:#ffffff; --hover:#f6f6f3;
+    --amber:#BA7517; --amber-soft:#f5e9d6;
+    --accent-amber:#e0a020; --accent-red:#d6452b;
+    --heat:#c2570f;
+    --radius:10px;
+    --shadow:0 1px 2px rgba(0,0,0,0.03), 0 4px 16px rgba(0,0,0,0.04);
+  }
+  * { box-sizing:border-box; }
+  body {
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:"DM Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wi-wrap { max-width:980px; margin:0 auto; padding:26px 22px 80px; }
+
+  /* ---- page title bar ---- */
+  .wi-titlebar {
+    display:flex; align-items:flex-end; justify-content:space-between;
+    gap:18px; flex-wrap:wrap; margin-bottom:6px;
+  }
+  .wi-title { font-size:24px; font-weight:600; letter-spacing:-0.02em; margin:0; }
+  .wi-sub { font-size:13px; color:var(--muted); margin:4px 0 0; max-width:560px; line-height:1.45; }
+  .wi-controls { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .wi-asof { font-size:12px; color:var(--faint); white-space:nowrap; }
+  .wi-select {
+    font-family:inherit; font-size:13px; color:var(--ink); background:var(--card);
+    border:1px solid #d8d8d4; border-radius:20px; padding:6px 30px 6px 12px; cursor:pointer;
+    appearance:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5L6 7.5L9 4.5' stroke='%231a1a1a' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 11px center;
+  }
+  .wi-btn {
+    font-family:inherit; font-size:12px; font-weight:500; color:var(--ink);
+    background:var(--card); border:1px solid #d8d8d4; border-radius:20px;
+    padding:6px 14px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;
+  }
+  .wi-btn:hover { background:var(--hover); }
+  .wi-btn:disabled { opacity:0.5; cursor:default; }
+  .wi-btn .wi-spin { display:inline-block; animation:wi-rot 0.9s linear infinite; }
+  @keyframes wi-rot { to { transform:rotate(360deg); } }
+
+  .wi-divider { height:1px; background:var(--hairline); margin:18px 0 22px; }
+
+  /* ---- forecast-level banner (unavailable) ---- */
+  .wi-banner {
+    border:1px solid #ecd9c2; background:#fbf3e7; color:#8a5a17;
+    border-radius:var(--radius); padding:12px 16px; font-size:13px;
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    margin-bottom:20px;
+  }
+
+  /* ---- day section ---- */
+  .wi-day { margin-bottom:26px; }
+  .wi-day-head {
+    display:flex; align-items:baseline; gap:10px;
+    padding:0 2px 10px; border-bottom:1px solid var(--hairline); margin-bottom:14px;
+  }
+  .wi-day-rel { font-size:15px; font-weight:600; letter-spacing:-0.01em; }
+  .wi-day-date { font-size:13px; color:var(--muted); }
+  .wi-day-count { font-size:12px; color:var(--faint); margin-left:auto; }
+
+  /* ---- rich event card (today + tomorrow) ---- */
+  .wi-card {
+    position:relative; background:var(--card); border:1px solid var(--hairline);
+    border-radius:var(--radius); box-shadow:var(--shadow);
+    padding:16px 18px 16px 20px; margin-bottom:12px; overflow:hidden;
+  }
+  .wi-card::before {
+    content:""; position:absolute; left:0; top:0; bottom:0; width:4px;
+    background:transparent;
+  }
+  .wi-card.accent-amber::before { background:var(--accent-amber); }
+  .wi-card.accent-red::before   { background:var(--accent-red); }
+
+  .wi-card-top { display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap; }
+  .wi-vbadge {
+    font-size:11px; font-weight:600; letter-spacing:0.02em; padding:3px 9px;
+    border-radius:20px; white-space:nowrap; line-height:1.4;
+  }
+  .wi-evmeta { flex:1 1 220px; min-width:160px; }
+  .wi-evname { font-size:15px; font-weight:600; letter-spacing:-0.01em; line-height:1.3; }
+  .wi-evtime { font-size:12.5px; color:var(--muted); margin-top:2px; }
+
+  /* daily chip */
+  .wi-chip { display:flex; align-items:center; gap:10px; white-space:nowrap; }
+  .wi-chip-icon { font-size:24px; line-height:1; }
+  .wi-chip-temps { font-size:14px; font-weight:600; }
+  .wi-chip-temps .lo { color:var(--faint); font-weight:500; }
+  .wi-chip-cond { font-size:12px; color:var(--muted); }
+  .wi-chip-precip { font-size:12px; color:#2e7bb5; font-weight:500; }
+  .wi-chip-precip.warn { color:var(--accent-red); }
+
+  .wi-heat {
+    display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:600;
+    color:var(--heat); background:#fbeede; border:1px solid #f1d9bd;
+    padding:2px 8px; border-radius:20px; margin-left:8px; white-space:nowrap;
+  }
+
+  .wi-noforecast { font-size:12px; color:var(--faint); font-style:italic; }
+
+  /* hourly strip */
+  .wi-strip {
+    display:flex; gap:0; margin-top:14px; border:1px solid var(--hairline);
+    border-radius:8px; overflow:hidden;
+  }
+  .wi-hour {
+    flex:1 1 0; min-width:0; text-align:center; padding:8px 4px 9px;
+    border-right:1px solid var(--hairline); font-variant-numeric:tabular-nums;
+  }
+  .wi-hour:last-child { border-right:none; }
+  .wi-hour.in-window { background:#fbf7ef; }
+  .wi-hour.leadin { background:#fafafa; }
+  .wi-hr-time { font-size:10.5px; color:var(--faint); font-weight:500; }
+  .wi-hr-icon { font-size:15px; line-height:1.2; margin:3px 0 1px; }
+  .wi-hr-temp { font-size:11.5px; font-weight:600; }
+  .wi-hr-precip { font-size:10px; color:#2e7bb5; margin-top:1px; }
+  .wi-hr-precip.warn { color:var(--accent-red); font-weight:600; }
+  .wi-hour.more { background:#f3f3f0; }
+  .wi-hr-more { font-size:12px; font-weight:600; color:var(--muted); margin-top:7px; }
+  .wi-strip-note { font-size:11px; color:var(--faint); margin-top:5px; padding-left:2px; }
+
+  /* ---- compact rows (days 3-10) ---- */
+  .wi-rowlist {
+    background:var(--card); border:1px solid var(--hairline);
+    border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden;
+  }
+  .wi-row {
+    position:relative; display:flex; align-items:center; gap:12px;
+    padding:10px 16px 10px 18px; border-bottom:1px solid var(--hairline); font-size:13px;
+  }
+  .wi-row:last-child { border-bottom:none; }
+  .wi-row::before {
+    content:""; position:absolute; left:0; top:0; bottom:0; width:4px; background:transparent;
+  }
+  .wi-row.accent-amber::before { background:var(--accent-amber); }
+  .wi-row.accent-red::before   { background:var(--accent-red); }
+  .wi-row .wi-vbadge { flex:0 0 auto; }
+  .wi-row-name { flex:1 1 auto; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:80px; }
+  .wi-row-time { color:var(--muted); flex:0 0 auto; font-size:12px; white-space:nowrap; }
+  .wi-row-wx { display:flex; align-items:center; gap:8px; flex:0 0 auto; white-space:nowrap; }
+  .wi-row-icon { font-size:16px; }
+  .wi-row-temps { font-weight:600; }
+  .wi-row-temps .lo { color:var(--faint); font-weight:500; }
+  .wi-row-precip { color:#2e7bb5; font-size:12px; min-width:34px; text-align:right; }
+  .wi-row-precip.warn { color:var(--accent-red); font-weight:600; }
+
+  /* ---- states ---- */
+  .wi-empty { text-align:center; color:var(--faint); font-size:14px; padding:60px 20px; }
+  .wi-loading { text-align:center; color:var(--muted); font-size:14px; padding:60px 20px; }
+  .wi-err {
+    border:1px solid #e7c4bc; background:#fbeeea; color:#9a3b25;
+    border-radius:var(--radius); padding:16px 18px; font-size:13px; line-height:1.5;
+  }
+
+  @media (max-width:560px) {
+    .wi-titlebar { align-items:flex-start; }
+    .wi-hr-icon { font-size:13px; }
+    .wi-chip-cond { display:none; }
+  }
+</style>
+</head>
+<body>
+<div class="wi-wrap">
+  <div class="wi-titlebar">
+    <div>
+      <h1 class="wi-title">Weather Impacts</h1>
+      <p class="wi-sub">Upcoming events and the forecast at each venue, side by side, for the next 10 days. Weather is per&#8209;venue &mdash; one venue can be storming while another is clear.</p>
+    </div>
+    <div class="wi-controls">
+      <select class="wi-select" id="wi-venue-filter" aria-label="Filter by venue">
+        <option value="">All venues</option>
+      </select>
+      <span class="wi-asof" id="wi-asof"></span>
+      <button class="wi-btn" id="wi-refresh" type="button">
+        <span id="wi-refresh-icon">&#8635;</span> Refresh
+      </button>
+    </div>
+  </div>
+
+  <div class="wi-divider"></div>
+
+  <div id="wi-content">
+    <div class="wi-loading">Loading events&hellip;</div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ===================================================================
+  // CONFIG
+  // ===================================================================
+  var PAGE_SLUG   = 'weather-impacts';
+  var REST_BASE   = 'https://aoazlttdjowhlfcksoyl.supabase.co/rest/v1';
+  var OPEN_METEO  = 'https://api.open-meteo.com/v1/forecast';
+  var HORIZON_DAYS = 10;
+
+  // Planning-signal thresholds (tunable per spec §7)
+  var PRECIP_AMBER = 40;   // % chance within event window
+  var PRECIP_RED   = 60;
+  var HEAT_BADGE_F = 90;   // event-day high
+
+  // Hourly strip: lead-in before the event window, and a default tail when
+  // estimated_end_time is missing but a start can be resolved.
+  var LEADIN_HOURS    = 2;
+  var DEFAULT_SPAN_HR = 5;  // assumed event length when no end time
+  var MAX_HOUR_COLS   = 8;  // strip cap; overflow rolls into a "+N" column
+
+  // Venue badge tints. Mirrors the Event Workspace VENUE_COLORS intent.
+  // (If/when the canonical VENUE_COLORS object is centralized, swap this for it.)
+  var VENUE_COLORS = {
+    Mann:      { bg:'#eaf3df', fg:'#4f7a17' },
+    FMP:       { bg:'#e2eefb', fg:'#185FA5' },
+    BWH:       { bg:'#fdeede', fg:'#b5641a' },
+    ACCC:      { bg:'#f3e9fb', fg:'#7a3fb0' },
+    Cure:      { bg:'#fde8ec', fg:'#bd2e4f' },
+    DE:        { bg:'#e2f5f1', fg:'#157a68' },
+    Subaru:    { bg:'#e7eefc', fg:'#2a52b5' },
+    PNC:       { bg:'#fbf3da', fg:'#9a7a12' },
+    Montage:   { bg:'#eef0f3', fg:'#4a5568' },
+    SATB:      { bg:'#e3f1fb', fg:'#1f74a8' },
+    Kirkwood:  { bg:'#eaf2e4', fg:'#5a7a32' },
+    Villanova: { bg:'#e9e7fb', fg:'#4b3fb0' }
+  };
+  function venueColor(code) {
+    if (VENUE_COLORS[code]) return VENUE_COLORS[code];
+    // Deterministic fallback hue for any unknown code.
+    var h = 0, i;
+    for (i = 0; i < String(code).length; i++) { h = (h * 31 + String(code).charCodeAt(i)) % 360; }
+    return { bg:'hsl(' + h + ',45%,93%)', fg:'hsl(' + h + ',55%,32%)' };
+  }
+
+  // ===================================================================
+  // WMO weather_code -> { label, icon }
+  // Faithful to the standard WMO table and the toolkit's existing weather
+  // emoji set. Mirrors fetch-event-weather's weatherCodeLabel() and the
+  // sales-history weatherIconFor(). If byte-identical label strings are ever
+  // required for visual parity, paste those two functions in here verbatim.
+  // ===================================================================
+  function weatherFor(code) {
+    if (code === null || code === undefined) return { label: '\u2014', icon: '' };
+    var c = Number(code);
+    if (c === 0)  return { label: 'Clear',          icon: '\u2600\uFE0F' };          // sun
+    if (c === 1)  return { label: 'Mostly clear',   icon: '\u26C5' };                // sun behind cloud
+    if (c === 2)  return { label: 'Partly cloudy',  icon: '\u26C5' };
+    if (c === 3)  return { label: 'Overcast',       icon: '\u2601\uFE0F' };          // cloud
+    if (c === 45 || c === 48) return { label: 'Fog', icon: '\uD83C\uDF2B\uFE0F' };   // fog
+    if (c >= 51 && c <= 55)   return { label: 'Drizzle', icon: '\uD83C\uDF26\uFE0F' };       // sun behind rain cloud
+    if (c === 56 || c === 57) return { label: 'Freezing drizzle', icon: '\uD83C\uDF28\uFE0F' };
+    if (c >= 61 && c <= 65)   return { label: 'Rain', icon: '\uD83C\uDF27\uFE0F' };          // rain cloud
+    if (c === 66 || c === 67) return { label: 'Freezing rain', icon: '\uD83C\uDF28\uFE0F' };
+    if (c >= 71 && c <= 77)   return { label: 'Snow', icon: '\uD83C\uDF28\uFE0F' };          // snow cloud
+    if (c === 80 || c === 81) return { label: 'Rain showers', icon: '\uD83C\uDF26\uFE0F' };
+    if (c === 82)             return { label: 'Heavy showers', icon: '\uD83C\uDF27\uFE0F' };
+    if (c === 85 || c === 86) return { label: 'Snow showers', icon: '\uD83C\uDF28\uFE0F' };
+    if (c >= 95)              return { label: 'Thunderstorm', icon: '\u26C8\uFE0F' };         // storm
+    return { label: 'Unknown', icon: '\u2601\uFE0F' };
+  }
+
+  // ===================================================================
+  // Auth-resilient fetch (read-only page, but cheap insurance against a
+  // tab left open past token expiry).
+  // ===================================================================
+  function handleAuthFailure() {
+    try {
+      localStorage.removeItem('sb_access_token');
+      localStorage.removeItem('sb_refresh_token');
+    } catch (e) {}
+    setTimeout(function () { window.location.reload(); }, 1500);
+  }
+  function authFetch(url) {
+    return fetch(url, { headers: pcAuth.headers() }).then(function (r) {
+      if (!r.ok) {
+        return r.text().then(function (t) {
+          if (r.status === 401 || (t && t.indexOf('JWT expired') !== -1)) {
+            var ae = new Error('JWT expired'); ae.authFailed = true; throw ae;
+          }
+          throw new Error(t || ('HTTP ' + r.status));
+        });
+      }
+      return r.text().then(function (t) {
+        if (!t) return [];
+        try { return JSON.parse(t); } catch (e) { return []; }
+      });
+    });
+  }
+
+  // ===================================================================
+  // Date / time helpers (local = America/New_York for our managers)
+  // ===================================================================
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+  function ymd(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+  function addDays(d, n) { var x = new Date(d.getTime()); x.setDate(x.getDate() + n); return x; }
+
+  var WEEKDAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  function relLabel(idx, dateObj) {
+    if (idx === 0) return 'Today';
+    if (idx === 1) return 'Tomorrow';
+    return WEEKDAYS[dateObj.getDay()];
+  }
+  function prettyDate(dateObj) {
+    return MONTHS[dateObj.getMonth()] + ' ' + dateObj.getDate();
+  }
+
+  // Parse "HH:MM[:SS]" or an ISO timestamp -> integer hour (0-23) or null.
+  function parseHour(t) {
+    if (!t) return null;
+    var s = String(t);
+    var tIdx = s.indexOf('T');
+    if (tIdx !== -1) s = s.slice(tIdx + 1);     // ISO timestamp -> time part
+    var m = s.match(/^(\d{1,2}):(\d{2})/);
+    if (!m) return null;
+    var h = parseInt(m[1], 10);
+    return (h >= 0 && h <= 23) ? h : null;
+  }
+  // "HH:MM[:SS]" -> "7:00 PM"
+  function fmtTime(t) {
+    if (!t) return '';
+    var s = String(t);
+    var tIdx = s.indexOf('T');
+    if (tIdx !== -1) s = s.slice(tIdx + 1);
+    var m = s.match(/^(\d{1,2}):(\d{2})/);
+    if (!m) return '';
+    var h = parseInt(m[1], 10), min = m[2];
+    var ap = h >= 12 ? 'PM' : 'AM';
+    var h12 = h % 12; if (h12 === 0) h12 = 12;
+    return h12 + ':' + min + ' ' + ap;
+  }
+  // integer hour -> "2p" / "9a" / "12a"
+  function hourLabel(h) {
+    var ap = h >= 12 ? 'p' : 'a';
+    var h12 = h % 12; if (h12 === 0) h12 = 12;
+    return h12 + ap;
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  // ===================================================================
+  // PAGE STATE
+  // ===================================================================
+  var state = {
+    events: [],            // filtered, sorted event rows
+    venuesByCode: {},      // code -> { code, full_name, latitude, longitude }
+    venuesByName: {},      // full_name -> same
+    weatherByCode: {},     // venue code -> Open-Meteo location object
+    weatherError: false,
+    asOf: '',
+    filterVenue: ''
+  };
+  var windowDates = [];    // [{ key:'YYYY-MM-DD', date:Date, idx }]
+
+  function resolveVenue(ev) {
+    var v = state.venuesByCode[ev.venue];
+    if (!v) v = state.venuesByName[ev.venue];
+    return v || null;
+  }
+
+  // ===================================================================
+  // DATA LOAD
+  // ===================================================================
+  function loadBaseData() {
+    var today = new Date();
+    var start = ymd(today);
+    var end = ymd(addDays(today, HORIZON_DAYS - 1));
+
+    windowDates = [];
+    for (var i = 0; i < HORIZON_DAYS; i++) {
+      var d = addDays(today, i);
+      windowDates.push({ key: ymd(d), date: d, idx: i });
+    }
+
+    var evUrl = REST_BASE + '/events'
+      + '?select=id,venue,event_name,event_date,gates_open,report_time,estimated_end_time,event_type'
+      + '&deleted_at=is.null'
+      + '&cancelled_at=is.null'
+      + '&event_date=gte.' + start
+      + '&event_date=lte.' + end
+      + '&order=event_date.asc,report_time.asc';
+
+    // Read coordinates straight from venues (authoritative; pcCatalog predates
+    // the lat/lng columns and does not surface them).
+    var vUrl = REST_BASE + '/venues'
+      + '?select=code,full_name,latitude,longitude,is_active';
+
+    return Promise.all([authFetch(evUrl), authFetch(vUrl)]).then(function (res) {
+      var rawEvents = res[0] || [];
+      var venues = res[1] || [];
+
+      state.venuesByCode = {};
+      state.venuesByName = {};
+      venues.forEach(function (v) {
+        if (v.code) state.venuesByCode[v.code] = v;
+        if (v.full_name) state.venuesByName[v.full_name] = v;
+      });
+
+      // Exclude adhoc client-side (avoids PostgREST neq dropping NULL types).
+      state.events = rawEvents.filter(function (e) {
+        return String(e.event_type || '').toLowerCase() !== 'adhoc';
+      });
+    });
+  }
+
+  // ===================================================================
+  // WEATHER FETCH — one batched Open-Meteo call for all distinct venues
+  // that have events in the window AND have coordinates.
+  // ===================================================================
+  function fetchWeather() {
+    state.weatherError = false;
+
+    var seen = {}, ordered = [];
+    state.events.forEach(function (ev) {
+      var v = resolveVenue(ev);
+      if (!v || v.latitude == null || v.longitude == null) return;
+      if (seen[v.code]) return;
+      seen[v.code] = true;
+      ordered.push({ code: v.code, lat: v.latitude, lng: v.longitude });
+    });
+
+    if (!ordered.length) {
+      state.weatherByCode = {};
+      stampAsOf();
+      return Promise.resolve();
+    }
+
+    var lats = ordered.map(function (o) { return o.lat; }).join(',');
+    var lngs = ordered.map(function (o) { return o.lng; }).join(',');
+
+    var url = OPEN_METEO
+      + '?latitude=' + lats
+      + '&longitude=' + lngs
+      + '&forecast_days=' + HORIZON_DAYS
+      + '&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max'
+      + '&hourly=temperature_2m,precipitation_probability,weather_code'
+      + '&temperature_unit=fahrenheit'
+      + '&timezone=America%2FNew_York';
+
+    return fetch(url).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    }).then(function (resp) {
+      // Multiple coords -> array in input order; single coord -> one object.
+      var arr = Array.isArray(resp) ? resp : [resp];
+      var map = {};
+      for (var i = 0; i < ordered.length; i++) {
+        if (arr[i]) map[ordered[i].code] = arr[i];
+      }
+      state.weatherByCode = map;
+      stampAsOf();
+    }).catch(function (e) {
+      state.weatherError = true;
+      state.weatherByCode = {};
+      stampAsOf();
+    });
+  }
+
+  function stampAsOf() {
+    var now = new Date();
+    var h = now.getHours(), min = pad2(now.getMinutes());
+    var ap = h >= 12 ? 'PM' : 'AM'; var h12 = h % 12; if (h12 === 0) h12 = 12;
+    state.asOf = h12 + ':' + min + ' ' + ap;
+    var el = document.getElementById('wi-asof');
+    if (el) el.textContent = 'as of ' + state.asOf;
+  }
+
+  // ===================================================================
+  // SLICING
+  // ===================================================================
+  function dailySlice(loc, dateKey) {
+    if (!loc || !loc.daily || !loc.daily.time) return null;
+    var idx = loc.daily.time.indexOf(dateKey);
+    if (idx === -1) return null;
+    var d = loc.daily;
+    return {
+      high:   (d.temperature_2m_max ? d.temperature_2m_max[idx] : null),
+      low:    (d.temperature_2m_min ? d.temperature_2m_min[idx] : null),
+      code:   (d.weather_code ? d.weather_code[idx] : null),
+      precip: (d.precipitation_probability_max ? d.precipitation_probability_max[idx] : null)
+    };
+  }
+
+  // Resolve the event window in integer hours. Returns null if neither
+  // report_time nor gates_open is present (can't draw a strip).
+  function eventWindow(ev) {
+    var startH = parseHour(ev.report_time);
+    if (startH === null) {
+      var g = parseHour(ev.gates_open);
+      if (g !== null) startH = g - 1;
+    }
+    if (startH === null) return null;
+    if (startH < 0) startH = 0;
+
+    var endH = parseHour(ev.estimated_end_time);
+    if (endH === null) endH = startH + DEFAULT_SPAN_HR;
+    if (endH < startH) endH = startH + DEFAULT_SPAN_HR;   // guard cross-midnight oddities
+    if (endH > 23) endH = 23;
+
+    return { startH: startH, endH: endH };
+  }
+
+  // Build hourly cells for a today/tomorrow event. Returns { cells:[], note:'' }.
+  function hourlySlice(loc, ev, dateKey) {
+    var win = eventWindow(ev);
+    if (!win || !loc || !loc.hourly || !loc.hourly.time) return null;
+
+    var stripStart = win.startH - LEADIN_HOURS; if (stripStart < 0) stripStart = 0;
+    var stripEnd = win.endH;
+
+    var hrs = loc.hourly;
+    var cellsAll = [];
+    for (var h = stripStart; h <= stripEnd; h++) {
+      var stamp = dateKey + 'T' + pad2(h) + ':00';
+      var i = hrs.time.indexOf(stamp);
+      var temp = (i !== -1 && hrs.temperature_2m) ? hrs.temperature_2m[i] : null;
+      var precip = (i !== -1 && hrs.precipitation_probability) ? hrs.precipitation_probability[i] : null;
+      var code = (i !== -1 && hrs.weather_code) ? hrs.weather_code[i] : null;
+      cellsAll.push({
+        hour: h,
+        inWindow: (h >= win.startH && h <= win.endH),
+        leadin: (h < win.startH),
+        temp: temp, precip: precip, code: code
+      });
+    }
+
+    // Cap columns: keep first (MAX_HOUR_COLS - 1) then roll the tail into "+N".
+    var note = '';
+    var cells = cellsAll;
+    if (cellsAll.length > MAX_HOUR_COLS) {
+      var keep = MAX_HOUR_COLS - 1;
+      cells = cellsAll.slice(0, keep);
+      var tail = cellsAll.slice(keep);
+      var tailMax = null;
+      tail.forEach(function (c) {
+        if (c.precip != null && (tailMax === null || c.precip > tailMax)) tailMax = c.precip;
+      });
+      cells.push({ more: true, count: tail.length, tailPrecip: tailMax });
+      note = '+ ' + tail.length + ' more hour' + (tail.length === 1 ? '' : 's') + ' through '
+           + hourLabel(stripEnd);
+    }
+    return { cells: cells, note: note, win: win };
+  }
+
+  // Max precip % within the actual event window (not lead-in). Drives the
+  // card accent. Uses hourly when available, else daily precip_max.
+  function windowPrecip(loc, ev, dateKey, daily) {
+    var win = eventWindow(ev);
+    if (win && loc && loc.hourly && loc.hourly.time) {
+      var maxP = null;
+      for (var h = win.startH; h <= win.endH; h++) {
+        var i = loc.hourly.time.indexOf(dateKey + 'T' + pad2(h) + ':00');
+        if (i !== -1 && loc.hourly.precipitation_probability) {
+          var p = loc.hourly.precipitation_probability[i];
+          if (p != null && (maxP === null || p > maxP)) maxP = p;
+        }
+      }
+      if (maxP !== null) return maxP;
+    }
+    return daily ? daily.precip : null;
+  }
+
+  function accentClass(precipPct) {
+    if (precipPct == null) return '';
+    if (precipPct >= PRECIP_RED) return 'accent-red';
+    if (precipPct >= PRECIP_AMBER) return 'accent-amber';
+    return '';
+  }
+
+  // ===================================================================
+  // RENDER
+  // ===================================================================
+  function render() {
+    var content = document.getElementById('wi-content');
+
+    var events = state.events;
+    if (state.filterVenue) {
+      events = events.filter(function (e) {
+        var v = resolveVenue(e);
+        return v && v.code === state.filterVenue;
+      });
+    }
+
+    if (!events.length) {
+      content.innerHTML = '<div class="wi-empty">No upcoming events in the next ' + HORIZON_DAYS + ' days'
+        + (state.filterVenue ? ' for this venue.' : '.') + '</div>';
+      return;
+    }
+
+    var html = '';
+
+    if (state.weatherError) {
+      html += '<div class="wi-banner"><span>Forecast unavailable right now &mdash; the event list is still accurate. '
+            + 'Try Refresh in a moment.</span>'
+            + '<button class="wi-btn" type="button" onclick="document.getElementById(\'wi-refresh\').click()">Retry</button></div>';
+    }
+
+    // group by date
+    var byDate = {};
+    events.forEach(function (e) {
+      (byDate[e.event_date] = byDate[e.event_date] || []).push(e);
+    });
+
+    windowDates.forEach(function (wd) {
+      var dayEvents = byDate[wd.key];
+      if (!dayEvents || !dayEvents.length) return;   // skip empty days
+
+      var isRich = (wd.idx <= 1);   // today + tomorrow
+
+      html += '<div class="wi-day">';
+      html += '<div class="wi-day-head">'
+            + '<span class="wi-day-rel">' + escapeHtml(relLabel(wd.idx, wd.date)) + '</span>'
+            + '<span class="wi-day-date">' + escapeHtml(prettyDate(wd.date)) + '</span>'
+            + '<span class="wi-day-count">' + dayEvents.length + ' event' + (dayEvents.length === 1 ? '' : 's') + '</span>'
+            + '</div>';
+
+      if (isRich) {
+        dayEvents.forEach(function (ev) { html += renderCard(ev, wd.key); });
+      } else {
+        html += '<div class="wi-rowlist">';
+        dayEvents.forEach(function (ev) { html += renderRow(ev, wd.key); });
+        html += '</div>';
+      }
+      html += '</div>';
+    });
+
+    content.innerHTML = html;
+  }
+
+  function venueBadge(ev) {
+    var v = resolveVenue(ev);
+    var code = v ? v.code : (ev.venue || '?');
+    var label = v ? (v.full_name || v.code) : ev.venue;
+    var col = venueColor(code);
+    return '<span class="wi-vbadge" style="background:' + col.bg + ';color:' + col.fg + ';">'
+         + escapeHtml(label) + '</span>';
+  }
+
+  function timeRange(ev) {
+    var s = fmtTime(ev.report_time) || fmtTime(ev.gates_open);
+    var e = fmtTime(ev.estimated_end_time);
+    if (s && e) return s + ' &rarr; ' + e;
+    if (s) return s;
+    if (e) return 'until ' + e;
+    return '';
+  }
+
+  function renderCard(ev, dateKey) {
+    var v = resolveVenue(ev);
+    var loc = v ? state.weatherByCode[v.code] : null;
+    var daily = loc ? dailySlice(loc, dateKey) : null;
+
+    var precipPct = windowPrecip(loc, ev, dateKey, daily);
+    var acc = accentClass(precipPct);
+
+    var html = '<div class="wi-card ' + acc + '">';
+    html += '<div class="wi-card-top">';
+    html += venueBadge(ev);
+
+    html += '<div class="wi-evmeta">';
+    html += '<div class="wi-evname">' + escapeHtml(ev.event_name || 'Event');
+    if (daily && daily.high != null && daily.high >= HEAT_BADGE_F) {
+      html += '<span class="wi-heat">\uD83C\uDF21\uFE0F Heat ' + Math.round(daily.high) + '\u00B0</span>';
+    }
+    html += '</div>';
+    var tr = timeRange(ev);
+    if (tr) html += '<div class="wi-evtime">' + tr + '</div>';
+    html += '</div>'; // evmeta
+
+    // daily chip / no-forecast note
+    if (!v || v.latitude == null || v.longitude == null) {
+      html += '<div class="wi-noforecast">No forecast &mdash; venue missing coordinates</div>';
+    } else if (state.weatherError || !loc) {
+      html += '<div class="wi-noforecast">Forecast unavailable</div>';
+    } else {
+      html += renderChip(daily, precipPct);
+    }
+
+    html += '</div>'; // card-top
+
+    // hourly strip (today + tomorrow only)
+    if (v && v.latitude != null && loc && !state.weatherError) {
+      var slice = hourlySlice(loc, ev, dateKey);
+      if (slice && slice.cells.length) {
+        html += '<div class="wi-strip">';
+        slice.cells.forEach(function (c) {
+          if (c.more) {
+            html += '<div class="wi-hour more"><div class="wi-hr-more">+' + c.count + '</div></div>';
+            return;
+          }
+          var cls = c.inWindow ? 'in-window' : (c.leadin ? 'leadin' : '');
+          var w = weatherFor(c.code);
+          var pWarn = (c.precip != null && c.precip >= PRECIP_AMBER) ? ' warn' : '';
+          html += '<div class="wi-hour ' + cls + '">'
+                + '<div class="wi-hr-time">' + hourLabel(c.hour) + '</div>'
+                + '<div class="wi-hr-icon">' + w.icon + '</div>'
+                + '<div class="wi-hr-temp">' + (c.temp != null ? Math.round(c.temp) + '\u00B0' : '\u2014') + '</div>'
+                + '<div class="wi-hr-precip' + pWarn + '">' + (c.precip != null ? c.precip + '%' : '') + '</div>'
+                + '</div>';
+        });
+        html += '</div>';
+        if (slice.note) html += '<div class="wi-strip-note">' + escapeHtml(slice.note) + '</div>';
+      }
+    }
+
+    html += '</div>'; // card
+    return html;
+  }
+
+  function renderChip(daily, precipPct) {
+    if (!daily) return '<div class="wi-noforecast">No forecast for this date</div>';
+    var w = weatherFor(daily.code);
+    var html = '<div class="wi-chip">';
+    html += '<span class="wi-chip-icon">' + w.icon + '</span>';
+    html += '<span>';
+    html += '<span class="wi-chip-temps">'
+          + (daily.high != null ? Math.round(daily.high) + '\u00B0' : '\u2014')
+          + ' <span class="lo">/ ' + (daily.low != null ? Math.round(daily.low) + '\u00B0' : '\u2014') + '</span></span>';
+    html += '<br><span class="wi-chip-cond">' + escapeHtml(w.label) + '</span>';
+    html += '</span>';
+    var pWarn = (precipPct != null && precipPct >= PRECIP_AMBER) ? ' warn' : '';
+    html += '<span class="wi-chip-precip' + pWarn + '">'
+          + (precipPct != null ? '\uD83D\uDCA7 ' + precipPct + '%' : '') + '</span>';
+    html += '</div>';
+    return html;
+  }
+
+  function renderRow(ev, dateKey) {
+    var v = resolveVenue(ev);
+    var loc = v ? state.weatherByCode[v.code] : null;
+    var daily = loc ? dailySlice(loc, dateKey) : null;
+    var precipPct = daily ? daily.precip : null;
+    var acc = accentClass(precipPct);
+    var w = weatherFor(daily ? daily.code : null);
+
+    var html = '<div class="wi-row ' + acc + '">';
+    html += venueBadge(ev);
+    html += '<span class="wi-row-name">' + escapeHtml(ev.event_name || 'Event');
+    if (daily && daily.high != null && daily.high >= HEAT_BADGE_F) {
+      html += '<span class="wi-heat">\uD83C\uDF21\uFE0F ' + Math.round(daily.high) + '\u00B0</span>';
+    }
+    html += '</span>';
+    var rt = fmtTime(ev.report_time) || fmtTime(ev.gates_open);
+    html += '<span class="wi-row-time">' + (rt || '') + '</span>';
+
+    html += '<span class="wi-row-wx">';
+    if (!v || v.latitude == null) {
+      html += '<span class="wi-noforecast">no coords</span>';
+    } else if (state.weatherError || !daily) {
+      html += '<span class="wi-noforecast">&mdash;</span>';
+    } else {
+      html += '<span class="wi-row-icon">' + w.icon + '</span>';
+      html += '<span class="wi-row-temps">'
+            + (daily.high != null ? Math.round(daily.high) + '\u00B0' : '\u2014')
+            + ' <span class="lo">/ ' + (daily.low != null ? Math.round(daily.low) + '\u00B0' : '\u2014') + '</span></span>';
+      var pWarn = (precipPct != null && precipPct >= PRECIP_AMBER) ? ' warn' : '';
+      html += '<span class="wi-row-precip' + pWarn + '">' + (precipPct != null ? precipPct + '%' : '') + '</span>';
+    }
+    html += '</span>';
+
+    html += '</div>';
+    return html;
+  }
+
+  // ===================================================================
+  // VENUE FILTER
+  // ===================================================================
+  function buildVenueFilter() {
+    var sel = document.getElementById('wi-venue-filter');
+    if (!sel) return;
+    var seen = {}, opts = [];
+    state.events.forEach(function (e) {
+      var v = resolveVenue(e);
+      var code = v ? v.code : e.venue;
+      var label = v ? (v.full_name || v.code) : e.venue;
+      if (code && !seen[code]) { seen[code] = true; opts.push({ code: code, label: label }); }
+    });
+    opts.sort(function (a, b) { return String(a.label).localeCompare(String(b.label)); });
+    var html = '<option value="">All venues</option>';
+    opts.forEach(function (o) {
+      html += '<option value="' + escapeHtml(o.code) + '">' + escapeHtml(o.label) + '</option>';
+    });
+    sel.innerHTML = html;
+    sel.value = state.filterVenue;
+    sel.onchange = function () { state.filterVenue = sel.value; render(); };
+  }
+
+  // ===================================================================
+  // REFRESH
+  // ===================================================================
+  function wireRefresh() {
+    var btn = document.getElementById('wi-refresh');
+    var icon = document.getElementById('wi-refresh-icon');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      btn.disabled = true;
+      if (icon) icon.className = 'wi-spin';
+      fetchWeather().then(function () {
+        render();
+        btn.disabled = false;
+        if (icon) icon.className = '';
+      });
+    });
+  }
+
+  // ===================================================================
+  // BOOT
+  // ===================================================================
+  function onReady() {
+    if (typeof pcActivity !== 'undefined' && pcActivity.init) pcActivity.init(PAGE_SLUG);
+    wireRefresh();
+
+    loadBaseData().then(function () {
+      buildVenueFilter();
+      return fetchWeather();
+    }).then(function () {
+      render();
+    }).catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      var content = document.getElementById('wi-content');
+      if (content) {
+        content.innerHTML = '<div class="wi-err">Could not load events. '
+          + 'Please refresh the page. If this persists, the events service may be temporarily unavailable.</div>';
+      }
+    });
+  }
+
+  if (typeof pcAuth === 'undefined') {
+    var c = document.getElementById('wi-content');
+    if (c) c.innerHTML = '<div class="wi-err">Authentication module not loaded. '
+      + 'This page must be served from the toolkit (tools.camdenco.com).</div>';
+    return;
+  }
+  pcAuth.require({ pageSlug: PAGE_SLUG, onReady: onReady });
+})();
+</script>
+</body>
+</html>
