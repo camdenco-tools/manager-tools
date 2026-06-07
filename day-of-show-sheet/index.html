@@ -99,6 +99,18 @@ body { background: #f6f6f3; margin: 0; }
   background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 5px 11px;
 }
 .dos-weatherchip .emoji { font-size: 17px; }
+.dos-wx { margin-top: 5px; }
+.dos-wx-summary { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; margin-bottom: 9px; }
+.dos-wx-summary .emoji { font-size: 18px; }
+.dos-wx-strip { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.dos-wx-col { flex: 1 1 0; min-width: 0; text-align: center; padding: 8px 4px; border-right: 1px solid var(--line-soft); }
+.dos-wx-col:last-child { border-right: none; }
+.dos-wx-col.shaded { background: var(--bg); }
+.dos-wx-col .h { font-size: 11px; color: var(--faint); font-weight: 600; }
+.dos-wx-col .em { font-size: 16px; line-height: 1; margin: 3px 0; }
+.dos-wx-col .t { font-size: 13px; font-weight: 700; }
+.dos-wx-col .p { font-size: 11px; color: var(--accent); font-weight: 600; min-height: 14px; }
+.dos-wx-col.more { display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--faint); font-weight: 700; font-size: 12px; }
 
 /* fields */
 .dos-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
@@ -144,6 +156,8 @@ body { background: #f6f6f3; margin: 0; }
 }
 .dos-mini:hover { background: var(--line-soft); }
 .dos-emptyline { font-size: 13px; color: var(--faint); font-style: italic; }
+.dos-note { font-size: 12px; color: var(--muted); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; line-height: 1.45; }
+.dos-pop-noplan-warn { font-size: 13px; font-weight: 700; color: var(--amber); background: #fdf6ec; border: 1px solid #f0dcc0; border-radius: 8px; padding: 9px 12px; }
 
 /* heads-up chips */
 .dos-chips { display: flex; flex-direction: column; gap: 8px; }
@@ -201,7 +215,8 @@ body { background: #f6f6f3; margin: 0; }
   .pc-nav-header, .pc-nav-ribbon, .pc-nav-totop, #pc-nav-root { display: none !important; }
   .dos-pills, .dos-modebar, .dos-savebar, .dos-toast, .dos-upwarn,
   .dos-filebtn, .dos-img-clear, .dos-poprow .pdel, .dos-popadd,
-  .dos-chip .cdel, .dos-mini { display: none !important; }
+  .dos-chip .cdel, .dos-mini, .dos-note, .dos-screen-only { display: none !important; }
+  .dos-pop-noplan-warn { color: #000 !important; background: none !important; border: none !important; padding: 0 !important; }
   .dos-root { max-width: 100%; padding: 0; }
   .dos-card { border: none; border-bottom: 1px solid #ccc; border-radius: 0; padding: 10px 0; margin: 0; page-break-inside: avoid; }
   .dos-input, .dos-textarea, .dos-chip input { border: none; padding: 0; background: none; box-shadow: none; resize: none; }
@@ -395,11 +410,40 @@ body { background: #f6f6f3; margin: 0; }
         $('dosGate').style.display = 'none';
         $('dosShell').style.display = 'block';
         renderPills();
-        selectVenue(ST.venues[0].code);
+        return pickDefaultVenue().then(function (code) {
+          selectVenue(code || ST.venues[0].code);
+        });
       })
       .catch(function (e) {
         $('dosGate').textContent = 'Could not load venues. ' + e.message;
       });
+  }
+
+  // Default landing = the venue whose next show is soonest (today counts first),
+  // tie-broken alphabetically among venues sharing that date. Falls back to the
+  // first venue alphabetically if nothing is scheduled.
+  function pickDefaultVenue() {
+    var codes = {};
+    ST.venues.forEach(function (v) { codes[v.code] = true; });
+    return sb('events?select=venue,event_date,event_type,deleted_at,cancelled_at' +
+      '&event_date=gte.' + todayISO() + '&order=event_date.asc&limit=300')
+      .then(function (rows) {
+        var live = (rows || []).filter(function (e) {
+          if (!codes[e.venue]) return false;
+          if (String(e.event_type || '').toLowerCase() === 'adhoc') return false;
+          if (e.deleted_at || e.cancelled_at) return false;
+          return true;
+        }).map(function (e) {
+          return { venue: e.venue, date: String(e.event_date).slice(0, 10) };
+        });
+        if (!live.length) return null;
+        var soonest = live[0].date; // rows are asc by date, so first live row is soonest
+        var atSoonest = live.filter(function (e) { return e.date === soonest; })
+          .map(function (e) { return e.venue; });
+        atSoonest.sort();
+        return atSoonest[0] || null;
+      })
+      .catch(function () { return null; });
   }
 
   function renderPills() {
@@ -573,19 +617,70 @@ body { background: #f6f6f3; margin: 0; }
     var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + c.latitude +
       '&longitude=' + c.longitude +
       '&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_max' +
+      '&hourly=temperature_2m,weathercode,precipitation_probability' +
       '&temperature_unit=fahrenheit&timezone=America%2FNew_York' +
       '&start_date=' + date + '&end_date=' + date;
     return fetch(url).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
       if (!j || !j.daily || !j.daily.time || !j.daily.time.length) { ST.wx = null; return; }
-      ST.wx = {
+      var wx = {
         high: num(j.daily.temperature_2m_max && j.daily.temperature_2m_max[0]),
         low: num(j.daily.temperature_2m_min && j.daily.temperature_2m_min[0]),
         code: num(j.daily.weathercode && j.daily.weathercode[0]),
-        precip: num(j.daily.precipitation_probability_max && j.daily.precipitation_probability_max[0])
+        precip: num(j.daily.precipitation_probability_max && j.daily.precipitation_probability_max[0]),
+        strip: [], more: 0
       };
+      var built = buildStrip(j.hourly, date, ev);
+      wx.strip = built.cols; wx.more = built.more;
+      ST.wx = wx;
     }).catch(function () { ST.wx = null; });
   }
   function num(v) { return (v == null || isNaN(v)) ? null : Math.round(Number(v)); }
+
+  function parseHM(t) {
+    if (!t) return null;
+    var s = String(t);
+    var iso = s.match(/T(\d{2}):(\d{2})/);
+    if (iso) return { h: Number(iso[1]), m: Number(iso[2]) };
+    var m = s.match(/(\d{1,2}):(\d{2})/);
+    if (m) return { h: Number(m[1]), m: Number(m[2]) };
+    return null;
+  }
+  function hourLabel(h) {
+    var ap = h >= 12 ? 'p' : 'a'; var hh = h % 12; if (hh === 0) hh = 12; return hh + ap;
+  }
+  // Build an hourly strip around the event window (mirrors Weather Impacts):
+  // ~2h lead-in, shade the report->end window, cap 8 cols + roll the tail into +N.
+  function buildStrip(hourly, date, ev) {
+    var blank = { cols: [], more: 0 };
+    if (!hourly || !hourly.time || !hourly.time.length) return blank;
+    var ws = parseHM(ev.report_time) || parseHM(ev.gates_open) || parseHM(ev.show_time);
+    if (!ws) return blank;
+    var we = parseHM(ev.estimated_end_time) || parseHM(ev.show_time);
+    var startH = Math.max(0, ws.h - 2);
+    var endH = we ? Math.min(23, we.h + (we.m > 0 ? 1 : 0)) : Math.min(23, ws.h + 4);
+    if (endH < ws.h) endH = Math.min(23, ws.h + 4);
+
+    var byHour = {};
+    for (var i = 0; i < hourly.time.length; i++) {
+      var hm = parseHM(hourly.time[i]);
+      if (hm) byHour[hm.h] = i;
+    }
+    var cols = [];
+    for (var h = startH; h <= endH; h++) {
+      var idx = byHour[h];
+      var code = idx != null ? num(hourly.weathercode[idx]) : null;
+      cols.push({
+        label: hourLabel(h),
+        emoji: wmo(code).emoji,
+        temp: idx != null ? num(hourly.temperature_2m[idx]) : null,
+        precip: idx != null ? num(hourly.precipitation_probability[idx]) : null,
+        shaded: (h >= ws.h && h <= (we ? we.h : endH))
+      });
+    }
+    var more = 0;
+    if (cols.length > 8) { more = cols.length - 7; cols = cols.slice(0, 7); }
+    return { cols: cols, more: more };
+  }
 
   function loadPlannedPopcorn(eventId) {
     // prep_plan_lines for this event, item = Popcorn, with stand names embedded.
@@ -602,30 +697,34 @@ body { background: #f6f6f3; margin: 0; }
     }).catch(function () { ST._plannedPopcorn = []; });
   }
 
-  // Best-effort: read placements for the event and pull manager-level names.
-  // position_assignments column shape isn't pinned, so this probes defensively
-  // and stays non-fatal — the managers field is always editable (the spine).
+  // Auto-fill on-site managers from placements (position_assignments).
+  // Confirmed columns: staff_name, role, removed_at. Manager-level roles only.
+  // Non-fatal — the managers field is always editable (the spine).
   function loadAutoManagers(eventId) {
     ST._autoManagers = '';
-    return sb('position_assignments?select=*&event_id=eq.' + eventId + '&limit=500')
+    return sb('position_assignments?select=staff_name,role&event_id=eq.' + eventId +
+      '&removed_at=is.null&limit=500')
       .then(function (rows) {
         if (!rows || !rows.length) return;
-        try { if (window.console) console.log('[DOS] position_assignments sample keys:', Object.keys(rows[0])); } catch (e) {}
-        var names = [];
+        var names = [], seen = {};
         rows.forEach(function (r) {
-          var role = r.role_name || r.canonical_role || r.role || r.position || null;
-          // only auto-fill when we can see a manager-level role
-          if (!role || MANAGER_ROLES.indexOf(role) === -1) return;
-          var nm = r.employee_name || r.staff_name || r.name ||
-            ((r.first_name || '') + ' ' + (r.last_name || '')).trim();
-          if (nm) names.push(nm);
+          if (!isManagerRole(r.role)) return;
+          var nm = (r.staff_name || '').trim();
+          if (nm && !seen[nm]) { seen[nm] = 1; names.push(nm); }
         });
-        // de-dup
-        var seen = {}, uniq = [];
-        names.forEach(function (n) { if (!seen[n]) { seen[n] = 1; uniq.push(n); } });
-        ST._autoManagers = uniq.join(', ');
+        ST._autoManagers = names.join(', ');
       })
       .catch(function () { ST._autoManagers = ''; });
+  }
+
+  function isManagerRole(role) {
+    if (!role) return false;
+    var r = String(role).toLowerCase();
+    for (var i = 0; i < MANAGER_ROLES.length; i++) {
+      if (r === MANAGER_ROLES[i].toLowerCase()) return true;
+    }
+    // forgiving fallback so a slightly different label still counts
+    return r.indexOf('manager') !== -1 || r.indexOf('supervisor') !== -1;
   }
 
   // After all loads: seed working state from saved sheet if present, else from sources.
@@ -666,21 +765,6 @@ body { background: #f6f6f3; margin: 0; }
     hg.appendChild(kv('Venue', venueLabel(ST.venueCode)));
     hg.appendChild(kv('Event', ev.event_name || 'Untitled'));
     hg.appendChild(kv('Date', prettyDate(ev.event_date)));
-    // weather chip
-    var wkv = el('div', 'dos-kv');
-    wkv.appendChild(el('span', 'k', 'Weather'));
-    if (ST.wx && (ST.wx.high != null || ST.wx.low != null)) {
-      var w = wmo(ST.wx.code);
-      var chip = el('span', 'dos-weatherchip');
-      chip.innerHTML = '<span class="emoji">' + w.emoji + '</span>' +
-        '<span>' + (ST.wx.high != null ? ST.wx.high + '°' : '—') + ' / ' +
-        (ST.wx.low != null ? ST.wx.low + '°' : '—') + ' · ' + esc(w.label) +
-        (ST.wx.precip != null ? ' · ' + ST.wx.precip + '% precip' : '') + '</span>';
-      wkv.appendChild(chip);
-    } else {
-      wkv.appendChild(el('span', 'v', '—'));
-    }
-    hg.appendChild(wkv);
     // report time (editable per spine, seeded from event)
     var rt = el('div', 'dos-kv');
     rt.appendChild(el('span', 'k', 'Crew report time'));
@@ -689,13 +773,19 @@ body { background: #f6f6f3; margin: 0; }
     rt.appendChild(rtIn);
     hg.appendChild(rt);
     hc.appendChild(hg);
+    hc.appendChild(buildWeatherBlock());
     pane.appendChild(hc);
 
     // ---- Logistics ----
-    var lc = card('Logistics', 'venue default + tonight\u2019s override');
+    var lc = card('Logistics', 'from the event — change only if different');
+    var lnote = el('div', 'dos-note');
+    lnote.textContent = 'Doors, cut-off, and attendance come from the event. No need to update unless tonight is different — leave a box blank to keep the value shown.';
+    lc.appendChild(lnote);
     var lrow = el('div', 'dos-row3');
-    lrow.appendChild(field('Doors', inputEl('dosDoors', orStr(s.doors), d.doors_default || 'venue default')));
-    lrow.appendChild(field('Alcohol cut-off', inputEl('dosCutoff', orStr(s.alcohol_cutoff), d.alcohol_cutoff_default || '~10:15')));
+    var doorsSrc = prettyTime(ev.gates_open) || (d.doors_default || '');
+    lrow.appendChild(field('Doors', inputEl('dosDoors', orStr(s.doors), doorsSrc || 'doors time')));
+    var cutoffSrc = d.alcohol_cutoff_default || '10:15 PM';
+    lrow.appendChild(field('Alcohol cut-off', inputEl('dosCutoff', orStr(s.alcohol_cutoff), cutoffSrc)));
     var attIn = inputEl('dosAtt', s.expected_attendance != null ? s.expected_attendance : '',
       ev.expected_attendance != null ? String(ev.expected_attendance) : 'estimate');
     attIn.type = 'number'; attIn.min = '0';
@@ -732,7 +822,7 @@ body { background: #f6f6f3; margin: 0; }
     var cc = card('Crew note', 'required', true);
     var ta = document.createElement('textarea');
     ta.className = 'dos-textarea'; ta.id = 'dosCrew'; ta.rows = 3;
-    ta.placeholder = 'The one thing the crew needs to hear — "34 teams today", "halftime is your rush", "soda cases back in the reach-ins before you leave".';
+    ta.placeholder = 'Every event has SOMETHING we need to communicate to staff. Add those notes here. Is it a note about counting inventory, or maybe a heads up on when to be ready for intermission?';
     ta.value = orStr(s.crew_note);
     ta.oninput = function () { ta.classList.remove('required-empty'); $('dosSaveMsg').textContent = ''; $('dosSaveMsg').className = 'msg'; };
     cc.appendChild(ta);
@@ -787,6 +877,36 @@ body { background: #f6f6f3; margin: 0; }
   function kv(k, v) {
     var n = el('div', 'dos-kv'); n.appendChild(el('span', 'k', k)); n.appendChild(el('span', 'v', v || '—')); return n;
   }
+  function buildWeatherBlock() {
+    var wrap = el('div', 'dos-kv full');
+    wrap.style.marginTop = '14px';
+    wrap.appendChild(el('span', 'k', 'Weather'));
+    var has = ST.wx && (ST.wx.high != null || ST.wx.low != null || (ST.wx.strip && ST.wx.strip.length));
+    if (!has) { wrap.appendChild(el('span', 'v', 'No forecast available for this date.')); return wrap; }
+    var box = el('div', 'dos-wx');
+    var w = wmo(ST.wx.code);
+    var sum = el('div', 'dos-wx-summary');
+    sum.innerHTML = '<span class="emoji">' + w.emoji + '</span>' +
+      '<span>' + (ST.wx.high != null ? ST.wx.high + '°' : '—') + ' / ' +
+      (ST.wx.low != null ? ST.wx.low + '°' : '—') + ' · ' + esc(w.label) +
+      (ST.wx.precip != null ? ' · ' + ST.wx.precip + '% precip' : '') + '</span>';
+    box.appendChild(sum);
+    if (ST.wx.strip && ST.wx.strip.length) {
+      var strip = el('div', 'dos-wx-strip');
+      ST.wx.strip.forEach(function (col) {
+        var c = el('div', 'dos-wx-col' + (col.shaded ? ' shaded' : ''));
+        c.innerHTML = '<div class="h">' + esc(col.label) + '</div>' +
+          '<div class="em">' + col.emoji + '</div>' +
+          '<div class="t">' + (col.temp != null ? col.temp + '°' : '—') + '</div>' +
+          '<div class="p">' + (col.precip != null ? col.precip + '%' : '') + '</div>';
+        strip.appendChild(c);
+      });
+      if (ST.wx.more > 0) { strip.appendChild(el('div', 'dos-wx-col more', '+' + ST.wx.more)); }
+      box.appendChild(strip);
+    }
+    wrap.appendChild(box);
+    return wrap;
+  }
   function standingKV(k, v, full) {
     var n = el('div', full ? 'full' : null);
     n.appendChild(el('div', 'k', k));
@@ -822,7 +942,11 @@ body { background: #f6f6f3; margin: 0; }
     // clear everything after the header
     while (card.children.length > 1) card.removeChild(card.lastChild);
     if (!ST.popcorn.length) {
-      card.appendChild(el('div', 'dos-emptyline', 'No planned popcorn for this event. Add a stand line below if you\u2019re popping anyway.'));
+      var warn = el('div', 'dos-pop-noplan-warn', '\u26a0 Your manager did not create a popcorn plan for this event.');
+      card.appendChild(warn);
+      var hint = el('div', 'dos-emptyline dos-screen-only', 'Build one in Prep & Production Planning — or add a stand line below if you\u2019re popping tonight anyway.');
+      hint.style.marginTop = '8px';
+      card.appendChild(hint);
     }
     ST.popcorn.forEach(function (p, idx) {
       var row = el('div', 'dos-poprow');
