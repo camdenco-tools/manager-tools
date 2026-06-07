@@ -120,7 +120,7 @@
     'Pizza Lead':                  'Lead',
     'Pizza Cashier':               'Cashier',
     'Beer Tender':                 'Bartender',
-    'Prep Cook':                   'Cook',
+    'Prep Cook':                   'Stand Worker',
 
     // Parenthetical-stripped variants seen in the spelunking
     'Bartender (mixed drinks)':    'Bartender',
@@ -130,7 +130,9 @@
 
     // Drops (no canonical equivalent — null sentinel)
     'Barback':                     null,
-    'Venue Manager':               null,
+
+    // Promoted to a real role 2026-06-06 (12th canonical role, Mann)
+    'Venue Manager':               'Venue Manager',
 
     // Special expansion case (used only in applicant data, see header)
     'Multiple / Open':             '__MULTI__'
