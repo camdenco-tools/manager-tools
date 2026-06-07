@@ -44,6 +44,7 @@
       { label: 'Submit event',                   href: '/submit-event/',           slug: 'submit-event' },
       { label: 'Event planning',                 href: '/event-planning/',         slug: 'event-planning' },
       { label: 'Prep & Production Planning',     href: '/prep-production-planning/', slugAny: ['prep-planning', 'prep-production'] },
+      { label: 'Day-of-show sheet',              href: '/day-of-show-sheet/',      slug: 'day-of-show-sheet' },
       { label: 'Schedule assistant',             href: '/schedule-assistant/',     slug: 'schedule-assistant' },
       { label: 'Log sales',                      href: '/log-sales/',              slug: 'log-sales' },
       { label: 'Sales history',                  href: '/sales-history/',          slug: 'sales-history' },
