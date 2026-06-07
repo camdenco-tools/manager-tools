@@ -1,0 +1,1162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Day-of-Show Sheet — Popcorn Chez</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+/* ===================================================================
+   Day-of-Show Sheet — scoped under .dos-root so nothing here can
+   clobber the pc-nav header/ribbon styles injected by pc-nav.js.
+   House style: DM Sans, clean cards, #1a1a1a ink, #e8e8e4 borders.
+   =================================================================== */
+.dos-root {
+  --ink: #1a1a1a;
+  --muted: #6b6b66;
+  --faint: #9b9b94;
+  --line: #e8e8e4;
+  --line-soft: #f0f0ec;
+  --paper: #ffffff;
+  --bg: #f6f6f3;
+  --accent: #185FA5;
+  --accent-soft: #eaf1f9;
+  --green: #639922;
+  --amber: #BA7517;
+  --red: #c0392b;
+  --radius: 12px;
+  font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--ink);
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 22px 22px 120px;
+  box-sizing: border-box;
+}
+.dos-root *, .dos-root *::before, .dos-root *::after { box-sizing: border-box; }
+body { background: #f6f6f3; margin: 0; }
+
+.dos-title { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; margin: 4px 0 2px; }
+.dos-sub { font-size: 13px; color: var(--muted); margin: 0 0 18px; }
+
+/* gate / loading / empty */
+.dos-gate, .dos-empty {
+  background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 28px; text-align: center; color: var(--muted); font-size: 14px; margin-top: 16px;
+}
+
+/* venue pills */
+.dos-pills { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.dos-pill {
+  font-size: 13px; font-weight: 600; padding: 7px 14px; border-radius: 20px;
+  border: 1px solid var(--line); background: var(--paper); color: var(--ink);
+  cursor: pointer; transition: all 0.12s ease; white-space: nowrap;
+}
+.dos-pill:hover { background: var(--line-soft); }
+.dos-pill.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+/* mode toggle */
+.dos-modebar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.dos-toggle { display: inline-flex; background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
+.dos-toggle button {
+  border: none; background: transparent; font: inherit; font-size: 13px; font-weight: 600;
+  color: var(--muted); padding: 7px 16px; border-radius: 8px; cursor: pointer;
+}
+.dos-toggle button.active { background: var(--ink); color: #fff; }
+
+/* event picker */
+.dos-eventpick { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.dos-eventpick label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.dos-eventpick select {
+  font: inherit; font-size: 14px; padding: 8px 12px; border: 1px solid var(--line);
+  border-radius: 8px; background: var(--paper); color: var(--ink); min-width: 260px; max-width: 100%;
+}
+
+/* cards / zones */
+.dos-card {
+  background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 18px 20px; margin-bottom: 14px;
+}
+.dos-zone-h {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--faint); margin: 0 0 12px;
+}
+.dos-zone-h .req { color: var(--red); font-weight: 700; }
+.dos-zone-h .src { font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--faint); font-size: 11px; }
+
+/* header zone grid */
+.dos-headgrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px 22px; }
+.dos-headgrid .full { grid-column: 1 / -1; }
+.dos-kv { display: flex; flex-direction: column; gap: 3px; }
+.dos-kv .k { font-size: 11px; color: var(--faint); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.dos-kv .v { font-size: 15px; font-weight: 600; }
+.dos-weatherchip {
+  display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 5px 11px;
+}
+.dos-weatherchip .emoji { font-size: 17px; }
+
+/* fields */
+.dos-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+.dos-field:last-child { margin-bottom: 0; }
+.dos-field label { font-size: 12px; font-weight: 600; color: var(--muted); }
+.dos-field .hint { font-size: 11px; color: var(--faint); font-weight: 400; }
+.dos-input, .dos-textarea {
+  font: inherit; font-size: 14px; padding: 9px 12px; border: 1px solid var(--line);
+  border-radius: 8px; background: var(--paper); color: var(--ink); width: 100%;
+}
+.dos-input:focus, .dos-textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.dos-textarea { resize: vertical; min-height: 70px; line-height: 1.45; }
+.dos-textarea.required-empty { border-color: var(--red); box-shadow: 0 0 0 3px rgba(192,57,43,0.08); }
+.dos-row3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+
+/* image upload */
+.dos-upwarn {
+  font-size: 12px; line-height: 1.5; color: var(--amber); background: #fdf6ec;
+  border: 1px solid #f0dcc0; border-radius: 8px; padding: 9px 12px; margin-bottom: 10px;
+}
+.dos-upwarn b { color: #8a5a12; }
+.dos-uprow { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.dos-filebtn {
+  font: inherit; font-size: 13px; font-weight: 600; padding: 8px 14px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--paper); color: var(--ink); cursor: pointer;
+}
+.dos-filebtn:hover { background: var(--line-soft); }
+.dos-filename { font-size: 13px; color: var(--muted); }
+.dos-imgprev { margin-top: 12px; max-width: 100%; }
+.dos-imgprev img { max-width: 100%; max-height: 360px; border: 1px solid var(--line); border-radius: 8px; display: block; }
+.dos-img-clear { font: inherit; font-size: 12px; color: var(--red); background: none; border: none; cursor: pointer; padding: 4px 0; }
+
+/* popcorn list */
+.dos-poprow { display: grid; grid-template-columns: 1fr 110px auto; gap: 10px; align-items: center; margin-bottom: 8px; }
+.dos-poprow .pname { font-size: 14px; font-weight: 500; }
+.dos-poprow .pbox { text-align: right; }
+.dos-poprow .pdel { font: inherit; font-size: 12px; color: var(--red); background: none; border: none; cursor: pointer; }
+.dos-popadd { display: grid; grid-template-columns: 1fr 110px auto; gap: 10px; align-items: center; margin-top: 10px; padding-top: 12px; border-top: 1px dashed var(--line); }
+.dos-popadd select, .dos-popadd input { font: inherit; font-size: 13px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+.dos-mini {
+  font: inherit; font-size: 12px; font-weight: 600; padding: 8px 12px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--paper); color: var(--ink); cursor: pointer; white-space: nowrap;
+}
+.dos-mini:hover { background: var(--line-soft); }
+.dos-emptyline { font-size: 13px; color: var(--faint); font-style: italic; }
+
+/* heads-up chips */
+.dos-chips { display: flex; flex-direction: column; gap: 8px; }
+.dos-chip { display: flex; align-items: center; gap: 8px; }
+.dos-chip input { font: inherit; font-size: 13px; padding: 8px 11px; border: 1px solid var(--line); border-radius: 8px; flex: 1; background: var(--bg); }
+.dos-chip .cdel { font: inherit; font-size: 16px; line-height: 1; color: var(--faint); background: none; border: none; cursor: pointer; padding: 0 4px; }
+.dos-chip .cdel:hover { color: var(--red); }
+
+/* standing notes (read-only display in Input mode) */
+.dos-standing { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 22px; }
+.dos-standing .full { grid-column: 1 / -1; }
+.dos-standing .k { font-size: 11px; color: var(--faint); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.dos-standing .v { font-size: 14px; line-height: 1.45; }
+.dos-standing .v.empty { color: var(--faint); font-style: italic; }
+
+/* save bar */
+.dos-savebar {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 200;
+  background: #1a1a1a; color: #fff; padding: 12px 22px;
+  display: none; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap;
+}
+.dos-savebar.show { display: flex; }
+.dos-savebar .msg { font-size: 13px; color: #cfcfca; }
+.dos-savebar .msg.err { color: #ffb4ab; font-weight: 600; }
+.dos-btn {
+  font: inherit; font-size: 14px; font-weight: 600; padding: 9px 22px; border-radius: 8px;
+  border: none; cursor: pointer;
+}
+.dos-btn-save { background: var(--green); color: #fff; }
+.dos-btn-save:hover { background: #547f1c; }
+.dos-btn-save:disabled { opacity: 0.5; cursor: default; }
+.dos-btn-print { background: #fff; color: #1a1a1a; }
+.dos-btn-print:hover { background: #eee; }
+.dos-btn-print:disabled { opacity: 0.4; cursor: default; }
+
+/* toast */
+.dos-toast {
+  position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%);
+  background: #1a1a1a; color: #fff; padding: 11px 22px; border-radius: 8px;
+  font-size: 14px; font-weight: 500; z-index: 300; opacity: 0; transition: opacity 0.25s; pointer-events: none;
+}
+.dos-toast.show { opacity: 1; }
+
+@media (max-width: 640px) {
+  .dos-headgrid, .dos-standing { grid-template-columns: 1fr; }
+  .dos-row3 { grid-template-columns: 1fr; }
+  .dos-poprow, .dos-popadd { grid-template-columns: 1fr 90px auto; }
+}
+
+/* ===================== PRINT (basic — step 4 will refine) =====================
+   Print the sheet content; hide all chrome, controls, and editing affordances.
+   Inputs render as their values via the print-mirror spans the JS keeps in sync. */
+@media print {
+  body { background: #fff; }
+  .pc-nav-header, .pc-nav-ribbon, .pc-nav-totop, #pc-nav-root { display: none !important; }
+  .dos-pills, .dos-modebar, .dos-savebar, .dos-toast, .dos-upwarn,
+  .dos-filebtn, .dos-img-clear, .dos-poprow .pdel, .dos-popadd,
+  .dos-chip .cdel, .dos-mini { display: none !important; }
+  .dos-root { max-width: 100%; padding: 0; }
+  .dos-card { border: none; border-bottom: 1px solid #ccc; border-radius: 0; padding: 10px 0; margin: 0; page-break-inside: avoid; }
+  .dos-input, .dos-textarea, .dos-chip input { border: none; padding: 0; background: none; box-shadow: none; resize: none; }
+  .dos-title { margin-top: 0; }
+}
+</style>
+</head>
+<body>
+
+<div class="dos-root" id="dosRoot">
+  <h1 class="dos-title">Day-of-Show Sheet</h1>
+  <p class="dos-sub">Build today's crew sheet for an event, print it, and keep it on the event as a record.</p>
+
+  <div class="dos-gate" id="dosGate">Loading…</div>
+
+  <!-- everything below is shown once a venue + (input mode) event is selected -->
+  <div id="dosShell" style="display:none;">
+    <div class="dos-pills" id="dosPills"></div>
+
+    <div class="dos-modebar">
+      <div class="dos-toggle" id="dosModeToggle">
+        <button data-mode="input" class="active">Input</button>
+        <button data-mode="defaults">Set Defaults</button>
+      </div>
+      <div class="dos-eventpick" id="dosEventPick" style="display:none;">
+        <label for="dosEventSel">Event</label>
+        <select id="dosEventSel"></select>
+      </div>
+    </div>
+
+    <div id="dosInputPane"></div>
+    <div id="dosDefaultsPane" style="display:none;"></div>
+  </div>
+</div>
+
+<div class="dos-savebar" id="dosSaveBar">
+  <span class="msg" id="dosSaveMsg"></span>
+  <button class="dos-btn dos-btn-save" id="dosSaveBtn">Save</button>
+  <button class="dos-btn dos-btn-print" id="dosPrintBtn" disabled title="Save first to print">Print</button>
+</div>
+
+<div class="dos-toast" id="dosToast"></div>
+
+<!-- shared toolkit scripts (auth first, then nav, then activity) -->
+<script src="/pc-auth.js"></script>
+<script src="/pc-nav.js"></script>
+<script src="/pc-activity.js"></script>
+
+<script>
+(function () {
+  'use strict';
+
+  var SB_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
+  var REST = SB_URL + '/rest/v1/';
+  var STORAGE_BUCKET = 'show-sheet-images';
+  var PAGE_SLUG = 'day-of-show-sheet';
+
+  // On-site manager role set (spec open Q — Venue Manager + Supervisor).
+  // One-line change point if Lead etc. should count later.
+  var MANAGER_ROLES = ['Venue Manager', 'Supervisor'];
+
+  // ---- DOM helpers ----
+  function $(id) { return document.getElementById(id); }
+  function el(tag, cls, txt) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (txt != null) n.textContent = txt;
+    return n;
+  }
+  function esc(s) {
+    var d = document.createElement('div'); d.textContent = (s == null ? '' : String(s)); return d.innerHTML;
+  }
+  function toast(msg) {
+    var t = $('dosToast'); t.textContent = msg; t.classList.add('show');
+    setTimeout(function () { t.classList.remove('show'); }, 2600);
+  }
+
+  // ---- authenticated REST (fail-loud, mirrors pc-roles.js) ----
+  function sb(path, opts) {
+    opts = opts || {};
+    var headers = pcAuth.headers();
+    if (opts.headers) { for (var k in opts.headers) headers[k] = opts.headers[k]; }
+    return fetch(REST + path, { method: opts.method || 'GET', headers: headers, body: opts.body })
+      .then(function (r) {
+        if (!r.ok) {
+          return r.text().then(function (t) {
+            throw new Error('HTTP ' + r.status + ' on ' + path + (t ? ' — ' + t.slice(0, 240) : ''));
+          });
+        }
+        if (r.status === 204) return null;
+        var ct = r.headers.get('content-type') || '';
+        return ct.indexOf('application/json') !== -1 ? r.json() : null;
+      });
+  }
+
+  // ---- date helpers (Camden = ET; browser-local date is fine) ----
+  function isoDate(d) {
+    return d.getFullYear() + '-' +
+      String(d.getMonth() + 1).padStart(2, '0') + '-' +
+      String(d.getDate()).padStart(2, '0');
+  }
+  function todayISO() { return isoDate(new Date()); }
+  function shiftISO(days) { var d = new Date(); d.setDate(d.getDate() + days); return isoDate(d); }
+  function prettyDate(iso) {
+    if (!iso) return '';
+    var p = String(iso).slice(0, 10).split('-');
+    if (p.length !== 3) return iso;
+    var d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  }
+  function prettyTime(t) {
+    if (!t) return '';
+    var m = String(t).match(/(\d{1,2}):(\d{2})/);
+    if (!m) return t;
+    var h = Number(m[1]), min = m[2], ap = h >= 12 ? 'PM' : 'AM';
+    var h12 = h % 12; if (h12 === 0) h12 = 12;
+    return h12 + ':' + min + ' ' + ap;
+  }
+
+  // ---- WMO weather code → label + emoji (compact; matches toolkit set) ----
+  function wmo(code) {
+    if (code == null) return { label: '—', emoji: '' };
+    if (code === 0) return { label: 'Clear', emoji: '☀️' };
+    if (code === 1 || code === 2) return { label: 'Partly cloudy', emoji: '⛅' };
+    if (code === 3) return { label: 'Cloudy', emoji: '☁️' };
+    if (code === 45 || code === 48) return { label: 'Fog', emoji: '🌫️' };
+    if (code >= 51 && code <= 57) return { label: 'Drizzle', emoji: '🌦️' };
+    if (code >= 61 && code <= 67) return { label: 'Rain', emoji: '🌧️' };
+    if ((code >= 71 && code <= 77) || code === 85 || code === 86) return { label: 'Snow', emoji: '🌨️' };
+    if (code >= 80 && code <= 82) return { label: 'Showers', emoji: '🌦️' };
+    if (code >= 95) return { label: 'Thunderstorm', emoji: '⛈️' };
+    return { label: 'Mixed', emoji: '🌦️' };
+  }
+  function isSnow(code) { return code != null && ((code >= 71 && code <= 77) || code === 85 || code === 86); }
+  function isRain(code) { return code != null && ((code >= 51 && code <= 67) || (code >= 80 && code <= 82) || code >= 95); }
+
+  // Deterministic heads-up suggestions from the daily forecast (spec rules).
+  function buildHeadsUp(wx) {
+    var out = [];
+    if (!wx) return out;
+    if (wx.high != null && wx.high >= 85) out.push('Hot one today — bring a water bottle and stay hydrated.');
+    if (isSnow(wx.code)) out.push('Snow expected — leave early, drive careful, keep an ice scraper in the car.');
+    if (isRain(wx.code) || (wx.precip != null && wx.precip >= 50)) out.push('Rain in the forecast — rain jacket and dry socks.');
+    if (wx.low != null && wx.low <= 50) out.push('Gets cool after dark — bring a layer.');
+    return out;
+  }
+
+  // =====================================================================
+  // STATE
+  // =====================================================================
+  var ST = {
+    user: null,
+    venues: [],          // [{code, full_name, latitude, longitude}]
+    venueCode: null,
+    mode: 'input',        // 'input' | 'defaults'
+    events: [],           // events for the selected venue (window)
+    event: null,          // selected event row
+    standsByVenue: {},    // code -> [{id, stand_name}]
+    defaults: null,       // venue_show_defaults row for venueCode (or null)
+    wx: null,             // {high, low, code, precip} for the event day
+    sheet: null,          // existing event_show_sheets row (or null)
+    popcorn: [],          // [{stand_id, stand_name, boxes}] working set
+    headsUp: [],          // [string]
+    newImageFile: null,   // File pending upload
+    clearImage: false,    // user removed an existing image
+    saved: false          // has the current event sheet been saved this session
+  };
+
+  // =====================================================================
+  // BOOT
+  // =====================================================================
+  pcAuth.require({
+    pageSlug: PAGE_SLUG,
+    onReady: function (user) {
+      ST.user = user;
+      if (typeof pcActivity !== 'undefined' && pcActivity.init) { pcActivity.init(PAGE_SLUG); }
+      loadVenues();
+      wireChrome();
+    }
+  });
+
+  function userName() {
+    return (ST.user && (ST.user.display_name || ST.user.email)) || 'manager';
+  }
+
+  function loadVenues() {
+    sb('venues?select=code,full_name,latitude,longitude&is_active=eq.true&order=code.asc&limit=100')
+      .then(function (rows) {
+        ST.venues = rows || [];
+        if (!ST.venues.length) { $('dosGate').textContent = 'No active venues found.'; return; }
+        $('dosGate').style.display = 'none';
+        $('dosShell').style.display = 'block';
+        renderPills();
+        selectVenue(ST.venues[0].code);
+      })
+      .catch(function (e) {
+        $('dosGate').textContent = 'Could not load venues. ' + e.message;
+      });
+  }
+
+  function renderPills() {
+    var wrap = $('dosPills'); wrap.innerHTML = '';
+    ST.venues.forEach(function (v) {
+      var b = el('button', 'dos-pill' + (v.code === ST.venueCode ? ' active' : ''), v.code);
+      b.title = v.full_name || v.code;
+      b.onclick = function () { selectVenue(v.code); };
+      wrap.appendChild(b);
+    });
+  }
+
+  function wireChrome() {
+    var tog = $('dosModeToggle');
+    tog.querySelectorAll('button').forEach(function (btn) {
+      btn.onclick = function () {
+        setMode(btn.getAttribute('data-mode'));
+      };
+    });
+    $('dosEventSel').onchange = function () { selectEvent(this.value); };
+    $('dosSaveBtn').onclick = onSave;
+    $('dosPrintBtn').onclick = function () { window.print(); };
+  }
+
+  function setMode(mode) {
+    ST.mode = mode;
+    $('dosModeToggle').querySelectorAll('button').forEach(function (b) {
+      b.classList.toggle('active', b.getAttribute('data-mode') === mode);
+    });
+    $('dosEventPick').style.display = (mode === 'input') ? 'flex' : 'none';
+    $('dosInputPane').style.display = (mode === 'input') ? 'block' : 'none';
+    $('dosDefaultsPane').style.display = (mode === 'defaults') ? 'block' : 'none';
+    if (mode === 'defaults') { renderDefaultsPane(); $('dosSaveMsg').textContent = ''; }
+    else { renderInputPane(); }
+    updateSaveBar();
+  }
+
+  function venueLabel(code) {
+    for (var i = 0; i < ST.venues.length; i++) if (ST.venues[i].code === code) return ST.venues[i].full_name || code;
+    return code;
+  }
+  function venueCoords(code) {
+    for (var i = 0; i < ST.venues.length; i++) if (ST.venues[i].code === code) return ST.venues[i];
+    return null;
+  }
+
+  // =====================================================================
+  // VENUE SELECT → load defaults + stands + events
+  // =====================================================================
+  function selectVenue(code) {
+    ST.venueCode = code;
+    ST.event = null; ST.sheet = null; ST.wx = null; ST.popcorn = []; ST.headsUp = [];
+    ST.newImageFile = null; ST.clearImage = false; ST.saved = false; ST.defaults = null;
+    renderPills();
+
+    var jobs = [loadDefaults(code), loadStands(code), loadEvents(code)];
+    Promise.all(jobs).then(function () {
+      if (ST.mode === 'defaults') renderDefaultsPane(); else renderInputPane();
+      updateSaveBar();
+    });
+  }
+
+  function loadDefaults(code) {
+    return sb('venue_show_defaults?select=*&venue_code=eq.' + encodeURIComponent(code) +
+      '&is_active=eq.true&limit=1')
+      .then(function (rows) { ST.defaults = (rows && rows[0]) || null; })
+      .catch(function () { ST.defaults = null; });
+  }
+
+  function loadStands(code) {
+    if (ST.standsByVenue[code]) return Promise.resolve();
+    // Read stands directly (embedded select on popcorn already gives names;
+    // this list powers the "+ add stand line" picker).
+    return sb('stands?select=id,stand_name,venue_code,is_active&venue_code=eq.' +
+      encodeURIComponent(code) + '&order=stand_name.asc&limit=300')
+      .then(function (rows) {
+        ST.standsByVenue[code] = (rows || []).filter(function (s) { return s.is_active !== false; });
+      })
+      .catch(function () { ST.standsByVenue[code] = []; });
+  }
+
+  function loadEvents(code) {
+    var q = 'events?select=*&venue=eq.' + encodeURIComponent(code) +
+      '&event_date=gte.' + shiftISO(-2) + '&event_date=lte.' + shiftISO(30) +
+      '&order=event_date.asc&limit=80';
+    return sb(q).then(function (rows) {
+      ST.events = (rows || []).filter(function (e) {
+        var t = String(e.event_type || '').toLowerCase();
+        if (t === 'adhoc') return false;
+        if (e.deleted_at) return false;
+        if (e.cancelled_at) return false;
+        return true;
+      });
+    }).catch(function () { ST.events = []; });
+  }
+
+  // =====================================================================
+  // INPUT MODE
+  // =====================================================================
+  function renderInputPane() {
+    var pane = $('dosInputPane');
+    pane.innerHTML = '';
+
+    // event picker options
+    var sel = $('dosEventSel');
+    sel.innerHTML = '';
+    if (!ST.events.length) {
+      sel.innerHTML = '<option value="">No upcoming events</option>';
+      pane.appendChild(emptyCard('No scheduled events for ' + venueLabel(ST.venueCode) +
+        ' in the next few weeks. Sheets are built against an event.'));
+      return;
+    }
+    // default to today's event if present, else soonest upcoming
+    var defId = null, today = todayISO();
+    ST.events.forEach(function (e) {
+      var o = el('option', null, prettyDate(e.event_date) + ' — ' + (e.event_name || 'Untitled'));
+      o.value = e.id; sel.appendChild(o);
+      if (!defId && e.event_date >= today) defId = e.id;
+    });
+    if (!defId) defId = ST.events[ST.events.length - 1].id;
+    var chosen = ST.event ? ST.event.id : defId;
+    sel.value = chosen;
+
+    if (!ST.event || ST.event.id !== chosen) { selectEvent(chosen); return; }
+    buildSheetForm(pane);
+  }
+
+  function emptyCard(msg) {
+    var c = el('div', 'dos-empty'); c.textContent = msg; return c;
+  }
+
+  function selectEvent(eventId) {
+    if (!eventId) return;
+    var ev = null;
+    for (var i = 0; i < ST.events.length; i++) if (ST.events[i].id === eventId) ev = ST.events[i];
+    if (!ev) return;
+    ST.event = ev;
+    ST.sheet = null; ST.wx = null; ST.popcorn = []; ST.headsUp = [];
+    ST.newImageFile = null; ST.clearImage = false; ST.saved = false;
+
+    // load existing sheet (resume from saved), forecast, planned popcorn — in parallel
+    Promise.all([loadSheet(ev.id), loadForecast(ev), loadPlannedPopcorn(ev.id)])
+      .then(function () {
+        // managers auto (best-effort) only matters if no saved override
+        return loadAutoManagers(ev.id);
+      })
+      .then(function () {
+        reconcileAfterLoad();
+        buildSheetForm($('dosInputPane'));
+        updateSaveBar();
+      });
+  }
+
+  function loadSheet(eventId) {
+    return sb('event_show_sheets?select=*&event_id=eq.' + eventId + '&deleted_at=is.null&limit=1')
+      .then(function (rows) {
+        ST.sheet = (rows && rows[0]) || null;
+        if (!ST.sheet) return null;
+        ST.saved = true;
+        // load saved popcorn child rows
+        return sb('event_show_sheet_popcorn?select=*&sheet_id=eq.' + ST.sheet.id +
+          '&is_active=eq.true&limit=200').then(function (pc) { ST.sheet._popcorn = pc || []; });
+      })
+      .catch(function () { ST.sheet = null; });
+  }
+
+  function loadForecast(ev) {
+    var c = venueCoords(ST.venueCode);
+    var date = String(ev.event_date || '').slice(0, 10);
+    if (!c || c.latitude == null || c.longitude == null || !date) { ST.wx = null; return Promise.resolve(); }
+    var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + c.latitude +
+      '&longitude=' + c.longitude +
+      '&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_max' +
+      '&temperature_unit=fahrenheit&timezone=America%2FNew_York' +
+      '&start_date=' + date + '&end_date=' + date;
+    return fetch(url).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+      if (!j || !j.daily || !j.daily.time || !j.daily.time.length) { ST.wx = null; return; }
+      ST.wx = {
+        high: num(j.daily.temperature_2m_max && j.daily.temperature_2m_max[0]),
+        low: num(j.daily.temperature_2m_min && j.daily.temperature_2m_min[0]),
+        code: num(j.daily.weathercode && j.daily.weathercode[0]),
+        precip: num(j.daily.precipitation_probability_max && j.daily.precipitation_probability_max[0])
+      };
+    }).catch(function () { ST.wx = null; });
+  }
+  function num(v) { return (v == null || isNaN(v)) ? null : Math.round(Number(v)); }
+
+  function loadPlannedPopcorn(eventId) {
+    // prep_plan_lines for this event, item = Popcorn, with stand names embedded.
+    var q = 'prep_plan_lines?select=planned_qty,stand_id,stands(stand_name),prep_items!inner(name)' +
+      '&event_id=eq.' + eventId + '&prep_items.name=eq.Popcorn&deleted_at=is.null&limit=200';
+    return sb(q).then(function (rows) {
+      ST._plannedPopcorn = (rows || []).map(function (r) {
+        return {
+          stand_id: r.stand_id,
+          stand_name: (r.stands && r.stands.stand_name) || 'Stand',
+          boxes: r.planned_qty == null ? '' : Number(r.planned_qty)
+        };
+      });
+    }).catch(function () { ST._plannedPopcorn = []; });
+  }
+
+  // Best-effort: read placements for the event and pull manager-level names.
+  // position_assignments column shape isn't pinned, so this probes defensively
+  // and stays non-fatal — the managers field is always editable (the spine).
+  function loadAutoManagers(eventId) {
+    ST._autoManagers = '';
+    return sb('position_assignments?select=*&event_id=eq.' + eventId + '&limit=500')
+      .then(function (rows) {
+        if (!rows || !rows.length) return;
+        try { if (window.console) console.log('[DOS] position_assignments sample keys:', Object.keys(rows[0])); } catch (e) {}
+        var names = [];
+        rows.forEach(function (r) {
+          var role = r.role_name || r.canonical_role || r.role || r.position || null;
+          // only auto-fill when we can see a manager-level role
+          if (!role || MANAGER_ROLES.indexOf(role) === -1) return;
+          var nm = r.employee_name || r.staff_name || r.name ||
+            ((r.first_name || '') + ' ' + (r.last_name || '')).trim();
+          if (nm) names.push(nm);
+        });
+        // de-dup
+        var seen = {}, uniq = [];
+        names.forEach(function (n) { if (!seen[n]) { seen[n] = 1; uniq.push(n); } });
+        ST._autoManagers = uniq.join(', ');
+      })
+      .catch(function () { ST._autoManagers = ''; });
+  }
+
+  // After all loads: seed working state from saved sheet if present, else from sources.
+  function reconcileAfterLoad() {
+    var s = ST.sheet;
+    if (s) {
+      // resume from saved values — do NOT clobber with fresh pulls
+      ST.headsUp = splitLines(s.heads_up_text);
+      ST.popcorn = (s._popcorn || []).map(function (p) {
+        return { stand_id: p.stand_id, stand_name: standName(p.stand_id), boxes: p.boxes == null ? '' : Number(p.boxes) };
+      });
+    } else {
+      ST.headsUp = buildHeadsUp(ST.wx);
+      ST.popcorn = (ST._plannedPopcorn || []).slice();
+    }
+  }
+
+  function splitLines(t) {
+    if (!t) return [];
+    return String(t).split('\n').map(function (x) { return x.trim(); }).filter(function (x) { return x; });
+  }
+  function standName(id) {
+    var list = ST.standsByVenue[ST.venueCode] || [];
+    for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i].stand_name;
+    var pp = ST._plannedPopcorn || [];
+    for (var j = 0; j < pp.length; j++) if (pp[j].stand_id === id) return pp[j].stand_name;
+    return 'Stand';
+  }
+
+  function buildSheetForm(pane) {
+    pane.innerHTML = '';
+    var ev = ST.event, d = ST.defaults || {};
+    var s = ST.sheet || {};
+
+    // ---- Header zone (auto, mostly untouched) ----
+    var hc = card('Header', 'auto');
+    var hg = el('div', 'dos-headgrid');
+    hg.appendChild(kv('Venue', venueLabel(ST.venueCode)));
+    hg.appendChild(kv('Event', ev.event_name || 'Untitled'));
+    hg.appendChild(kv('Date', prettyDate(ev.event_date)));
+    // weather chip
+    var wkv = el('div', 'dos-kv');
+    wkv.appendChild(el('span', 'k', 'Weather'));
+    if (ST.wx && (ST.wx.high != null || ST.wx.low != null)) {
+      var w = wmo(ST.wx.code);
+      var chip = el('span', 'dos-weatherchip');
+      chip.innerHTML = '<span class="emoji">' + w.emoji + '</span>' +
+        '<span>' + (ST.wx.high != null ? ST.wx.high + '°' : '—') + ' / ' +
+        (ST.wx.low != null ? ST.wx.low + '°' : '—') + ' · ' + esc(w.label) +
+        (ST.wx.precip != null ? ' · ' + ST.wx.precip + '% precip' : '') + '</span>';
+      wkv.appendChild(chip);
+    } else {
+      wkv.appendChild(el('span', 'v', '—'));
+    }
+    hg.appendChild(wkv);
+    // report time (editable per spine, seeded from event)
+    var rt = el('div', 'dos-kv');
+    rt.appendChild(el('span', 'k', 'Crew report time'));
+    var rtIn = inputEl('dosReportTime', prettyTime(ev.report_time) || prettyTime(ev.gates_open) || '');
+    rtIn.placeholder = 'e.g. 4:30 PM';
+    rt.appendChild(rtIn);
+    hg.appendChild(rt);
+    hc.appendChild(hg);
+    pane.appendChild(hc);
+
+    // ---- Logistics ----
+    var lc = card('Logistics', 'venue default + tonight\u2019s override');
+    var lrow = el('div', 'dos-row3');
+    lrow.appendChild(field('Doors', inputEl('dosDoors', orStr(s.doors), d.doors_default || 'venue default')));
+    lrow.appendChild(field('Alcohol cut-off', inputEl('dosCutoff', orStr(s.alcohol_cutoff), d.alcohol_cutoff_default || '~10:15')));
+    var attIn = inputEl('dosAtt', s.expected_attendance != null ? s.expected_attendance : '',
+      ev.expected_attendance != null ? String(ev.expected_attendance) : 'estimate');
+    attIn.type = 'number'; attIn.min = '0';
+    lrow.appendChild(field('Expected attendance', attIn));
+    lc.appendChild(lrow);
+    pane.appendChild(lc);
+
+    // ---- Run of show (optional) ----
+    var rc = card('Run of show / set times', 'optional');
+    rc.appendChild(textareaField('Set times (free text)', 'dosRos', orStr(s.run_of_show_text),
+      'Type or paste set times — or upload a screenshot below. Leave blank if there\u2019s nothing to share.'));
+    // image upload + HEIC warning
+    var warn = el('div', 'dos-upwarn');
+    warn.innerHTML = '<b>No HEIC/HEIF photos.</b> iPhone camera photos won\u2019t upload. ' +
+      'Fix: Settings \u2192 Camera \u2192 Formats \u2192 <b>Most Compatible</b>. Photos already in your camera roll ' +
+      'stay HEIC even after changing this — retake them. Screenshots come off the phone as PNG and are fine.';
+    rc.appendChild(warn);
+    var uprow = el('div', 'dos-uprow');
+    var fbtn = el('button', 'dos-filebtn', 'Choose image');
+    var finput = document.createElement('input');
+    finput.type = 'file'; finput.accept = 'image/png,image/jpeg,image/webp,image/gif'; finput.style.display = 'none';
+    finput.id = 'dosRosFile';
+    fbtn.onclick = function () { finput.click(); };
+    var fname = el('span', 'dos-filename', '');
+    finput.onchange = function () { onPickImage(finput, fname); };
+    uprow.appendChild(fbtn); uprow.appendChild(finput); uprow.appendChild(fname);
+    rc.appendChild(uprow);
+    var prev = el('div', 'dos-imgprev'); prev.id = 'dosImgPrev';
+    rc.appendChild(prev);
+    pane.appendChild(rc);
+    renderImagePreview();
+
+    // ---- Crew note (REQUIRED) ----
+    var cc = card('Crew note', 'required', true);
+    var ta = document.createElement('textarea');
+    ta.className = 'dos-textarea'; ta.id = 'dosCrew'; ta.rows = 3;
+    ta.placeholder = 'The one thing the crew needs to hear — "34 teams today", "halftime is your rush", "soda cases back in the reach-ins before you leave".';
+    ta.value = orStr(s.crew_note);
+    ta.oninput = function () { ta.classList.remove('required-empty'); $('dosSaveMsg').textContent = ''; $('dosSaveMsg').className = 'msg'; };
+    cc.appendChild(ta);
+    pane.appendChild(cc);
+
+    // ---- Popcorn to pop ----
+    var pc = card('Popcorn to pop', 'planned + override');
+    pc.id = 'dosPopCard';
+    renderPopcorn(pc);
+    pane.appendChild(pc);
+
+    // ---- On-site managers ----
+    var mc = card('On-site managers', 'from placements + override');
+    var mval = (s.managers_override != null) ? s.managers_override : (ST._autoManagers || '');
+    var mIn = inputEl('dosManagers', mval, 'e.g. Carlo, Brian');
+    mc.appendChild(field('Managers on site', mIn));
+    if (!ST._autoManagers && s.managers_override == null) {
+      var hintm = el('div', 'dos-emptyline', 'No manager placements detected — type names above.');
+      hintm.style.marginTop = '6px';
+      mc.appendChild(hintm);
+    }
+    pane.appendChild(mc);
+
+    // ---- Heads-up ----
+    var uc = card('Heads-up', 'weather suggestions — editable');
+    uc.id = 'dosHeadsCard';
+    renderHeadsUp(uc);
+    pane.appendChild(uc);
+
+    // ---- Standing venue notes (read-only here; edit in Set Defaults) ----
+    var sc = card('Standing venue notes', 'set in Set Defaults');
+    var sg = el('div', 'dos-standing');
+    sg.appendChild(standingKV('Parking', d.parking_note));
+    sg.appendChild(standingKV('Dress', d.dress_note));
+    sg.appendChild(standingKV('Where to report', d.arrival_note));
+    if (d.shelter_in_place_note) sg.appendChild(standingKV('Shelter-in-place', d.shelter_in_place_note, true));
+    sc.appendChild(sg);
+    pane.appendChild(sc);
+  }
+
+  // ---- small builders ----
+  function card(title, src, required) {
+    var c = el('div', 'dos-card');
+    var h = el('div', 'dos-zone-h');
+    var left = el('span', null, title);
+    if (required) { var r = el('span', 'req', ' *'); left.appendChild(r); }
+    h.appendChild(left);
+    if (src) h.appendChild(el('span', 'src', src));
+    c.appendChild(h);
+    return c;
+  }
+  function kv(k, v) {
+    var n = el('div', 'dos-kv'); n.appendChild(el('span', 'k', k)); n.appendChild(el('span', 'v', v || '—')); return n;
+  }
+  function standingKV(k, v, full) {
+    var n = el('div', full ? 'full' : null);
+    n.appendChild(el('div', 'k', k));
+    if (v) n.appendChild(el('div', 'v', v));
+    else { var e = el('div', 'v empty', 'not set'); n.appendChild(e); }
+    return n;
+  }
+  function field(label, inputNode, hint) {
+    var f = el('div', 'dos-field');
+    var l = el('label', null, label);
+    if (hint) { l.appendChild(el('span', 'hint', '  ' + hint)); }
+    f.appendChild(l); f.appendChild(inputNode); return f;
+  }
+  function textareaField(label, id, val, hint) {
+    var f = el('div', 'dos-field');
+    var l = el('label', null, label);
+    f.appendChild(l);
+    var ta = document.createElement('textarea');
+    ta.className = 'dos-textarea'; ta.id = id; ta.rows = 3; ta.value = val || '';
+    if (hint) ta.placeholder = hint;
+    f.appendChild(ta);
+    return f;
+  }
+  function inputEl(id, val, placeholder) {
+    var i = document.createElement('input');
+    i.className = 'dos-input'; i.id = id; i.value = (val == null ? '' : val);
+    if (placeholder) i.placeholder = placeholder;
+    return i;
+  }
+  function orStr(v) { return v == null ? '' : v; }
+
+  function renderPopcorn(card) {
+    // clear everything after the header
+    while (card.children.length > 1) card.removeChild(card.lastChild);
+    if (!ST.popcorn.length) {
+      card.appendChild(el('div', 'dos-emptyline', 'No planned popcorn for this event. Add a stand line below if you\u2019re popping anyway.'));
+    }
+    ST.popcorn.forEach(function (p, idx) {
+      var row = el('div', 'dos-poprow');
+      row.appendChild(el('span', 'pname', p.stand_name));
+      var bi = document.createElement('input');
+      bi.type = 'number'; bi.min = '0'; bi.className = 'dos-input pbox'; bi.value = (p.boxes === '' ? '' : p.boxes);
+      bi.placeholder = 'boxes';
+      bi.oninput = function () { ST.popcorn[idx].boxes = bi.value === '' ? '' : Number(bi.value); };
+      row.appendChild(bi);
+      var del = el('button', 'pdel', 'remove');
+      del.onclick = function () { ST.popcorn.splice(idx, 1); renderPopcorn(card); };
+      row.appendChild(del);
+      card.appendChild(row);
+    });
+    // add-line control
+    var stands = ST.standsByVenue[ST.venueCode] || [];
+    var add = el('div', 'dos-popadd');
+    var sel = document.createElement('select');
+    sel.innerHTML = '<option value="">+ Add stand line…</option>';
+    stands.forEach(function (s) {
+      // skip stands already listed
+      var already = ST.popcorn.some(function (p) { return p.stand_id === s.id; });
+      if (already) return;
+      var o = el('option', null, s.stand_name); o.value = s.id; sel.appendChild(o);
+    });
+    var boxIn = document.createElement('input');
+    boxIn.type = 'number'; boxIn.min = '0'; boxIn.placeholder = 'boxes';
+    var addBtn = el('button', 'dos-mini', 'Add');
+    addBtn.onclick = function () {
+      if (!sel.value) return;
+      ST.popcorn.push({ stand_id: sel.value, stand_name: standName(sel.value), boxes: boxIn.value === '' ? '' : Number(boxIn.value) });
+      renderPopcorn(card);
+    };
+    add.appendChild(sel); add.appendChild(boxIn); add.appendChild(addBtn);
+    card.appendChild(add);
+  }
+
+  function renderHeadsUp(card) {
+    while (card.children.length > 1) card.removeChild(card.lastChild);
+    var chips = el('div', 'dos-chips');
+    ST.headsUp.forEach(function (txt, idx) {
+      var row = el('div', 'dos-chip');
+      var inp = document.createElement('input');
+      inp.value = txt;
+      inp.oninput = function () { ST.headsUp[idx] = inp.value; };
+      row.appendChild(inp);
+      var del = el('button', 'cdel', '\u00d7');
+      del.title = 'Remove';
+      del.onclick = function () { ST.headsUp.splice(idx, 1); renderHeadsUp(card); };
+      row.appendChild(del);
+      chips.appendChild(row);
+    });
+    card.appendChild(chips);
+    var addBtn = el('button', 'dos-mini', '+ Add heads-up');
+    addBtn.style.marginTop = '10px';
+    addBtn.onclick = function () { ST.headsUp.push(''); renderHeadsUp(card); };
+    card.appendChild(addBtn);
+  }
+
+  // ---- image pick + preview ----
+  function onPickImage(input, fnameEl) {
+    var f = input.files && input.files[0];
+    if (!f) return;
+    var name = (f.name || '').toLowerCase();
+    if (name.endsWith('.heic') || name.endsWith('.heif') || f.type === 'image/heic' || f.type === 'image/heif') {
+      alert('HEIC/HEIF photos can\u2019t be uploaded. On your iPhone: Settings \u2192 Camera \u2192 Formats \u2192 Most Compatible, then RETAKE the photo (existing camera-roll photos stay HEIC). A screenshot works as-is.');
+      input.value = '';
+      return;
+    }
+    ST.newImageFile = f;
+    ST.clearImage = false;
+    fnameEl.textContent = f.name;
+    renderImagePreview();
+  }
+
+  function renderImagePreview() {
+    var prev = $('dosImgPrev'); if (!prev) return;
+    prev.innerHTML = '';
+    if (ST.newImageFile) {
+      var url = URL.createObjectURL(ST.newImageFile);
+      var img = document.createElement('img'); img.src = url; prev.appendChild(img);
+      addClearImg(prev, function () { ST.newImageFile = null; var fi = $('dosRosFile'); if (fi) fi.value = ''; var fn = prev.parentNode.querySelector('.dos-filename'); if (fn) fn.textContent = ''; renderImagePreview(); });
+      return;
+    }
+    var existing = ST.sheet && ST.sheet.run_of_show_image_path;
+    if (existing && !ST.clearImage) {
+      var img2 = document.createElement('img'); img2.src = publicUrl(existing); prev.appendChild(img2);
+      addClearImg(prev, function () { ST.clearImage = true; renderImagePreview(); });
+    }
+  }
+  function addClearImg(prev, fn) {
+    var c = el('button', 'dos-img-clear', 'Remove image'); c.onclick = fn; prev.appendChild(c);
+  }
+  function publicUrl(path) {
+    return SB_URL + '/storage/v1/object/public/' + STORAGE_BUCKET + '/' + path;
+  }
+
+  // =====================================================================
+  // SET DEFAULTS MODE
+  // =====================================================================
+  function renderDefaultsPane() {
+    var pane = $('dosDefaultsPane');
+    pane.innerHTML = '';
+    var d = ST.defaults || {};
+    var c = card('Standing values — ' + venueLabel(ST.venueCode), 'one row per venue');
+    var r = el('div', 'dos-row3');
+    r.appendChild(field('Doors (default)', inputEl('defDoors', orStr(d.doors_default), 'e.g. 6:30 PM')));
+    r.appendChild(field('Alcohol cut-off (default)', inputEl('defCutoff', orStr(d.alcohol_cutoff_default), 'e.g. 10:15 PM')));
+    r.appendChild(el('div'));
+    c.appendChild(r);
+    c.appendChild(textareaField('Parking', 'defParking', orStr(d.parking_note), 'Where the crew parks.'));
+    c.appendChild(textareaField('Dress', 'defDress', orStr(d.dress_note), 'Dress code / uniform.'));
+    c.appendChild(textareaField('Where to report', 'defArrival', orStr(d.arrival_note), 'Entrance / check-in point.'));
+    c.appendChild(textareaField('Shelter-in-place', 'defShelter', orStr(d.shelter_in_place_note), 'Leave blank for venues without one (e.g. most).'));
+    pane.appendChild(c);
+    pane.appendChild(noteCard());
+  }
+  function noteCard() {
+    var c = el('div', 'dos-empty');
+    c.style.textAlign = 'left'; c.style.fontSize = '12px';
+    c.textContent = 'These are the venue\u2019s standing values. The Input sheet seeds doors / cut-off from here and shows the notes for reference — each is still overridable per sheet. Changing a default here never touches a saved sheet.';
+    return c;
+  }
+
+  // =====================================================================
+  // SAVE
+  // =====================================================================
+  function updateSaveBar() {
+    var bar = $('dosSaveBar');
+    var show = (ST.mode === 'defaults' && ST.venueCode) ||
+               (ST.mode === 'input' && ST.event);
+    bar.classList.toggle('show', !!show);
+    if (ST.mode === 'input') {
+      $('dosSaveBtn').textContent = 'Save sheet';
+      $('dosPrintBtn').style.display = '';
+      $('dosPrintBtn').disabled = !ST.saved;
+      $('dosPrintBtn').title = ST.saved ? 'Print this sheet' : 'Save first to print';
+    } else {
+      $('dosSaveBtn').textContent = 'Save defaults';
+      $('dosPrintBtn').style.display = 'none';
+    }
+  }
+
+  function setSaveErr(msg) {
+    var m = $('dosSaveMsg'); m.textContent = msg; m.className = 'msg err';
+  }
+  function clearSaveMsg() { var m = $('dosSaveMsg'); m.textContent = ''; m.className = 'msg'; }
+
+  function onSave() {
+    if (ST.mode === 'defaults') return saveDefaults();
+    return saveSheet();
+  }
+
+  function busy(on) {
+    $('dosSaveBtn').disabled = on;
+  }
+
+  // ---- Set Defaults save (read-first → PATCH or POST) ----
+  function saveDefaults() {
+    busy(true); clearSaveMsg();
+    var payload = {
+      venue_code: ST.venueCode,
+      doors_default: valOrNull('defDoors'),
+      alcohol_cutoff_default: valOrNull('defCutoff'),
+      parking_note: valOrNull('defParking'),
+      dress_note: valOrNull('defDress'),
+      arrival_note: valOrNull('defArrival'),
+      shelter_in_place_note: valOrNull('defShelter'),
+      is_active: true,
+      updated_by: userName(),
+      updated_at: new Date().toISOString()
+    };
+    var done = function () {
+      busy(false);
+      loadDefaults(ST.venueCode).then(function () { toast('Defaults saved'); });
+    };
+    if (ST.defaults && ST.defaults.id) {
+      sb('venue_show_defaults?id=eq.' + ST.defaults.id, {
+        method: 'PATCH', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify(payload)
+      }).then(done).catch(saveFail);
+    } else {
+      payload.created_by = userName();
+      sb('venue_show_defaults', {
+        method: 'POST', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify(payload)
+      }).then(done).catch(saveFail);
+    }
+  }
+
+  // ---- Input sheet save ----
+  function saveSheet() {
+    var crew = ($('dosCrew') && $('dosCrew').value || '').trim();
+    if (!crew) {
+      var ta = $('dosCrew');
+      if (ta) { ta.classList.add('required-empty'); ta.focus(); }
+      setSaveErr('Crew note is required before you can save (and print).');
+      return;
+    }
+    busy(true); clearSaveMsg();
+
+    // 1) upload image if a new file was picked
+    var imageStep = Promise.resolve(null);
+    if (ST.newImageFile) {
+      imageStep = uploadImage(ST.newImageFile);
+    }
+
+    imageStep.then(function (uploadedPath) {
+      var imagePath;
+      if (uploadedPath) imagePath = uploadedPath;
+      else if (ST.clearImage) imagePath = null;
+      else imagePath = (ST.sheet && ST.sheet.run_of_show_image_path) || null;
+
+      var nowIso = new Date().toISOString();
+      var payload = {
+        event_id: ST.event.id,
+        venue_code: ST.venueCode,
+        doors: valOrNull('dosDoors'),
+        alcohol_cutoff: valOrNull('dosCutoff'),
+        expected_attendance: intOrNull('dosAtt'),
+        run_of_show_text: valOrNull('dosRos'),
+        run_of_show_image_path: imagePath,
+        crew_note: crew,
+        heads_up_text: collectHeadsUp(),
+        managers_override: valOrNull('dosManagers'),
+        last_saved_by: userName(),
+        last_saved_at: nowIso,
+        updated_by: userName(),
+        updated_at: nowIso
+      };
+
+      var sheetStep;
+      if (ST.sheet && ST.sheet.id) {
+        sheetStep = sb('event_show_sheets?id=eq.' + ST.sheet.id, {
+          method: 'PATCH', headers: { 'Prefer': 'return=representation' }, body: JSON.stringify(payload)
+        }).then(function (rows) { return (rows && rows[0]) || ST.sheet; });
+      } else {
+        payload.created_by = userName();
+        sheetStep = sb('event_show_sheets', {
+          method: 'POST', headers: { 'Prefer': 'return=representation' }, body: JSON.stringify(payload)
+        }).then(function (rows) { return rows && rows[0]; });
+      }
+
+      return sheetStep.then(function (saved) {
+        if (!saved || !saved.id) throw new Error('Sheet did not return an id.');
+        ST.sheet = saved;
+        return savePopcorn(saved.id);
+      });
+    })
+    .then(function () {
+      busy(false);
+      ST.saved = true;
+      ST.newImageFile = null; ST.clearImage = false;
+      // reload the saved sheet + popcorn so subsequent edits resume cleanly
+      return loadSheet(ST.event.id);
+    })
+    .then(function () {
+      reconcileAfterLoad();
+      buildSheetForm($('dosInputPane'));
+      updateSaveBar();
+      toast('Sheet saved — ready to print');
+    })
+    .catch(function (e) { busy(false); setSaveErr('Save failed: ' + e.message); });
+  }
+
+  function savePopcorn(sheetId) {
+    // upsert each shown line on (sheet_id, stand_id); deactivate any removed.
+    var lines = ST.popcorn.filter(function (p) { return p.stand_id; });
+    var keepIds = lines.map(function (p) { return p.stand_id; });
+
+    var upsertStep = Promise.resolve();
+    if (lines.length) {
+      var body = lines.map(function (p) {
+        return {
+          sheet_id: sheetId,
+          stand_id: p.stand_id,
+          boxes: p.boxes === '' || p.boxes == null ? null : Number(p.boxes),
+          is_active: true,
+          updated_by: userName(),
+          updated_at: new Date().toISOString()
+        };
+      });
+      upsertStep = sb('event_show_sheet_popcorn?on_conflict=sheet_id,stand_id', {
+        method: 'POST',
+        headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify(body)
+      });
+    }
+
+    return upsertStep.then(function () {
+      // deactivate any previously-active rows no longer in the list
+      var notIn = keepIds.length ? '&stand_id=not.in.(' + keepIds.join(',') + ')' : '';
+      return sb('event_show_sheet_popcorn?sheet_id=eq.' + sheetId + '&is_active=eq.true' + notIn, {
+        method: 'PATCH', headers: { 'Prefer': 'return=minimal' },
+        body: JSON.stringify({ is_active: false, updated_by: userName(), updated_at: new Date().toISOString() })
+      }).catch(function () { /* nothing to deactivate is fine */ });
+    });
+  }
+
+  function uploadImage(file) {
+    var safe = (file.name || 'image').replace(/[^a-zA-Z0-9._-]/g, '_');
+    var path = ST.event.id + '/' + Date.now() + '-' + safe;
+    var headers = pcAuth.headers();
+    var h = {};
+    for (var k in headers) { if (k.toLowerCase() !== 'content-type') h[k] = headers[k]; }
+    h['Content-Type'] = file.type || 'application/octet-stream';
+    h['x-upsert'] = 'true';
+    return fetch(SB_URL + '/storage/v1/object/' + STORAGE_BUCKET + '/' + path, {
+      method: 'POST', headers: h, body: file
+    }).then(function (r) {
+      if (!r.ok) return r.text().then(function (t) { throw new Error('image upload ' + r.status + ' ' + t.slice(0, 160)); });
+      return path;
+    });
+  }
+
+  function saveFail(e) { busy(false); setSaveErr('Save failed: ' + e.message); }
+
+  // ---- value collectors ----
+  function valOrNull(id) {
+    var n = $(id); if (!n) return null;
+    var v = (n.value == null ? '' : String(n.value)).trim();
+    return v === '' ? null : v;
+  }
+  function intOrNull(id) {
+    var n = $(id); if (!n) return null;
+    var v = (n.value == null ? '' : String(n.value)).trim();
+    if (v === '') return null;
+    var i = parseInt(v, 10); return isNaN(i) ? null : i;
+  }
+  function collectHeadsUp() {
+    // pull straight from state (inputs write back on input)
+    var lines = ST.headsUp.map(function (s) { return (s || '').trim(); }).filter(function (s) { return s; });
+    return lines.length ? lines.join('\n') : null;
+  }
+
+})();
+</script>
+</body>
+</html>
