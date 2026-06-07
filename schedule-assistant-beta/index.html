@@ -4081,7 +4081,11 @@ function buildPlanEdits(ev) {
   const venueIndex = state.parIndex[ev.venue] || {};
   const tierIndex = venueIndex[tier] || {};
 
-  // Index existing staffing_requests by stand → role for this event
+  // Index existing staffing_requests by stand → role for this event.
+  // Role keys stay as their STORED string (legacy or canonical) so the
+  // submit diff and the placement join (position_assignments stand||role)
+  // keep matching live DB rows exactly — we never rename a row out from
+  // under a placed person.
   const eventReqs = {};
   const eventStands = new Set();
   state.staffingRequests.filter(r => r.event_id === ev.id).forEach(r => {
@@ -4091,10 +4095,13 @@ function buildPlanEdits(ev) {
     if ((r.headcount || 0) > 0) eventStands.add(r.stand);
   });
 
-  // Build the union of stand names: par-catalog + event-only, minus hidden
+  // Stand list now comes from the CATALOG (active stands for the venue),
+  // unioned with any event-only stands that already have rows but aren't in
+  // the active catalog. This drops retired stands (783/UD1) and surfaces
+  // brand-new catalog stands that have no par rows yet.
   const allStandNames = new Set();
-  Object.keys(tierIndex).forEach(s => {
-    if (HIDDEN_STANDS.indexOf(s) === -1) allStandNames.add(s);
+  (pcCatalog.getActiveStandsForVenue(ev.venue) || []).forEach(s => {
+    if (HIDDEN_STANDS.indexOf(s.stand_name) === -1) allStandNames.add(s.stand_name);
   });
   Object.keys(eventReqs).forEach(s => {
     if (HIDDEN_STANDS.indexOf(s) === -1) allStandNames.add(s);
@@ -4106,25 +4113,56 @@ function buildPlanEdits(ev) {
     const reqRoles = eventReqs[standName] || {};
     const isActive = eventStands.has(standName);
 
-    // Union of role names from par + event
-    const roleNames = new Set();
-    parRoles.forEach(p => roleNames.add(p.role));
-    Object.keys(reqRoles).forEach(r => roleNames.add(r));
+    // The category allowlist is the role SPINE for this stand.
+    const standRow = pcCatalog.getStand(ev.venue, standName);
+    const categoryId = standRow ? standRow.category_id : null;
+    const allowRoles = (pcRoles.getRolesForCategory(categoryId) || [])
+      .map(a => a.role_name)
+      .filter(Boolean);
 
     const roles = {};
-    roleNames.forEach(role => {
-      const req = reqRoles[role];
-      const parEntry = parRoles.find(p => p.role === role);
-      let count;
-      if (isActive) {
-        // Active stand: confirmed value from staffing_requests, or 0 if no row
-        count = req ? (req.headcount || 0) : 0;
-      } else {
-        // Defaulted: par default
-        count = parEntry ? parEntry.default_count : 0;
-      }
-      roles[role] = { count: count, prevCount: isActive ? count : null };
-    });
+
+    if (isActive) {
+      // Active stand: keep every existing row under its stored name (write
+      // path + placements untouched), then surface any allowlist role not
+      // already covered (by canonical identity) at 0 so the full spine shows.
+      Object.keys(reqRoles).forEach(role => {
+        const hc = reqRoles[role].headcount || 0;
+        roles[role] = { count: hc, prevCount: hc };
+      });
+      const haveCanon = {};
+      Object.keys(roles).forEach(role => {
+        const c = pcRoles.legacyToCanonical(role);
+        if (c) haveCanon[c] = true;
+      });
+      allowRoles.forEach(role => {
+        if (haveCanon[role] || roles[role]) return;
+        roles[role] = { count: 0, prevCount: 0 };
+      });
+    } else {
+      // Defaulted stand: build PURELY from the allowlist (clean canonical
+      // spine — this is the screenshot case, where Barback/Beer Tender are
+      // simply gone). Seed each role's default by summing every par row whose
+      // canonical maps to it (the approved sum-dedup, done at read time).
+      const parByCanon = {};
+      parRoles.forEach(p => {
+        const c = pcRoles.legacyToCanonical(p.role);
+        if (!c) return; // dropped legacy par row (e.g. Barback) — skip
+        parByCanon[c] = (parByCanon[c] || 0) + (p.default_count || 0);
+      });
+      allowRoles.forEach(role => {
+        roles[role] = { count: parByCanon[role] || 0, prevCount: null };
+      });
+      // Loud (not silent): par headcount on a role outside this stand's
+      // allowlist — data worth cleaning, never shown or blocked.
+      Object.keys(parByCanon).forEach(c => {
+        if (allowRoles.indexOf(c) === -1 && parByCanon[c] > 0) {
+          console.warn('[plan] ' + ev.venue + ' / ' + standName +
+            ': par default for off-allowlist role "' + c + '" (' +
+            parByCanon[c] + ') not shown — category ' + categoryId);
+        }
+      });
+    }
 
     // Resolve forecast — first row with non-null sales_forecast wins
     let forecast = null;
@@ -4422,29 +4460,20 @@ function onAddRoleClick(eventId, stand, anchorBtn) {
     if (wasSame) return; // clicked same button → close
   }
 
-  // Source roles from par_levels for this venue + tier. Filter out
-  // roles already on this stand.
-  const tier = ev.staffing_tier || 'full';
-  const venueIndex = state.parIndex[ev.venue] || {};
-  const tierIndex = venueIndex[tier] || {};
-  const parRolesAtStand = tierIndex[stand] || [];
-  const existingRoles = new Set(Object.keys(standEdit.roles));
-
-  // Build candidate list: par roles at this stand not yet present.
-  // If par has no entries for this stand (e.g. event-only stand),
-  // fall back to all par roles across the venue (deduped).
-  let candidates = parRolesAtStand
-    .map(p => p.role)
-    .filter(r => !existingRoles.has(r));
-  if (parRolesAtStand.length === 0) {
-    // Stand isn't in par catalog. Gather all roles seen anywhere
-    // in this venue's tier as a fallback.
-    const seen = new Set();
-    Object.values(tierIndex).forEach(roleArr => {
-      roleArr.forEach(p => { if (!existingRoles.has(p.role)) seen.add(p.role); });
-    });
-    candidates = Array.from(seen);
-  }
+  // Source candidate roles from the stand's CATEGORY ALLOWLIST (the curated
+  // catalog), not par_levels. Offer only allowlist roles whose canonical
+  // identity isn't already on this stand — so we never offer a second
+  // "Bartender" when a legacy "Beer Tender" row is already present.
+  const standRow = pcCatalog.getStand(ev.venue, stand);
+  const categoryId = standRow ? standRow.category_id : null;
+  const haveCanon = new Set();
+  Object.keys(standEdit.roles).forEach(r => {
+    const c = pcRoles.legacyToCanonical(r);
+    if (c) haveCanon.add(c);
+  });
+  let candidates = (pcRoles.getRolesForCategory(categoryId) || [])
+    .map(a => a.role_name)
+    .filter(r => r && !haveCanon.has(r));
   candidates.sort((a, b) => roleSortKey(a) - roleSortKey(b));
 
   // Build the picker
@@ -4455,7 +4484,7 @@ function onAddRoleClick(eventId, stand, anchorBtn) {
   picker.dataset.stand = stand;
   if (candidates.length === 0) {
     picker.innerHTML = '<div class="plan-role-picker-empty">' +
-      'All par-catalog roles are already on this stand.' +
+      'All roles for this stand\'s category are already added.' +
     '</div>';
   } else {
     picker.innerHTML = candidates.map(r =>
@@ -4997,7 +5026,8 @@ function renderPlanTab(ev) {
         const roleEdit = standEdit.roles[role];
         const roleDirty = isActive && roleEdit.prevCount != null && roleEdit.count !== roleEdit.prevCount;
         html += '<div class="plan-role-cell">';
-        html += '<div class="plan-role-label">' + escapeHtml(role) + '</div>';
+        html += '<div class="plan-role-label">' +
+          escapeHtml(pcRoles.legacyToCanonical(role) || role) + '</div>';
         html += '<input class="plan-role-input' + (roleDirty ? ' dirty' : '') +
           '" type="text" inputmode="numeric"' +
           ' data-plan-input="role"' +
