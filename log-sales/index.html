@@ -937,6 +937,14 @@ async function submitSale() {
       });
     }
 
+    // Write weather to the event on first sale logged — decoupled from notes.
+    // (The May 29 wiring only fired weather on a notes save.) notesEvent is the
+    // events row for the selected date+venue, loaded in handleVenueChange().
+    // Guarded on weather_fetched_at so we only fetch once per event.
+    if (notesEvent && notesEvent.id && !notesEvent.weather_fetched_at) {
+      fetchWeather(false);
+    }
+
     loadScoreboard();
   } catch(e) {
     errEl.textContent = 'Error: ' + (e.message || String(e));
