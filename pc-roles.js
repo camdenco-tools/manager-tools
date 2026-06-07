@@ -67,6 +67,8 @@
   var _venueRoles = null;     // [{ id, venue_id, role_id, venue_code,
                               //    role_name, role_sort, pay_rate,
                               //    is_active }, ...]
+  var _categoryRoles = null;  // [{ category_id, role_id, role_name,
+                              //    role_sort, is_active }, ...]
   var _readyPromise = null;   // the in-flight or settled load promise
 
   // ---------------------------------------------------------------------
@@ -201,7 +203,14 @@
       'venues(code),roles(name,sort_order)'
     );
 
-    return Promise.all([rolesReq, vrReq]).then(function (results) {
+    // Per-category role allowlist (stand_category_roles, seeded May 19).
+    // Embedded roles() select so we get readable names + sort in one trip.
+    var crReq = sbGet(
+      'stand_category_roles?select=category_id,role_id,is_active,' +
+      'roles(name,sort_order)'
+    );
+
+    return Promise.all([rolesReq, vrReq, crReq]).then(function (results) {
       _roles = (results[0] || []).map(function (r) {
         return {
           id: r.id,
@@ -224,6 +233,17 @@
           // pay_rate comes back as a string from PostgREST numeric — coerce.
           pay_rate: vr.pay_rate == null ? null : Number(vr.pay_rate),
           is_active: vr.is_active !== false
+        };
+      });
+
+      _categoryRoles = (results[2] || []).map(function (cr) {
+        var role = cr.roles || {};
+        return {
+          category_id: cr.category_id,
+          role_id: cr.role_id,
+          role_name: role.name || null,
+          role_sort: typeof role.sort_order === 'number' ? role.sort_order : 9999,
+          is_active: cr.is_active !== false
         };
       });
     });
@@ -258,6 +278,7 @@
     refresh: function () {
       _roles = null;
       _venueRoles = null;
+      _categoryRoles = null;
       _readyPromise = null;
       return pcRoles.ready();
     },
@@ -310,6 +331,38 @@
             role_name: vr.role_name,
             pay_rate: vr.pay_rate,
             is_active: vr.is_active
+          };
+        });
+    },
+
+    /*
+     * getRolesForCategory(categoryId, { includeRetired }) — the canonical
+     * roles allowed for a stand category (the stand_category_roles
+     * allowlist), sorted by the role's catalog sort_order. Active rows
+     * only by default. This is the authority for which roles a stand in a
+     * given category can be staffed with — used by the Event Workspace
+     * Plan tab and the Default Staffing page.
+     *
+     * Each item: { category_id, role_id, role_name, role_sort, is_active }
+     * Returns [] for an unknown or null categoryId (e.g. PNC/Wholesale,
+     * which has no category) — callers render no roles, which is correct.
+     */
+    getRolesForCategory: function (categoryId, opts) {
+      _assertReady('getRolesForCategory');
+      if (categoryId == null) return [];
+      var includeRetired = opts && opts.includeRetired;
+      return _categoryRoles
+        .filter(function (cr) {
+          return cr.category_id === categoryId && (includeRetired || cr.is_active);
+        })
+        .sort(function (a, b) { return a.role_sort - b.role_sort; })
+        .map(function (cr) {
+          return {
+            category_id: cr.category_id,
+            role_id: cr.role_id,
+            role_name: cr.role_name,
+            role_sort: cr.role_sort,
+            is_active: cr.is_active
           };
         });
     },
@@ -570,7 +623,7 @@
   // Internal: guard so getters fail loudly if called before ready().
   // ---------------------------------------------------------------------
   function _assertReady(fnName) {
-    if (_roles === null || _venueRoles === null) {
+    if (_roles === null || _venueRoles === null || _categoryRoles === null) {
       throw new Error('pc-roles.js: pcRoles.' + fnName +
         '() called before pcRoles.ready() resolved');
     }
