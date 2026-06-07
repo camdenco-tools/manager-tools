@@ -127,6 +127,28 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
 .notes-add-row { padding: 8px 14px; border-top: 1px dashed #e8e8e0; cursor: pointer; color: #185FA5; font-size: 12px; font-style: italic; display: flex; align-items: center; gap: 7px; }
 .notes-add-row:hover { background: #F5F9FD; }
 .notes-add-icon { width: 18px; height: 18px; border-radius: 50%; background: #E6F1FB; border: 1px solid #B5D4F4; display: flex; align-items: center; justify-content: center; font-size: 13px; color: #185FA5; flex-shrink: 0; line-height: 1; }
+
+/* Day-of-show sheet row — frozen snapshot, added Jun 7 2026 */
+.dos-sheet-row { padding: 8px 14px; border-top: 1px solid #f5f5f5; cursor: pointer; background: #F5F9FD; }
+.dos-sheet-row:hover { background: #EAF3FB; }
+.dos-sheet-row-label { font-size: 12px; font-weight: 600; color: #0C447C; display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.dos-sheet-expanded { display: none; padding: 12px 14px 14px; border-top: 1px solid #f5f5f5; background: #F5F9FD; }
+.dos-sheet-expanded.open { display: block; }
+.dos-sh-logi { font-size: 13px; font-weight: 600; color: #1a1a1a; margin-bottom: 10px; }
+.dos-sh-logi b { font-weight: 700; }
+.dos-sh-sec { margin-bottom: 10px; }
+.dos-sh-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #999; margin-bottom: 3px; }
+.dos-sh-crew { font-size: 13px; color: #1a1a1a; white-space: pre-wrap; line-height: 1.5; border-left: 3px solid #185FA5; padding-left: 10px; }
+.dos-sh-text { font-size: 12px; color: #444; white-space: pre-wrap; line-height: 1.45; }
+.dos-sh-imglink { font-size: 11px; background: #E6F1FB; color: #0C447C; padding: 3px 8px; border-radius: 6px; text-decoration: none; font-weight: 600; display: inline-block; margin-top: 4px; }
+.dos-sh-pop { font-size: 12px; color: #444; line-height: 1.6; }
+.dos-sh-pop b { color: #1a1a1a; }
+.dos-sh-noplan { font-size: 12px; font-weight: 700; color: #A35200; }
+.dos-sh-list { margin: 2px 0 0; padding-left: 18px; }
+.dos-sh-list li { font-size: 12px; color: #444; margin: 1px 0; }
+.dos-sh-kv { font-size: 12px; color: #444; margin: 1px 0; }
+.dos-sh-kv .k { font-weight: 600; color: #777; }
+.dos-sh-meta { font-size: 11px; color: #999; margin-top: 8px; }
 </style>
 </head>
 <body>
@@ -571,7 +593,8 @@ async function searchHistory() {
       var evUrl = SUPA_URL + '/rest/v1/events?event_date=gte.' + minDate + '&event_date=lte.' + maxDate +
                   '&cancelled_at=is.null' +
                   '&select=id,venue,event_date,manager_notes,manager_notes_updated_by,' +
-                  'manager_notes_updated_at,weather_high_f,weather_low_f,weather_conditions,weather_fetched_at';
+                  'manager_notes_updated_at,weather_high_f,weather_low_f,weather_conditions,weather_fetched_at,' +
+                  'report_time,gates_open,show_time,estimated_end_time,expected_attendance';
       var evRes = await fetch(evUrl, { headers: apiHeaders() });
       var evRows = await evRes.json();
       if (Array.isArray(evRows)) {
@@ -585,6 +608,34 @@ async function searchHistory() {
     }
     // Stash for use by edit-modal handlers
     currentEventInfoByKey = eventInfoByKey;
+
+    // Day-of-show sheets for these events — frozen snapshots, rendered from
+    // saved values only (no live weather/prep re-pull).
+    dosSheetsByEventId = {}; dosPopcornBySheetId = {}; venueDefaultsByCode = {};
+    try {
+      var evIds = Object.keys(eventInfoByKey).map(function(k){ return eventInfoByKey[k].id; }).filter(Boolean);
+      if (evIds.length) {
+        var shUrl = SUPA_URL + '/rest/v1/event_show_sheets?select=*&deleted_at=is.null&event_id=in.(' + evIds.join(',') + ')&limit=500';
+        var shRes = await fetch(shUrl, { headers: apiHeaders() });
+        var shRows = await shRes.json();
+        var sheetIds = [];
+        if (Array.isArray(shRows)) shRows.forEach(function(s){ dosSheetsByEventId[s.event_id] = s; sheetIds.push(s.id); });
+        if (sheetIds.length) {
+          var pcUrl = SUPA_URL + '/rest/v1/event_show_sheet_popcorn?select=boxes,stand_id,sheet_id,stands(stand_name)&is_active=eq.true&sheet_id=in.(' + sheetIds.join(',') + ')&limit=2000';
+          var pcRes = await fetch(pcUrl, { headers: apiHeaders() });
+          var pcRows = await pcRes.json();
+          if (Array.isArray(pcRows)) pcRows.forEach(function(p){
+            if (!dosPopcornBySheetId[p.sheet_id]) dosPopcornBySheetId[p.sheet_id] = [];
+            dosPopcornBySheetId[p.sheet_id].push(p);
+          });
+        }
+        var vdRes = await fetch(SUPA_URL + '/rest/v1/venue_show_defaults?select=*&is_active=eq.true&limit=100', { headers: apiHeaders() });
+        var vdRows = await vdRes.json();
+        if (Array.isArray(vdRows)) vdRows.forEach(function(d){ venueDefaultsByCode[d.venue_code] = d; });
+      }
+    } catch(e) {
+      console.warn('[sales-history] day-of-show sheet lookup failed:', e);
+    }
 
     var grandTotal = rows.reduce(function(s,r) { return s+parseFloat(r.amount); }, 0);
     var grandTips = rows.reduce(function(s,r) { return s+(parseFloat(r.tip_amount)||0); }, 0);
@@ -686,6 +737,11 @@ async function searchHistory() {
         }
       }
 
+      // Day-of-show sheet row — only when a saved sheet exists for this event
+      if (eventInfo && dosSheetsByEventId[eventInfo.id]) {
+        html += renderDosSheetRow(dosSheetsByEventId[eventInfo.id], eventInfo, i);
+      }
+
       html += '<table class="result-stand-table" id="' + id + '">';
       html += '<thead><tr><th>Stand</th><th style="text-align:right;">Amount</th><th style="text-align:right;">Tips</th><th>Photos</th><th>Actions</th></tr></thead><tbody>';
 
@@ -740,6 +796,109 @@ function toggleResult(id, chId) {
 // ============================================================
 
 var currentEventInfoByKey = {}; // populated by searchHistory(), keyed by "date||venue"
+var dosSheetsByEventId = {};    // event_id -> event_show_sheets row (frozen snapshot)
+var dosPopcornBySheetId = {};   // sheet_id -> [popcorn child rows]
+var venueDefaultsByCode = {};   // venue_code -> venue_show_defaults row
+
+function dosPrettyTime(t) {
+  if (!t) return '';
+  var m = String(t).match(/(\d{1,2}):(\d{2})/);
+  if (!m) return t;
+  var h = parseInt(m[1],10), min = m[2], ap = h >= 12 ? 'PM' : 'AM';
+  var h12 = h % 12; if (h12 === 0) h12 = 12;
+  return h12 + ':' + min + ' ' + ap;
+}
+
+function renderDosSheetRow(sheet, ev, idx) {
+  var dsExpId = 'ds-' + idx, dsChId = 'dsc-' + idx;
+  var preview = (sheet.crew_note || '').replace(/\s+/g, ' ').trim();
+  if (preview.length > 80) preview = preview.slice(0, 78) + '...';
+  var html = '<div class="dos-sheet-row" onclick="toggleNotesRow(\'' + dsExpId + '\',\'' + dsChId + '\')">';
+  html += '<div class="notes-row-top">';
+  html += '<div class="dos-sheet-row-label">\ud83d\udccb Day-of-show sheet</div>';
+  html += '<div class="notes-row-preview">' + escapeHtml(preview) + '</div>';
+  html += '<div class="notes-row-chev" id="' + dsChId + '">&#9654;</div>';
+  html += '</div></div>';
+  html += '<div class="dos-sheet-expanded" id="' + dsExpId + '" onclick="event.stopPropagation()">';
+  html += renderDosSheetContent(sheet, ev);
+  html += '</div>';
+  return html;
+}
+
+function renderDosSheetContent(sheet, ev) {
+  var vd = venueDefaultsByCode[ev.venue] || {};
+  var report = sheet.report_time || dosPrettyTime(ev.report_time) || dosPrettyTime(ev.gates_open) || '';
+  var doors = sheet.doors || dosPrettyTime(ev.gates_open) || vd.doors_default || '';
+  var cutoff = sheet.alcohol_cutoff || vd.alcohol_cutoff_default || '10:15 PM';
+  var attendance = (sheet.expected_attendance != null) ? sheet.expected_attendance
+    : (ev.expected_attendance != null ? ev.expected_attendance : null);
+
+  var h = '<div class="dos-sh">';
+  var logi = [];
+  logi.push('Doors <b>' + escapeHtml(doors || '\u2014') + '</b>');
+  logi.push('Cut-off <b>' + escapeHtml(cutoff || '\u2014') + '</b>');
+  logi.push('Expected <b>' + (attendance != null ? escapeHtml(String(attendance)) : '\u2014') + '</b>');
+  if (report) logi.push('Report <b>' + escapeHtml(report) + '</b>');
+  h += '<div class="dos-sh-logi">' + logi.join(' \u00b7 ') + '</div>';
+
+  h += '<div class="dos-sh-sec"><div class="dos-sh-label">Crew note</div><div class="dos-sh-crew">' + escapeHtml(sheet.crew_note || '') + '</div></div>';
+
+  if (sheet.run_of_show_text || sheet.run_of_show_image_path) {
+    h += '<div class="dos-sh-sec"><div class="dos-sh-label">Run of show</div>';
+    if (sheet.run_of_show_text) h += '<div class="dos-sh-text">' + escapeHtml(sheet.run_of_show_text) + '</div>';
+    if (sheet.run_of_show_image_path) {
+      var imgUrl = SUPA_URL + '/storage/v1/object/public/show-sheet-images/' + sheet.run_of_show_image_path;
+      h += '<a href="' + imgUrl + '" target="_blank" class="dos-sh-imglink">View run-of-show image</a>';
+    }
+    h += '</div>';
+  }
+
+  var pc = dosPopcornBySheetId[sheet.id] || [];
+  h += '<div class="dos-sh-sec"><div class="dos-sh-label">Popcorn to pop</div>';
+  if (pc.length) {
+    var items = pc.map(function (p) {
+      var nm = (p.stands && p.stands.stand_name) || 'Stand';
+      var b = (p.boxes == null || p.boxes === '') ? '\u2014' : p.boxes;
+      return escapeHtml(nm) + ' <b>' + escapeHtml(String(b)) + '</b>';
+    });
+    h += '<div class="dos-sh-pop">' + items.join(' \u00b7 ') + '</div>';
+  } else {
+    h += '<div class="dos-sh-noplan">\u26a0 Your manager did not create a popcorn plan for this event.</div>';
+  }
+  h += '</div>';
+
+  if (sheet.managers_override) {
+    h += '<div class="dos-sh-sec"><div class="dos-sh-label">On-site managers</div><div class="dos-sh-text">' + escapeHtml(sheet.managers_override) + '</div></div>';
+  }
+
+  var hu = (sheet.heads_up_text || '').split('\n').map(function (x) { return x.trim(); }).filter(function (x) { return x; });
+  if (hu.length) {
+    h += '<div class="dos-sh-sec"><div class="dos-sh-label">Heads-up</div><ul class="dos-sh-list">';
+    hu.forEach(function (x) { h += '<li>' + escapeHtml(x) + '</li>'; });
+    h += '</ul></div>';
+  }
+
+  var st = [];
+  if (vd.arrival_note) st.push(['Where to report', vd.arrival_note]);
+  if (vd.parking_note) st.push(['Parking', vd.parking_note]);
+  if (vd.dress_note) st.push(['Dress', vd.dress_note]);
+  if (vd.shelter_in_place_note) st.push(['Shelter-in-place', vd.shelter_in_place_note]);
+  if (st.length) {
+    h += '<div class="dos-sh-sec"><div class="dos-sh-label">Good to know</div>';
+    st.forEach(function (pair) {
+      h += '<div class="dos-sh-kv"><span class="k">' + escapeHtml(pair[0]) + ':</span> ' + escapeHtml(pair[1]) + '</div>';
+    });
+    h += '</div>';
+  }
+
+  var who = sheet.last_saved_by || 'someone';
+  var when = sheet.last_saved_at ? new Date(sheet.last_saved_at) : null;
+  var whenStr = when ? when.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+  h += '<div class="dos-sh-meta">Sheet saved by ' + escapeHtml(who) + (whenStr ? ' \u00b7 ' + whenStr : '') + '</div>';
+
+  h += '</div>';
+  return h;
+}
 
 function weatherIconFor(cond) {
   if (!cond) return '\u2601\ufe0f';
