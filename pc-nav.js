@@ -54,8 +54,10 @@
       { label: 'Asset tracker',                  href: '/asset-tracker/',          slug: 'asset-tracker' },
       { label: 'COS & Labor',                    href: '/cos-labor/',              slug: 'cos-labor' }
     ],
-    // Dashboards is a single direct link, not a dropdown.
-    dashboards: { label: 'Staffing dashboard', href: '/dashboard/', slug: 'dashboard' },
+    dashboards: [
+      { label: 'Staffing dashboard',           href: '/dashboard/',          slug: 'dashboard' },
+      { label: 'Weather Impacts',               href: '/weather-impacts/',    slug: 'weather-impacts' }
+    ],
     admin: [
       { label: 'Accounts receivable',            href: '/accounts-receivable/',    slug: 'accounts-receivable' },
       { label: 'Sales by item',                  href: '/sales-by-item/',          slug: 'sales-by-item' },
@@ -151,16 +153,7 @@
   // RENDER — assemble the header + ribbon HTML
   // =====================================================================
   function buildLaneHTML(laneKey, laneLabel, items) {
-    // Dashboards short-circuit: it's a single direct link, no dropdown.
-    if (laneKey === 'dashboards') {
-      var d = items;
-      return (
-        '<a class="pc-nav-lane lane-' + laneKey + '" href="' + esc(d.href) +
-        '" data-pc-nav-direct="1" data-pc-nav-slug="' + esc(d.slug) + '">' +
-        esc(laneLabel) +
-        '</a>'
-      );
-    }
+    
 
     var dropdownInner = items.map(function (it) {
       var current = isCurrentPath(it.href) ? ' pc-nav-current' : '';
