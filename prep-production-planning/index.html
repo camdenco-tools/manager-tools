@@ -1675,6 +1675,7 @@
   PC._prodClaims = {};    // 'item_id|venue_code' -> { claimed_by }  (active claims, this week)
   PC._sel = {};           // 'item_id|venue_code' -> true  (pending picks, not yet built)
   PC._prodEvents = [];    // events + staffing_requests for the week (feeds estimates)
+  PC._prodWholesale = []; // wholesale needs for the week (PNC etc., no event)
   PC.myName = function () { return (PC.user && (PC.user.display_name || PC.user.email)) || 'unknown'; };
 
   PC.initProdWeek = function () {
@@ -1743,11 +1744,17 @@
       '&staffing_requests.sales_forecast=gt.0' +
       '&event_date=gte.' + w.start + '&event_date=lte.' + w.end +
       '&deleted_at=is.null&order=event_date.asc&limit=1000';
-    PC.ensureProfiles().then(function () { return Promise.all([PC.authFetch(url), PC.authFetch(claimsUrl), PC.authFetch(evUrl)]); }).then(function (res) {
+    // Wholesale needs for the week (accounts with no scheduled event, e.g. PNC).
+    var wsUrl = '/rest/v1/prep_wholesale_needs?select=need_date,venue_code,stand_id,item_id,qty,' +
+      'prep_items(name,unit,production_mode,sort_order)' +
+      '&need_date=gte.' + w.start + '&need_date=lte.' + w.end +
+      '&deleted_at=is.null&order=need_date.asc&limit=2000';
+    PC.ensureProfiles().then(function () { return Promise.all([PC.authFetch(url), PC.authFetch(claimsUrl), PC.authFetch(evUrl), PC.authFetch(wsUrl)]); }).then(function (res) {
       PC._prodLines = (res[0] || []).filter(function (l) { return l.events && l.prep_items; });
       PC._prodClaims = {};
       (res[1] || []).forEach(function (c) { PC._prodClaims[c.item_id + '|' + c.venue_code] = { claimed_by: c.claimed_by }; });
       PC._prodEvents = res[2] || [];
+      PC._prodWholesale = (res[3] || []).filter(function (r) { return r.prep_items; });
       PC._sel = {};                       // pending picks never carry across a week change
       PC.setLoading('prod', false);
       PC.updateBuildBar();
@@ -1873,6 +1880,21 @@
       var di = PC.dayIndex(w.start, l.events.event_date);
       if (di >= 0 && di <= 6) it.byDay[di] += q;
       it.byVenue[l.events.venue] = (it.byVenue[l.events.venue] || 0) + q;
+    });
+
+    // Wholesale needs merge into the same planned structure: counted on
+    // need_date, under their venue_code. They become normal claimable cells
+    // in the drill-down and feed the Planned bubble side. Honors venue filter.
+    var wsRows = filter ? PC._prodWholesale.filter(function (r) { return r.venue_code === filter; }) : PC._prodWholesale;
+    wsRows.forEach(function (r) {
+      var q = Number(r.qty) || 0; if (q <= 0 || !r.prep_items) return;
+      var id = r.item_id;
+      if (!items[id]) items[id] = { meta: r.prep_items, total: 0, byDay: [0,0,0,0,0,0,0], byVenue: {} };
+      var it = items[id];
+      it.total += q;
+      var di = PC.dayIndex(w.start, r.need_date);
+      if (di >= 0 && di <= 6) it.byDay[di] += q;
+      it.byVenue[r.venue_code] = (it.byVenue[r.venue_code] || 0) + q;
     });
 
     // --- Estimate aggregation from forecasts (mix-based "what production
