@@ -343,13 +343,19 @@
   .pc-prod-total { text-align:right; font-size:13px; font-variant-numeric:tabular-nums; }
   .pc-prod-total b { font-size:16px; font-weight:700; }
   .pc-prod-unit { font-size:10px; color:var(--pc-faint); text-transform:uppercase; }
-  .pc-prod-days { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
-  .pc-prod-day { font-size:9px; color:var(--pc-faint); text-align:center; line-height:1.3; }
+  .pc-prod-days { display:grid; grid-template-columns:repeat(7,1fr); gap:0; }
+  .pc-prod-day { font-size:9px; color:var(--pc-faint); text-align:center; line-height:1.3; border-left:1px solid var(--pc-line-soft); padding:0 2px; }
+  .pc-prod-day:first-child { border-left:none; }
   .pc-prod-day b { display:block; font-size:11px; color:var(--pc-muted); font-weight:600; }
-  .pc-prod-daycell { font-size:12px; text-align:center; font-variant-numeric:tabular-nums; color:var(--pc-ink); }
-  .pc-prod-daycell.is-zero { color:var(--pc-line); }
-  .pc-prod-venues { background:var(--pc-bg); border-top:1px solid var(--pc-line-soft); padding:4px 16px 8px 34px; }
-  .pc-prod-vrow { display:flex; align-items:center; gap:10px; padding:7px 0; font-size:13px; max-width:540px; }
+  .pc-prod-daycell { font-size:12px; text-align:center; font-variant-numeric:tabular-nums; color:var(--pc-ink); font-weight:600; border-left:1px solid var(--pc-line-soft); padding:0 2px; }
+  .pc-prod-daycell:first-child { border-left:none; }
+  .pc-prod-daycell.is-zero { color:var(--pc-faint); font-weight:400; opacity:0.5; }
+  .pc-prod-venues { background:var(--pc-bg); border-top:1px solid var(--pc-line-soft); padding:4px 16px 8px 16px; }
+  .pc-prod-vrow { display:grid; grid-template-columns:1fr 120px 280px; gap:14px; align-items:center; padding:7px 0; font-size:13px; }
+  .pc-prod-vdays { display:grid; grid-template-columns:repeat(7,1fr); gap:0; }
+  .pc-prod-vdays span { font-size:11px; text-align:center; font-variant-numeric:tabular-nums; color:var(--pc-muted); font-weight:600; border-left:1px solid var(--pc-line-soft); padding:1px 2px; }
+  .pc-prod-vdays span:first-child { border-left:none; }
+  .pc-prod-vdays span.z { color:var(--pc-line); font-weight:400; }
   .pc-prod-vrow.selectable { cursor:pointer; }
   .pc-prod-vname { color:var(--pc-muted); display:flex; align-items:center; flex:1; }
   .pc-prod-vqty { font-variant-numeric:tabular-nums; min-width:74px; text-align:right; }
@@ -396,6 +402,14 @@
   .pc-ws-irow .u { font-size:10px; color:var(--pc-faint); text-transform:uppercase; margin-left:6px; }
   .pc-ws-qty { width:96px; padding:7px 9px; border:1px solid var(--pc-line); border-radius:7px; font-family:inherit; font-size:13px; text-align:right; }
   @media (max-width: 760px) { .pc-prod-row { grid-template-columns:1fr 90px; } .pc-prod-days { display:none; } }
+
+  /* ---- Print make-list picker ---- */
+  .pc-print-item { display:flex; align-items:center; gap:10px; padding:9px 4px; border-bottom:1px solid var(--pc-line-soft); font-size:13.5px; cursor:pointer; }
+  .pc-print-item:last-child { border-bottom:none; }
+  .pc-print-item input { width:17px; height:17px; cursor:pointer; accent-color:var(--pc-ops); }
+  .pc-print-item .nm { flex:1; font-weight:500; }
+  .pc-print-item .qt { font-variant-numeric:tabular-nums; color:var(--pc-muted); }
+  .pc-print-item .qt .u { font-size:10px; text-transform:uppercase; color:var(--pc-faint); margin-left:3px; }
 </style>
 </head>
 <body>
@@ -477,7 +491,8 @@
         <button id="pcProdWeekNext" type="button" aria-label="Next week" style="appearance:none;border:1px solid var(--pc-line);background:#fff;border-radius:7px;width:30px;height:32px;font-size:16px;line-height:1;cursor:pointer;color:var(--pc-ink);">&rsaquo;</button>
         <span class="pc-toolbar-label" style="margin-left:8px;">Venue</span>
         <select id="pcProdVenueFilter" style="padding:7px 12px;border:1px solid var(--pc-line);border-radius:7px;font-family:inherit;font-size:13px;background:#fff;cursor:pointer;min-width:150px;"></select>
-        <span id="pcProdCount" style="font-size:12px;color:var(--pc-faint);margin-left:auto;"></span>
+        <button id="pcPrintBtn" type="button" style="margin-left:auto;appearance:none;border:1px solid var(--pc-ops);background:var(--pc-ops-soft);color:var(--pc-ops);border-radius:7px;padding:7px 14px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;">Print make-list</button>
+        <span id="pcProdCount" style="font-size:12px;color:var(--pc-faint);"></span>
       </div>
       <!-- END PATCH ANCHOR: PROD_TOOLBAR -->
 
@@ -560,6 +575,32 @@
       <div style="display:flex;gap:10px;align-items:center;margin-left:auto;">
         <button class="pc-btn-ghost" id="pcWsCancel" type="button">Cancel</button>
         <button class="pc-btn-primary" id="pcWsSave" type="button" disabled>Save wholesale needs</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="pc-modal-backdrop" id="pcPrintBackdrop">
+  <div class="pc-modal" role="dialog" aria-label="Print make-list">
+    <div class="pc-modal-head">
+      <div>
+        <div class="pc-modal-title">Print make-list</div>
+        <div class="pc-modal-sub">Pick which items to include. The sheet shows planned quantities per venue &mdash; a make-list, not who claimed what.</div>
+      </div>
+      <button class="pc-modal-x" id="pcPrintClose" type="button" aria-label="Close">&times;</button>
+    </div>
+    <div class="pc-copy-head" style="padding:14px 22px 4px;">
+      <span>Items this week</span>
+      <label class="pc-copy-all"><input type="checkbox" id="pcPrintAll" checked> Select all</label>
+    </div>
+    <div class="pc-modal-body">
+      <div id="pcPrintList"></div>
+    </div>
+    <div class="pc-modal-foot">
+      <span class="pc-mix-total"></span>
+      <div style="display:flex;gap:10px;align-items:center;margin-left:auto;">
+        <button class="pc-btn-ghost" id="pcPrintCancel" type="button">Cancel</button>
+        <button class="pc-btn-primary" id="pcPrintGo" type="button" disabled>Print</button>
       </div>
     </div>
   </div>
@@ -1880,6 +1921,9 @@
       var di = PC.dayIndex(w.start, l.events.event_date);
       if (di >= 0 && di <= 6) it.byDay[di] += q;
       it.byVenue[l.events.venue] = (it.byVenue[l.events.venue] || 0) + q;
+      if (!it.byVenueDay) it.byVenueDay = {};
+      if (!it.byVenueDay[l.events.venue]) it.byVenueDay[l.events.venue] = [0,0,0,0,0,0,0];
+      if (di >= 0 && di <= 6) it.byVenueDay[l.events.venue][di] += q;
     });
 
     // Wholesale needs merge into the same planned structure: counted on
@@ -1895,6 +1939,9 @@
       var di = PC.dayIndex(w.start, r.need_date);
       if (di >= 0 && di <= 6) it.byDay[di] += q;
       it.byVenue[r.venue_code] = (it.byVenue[r.venue_code] || 0) + q;
+      if (!it.byVenueDay) it.byVenueDay = {};
+      if (!it.byVenueDay[r.venue_code]) it.byVenueDay[r.venue_code] = [0,0,0,0,0,0,0];
+      if (di >= 0 && di <= 6) it.byVenueDay[r.venue_code][di] += q;
     });
 
     // --- Estimate aggregation from forecasts (mix-based "what production
@@ -1908,6 +1955,9 @@
     Object.keys(est.byItem).forEach(function (id) { allIds[id] = true; });
     function sortOf(id) { return (items[id] ? items[id].meta.sort_order : (est.meta[id] ? est.meta[id].sort_order : 0)) || 0; }
     var ids = Object.keys(allIds).sort(function (a, b) { return sortOf(a) - sortOf(b); });
+
+    // Stash the merged rollup so the print make-list renders exactly what's on screen.
+    PC._prodItems = items; PC._prodWeek = w; PC._prodFilter = filter;
 
     var countEl = document.getElementById('pcProdCount');
     if (countEl) countEl.textContent = ids.length + ' item' + (ids.length === 1 ? '' : 's') + (filter ? ' \u00b7 ' + filter : '');
@@ -1999,8 +2049,17 @@
         var dot = '<span style="width:8px;height:8px;border-radius:50%;background:' + vc + ';display:inline-block;margin-right:7px;"></span>';
         var qty = '<span class="pc-prod-vqty">' + pq.toLocaleString() + ' <span class="pc-prod-unit">' + escAttr(unit) + '</span></span>';
 
+        // Day strip for this venue, aligned to the same 7 columns as the item row.
+        var dayDetail = '<span class="pc-prod-days pc-prod-vdays">';
+        var vd = (it && it.byVenueDay && it.byVenueDay[vcode]) ? it.byVenueDay[vcode] : [0,0,0,0,0,0,0];
+        for (var dz = 0; dz < 7; dz++) {
+          var dv = vd[dz] || 0;
+          dayDetail += '<span class="' + (dv > 0 ? '' : 'z') + '">' + (dv > 0 ? dv.toLocaleString() : '\u00b7') + '</span>';
+        }
+        dayDetail += '</span>';
+
         if (onsite) {
-          html += '<div class="pc-prod-vrow"><span class="pc-prod-vname">' + dot + escAttr(vcode) + '</span>' + qty + '</div>';
+          html += '<div class="pc-prod-vrow"><span class="pc-prod-vname">' + dot + escAttr(vcode) + '</span>' + qty + dayDetail + '</div>';
           return;
         }
 
@@ -2013,14 +2072,12 @@
             ? '<button class="pc-prod-vrelease" data-item="' + id + '" data-venue="' + escAttr(vcode) + '" title="Release" aria-label="Release">\u00d7</button>'
             : '';
           html += '<div class="pc-prod-vrow ' + (mine ? 'mine' : 'taken') + '">' +
-            '<span class="pc-prod-vcheck">\u2713</span>' +
-            '<span class="pc-prod-vname">' + dot + escAttr(vcode) + '</span>' + qty +
-            '<span class="pc-prod-vown">' + escAttr(mine ? 'You' : (claim.claimed_by || '')) + rel + '</span></div>';
+            '<span class="pc-prod-vname"><span class="pc-prod-vcheck">\u2713</span>' + dot + escAttr(vcode) +
+            '<span class="pc-prod-vown">' + escAttr(mine ? 'You' : (claim.claimed_by || '')) + rel + '</span></span>' + qty + dayDetail + '</div>';
         } else {
           var on = !!PC._sel[key];
           html += '<div class="pc-prod-vrow selectable' + (on ? ' sel' : '') + '" data-item="' + id + '" data-venue="' + escAttr(vcode) + '">' +
-            '<input type="checkbox" class="pc-prod-vcb"' + (on ? ' checked' : '') + '>' +
-            '<span class="pc-prod-vname">' + dot + escAttr(vcode) + '</span>' + qty + '</div>';
+            '<span class="pc-prod-vname"><input type="checkbox" class="pc-prod-vcb"' + (on ? ' checked' : '') + '>' + dot + escAttr(vcode) + '</span>' + qty + dayDetail + '</div>';
         }
       });
       html += '</div>';
@@ -2153,6 +2210,132 @@
     if (c && !c._wired) { c.addEventListener('click', function () { PC._sel = {}; PC.updateBuildBar(); PC.renderProd(); }); c._wired = true; }
   };
 
+  // ---- Print make-list (DOM-built; nothing written into the print window) ----
+  PC.initPrint = function () {
+    function wire(id, fn) { var el = document.getElementById(id); if (el && !el._wired) { el.addEventListener('click', fn); el._wired = true; } }
+    wire('pcPrintBtn', PC.openPrint);
+    wire('pcPrintClose', PC.closePrint);
+    wire('pcPrintCancel', PC.closePrint);
+    wire('pcPrintGo', PC.doPrint);
+    var all = document.getElementById('pcPrintAll');
+    if (all && !all._wired) {
+      all.addEventListener('change', function () {
+        document.querySelectorAll('#pcPrintList .pc-print-cb').forEach(function (cb) { cb.checked = all.checked; });
+        PC.updatePrintGo();
+      });
+      all._wired = true;
+    }
+    var bd = document.getElementById('pcPrintBackdrop');
+    if (bd && !bd._wired) { bd.addEventListener('click', function (e) { if (e.target === bd) PC.closePrint(); }); bd._wired = true; }
+  };
+
+  PC.closePrint = function () { document.getElementById('pcPrintBackdrop').classList.remove('is-on'); };
+
+  PC.openPrint = function () {
+    var items = PC._prodItems || {};
+    var ids = Object.keys(items).sort(function (a, b) {
+      return ((items[a].meta.sort_order || 0) - (items[b].meta.sort_order || 0));
+    });
+    var list = document.getElementById('pcPrintList');
+    if (!ids.length) {
+      list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--pc-faint);font-size:13px;">Nothing planned to print this week.</div>';
+    } else {
+      list.innerHTML = ids.map(function (id) {
+        var it = items[id];
+        return '<label class="pc-print-item"><input type="checkbox" class="pc-print-cb" value="' + id + '" checked>' +
+          '<span class="nm">' + escAttr(it.meta.name) + '</span>' +
+          '<span class="qt">' + (it.total || 0).toLocaleString() + ' <span class="u">' + escAttr(it.meta.unit || '') + '</span></span></label>';
+      }).join('');
+      list.querySelectorAll('.pc-print-cb').forEach(function (cb) { cb.addEventListener('change', PC.updatePrintGo); });
+    }
+    document.getElementById('pcPrintAll').checked = ids.length > 0;
+    document.getElementById('pcPrintBackdrop').classList.add('is-on');
+    PC.updatePrintGo();
+  };
+
+  PC.updatePrintGo = function () {
+    var total = document.querySelectorAll('#pcPrintList .pc-print-cb').length;
+    var n = document.querySelectorAll('#pcPrintList .pc-print-cb:checked').length;
+    var go = document.getElementById('pcPrintGo');
+    if (go) { go.disabled = (n === 0); go.textContent = n > 0 ? ('Print ' + n + ' item' + (n === 1 ? '' : 's')) : 'Print'; }
+    var all = document.getElementById('pcPrintAll');
+    if (all) all.checked = (total > 0 && n === total);
+  };
+
+  PC.doPrint = function () {
+    var chosen = [];
+    document.querySelectorAll('#pcPrintList .pc-print-cb:checked').forEach(function (cb) { chosen.push(cb.value); });
+    if (!chosen.length) return;
+    var items = PC._prodItems || {};
+    var w = PC._prodWeek, filter = PC._prodFilter || '';
+
+    var win = window.open('', '_blank');
+    if (!win) { PC.toast('Allow pop-ups to print the make-list', true); return; }
+    var doc = win.document;
+    doc.title = 'Production make-list';
+
+    var style = doc.createElement('style');
+    style.textContent =
+      '@page{margin:0.6in;}' +
+      'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;color:#1a1a1a;margin:0;}' +
+      'h1{font-size:18px;margin:0 0 2px;}' +
+      '.sub{font-size:12px;color:#666;margin:0 0 16px;}' +
+      '.item{break-inside:avoid;margin:0 0 14px;border:1px solid #ddd;border-radius:8px;overflow:hidden;}' +
+      '.ihead{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:9px 12px;background:#f4f4f1;border-bottom:1px solid #ddd;}' +
+      '.iname{font-size:15px;font-weight:700;}' +
+      '.itot{font-size:14px;font-weight:700;}' +
+      '.itot .u{font-size:11px;font-weight:400;color:#666;text-transform:uppercase;margin-left:3px;}' +
+      '.vrow{display:flex;justify-content:space-between;padding:6px 12px;border-bottom:1px solid #eee;font-size:13px;}' +
+      '.vrow:last-child{border-bottom:none;}' +
+      '.chk{display:inline-block;width:13px;height:13px;border:1px solid #999;border-radius:3px;margin-right:9px;vertical-align:-2px;}' +
+      '.days{padding:6px 12px;font-size:11px;color:#666;border-top:1px solid #eee;}' +
+      '.days b{color:#1a1a1a;}';
+    doc.head.appendChild(style);
+
+    var h1 = doc.createElement('h1'); h1.textContent = 'Production make-list'; doc.body.appendChild(h1);
+    var sub = doc.createElement('p'); sub.className = 'sub';
+    sub.textContent = (w ? (w.label + ' (' + fmtMD(w.start) + '\u2013' + fmtMD(w.end) + ')') : '') + '  \u00b7  ' + (filter ? filter : 'All venues');
+    doc.body.appendChild(sub);
+
+    chosen.sort(function (a, b) { return ((items[a].meta.sort_order || 0) - (items[b].meta.sort_order || 0)); });
+    chosen.forEach(function (id) {
+      var it = items[id]; if (!it) return;
+      var unit = it.meta.unit || '';
+      var box = doc.createElement('div'); box.className = 'item';
+
+      var head = doc.createElement('div'); head.className = 'ihead';
+      var nm = doc.createElement('span'); nm.className = 'iname'; nm.textContent = it.meta.name;
+      var tot = doc.createElement('span'); tot.className = 'itot';
+      tot.appendChild(doc.createTextNode((it.total || 0).toLocaleString() + ' '));
+      var tu = doc.createElement('span'); tu.className = 'u'; tu.textContent = unit; tot.appendChild(tu);
+      head.appendChild(nm); head.appendChild(tot); box.appendChild(head);
+
+      Object.keys(it.byVenue || {}).sort().forEach(function (vc) {
+        var row = doc.createElement('div'); row.className = 'vrow';
+        var left = doc.createElement('span');
+        var chk = doc.createElement('span'); chk.className = 'chk';
+        left.appendChild(chk); left.appendChild(doc.createTextNode(vc));
+        var qty = doc.createElement('span'); qty.textContent = (it.byVenue[vc] || 0).toLocaleString() + ' ' + unit;
+        row.appendChild(left); row.appendChild(qty); box.appendChild(row);
+      });
+
+      var dayParts = [];
+      for (var d = 0; d < 7; d++) {
+        if (it.byDay[d] > 0) dayParts.push(PC.dowName(PC.addDays(w.start, d)) + ' ' + it.byDay[d]);
+      }
+      if (dayParts.length) {
+        var days = doc.createElement('div'); days.className = 'days';
+        days.appendChild(doc.createTextNode('By day: '));
+        var bd = doc.createElement('b'); bd.textContent = dayParts.join('  \u00b7  ');
+        days.appendChild(bd); box.appendChild(days);
+      }
+      doc.body.appendChild(box);
+    });
+
+    win.focus();
+    setTimeout(function () { try { win.print(); } catch (e) {} }, 250);
+  };
+
   // ---- Boot ----------------------------------------------------------
   // Login-only gate (no pageSlug): entry is allowed for anyone signed in,
   // then the two slugs decide which side(s) they actually see. A user with
@@ -2194,6 +2377,7 @@
       if (PC.canPlan) PC.initProfileCopy();
       if (PC.canPlan) PC.initWholesale();
       if (PC.canProduce) PC.initBuildBar();
+      if (PC.canProduce) PC.initPrint();
       // END PATCH ANCHOR: BOOT_HOOK
     }
   });
