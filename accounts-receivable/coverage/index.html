@@ -68,7 +68,7 @@
   .csr-warn[hidden] { display: none; }
 
   /* Stat cards */
-  .csr-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 22px; }
+  .csr-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 22px; }
   .csr-card {
     background: #fff; border: 0.5px solid #e0dfd8; border-radius: 10px;
     padding: 16px 18px;
@@ -203,9 +203,14 @@
         <div class="csr-card-sub">Statemented &amp; invoiced · <a href="/accounts-receivable/">see Receivables</a></div>
       </div>
       <div class="csr-card">
+        <div class="csr-card-label">Chase Fieldhouse (est.)</div>
+        <div class="csr-card-value" id="statDe">—</div>
+        <div class="csr-card-sub" id="statDeSub">Monthly settlement · separate</div>
+      </div>
+      <div class="csr-card">
         <div class="csr-card-label">Combined expected</div>
         <div class="csr-card-value" id="statCombined">—</div>
-        <div class="csr-card-sub">Rough snapshot · est. + open</div>
+        <div class="csr-card-sub">Awaiting + AR open + Chase</div>
       </div>
     </div>
 
@@ -300,6 +305,13 @@
   // null to disable. "Show older" bypasses it.
   var COVERAGE_START = '2026-05-15';
 
+  // SATB: own POS, we keep the money, never an AR — excluded from CSR entirely.
+  var EXCLUDE_VENUES = { SATB: true };
+  // DE (Chase Fieldhouse): settles as one end-of-month lump, not the per-stand
+  // statement trickle. Its uncovered estimate gets its own headline box and is
+  // kept OUT of the main "awaiting statement" total.
+  var SETTLEMENT_VENUES = { DE: true };
+
   var state = {
     sales: [],
     events: [],
@@ -313,7 +325,8 @@
     dateFloorActive: true,
     filters: { venue: 'all' },
     mainRows: [],
-    redRows: []
+    redRows: [],
+    deRows: []
   };
 
   // =====================================================================
@@ -510,6 +523,7 @@
       if (!s.event_date) return;
       var v = resolveVenue(s.venue);
       if (!v) return;                              // unresolvable venue — can't place it
+      if (EXCLUDE_VENUES[v]) return;               // SATB: own POS, never an AR
       var stand = resolveStand(v, s.stand);
       if (SKIP_SET[stand]) return;                 // expected non-revenue pseudo-stands
       var amt = parseFloat(s.amount) || 0;
@@ -518,7 +532,7 @@
       agg[k].gross += amt;
     });
 
-    var mainRows = [], redRows = [];
+    var mainRows = [], redRows = [], deRows = [];
 
     Object.keys(agg).forEach(function (k) {
       var g = agg[k];
@@ -560,10 +574,14 @@
       }
 
       // Sales + deal, uncovered -> the real receivable.
-      mainRows.push({
+      var row = {
         venue: g.venue, date: g.date, eventName: eventName, stand: g.stand,
         dealType: comm.dealType, commission: comm.commission
-      });
+      };
+      // DE settles monthly as a lump — track it in its own bucket, out of
+      // the main per-stand awaiting total.
+      if (SETTLEMENT_VENUES[g.venue]) deRows.push(row);
+      else mainRows.push(row);
     });
 
     function cmp(a, b) {
@@ -573,8 +591,10 @@
     }
     mainRows.sort(cmp);
     redRows.sort(cmp);
+    deRows.sort(cmp);
     state.mainRows = mainRows;
     state.redRows = redRows;
+    state.deRows = deRows;
   }
 
   // =====================================================================
@@ -597,17 +617,31 @@
 
     var main = state.mainRows.filter(function (r) { return venuePass(r.venue); });
     var red  = state.redRows.filter(function (r) { return venuePass(r.venue); });
+    var de   = (state.deRows || []).filter(function (r) { return venuePass(r.venue); });
     var arOpen = state.arOpen.filter(function (r) { return venuePass(r.venue_code); });
 
-    var csrTotal = 0, redTotal = 0, arTotal = 0;
+    var csrTotal = 0, redTotal = 0, arTotal = 0, deTotal = 0;
     main.forEach(function (r) { csrTotal += r.commission; });
     red.forEach(function (r) { redTotal += r.gross; });
+    de.forEach(function (r) { deTotal += r.commission; });
     arOpen.forEach(function (r) { arTotal += (parseFloat(r.net_amount_due) || 0); });
 
     // Stat cards
     document.getElementById('statCsr').textContent = fmtMoney(csrTotal);
     document.getElementById('statAr').textContent = fmtMoney(arTotal);
-    document.getElementById('statCombined').textContent = fmtMoney(csrTotal + arTotal);
+    var deEl = document.getElementById('statDe');
+    if (deEl) deEl.textContent = fmtMoney(deTotal);
+    var deSubEl = document.getElementById('statDeSub');
+    if (deSubEl) {
+      var deEvSet = {};
+      de.forEach(function (r) { deEvSet[r.date] = true; });
+      var deEvCount = Object.keys(deEvSet).length;
+      deSubEl.textContent = de.length
+        ? (de.length + ' stand' + (de.length === 1 ? '' : 's') + ' · ' +
+           deEvCount + ' event' + (deEvCount === 1 ? '' : 's') + ' · monthly settlement')
+        : 'Monthly settlement · nothing pending';
+    }
+    document.getElementById('statCombined').textContent = fmtMoney(csrTotal + arTotal + deTotal);
 
     // Distinct events feeding the estimate
     var evSet = {};
