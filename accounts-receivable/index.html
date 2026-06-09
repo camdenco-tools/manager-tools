@@ -14,6 +14,7 @@
 <script src="/pc-auth.js"></script>
 <script src="/pc-nav.js"></script>
 <script src="/pc-activity.js"></script>
+<script src="/pc-catalog.js"></script>
 
 <style>
   /* ========================================================================
@@ -859,6 +860,51 @@
     margin-top: 3px;
   }
 
+  /* Statement coverage picker (Session 2) */
+  .ar-coverage-wrap {
+    background: #fafaf6;
+    border: 1px solid #e8e8e4;
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 14px;
+  }
+  .ar-coverage-wrap[hidden] { display: none; }
+  .ar-coverage-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 4px;
+  }
+  .ar-coverage-sub { font-size: 11px; color: #888; font-variant-numeric: tabular-nums; }
+  .ar-coverage-hint { font-size: 11px; color: #888; margin-bottom: 8px; }
+  .ar-coverage-loading { font-size: 12px; color: #aaa; padding: 8px 2px; }
+  .ar-coverage-list { display: flex; flex-direction: column; gap: 2px; }
+  .ar-coverage-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 6px;
+    border-radius: 5px;
+    font-size: 13px;
+  }
+  .ar-coverage-row input[type="checkbox"] { margin: 0; }
+  .ar-coverage-name { flex: 1; }
+  .ar-coverage-row.is-checked { background: #eaf3de; }
+  .ar-coverage-row.is-checked .ar-coverage-name { color: #27500A; font-weight: 500; }
+  .ar-coverage-row.is-locked { opacity: 0.7; }
+  .ar-coverage-row.is-locked .ar-coverage-name { color: #888; }
+  .ar-coverage-row.is-orphan .ar-coverage-name { color: #791F1F; }
+  .ar-coverage-tag {
+    font-size: 10px;
+    font-weight: 500;
+    padding: 2px 7px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+  .ar-coverage-tag.is-locked { background: #e6f1fb; color: #0C447C; }
+  .ar-coverage-tag.is-orphan { background: #fceaea; color: #791F1F; }
+
   /* Lines section */
   .ar-lines-head {
     margin-bottom: 8px;
@@ -1166,6 +1212,7 @@
     <div class="view-toggle-wrap" aria-label="Accounts receivable view">
       <span class="view-toggle-label">View</span>
       <div class="view-toggle">
+        <a href="/accounts-receivable/coverage/">Coverage</a>
         <a href="/accounts-receivable/" class="is-active" aria-current="page">Receivables</a>
         <a href="/accounts-receivable/payments/">Receive payment</a>
       </div>
@@ -2428,6 +2475,10 @@
       notes: '',              // INTERNAL notes — never printed
       invoice_notes: '',      // client-facing notes — printed on the invoice
       lines: [],              // array of {id?, item_id, qty, unit_price, amount, note, _line_id_seq}
+      coverage_planned: [],   // [{name, stand_id, status, invoice_number}] for the linked event
+      coverage_checked: {},   // stand_id -> true: stands THIS statement covers
+      coverage_event_id: '',  // event the picker last loaded for (stale-guard)
+      _coverage_original: {}, // edit-mode snapshot of covered stand_ids (Session 2b diff)
       _dirty: false           // any user input has happened — used for close confirm
     };
   }
@@ -2493,6 +2544,313 @@
   }
 
   // =====================================================================
+  // SESSION 2 — STATEMENT COVERAGE PICKER  (2a: display layer only)
+  //
+  // Event-driven stand checklist. Candidate stands = planned-open set for
+  // the linked event (staffing_requests, headcount > 0, minus the three
+  // excluded pseudo-stands), resolved name -> stand_id via pcCatalog.
+  // Stands already covered by ANOTHER active statement on the same event
+  // render locked. 2a renders only — checkboxes are disabled and nothing
+  // persists. 2b enables toggling + writes ar_invoice_stands on save.
+  // =====================================================================
+
+  var COVERAGE_EXCLUDE = ['Client Staffing Needs', 'Support Staff', 'Non-Event Labor'];
+
+  /** Planned-open stand NAMES for an event (deduped, exclusions removed). */
+  function fetchPlannedOpenStands(eventId) {
+    if (!eventId) return Promise.resolve([]);
+    return AR.authFetch(
+      SB_REST + 'staffing_requests?select=stand' +
+      '&event_id=eq.' + encodeURIComponent(eventId) +
+      '&headcount=gt.0' +
+      '&limit=10000',
+      { headers: pcAuth.headers() }
+    ).then(function (rows) {
+      var seen = {};
+      var names = [];
+      (rows || []).forEach(function (r) {
+        var nm = r.stand;
+        if (!nm) return;
+        if (COVERAGE_EXCLUDE.indexOf(nm) !== -1) return;
+        if (seen[nm]) return;
+        seen[nm] = true;
+        names.push(nm);
+      });
+      return names;
+    });
+  }
+
+  /** Active coverage rows on an event, with the covering invoice number. */
+  function fetchEventCoverage(eventId) {
+    if (!eventId) return Promise.resolve([]);
+    return AR.authFetch(
+      SB_REST + 'ar_invoice_stands?select=stand_id,invoice_id,ar_invoices(internal_invoice_number,status)' +
+      '&event_id=eq.' + encodeURIComponent(eventId) +
+      '&deleted_at=is.null' +
+      '&limit=10000',
+      { headers: pcAuth.headers() }
+    );
+  }
+
+  /** Hide the picker and clear its state. */
+  function clearCoveragePicker() {
+    if (formState) {
+      formState.coverage_planned = [];
+      formState.coverage_checked = {};
+      formState.coverage_event_id = '';
+    }
+    var wrap = document.getElementById('arfCoverageWrap');
+    if (wrap) wrap.hidden = true;
+  }
+
+  /** Build + render the picker for the currently-linked event. */
+  function loadCoveragePicker() {
+    if (!formState || !formState.event_id) { clearCoveragePicker(); return; }
+    var wrap = document.getElementById('arfCoverageWrap');
+    if (!wrap) return;
+    wrap.hidden = false;
+
+    var listEl = document.getElementById('arfCoverageList');
+    if (listEl) listEl.innerHTML = '<div class="ar-coverage-loading">Loading planned-open stands…</div>';
+
+    var eventId = formState.event_id;
+    var venue   = formState.venue_code;
+    formState.coverage_event_id = eventId;
+
+    Promise.all([
+      pcCatalog.ready(),
+      fetchPlannedOpenStands(eventId),
+      fetchEventCoverage(eventId)
+    ]).then(function (results) {
+      // Stale-load guard: the event may have changed while fetching.
+      if (!formState || formState.coverage_event_id !== eventId) return;
+
+      var names = results[1] || [];
+      var coverageRows = results[2] || [];
+
+      // stand_id -> { invoice_id, invoice_number, is_self }
+      var coveredBy = {};
+      coverageRows.forEach(function (row) {
+        var inv = row.ar_invoices || {};
+        coveredBy[row.stand_id] = {
+          invoice_id: row.invoice_id,
+          invoice_number: inv.internal_invoice_number || '',
+          is_self: !!(formState._editing_id && row.invoice_id === formState._editing_id)
+        };
+      });
+
+      var planned = names.map(function (nm) {
+        var stand = pcCatalog.getStand(venue, nm);
+        if (!stand) {
+          console.warn('[AR coverage] planned-open stand not in catalog: "' + nm +
+            '" (venue ' + venue + ', event ' + eventId + ')');
+          return { name: nm, stand_id: null, status: 'orphan', invoice_number: '' };
+        }
+        var cov = coveredBy[stand.id];
+        if (cov && cov.is_self) return { name: nm, stand_id: stand.id, status: 'self',   invoice_number: cov.invoice_number };
+        if (cov)               return { name: nm, stand_id: stand.id, status: 'locked', invoice_number: cov.invoice_number };
+        return { name: nm, stand_id: stand.id, status: 'available', invoice_number: '' };
+      });
+
+      var order = { available: 0, self: 1, locked: 2, orphan: 3 };
+      planned.sort(function (a, b) {
+        var d = order[a.status] - order[b.status];
+        if (d !== 0) return d;
+        return a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1;
+      });
+
+      formState.coverage_planned = planned;
+
+      // Seed checked state from this invoice's existing coverage (edit mode).
+      formState.coverage_checked = {};
+      var origSnap = {};
+      planned.forEach(function (p) {
+        if (p.status === 'self' && p.stand_id) {
+          formState.coverage_checked[p.stand_id] = true;
+          origSnap[p.stand_id] = true;
+        }
+      });
+      formState._coverage_original = origSnap;  // baseline for 2b diff
+
+      renderCoveragePicker();
+    }).catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      console.error('[AR coverage] load failed:', e);
+      var l = document.getElementById('arfCoverageList');
+      if (l) l.innerHTML = '<div class="ar-coverage-loading">Could not load planned-open stands.</div>';
+    });
+  }
+
+  /** Render the picker rows from formState.coverage_planned. */
+  function renderCoveragePicker() {
+    var body = document.getElementById('arfCoverageList');
+    var sub  = document.getElementById('arfCoverageSub');
+    if (!body || !formState) return;
+
+    var planned = formState.coverage_planned || [];
+    if (planned.length === 0) {
+      body.innerHTML = '<div class="ar-coverage-loading">No planned-open stands found for this event.</div>';
+      if (sub) sub.textContent = '';
+      return;
+    }
+
+    var checkedCount = 0, lockedCount = 0, orphanCount = 0;
+    planned.forEach(function (p) {
+      if (p.stand_id && formState.coverage_checked[p.stand_id]) checkedCount++;
+      if (p.status === 'locked') lockedCount++;
+      if (p.status === 'orphan') orphanCount++;
+    });
+
+    body.innerHTML = planned.map(function (p) {
+      if (p.status === 'locked') {
+        return '<label class="ar-coverage-row is-locked">' +
+          '<input type="checkbox" disabled>' +
+          '<span class="ar-coverage-name">' + esc(p.name) + '</span>' +
+          '<span class="ar-coverage-tag is-locked">covered by ' + esc(p.invoice_number || '\u2014') + '</span>' +
+        '</label>';
+      }
+      if (p.status === 'orphan') {
+        return '<label class="ar-coverage-row is-orphan">' +
+          '<input type="checkbox" disabled>' +
+          '<span class="ar-coverage-name">' + esc(p.name) + '</span>' +
+          '<span class="ar-coverage-tag is-orphan">not in catalog</span>' +
+        '</label>';
+      }
+      var isChecked = !!(p.stand_id && formState.coverage_checked[p.stand_id]);
+      return '<label class="ar-coverage-row' + (isChecked ? ' is-checked' : '') + '" ' +
+        'data-stand-id="' + esc(p.stand_id) + '">' +
+        '<input type="checkbox" class="ar-coverage-cb" data-stand-id="' + esc(p.stand_id) + '"' +
+          (isChecked ? ' checked' : '') + '>' +
+        '<span class="ar-coverage-name">' + esc(p.name) + '</span>' +
+      '</label>';
+    }).join('');
+
+    if (sub) {
+      var bits = [checkedCount + ' of ' + planned.length + ' checked'];
+      if (lockedCount) bits.push(lockedCount + ' on another statement');
+      if (orphanCount) bits.push(orphanCount + ' not in catalog');
+      sub.textContent = bits.join(' \u00b7 ');
+    }
+  }
+
+  /**
+   * The set of stand_ids checked in the picker, intersected with the
+   * planned set and filtered to resolvable (non-orphan) stands. This is
+   * the authoritative "what this statement covers" list at save time.
+   */
+  function checkedCoverageStandIds() {
+    if (!formState) return [];
+    var out = [];
+    (formState.coverage_planned || []).forEach(function (p) {
+      if (!p.stand_id) return;                 // skip orphans (no stand_id)
+      if (p.status === 'locked') return;       // can't claim another statement's stand
+      if (formState.coverage_checked[p.stand_id]) out.push(p.stand_id);
+    });
+    return out;
+  }
+
+  var COVERAGE_ACTOR = (function () {
+    try {
+      if (typeof pcAuth !== 'undefined' && pcAuth.getUser) {
+        var u = pcAuth.getUser();
+        return (u && u.display_name) || (u && u.email) || 'unknown';
+      }
+    } catch (e) {}
+    return 'unknown';
+  });
+
+  /**
+   * Persist coverage for an invoice that already has an id.
+   *   - adds: checked stand_ids with no active row yet → sequential POSTs.
+   *   - removes: previously-active rows now unchecked → soft-delete PATCH.
+   * Baseline is formState._coverage_original (seeded at picker load). New
+   * invoices pass {} as baseline (nothing was covered before).
+   * Returns a Promise. Coverage failure is surfaced but does NOT roll back
+   * the invoice — coverage is reconstructable metadata, not financial data.
+   */
+  function persistCoverage(invoiceId, eventId, baseline) {
+    if (!invoiceId || !eventId) return Promise.resolve();
+    var checked = checkedCoverageStandIds();
+    var checkedSet = {};
+    checked.forEach(function (sid) { checkedSet[sid] = true; });
+    baseline = baseline || {};
+
+    var toAdd = checked.filter(function (sid) { return !baseline[sid]; });
+    var toRemove = Object.keys(baseline).filter(function (sid) { return !checkedSet[sid]; });
+
+    if (toAdd.length === 0 && toRemove.length === 0) return Promise.resolve();
+
+    var actor = COVERAGE_ACTOR();
+    var postHdrs = Object.assign({}, pcAuth.headers(), {
+      'Content-Type': 'application/json', 'Prefer': 'return=minimal'
+    });
+    var patchHdrs = Object.assign({}, pcAuth.headers(), {
+      'Content-Type': 'application/json', 'Prefer': 'return=minimal'
+    });
+
+    var ops = [];
+
+    // Adds — one POST per stand (sequential pattern, not embedded).
+    if (toAdd.length > 0) {
+      var addRows = toAdd.map(function (sid) {
+        return {
+          invoice_id: invoiceId,
+          event_id:   eventId,
+          stand_id:   sid,
+          created_by: actor
+        };
+      });
+      ops.push(AR.authFetch(SB_REST + 'ar_invoice_stands', {
+        method: 'POST', headers: postHdrs, body: JSON.stringify(addRows)
+      }));
+    }
+
+    // Removes — soft-delete the active row for this invoice+stand.
+    toRemove.forEach(function (sid) {
+      ops.push(AR.authFetch(
+        SB_REST + 'ar_invoice_stands?invoice_id=eq.' + encodeURIComponent(invoiceId) +
+          '&stand_id=eq.' + encodeURIComponent(sid) + '&deleted_at=is.null',
+        {
+          method: 'PATCH',
+          headers: patchHdrs,
+          body: JSON.stringify({ deleted_at: new Date().toISOString(), deleted_by: actor })
+        }
+      ));
+    });
+
+    return Promise.all(ops);
+  }
+
+  /** First checked stand_id (for the primary stand_id on the invoice header). */
+  function primaryCoverageStandId() {
+    var checked = checkedCoverageStandIds();
+    return checked.length ? checked[0] : null;
+  }
+
+  /**
+   * True if the checked coverage set differs from the edit-mode baseline
+   * (formState._coverage_original). Mirrors persistCoverage's add/remove
+   * logic so the save gate and the writer agree on what "changed" means.
+   */
+  function coverageHasChanges() {
+    if (!formState || !formState.event_id) return false;
+    var baseline = formState._coverage_original || {};
+    var checked = checkedCoverageStandIds();
+    var checkedSet = {};
+    checked.forEach(function (s) { checkedSet[s] = true; });
+    // any newly-checked stand?
+    for (var i = 0; i < checked.length; i++) {
+      if (!baseline[checked[i]]) return true;
+    }
+    // any previously-covered stand now unchecked?
+    var bKeys = Object.keys(baseline);
+    for (var j = 0; j < bKeys.length; j++) {
+      if (!checkedSet[bKeys[j]]) return true;
+    }
+    return false;
+  }
+
+  // =====================================================================
   // STAGE 2.2 — MODAL BUILDERS
   // =====================================================================
 
@@ -2543,6 +2901,15 @@
               '<label class="ar-label">Client reference</label>' +
               '<input type="text" id="arfClientRef" placeholder="MANN-05.14.26-CS">' +
             '</div>' +
+          '</div>' +
+
+          '<div class="ar-coverage-wrap" id="arfCoverageWrap" hidden>' +
+            '<div class="ar-coverage-head">' +
+              '<div class="ar-section-label">Statement coverage</div>' +
+              '<div class="ar-coverage-sub" id="arfCoverageSub"></div>' +
+            '</div>' +
+            '<div class="ar-coverage-hint">Tick the planned-open stands this statement accounts for. Stands on another statement are locked.</div>' +
+            '<div class="ar-coverage-list" id="arfCoverageList"></div>' +
           '</div>' +
 
           '<div class="ar-lines-head">' +
@@ -2701,6 +3068,9 @@
       formState.event_id = '';
       if (hint) hint.textContent = txt ? 'Free text · not linked to an event' : 'No event linked';
     }
+
+    // Show / refresh the coverage picker when an event is linked; hide otherwise.
+    if (formState.event_id) { loadCoveragePicker(); } else { clearCoveragePicker(); }
   }
 
   // =====================================================================
@@ -2866,6 +3236,8 @@
       if (evtInput) evtInput.value = '';
       var hint = document.getElementById('arfEventHint');
       if (hint) hint.textContent = 'No event linked';
+
+      clearCoveragePicker();
 
       refreshClientDropdown();
       refreshStandDropdown();
@@ -3120,6 +3492,21 @@
         }
       });
     }
+
+    // Coverage checkbox toggles (delegated on the picker list).
+    var covList = document.getElementById('arfCoverageList');
+    if (covList) {
+      covList.addEventListener('change', function (ev) {
+        var t = ev.target;
+        if (!t || !t.classList || !t.classList.contains('ar-coverage-cb')) return;
+        var sid = t.getAttribute('data-stand-id');
+        if (!sid) return;
+        if (t.checked) { formState.coverage_checked[sid] = true; }
+        else { delete formState.coverage_checked[sid]; }
+        formState._dirty = true;
+        renderCoveragePicker();
+      });
+    }
   }
 
   /** Open the inline note editor for a given line. */
@@ -3365,6 +3752,9 @@
 
           // Set form field values from formState.
           syncFormFieldsFromState();
+
+          // Load the statement-coverage picker for the linked event (if any).
+          if (formState.event_id) { loadCoveragePicker(); } else { clearCoveragePicker(); }
 
           // Evaluate venue requirement based on the loaded client.
           applyVenueRequirementForCurrentClient();
@@ -3763,6 +4153,34 @@
       });
     })
     .then(function () {
+      // ----- Step 2.5: statement coverage (only when an event is linked) -----
+      if (!savedInvoice.event_id) return;
+      // New invoices have no prior coverage → baseline {}.
+      return persistCoverage(savedInvoice.id, savedInvoice.event_id, {})
+        .then(function () {
+          // Stamp the primary stand_id on the header from the first checked stand,
+          // if one was picked and the header didn't already carry a stand_id.
+          var primary = primaryCoverageStandId();
+          if (!primary || savedInvoice.stand_id) return;
+          return AR.authFetch(
+            SB_REST + 'ar_invoices?id=eq.' + encodeURIComponent(savedInvoice.id),
+            {
+              method: 'PATCH',
+              headers: Object.assign({}, pcAuth.headers(), {
+                'Content-Type': 'application/json', 'Prefer': 'return=minimal'
+              }),
+              body: JSON.stringify({ stand_id: primary })
+            }
+          ).then(function () { savedInvoice.stand_id = primary; });
+        })
+        .catch(function (covErr) {
+          // Non-fatal: invoice + lines are saved. Coverage is reconstructable.
+          console.error('[AR coverage] write failed for invoice ' +
+            savedInvoice.id + ' (invoice saved, coverage incomplete):', covErr);
+          showToast('Invoice saved · coverage not recorded', 3200);
+        });
+    })
+    .then(function () {
       // ----- Step 3: audit log (composite create row) -----
       return writeAuditLog({
         table_name: 'ar_invoices',
@@ -3983,7 +4401,7 @@
 
     var diff = buildEditDiff(validated);
 
-    if (!diff.hasAny) {
+    if (!diff.hasAny && !coverageHasChanges()) {
       showToast('No changes', 1600);
       return;
     }
@@ -4049,6 +4467,37 @@
         }
 
         return Promise.all(ops);
+      })
+      .then(function () {
+        // ----- Step 2.5: statement coverage diff (event-linked only) -----
+        if (!formState.event_id) return;
+        return persistCoverage(invoiceId, formState.event_id, formState._coverage_original || {})
+          .then(function () {
+            // Keep the header's primary stand_id in step with the coverage set:
+            // if the current header stand_id is no longer among the checked
+            // stands (or was never set), repoint it to the first checked one.
+            var checked = checkedCoverageStandIds();
+            var checkedSet = {};
+            checked.forEach(function (s) { checkedSet[s] = true; });
+            var curPrimary = formState.stand_id || '';
+            if (checked.length && !checkedSet[curPrimary]) {
+              return AR.authFetch(
+                SB_REST + 'ar_invoices?id=eq.' + encodeURIComponent(invoiceId),
+                {
+                  method: 'PATCH',
+                  headers: Object.assign({}, pcAuth.headers(), {
+                    'Content-Type': 'application/json', 'Prefer': 'return=minimal'
+                  }),
+                  body: JSON.stringify({ stand_id: checked[0] })
+                }
+              );
+            }
+          })
+          .catch(function (covErr) {
+            console.error('[AR coverage] edit write failed for invoice ' +
+              invoiceId + ' (invoice saved, coverage incomplete):', covErr);
+            showToast('Saved · coverage not fully recorded', 3200);
+          });
       })
       .then(function () {
         // ----- Step 3: audit log writes (fire-and-forget per row) -----
@@ -4864,6 +5313,9 @@
     // Re-render the line editor.
     renderLines();
 
+    // Hide the coverage picker (no event picked after reset).
+    clearCoveragePicker();
+
     // Restore last-saved indicator (we cleared formState but the subtitle
     // text we already set should persist visually — fix here if needed).
     if (sub && keepLastSavedHtml) sub.innerHTML = keepLastSavedHtml;
@@ -5172,9 +5624,28 @@
   // =====================================================================
   // BOOT — gated by pcAuth.require()
   // =====================================================================
+  /**
+   * Read ?invoice=<uuid> from URL and open the edit modal once initial
+   * data has loaded. Called from onAuthReady after fetches resolve.
+   * Used by sales-by-item drill-down (and any other report linking here).
+   */
+  function maybeOpenInvoiceFromUrl() {
+    try {
+      var params = new URLSearchParams(window.location.search);
+      var invoiceId = params.get('invoice');
+      if (!invoiceId) return;
+      // Validate UUID shape loosely — avoids opening modal on garbage.
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(invoiceId)) return;
+      openEditInvoiceModal(invoiceId);
+    } catch (e) {
+      console.error('[AR] maybeOpenInvoiceFromUrl failed:', e);
+    }
+  }
+
   function onAuthReady(user) {
     pcActivity.init('accounts-receivable');
     document.body.classList.remove('pre-auth');
+    if (typeof pcCatalog !== 'undefined' && pcCatalog.ready) pcCatalog.ready();
 
     wireViewToggle();
     wireModalClose();
@@ -5206,7 +5677,10 @@
         console.error('[AR] initial load failed:', e);
         setLoading(false);
       })
-      .then(function () { state.initialFetchDone = true; });
+      .then(function () {
+        state.initialFetchDone = true;
+        maybeOpenInvoiceFromUrl();
+      });
 
     void user;
   }
