@@ -836,6 +836,117 @@
      ======================================================================== */
   body.pre-auth .page-body,
   body.pre-auth .page-title-row { display: none; }
+
+  /* ========================================================================
+     PAYMENT DETAIL MODAL  (view a saved batch + its allocations)
+     Reuses the .pm-modal-head / -body / -footer / -title / -close shell
+     classes; only the card container differs so the existing pm close
+     handlers (which gate on .pm-modal-card) never fire on this modal.
+     ======================================================================== */
+  .pd-modal-card {
+    background: #fff;
+    border-radius: 14px;
+    max-width: 860px;
+    width: 100%;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.18);
+    color: #1a1a1a;
+    overflow: hidden;
+    position: relative;
+  }
+  .pd-voided-banner {
+    background: #fceaea;
+    color: #791F1F;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 13px;
+    margin-bottom: 14px;
+  }
+  .pd-summary {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: #f0efe8;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 16px;
+  }
+  .pd-summary .pd-cell { background: #faf9f5; padding: 10px 12px; }
+  .pd-summary .pd-cell-label {
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #888;
+    margin-bottom: 3px;
+  }
+  .pd-summary .pd-cell-value { font-size: 15px; font-weight: 600; }
+  .pd-summary .pd-cell-value.is-pos { color: #27500A; }
+  .pd-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    font-size: 12px;
+    color: #555;
+    margin-bottom: 16px;
+  }
+  .pd-meta .pd-meta-item strong { color: #1a1a1a; font-weight: 600; }
+  .pd-section-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #666;
+    margin: 4px 0 8px;
+  }
+  table.pd-alloc { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.pd-alloc th {
+    text-align: left;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #888;
+    padding: 6px 8px;
+    border-bottom: 1px solid #ece9df;
+  }
+  table.pd-alloc th.pd-num, table.pd-alloc td.pd-num { text-align: right; }
+  table.pd-alloc td {
+    padding: 8px;
+    border-bottom: 1px solid #f3f1e9;
+    vertical-align: top;
+  }
+  table.pd-alloc tr:last-child td { border-bottom: 0; }
+  .pd-inv-internal { font-weight: 600; }
+  .pd-inv-ref { font-size: 11px; color: #888; }
+  .pd-amount { font-weight: 600; }
+  .pd-attach-link {
+    background: transparent;
+    border: 0;
+    color: #0C447C;
+    cursor: pointer;
+    font: inherit;
+    padding: 0;
+    text-decoration: underline;
+  }
+  .pd-empty { padding: 24px; text-align: center; color: #888; font-size: 13px; }
+  .pd-loading { padding: 40px 20px; text-align: center; color: #aaa; font-size: 13px; }
+  /* invoice-status pills not already defined on .pm-status-pill */
+  .pm-status-pill.is-paid   { background: #eaf3de; color: #27500A; }
+  .pm-status-pill.is-voided { background: #efede6; color: #777; }
+  /* detail-modal edit mode + void button */
+  .pd-edit-grid {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .pd-edit-notes { margin-bottom: 14px; }
+  .pd-btn-danger {
+    background: #fff;
+    border: 1px solid #e7c9c9;
+    color: #791F1F;
+  }
+  .pd-btn-danger:hover { background: #fceaea; border-color: #d9a9a9; }
 </style>
 </head>
 
@@ -854,6 +965,7 @@
     <div class="view-toggle-wrap" aria-label="Accounts receivable view">
       <span class="view-toggle-label">View</span>
       <div class="view-toggle">
+        <a href="/accounts-receivable/coverage/">Coverage</a>
         <a href="/accounts-receivable/">Receivables</a>
         <a href="/accounts-receivable/payments/" class="is-active" aria-current="page">Receive payment</a>
       </div>
@@ -1256,6 +1368,9 @@
       'notes',
       'raw_document_url',
       'file_name',
+      'is_active',
+      'voided_at',
+      'voided_by',
       'created_at',
       'created_by',
       'ar_clients(name)'
@@ -1265,6 +1380,7 @@
     if (statusClause) parts.push(statusClause);
     if (clientClause) parts.push(clientClause);
     if (dateClause)   parts.push(dateClause);
+    parts.push('is_active=eq.true');   // voided batches drop out of the list
     parts.push('order=payment_date.desc');
 
     var url = SB_REST + 'ar_payment_batches?' + parts.join('&');
@@ -1566,11 +1682,570 @@
         return;
       }
 
-      // Regular row click — placeholder until edit modal lands.
+      // Regular row click — open the detail / view modal.
       var row = t.closest('tr[data-batch-id]');
       if (!row) return;
-      showToast('Edit / view payment lands in Stage 3.2', 1800);
+      var batchId = row.getAttribute('data-batch-id');
+      if (batchId) openBatchDetail(batchId);
     });
+  }
+
+  // =====================================================================
+  // PAYMENT DETAIL MODAL  (view a saved batch + its allocations)
+  //
+  // Opened by a row click on the batches list. Read-only in this stage;
+  // the Edit-header and Void actions are wired in the next stage. Kept
+  // fully independent from the Record-payment modal: its card uses the
+  // .pd-modal-card class and its own data-close-detail handlers, so the
+  // pm close/dirty logic never touches it.
+  // =====================================================================
+  var pdState = null;   // { batch: <denormalized batch>, allocs: [...] }
+
+  function fetchBatchAllocations(batchId) {
+    var selectClause = 'select=' + [
+      'id',
+      'amount',
+      'invoice_id',
+      'ar_invoices(internal_invoice_number,client_reference,venue_code,net_amount_due,status,stands(stand_name))'
+    ].join(',');
+    var url = SB_REST + 'ar_payment_allocations?' + selectClause +
+      '&payment_batch_id=eq.' + encodeURIComponent(batchId) +
+      '&order=id.asc';
+    return ARP.authFetch(url, { headers: pcAuth.headers() });
+  }
+
+  function pdInvPillClass(status) {
+    switch (status) {
+      case 'paid':           return 'is-paid';
+      case 'partially_paid': return 'is-partial';
+      case 'disputed':       return 'is-disputed';
+      case 'voided':         return 'is-voided';
+      default:               return 'is-open';
+    }
+  }
+
+  function pdInvPillLabel(status) {
+    if (status === 'partially_paid') return 'partial';
+    return status || 'open';
+  }
+
+  function pdBatchBadgeClass(status) {
+    switch (status) {
+      case 'unallocated':         return 'is-unallocated';
+      case 'partially_allocated': return 'is-partially-allocated';
+      case 'fully_allocated':     return 'is-fully-allocated';
+      default:                    return 'is-unallocated';
+    }
+  }
+
+  function pdBatchBadgeLabel(status) {
+    return String(status || '').replace(/_/g, ' ');
+  }
+
+  function pdAllocRowMarkup(a) {
+    var inv = a.ar_invoices || {};
+    var standName = inv.stands && inv.stands.stand_name ? inv.stands.stand_name : '';
+    var statusPill = '<span class="pm-status-pill ' + pdInvPillClass(inv.status) + '">' +
+      esc(pdInvPillLabel(inv.status)) + '</span>';
+    return '' +
+      '<tr>' +
+        '<td>' +
+          '<div class="pd-inv-internal">' + esc(inv.internal_invoice_number || '—') + '</div>' +
+          (inv.client_reference
+            ? '<div class="pd-inv-ref">' + esc(inv.client_reference) + '</div>'
+            : '') +
+        '</td>' +
+        '<td>' + esc(inv.venue_code || '—') +
+          (standName ? ' · ' + esc(standName) : '') + '</td>' +
+        '<td class="pd-num">' + fmtMoney(Number(inv.net_amount_due || 0)) + '</td>' +
+        '<td>' + statusPill + '</td>' +
+        '<td class="pd-num pd-amount">' + fmtMoney(Number(a.amount || 0)) + '</td>' +
+      '</tr>';
+  }
+
+  function pdModalMarkup(batch, allocs, editing) {
+    var remaining = Number(batch._remaining || 0);
+    var voided = batch.is_active === false;
+
+    var voidedBanner = voided
+      ? '<div class="pd-voided-banner">This payment has been voided' +
+          (batch.voided_at ? ' on ' + fmtDate(String(batch.voided_at).slice(0, 10)) : '') +
+          (batch.voided_by ? ' by ' + esc(batch.voided_by) : '') +
+          '. Its allocations no longer count against any invoice.</div>'
+      : '';
+
+    var attachItem = batch.raw_document_url
+      ? '<span class="pd-meta-item">Remittance: ' +
+          '<button type="button" class="pd-attach-link" data-action="pd-open-attachment" ' +
+            'data-storage-path="' + esc(batch.raw_document_url) + '">' +
+            esc(batch.file_name || 'view attachment') + '</button></span>'
+      : '';
+
+    var allocBody = (allocs && allocs.length)
+      ? allocs.map(pdAllocRowMarkup).join('')
+      : '';
+
+    var allocTable = allocs && allocs.length
+      ? '<table class="pd-alloc">' +
+          '<thead><tr>' +
+            '<th>Invoice</th>' +
+            '<th>Venue · Stand</th>' +
+            '<th class="pd-num">Net due</th>' +
+            '<th>Status</th>' +
+            '<th class="pd-num">Applied</th>' +
+          '</tr></thead>' +
+          '<tbody>' + allocBody + '</tbody>' +
+        '</table>'
+      : '<div class="pd-empty">No invoices were allocated on this payment.</div>';
+
+    // Meta block: editable header fields when editing, read-only otherwise.
+    var metaBlock;
+    if (editing) {
+      metaBlock =
+        '<div class="pd-edit-grid">' +
+          '<div class="pm-field"><label class="pm-label">Advice #</label>' +
+            '<input type="text" id="pdEditAdvice" value="' + esc(batch.advice_number || '') + '"></div>' +
+          '<div class="pm-field"><label class="pm-label">Payment date</label>' +
+            '<input type="date" id="pdEditDate" value="' + esc(batch.payment_date || '') + '"></div>' +
+        '</div>' +
+        '<div class="pm-field pd-edit-notes"><label class="pm-label">Notes</label>' +
+          '<textarea id="pdEditNotes" rows="3">' + esc(batch.notes || '') + '</textarea></div>';
+    } else {
+      metaBlock =
+        (attachItem ? '<div class="pd-meta">' + attachItem + '</div>' : '') +
+        (batch.notes
+          ? '<div class="pd-meta"><span class="pd-meta-item"><strong>Notes:</strong> ' +
+              esc(batch.notes) + '</span></div>'
+          : '');
+    }
+
+    // Footer: edit mode → Cancel / Save; voided → Close only;
+    // otherwise → Void (left) + Edit / Close (right).
+    var footerLeft = '';
+    var footerRight = '';
+    if (editing) {
+      footerRight =
+        '<button type="button" class="pm-btn pm-btn-secondary" data-action="pd-cancel-edit">Cancel</button>' +
+        '<button type="button" class="pm-btn pm-btn-primary" data-action="pd-save-edit">Save details</button>';
+    } else if (voided) {
+      footerRight =
+        '<button type="button" class="pm-btn pm-btn-secondary" data-close-detail="modal">Close</button>';
+    } else {
+      footerLeft =
+        '<button type="button" class="pm-btn pd-btn-danger" data-action="pd-void">Void payment</button>';
+      footerRight =
+        '<button type="button" class="pm-btn pm-btn-secondary" data-action="pd-edit">Edit details</button>' +
+        '<button type="button" class="pm-btn pm-btn-secondary" data-close-detail="modal">Close</button>';
+    }
+
+    return '' +
+      '<div class="pd-modal-card" role="dialog" aria-labelledby="pdModalTitle">' +
+        '<div class="pm-modal-head">' +
+          '<div>' +
+            '<div class="pm-modal-title" id="pdModalTitle">' +
+              esc(batch._client_name || 'Payment') +
+              (editing ? ' — editing' : '') + '</div>' +
+            '<div class="pm-modal-subtitle">' +
+              (batch.advice_number ? 'Advice #' + esc(batch.advice_number) + ' · ' : '') +
+              fmtDate(batch.payment_date) + '</div>' +
+          '</div>' +
+          '<button type="button" class="pm-modal-close" data-close-detail="modal" aria-label="Close">×</button>' +
+        '</div>' +
+        '<div class="pm-modal-body">' +
+          voidedBanner +
+          '<div class="pd-summary">' +
+            '<div class="pd-cell"><div class="pd-cell-label">Received</div>' +
+              '<div class="pd-cell-value">' + fmtMoney(Number(batch.payment_amount || 0)) + '</div></div>' +
+            '<div class="pd-cell"><div class="pd-cell-label">Allocated</div>' +
+              '<div class="pd-cell-value">' + fmtMoney(Number(batch.allocated_amount || 0)) + '</div></div>' +
+            '<div class="pd-cell"><div class="pd-cell-label">Remaining</div>' +
+              '<div class="pd-cell-value' + (Math.abs(remaining) < 0.005 ? ' is-pos' : '') + '">' +
+                fmtMoney(remaining) + '</div></div>' +
+            '<div class="pd-cell"><div class="pd-cell-label">Status</div>' +
+              '<div><span class="status-badge ' + pdBatchBadgeClass(batch.status) + '">' +
+                esc(pdBatchBadgeLabel(batch.status)) + '</span></div></div>' +
+          '</div>' +
+          metaBlock +
+          '<div class="pd-section-label">Applied to ' +
+            (allocs ? allocs.length : 0) + ' invoice' +
+            ((allocs && allocs.length === 1) ? '' : 's') + '</div>' +
+          allocTable +
+        '</div>' +
+        '<div class="pm-modal-footer">' +
+          '<div class="pm-modal-footer-left">' + footerLeft + '</div>' +
+          '<div class="pm-modal-footer-right">' + footerRight + '</div>' +
+        '</div>' +
+      '</div>';
+  }
+
+  // Rebuild the detail card from pdState into the backdrop. Used after the
+  // allocation fetch and after every edit-mode toggle / save / void.
+  function pdRender() {
+    var bd = document.getElementById('modalBackdrop');
+    if (!bd || !pdState) return;
+    bd.innerHTML = pdModalMarkup(pdState.batch, pdState.allocs, !!pdState.editing);
+  }
+
+  function openBatchDetail(batchId) {
+    var bd = document.getElementById('modalBackdrop');
+    if (!bd) return;
+    var batch = null;
+    for (var i = 0; i < state.batches.length; i++) {
+      if (String(state.batches[i].id) === String(batchId)) { batch = state.batches[i]; break; }
+    }
+    if (!batch) { showToast('Could not find that payment', 2500); return; }
+
+    pdState = { batch: batch, allocs: null };
+    bd.innerHTML =
+      '<div class="pd-modal-card" role="dialog" aria-labelledby="pdModalTitle">' +
+        '<div class="pm-modal-head">' +
+          '<div><div class="pm-modal-title" id="pdModalTitle">' +
+            esc(batch._client_name || 'Payment') + '</div></div>' +
+          '<button type="button" class="pm-modal-close" data-close-detail="modal" aria-label="Close">×</button>' +
+        '</div>' +
+        '<div class="pm-modal-body"><div class="pd-loading">Loading allocations…</div></div>' +
+      '</div>';
+    bd.classList.add('is-open');
+
+    fetchBatchAllocations(batchId)
+      .then(function (allocs) {
+        if (!pdState || String(pdState.batch.id) !== String(batchId)) return; // modal changed
+        pdState.allocs = allocs || [];
+        pdRender();
+      })
+      .catch(function (e) {
+        if (e && e.authFailed) { handleAuthFailure(); return; }
+        console.error('[ARP] allocation fetch failed:', e);
+        var body = bd.querySelector('.pm-modal-body');
+        if (body) body.innerHTML = '<div class="pd-empty">Could not load allocations.</div>';
+      });
+  }
+
+  function closeBatchDetail() {
+    var bd = document.getElementById('modalBackdrop');
+    if (bd) {
+      bd.classList.remove('is-open');
+      bd.innerHTML = '';
+    }
+    pdState = null;
+  }
+
+  function wireBatchDetailClose() {
+    // Click handling scoped to the detail card via data-close-detail and
+    // the attachment action. Gated on .pd-modal-card so it never collides
+    // with the Record-payment modal's handlers.
+    document.addEventListener('click', function (ev) {
+      var bd = document.getElementById('modalBackdrop');
+      if (!bd || !bd.classList.contains('is-open')) return;
+      if (!bd.querySelector('.pd-modal-card')) return;
+      var t = ev.target;
+      if (!t || !t.closest) return;
+
+      // Attachment open from inside the detail modal.
+      var clip = t.closest('[data-action="pd-open-attachment"]');
+      if (clip) {
+        ev.stopPropagation();
+        var storagePath = clip.getAttribute('data-storage-path');
+        if (!storagePath) return;
+        clip.disabled = true;
+        ARP.getSignedUrl(storagePath)
+          .then(function (url) { window.open(url, '_blank'); })
+          .catch(function (e) {
+            if (e && e.authFailed) { handleAuthFailure(); return; }
+            console.error('[ARP] signed URL failed:', e);
+            showToast('Could not open attachment', 3000);
+          })
+          .then(function () { clip.disabled = false; });
+        return;
+      }
+
+      // Action buttons (edit toggle, save edit, void).
+      var actionEl = t.closest('[data-action]');
+      if (actionEl) {
+        var action = actionEl.getAttribute('data-action');
+        if (action === 'pd-edit') {
+          ev.stopPropagation();
+          if (pdState) { pdState.editing = true; pdRender(); }
+          return;
+        }
+        if (action === 'pd-cancel-edit') {
+          ev.stopPropagation();
+          if (pdState) { pdState.editing = false; pdRender(); }
+          return;
+        }
+        if (action === 'pd-save-edit') {
+          ev.stopPropagation();
+          pdSaveHeaderEdit();
+          return;
+        }
+        if (action === 'pd-void') {
+          ev.stopPropagation();
+          pdVoidBatch();
+          return;
+        }
+      }
+
+      // Close triggers (× button, Close button).
+      var closer = t.closest('[data-close-detail]');
+      if (closer) { closeBatchDetail(); return; }
+
+      // Backdrop click (direct hit on the backdrop element itself).
+      // Protected while editing so a stray click can't drop edits.
+      if (t === bd) {
+        if (pdState && pdState.editing) return;
+        closeBatchDetail();
+      }
+    });
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Escape') return;
+      var bd = document.getElementById('modalBackdrop');
+      if (!bd || !bd.classList.contains('is-open')) return;
+      if (!bd.querySelector('.pd-modal-card')) return;
+      if (pdState && pdState.editing) return;   // Esc protected while editing
+      closeBatchDetail();
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // Save header edits (advice #, payment date, notes) on a saved batch.
+  // PATCHes only the changed fields and writes one audit row per change.
+  // ---------------------------------------------------------------------
+  var pdSavingEdit = false;
+
+  function pdSaveHeaderEdit() {
+    if (pdSavingEdit || !pdState) return;
+    var batch = pdState.batch;
+
+    var adviceEl = document.getElementById('pdEditAdvice');
+    var dateEl   = document.getElementById('pdEditDate');
+    var notesEl  = document.getElementById('pdEditNotes');
+
+    var newAdvice = adviceEl ? adviceEl.value.trim() : (batch.advice_number || '');
+    var newDate   = dateEl   ? dateEl.value          : (batch.payment_date || '');
+    var newNotes  = notesEl  ? notesEl.value.trim()  : (batch.notes || '');
+
+    if (!newDate) { showToast('Payment date is required', 2800); return; }
+
+    var oldAdvice = batch.advice_number || '';
+    var oldDate   = batch.payment_date  || '';
+    var oldNotes  = batch.notes         || '';
+
+    var changes = [];
+    if (newAdvice !== oldAdvice) changes.push({ field: 'advice_number', old: oldAdvice, val: newAdvice || null });
+    if (newDate   !== oldDate)   changes.push({ field: 'payment_date',  old: oldDate,  val: newDate });
+    if (newNotes  !== oldNotes)  changes.push({ field: 'notes',         old: oldNotes, val: newNotes || null });
+
+    if (!changes.length) { pdState.editing = false; pdRender(); return; }
+
+    pdSavingEdit = true;
+    var patchBody = {};
+    changes.forEach(function (c) { patchBody[c.field] = c.val; });
+
+    var hdrsMin = Object.assign({}, pcAuth.headers(), {
+      'Content-Type': 'application/json',
+      'Prefer':       'return=minimal'
+    });
+
+    ARP.authFetch(
+      SB_REST + 'ar_payment_batches?id=eq.' + encodeURIComponent(batch.id),
+      { method: 'PATCH', headers: hdrsMin, body: JSON.stringify(patchBody) }
+    )
+    .then(function () {
+      // Reflect the change in the in-memory batch + re-derive cosmetic fields.
+      batch.advice_number = newAdvice || null;
+      batch.payment_date  = newDate;
+      batch.notes         = newNotes || null;
+      denormalize(batch);
+
+      // One audit row per changed field.
+      changes.forEach(function (c) {
+        pmWriteAuditLog({
+          table_name: 'ar_payment_batches',
+          record_id:  batch.id,
+          action:     'update',
+          field_name: c.field,
+          old_value:  c.old,
+          new_value:  c.val,
+          context:    { payment_batch_id: batch.id }
+        }).catch(function (e) {
+          console.error('[ARP] audit write failed for batch edit ' + batch.id + ':', e);
+        });
+      });
+
+      showToast('Payment updated', 2400);
+      pdState.editing = false;
+      pdRender();
+      reloadBatches();
+    })
+    .catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      console.error('[ARP] batch edit save failed:', e);
+      var msg = (e && e.message) ? e.message : 'Update failed';
+      if (msg.length > 140) msg = msg.substring(0, 140) + '…';
+      showToast('Update failed · ' + msg, 4500);
+    })
+    .then(function () { pdSavingEdit = false; });
+  }
+
+  // ---------------------------------------------------------------------
+  // Recompute one invoice's status from its remaining ACTIVE allocations
+  // (i.e. after a batch is voided, the voided batch's allocations are gone
+  // from the sum). Disputed and already-voided invoices never auto-move.
+  // Returns a Promise resolving to { oldStatus, newStatus, changed }.
+  // ---------------------------------------------------------------------
+  function pdRecomputeInvoiceStatus(invoiceId) {
+    var p1 = ARP.authFetch(
+      SB_REST + 'ar_payment_allocations?select=amount,ar_payment_batches!inner(is_active)' +
+        '&invoice_id=eq.' + encodeURIComponent(invoiceId) +
+        '&ar_payment_batches.is_active=eq.true',
+      { headers: pcAuth.headers() }
+    );
+    var p2 = ARP.authFetch(
+      SB_REST + 'ar_invoices?select=id,status,net_amount_due&id=eq.' +
+        encodeURIComponent(invoiceId),
+      { headers: pcAuth.headers() }
+    );
+    return Promise.all([p1, p2]).then(function (results) {
+      var activeAllocs = results[0] || [];
+      var inv = (results[1] || [])[0];
+      if (!inv) return { oldStatus: 'unknown', newStatus: 'unknown', changed: false };
+
+      if (inv.status === 'disputed' || inv.status === 'voided') {
+        return { oldStatus: inv.status, newStatus: inv.status, changed: false };
+      }
+
+      var sum = 0;
+      activeAllocs.forEach(function (a) { sum += Number(a.amount || 0); });
+      sum = Math.round(sum * 100) / 100;
+      var net = Math.round(Number(inv.net_amount_due || 0) * 100) / 100;
+
+      var newStatus;
+      if (sum <= 0)                       newStatus = 'open';
+      else if (Math.abs(sum - net) < 0.005) newStatus = 'paid';
+      else if (sum < net)                 newStatus = 'partially_paid';
+      else                                newStatus = 'paid';   // overpaid maps to paid in v1
+
+      return {
+        oldStatus: inv.status || 'open',
+        newStatus: newStatus,
+        changed:   (inv.status || 'open') !== newStatus
+      };
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // Void a saved payment batch. Soft-delete only (is_active = false) — never
+  // a DELETE. Re-derives every invoice the batch touched, audit-logs the
+  // void plus each invoice transition, then drops the batch from the list.
+  // ---------------------------------------------------------------------
+  var pdVoiding = false;
+
+  function pdVoidBatch() {
+    if (pdVoiding || !pdState) return;
+    var batch = pdState.batch;
+    var allocs = pdState.allocs || [];
+
+    var ok = window.confirm(
+      'Void this payment of ' + fmtMoney(Number(batch.payment_amount || 0)) +
+      ((batch.advice_number) ? ' (Advice #' + batch.advice_number + ')' : '') + '?\n\n' +
+      'Its ' + allocs.length + ' allocation' + (allocs.length === 1 ? '' : 's') +
+      ' will be reversed and the affected invoices recalculated. This cannot be undone from the UI.'
+    );
+    if (!ok) return;
+
+    pdVoiding = true;
+
+    var actor = '';
+    try {
+      if (typeof pcAuth !== 'undefined' && pcAuth.getUser) {
+        var u = pcAuth.getUser();
+        actor = (u && u.display_name) || (u && u.email) || 'unknown';
+      }
+    } catch (e) { actor = 'unknown'; }
+
+    // Unique invoice ids this batch touched.
+    var invoiceIds = [];
+    var seen = {};
+    allocs.forEach(function (a) {
+      if (a.invoice_id && !seen[a.invoice_id]) { seen[a.invoice_id] = true; invoiceIds.push(a.invoice_id); }
+    });
+
+    var hdrsMin = Object.assign({}, pcAuth.headers(), {
+      'Content-Type': 'application/json',
+      'Prefer':       'return=minimal'
+    });
+    var nowIso = new Date().toISOString();
+    var transitions = [];
+
+    // Step 1: soft-delete the batch (must happen first so the recompute
+    // below already excludes this batch's allocations).
+    ARP.authFetch(
+      SB_REST + 'ar_payment_batches?id=eq.' + encodeURIComponent(batch.id),
+      {
+        method:  'PATCH',
+        headers: hdrsMin,
+        body:    JSON.stringify({ is_active: false, voided_at: nowIso, voided_by: actor })
+      }
+    )
+    .then(function () {
+      // Step 2: re-derive each touched invoice and PATCH the ones that move.
+      var statusPromises = invoiceIds.map(function (invId) {
+        return pdRecomputeInvoiceStatus(invId).then(function (result) {
+          if (!result.changed) return null;
+          transitions.push({ invoice_id: invId, oldStatus: result.oldStatus, newStatus: result.newStatus });
+          return ARP.authFetch(
+            SB_REST + 'ar_invoices?id=eq.' + encodeURIComponent(invId),
+            { method: 'PATCH', headers: hdrsMin, body: JSON.stringify({ status: result.newStatus }) }
+          );
+        });
+      });
+      return Promise.all(statusPromises);
+    })
+    .then(function () {
+      // Step 3: audit (fire-and-forget). Void row on the batch + one
+      // status_change row per invoice that moved.
+      pmWriteAuditLog({
+        table_name: 'ar_payment_batches',
+        record_id:  batch.id,
+        action:     'void',
+        context: {
+          payment_amount:   batch.payment_amount,
+          allocated_amount: batch.allocated_amount,
+          advice_number:    batch.advice_number,
+          allocation_count: allocs.length,
+          reversed_invoices: invoiceIds
+        }
+      }).catch(function (e) { console.error('[ARP] void audit failed:', e); });
+
+      transitions.forEach(function (tr) {
+        pmWriteAuditLog({
+          table_name: 'ar_invoices',
+          record_id:  tr.invoice_id,
+          action:     'status_change',
+          field_name: 'status',
+          old_value:  tr.oldStatus,
+          new_value:  tr.newStatus,
+          context:    { triggered_by: 'payment_void', payment_batch_id: batch.id }
+        }).catch(function (e) { console.error('[ARP] void status audit failed:', e); });
+      });
+
+      var msg = 'Payment voided';
+      if (transitions.length) {
+        msg += ' · ' + transitions.length + ' invoice' +
+          (transitions.length === 1 ? '' : 's') + ' recalculated';
+      }
+      showToast(msg, 3200);
+      closeBatchDetail();
+      reloadBatches();
+    })
+    .catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      console.error('[ARP] void failed:', e);
+      var m = (e && e.message) ? e.message : 'Void failed';
+      if (m.length > 140) m = m.substring(0, 140) + '…';
+      showToast('Void failed · ' + m, 4500);
+    })
+    .then(function () { pdVoiding = false; });
   }
 
   // =====================================================================
@@ -2536,8 +3211,9 @@
     // Fetch existing allocations for this invoice + the invoice's net.
     // Two parallel reads.
     var p1 = ARP.authFetch(
-      SB_REST + 'ar_payment_allocations?select=amount&invoice_id=eq.' +
-        encodeURIComponent(invoiceId),
+      SB_REST + 'ar_payment_allocations?select=amount,ar_payment_batches!inner(is_active)' +
+        '&invoice_id=eq.' + encodeURIComponent(invoiceId) +
+        '&ar_payment_batches.is_active=eq.true',
       { headers: pcAuth.headers() }
     );
     var p2 = ARP.authFetch(
@@ -2966,6 +3642,7 @@
     wireRowClicks();
     wireRecordPaymentButton();
     wireModalClose();
+    wireBatchDetailClose();
     renderSortHeaders();
 
     setLoading(true);
