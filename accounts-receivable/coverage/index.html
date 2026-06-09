@@ -293,10 +293,19 @@
 
   var DEAL_LABELS = { rev_split: 'Rev split', rev_bev: 'Rev + bev', labor: 'Labor', reimb: 'Reimb' };
 
+  // Hard floor: events before this date that were NEVER invoiced are treated
+  // as settled off-book (pre-ledger) and hidden. Events that WERE invoiced
+  // drop via the invoice-rule regardless of this date. Defaulted to AR ledger
+  // go-live (your first invoice entry). Lower it to see further back; set to
+  // null to disable. "Show older" bypasses it.
+  var COVERAGE_START = '2026-05-15';
+
   var state = {
     sales: [],
     events: [],
-    coveredSet: {},      // 'eventId||standId' -> true (active coverage)
+    coveredSet: {},      // 'eventId||standId' -> true (active per-stand coverage)
+    perStandEventSet: {},// 'eventId' -> true (events that USE per-stand coverage)
+    invoicedEventKeys: {},// 'venue||period_start' -> true (event has a non-voided invoice)
     standAliases: {},    // 'venue||alias' -> canonical stand
     venueAliases: {},    // raw venue -> canonical venue
     arOpen: [],          // [{ net, venue_code }] open/partial invoices
@@ -457,6 +466,16 @@
       { headers: pcAuth.headers() }
     );
   }
+  // Every non-voided invoice's (venue, event-date) key. An event with ANY
+  // invoice is in the ledger — statement received — so it's no longer
+  // awaiting a statement, even if it was a lump invoice with no per-stand
+  // coverage rows. This is what clears the paid historical flood.
+  function fetchInvoicedEventKeys() {
+    return authFetch(
+      SB_REST + 'ar_invoices?select=venue_code,period_start&status=neq.voided&limit=10000',
+      { headers: pcAuth.headers() }
+    );
+  }
 
   // =====================================================================
   // RESOLUTION
@@ -512,8 +531,19 @@
       var standObj = pcCatalog.getStand(g.venue, g.stand);
       var standId = standObj ? standObj.id : null;
 
-      // Covered by an active statement? -> it's in AR now, drop it.
+      // 1. Covered by an active per-stand statement -> in AR now, drop it.
       if (standId && eventId && state.coveredSet[eventId + '||' + standId]) return;
+
+      // 2. Lump-invoiced whole event: if this event isn't tracked per-stand
+      //    (no ar_invoice_stands rows) but DOES have a non-voided invoice,
+      //    one statement covered the whole event -> drop. This clears the
+      //    paid historical flood (event-level invoices, no per-stand rows).
+      var eventIsPerStand = eventId && state.perStandEventSet[eventId];
+      if (!eventIsPerStand && state.invoicedEventKeys[g.venue + '||' + g.date]) return;
+
+      // 3. Pre-ledger floor: an event before COVERAGE_START that survived 1 & 2
+      //    was never invoiced -> settled off-book, hide it. "Show older" bypasses.
+      if (state.dateFloorActive && COVERAGE_START && g.date < COVERAGE_START) return;
 
       // Sales logged, stand not in the catalog -> can't coverage-check, fail loud.
       if (!standObj) {
@@ -736,11 +766,15 @@
       fetchVenueAliases(),
       fetchArOpen(),
       fetchSales(),
-      fetchEvents()
+      fetchEvents(),
+      fetchInvoicedEventKeys()
     ]).then(function (res) {
       // res[0], res[1] = ready() (undefined)
       (res[2] || []).forEach(function (row) {
-        if (row.event_id && row.stand_id) state.coveredSet[row.event_id + '||' + row.stand_id] = true;
+        if (row.event_id && row.stand_id) {
+          state.coveredSet[row.event_id + '||' + row.stand_id] = true;
+          state.perStandEventSet[row.event_id] = true;
+        }
       });
       (res[3] || []).forEach(function (row) {
         state.standAliases[row.venue + '||' + row.alias_name] = row.maps_to_stand;
@@ -751,6 +785,11 @@
       state.arOpen = res[5] || [];
       state.sales = res[6] || [];
       state.events = res[7] || [];
+      (res[8] || []).forEach(function (row) {
+        if (row.venue_code && row.period_start) {
+          state.invoicedEventKeys[row.venue_code + '||' + row.period_start] = true;
+        }
+      });
 
       populateVenueFilter();
       compute();
