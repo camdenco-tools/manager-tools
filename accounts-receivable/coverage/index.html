@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Commission Statements Receivable — Admin · Popcorn Chez</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap">
+
+<!-- Auth must load BEFORE pc-nav. pc-commission/pc-catalog after auth. -->
+<script src="/pc-auth.js"></script>
+<script src="/pc-nav.js"></script>
+<script src="/pc-activity.js"></script>
+<script src="/pc-catalog.js"></script>
+<script src="/pc-commission.js"></script>
+<script src="/pc-fiscal.js"></script>
+
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: #faf9f6; color: #1a1a1a;
+    font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 14px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page-title-row {
+    background: #faf9f6; border-bottom: 1px solid #e8e8e4;
+    padding: 18px 22px 16px;
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap;
+  }
+  .page-title { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; margin: 0; }
+  .page-title-meta { font-size: 12px; color: #888; font-weight: 500; }
+
+  .page-body { max-width: 1240px; margin: 0 auto; padding: 18px 22px 80px; }
+
+  /* View toggle — same vocabulary as the other AR pages. Coverage first. */
+  .view-toggle-wrap { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
+  .view-toggle-label {
+    font-size: 11px; font-weight: 500; letter-spacing: 0.08em;
+    text-transform: uppercase; color: #888;
+  }
+  .view-toggle {
+    display: inline-flex; background: #f1f0eb; border: 1px solid #e0dfd8;
+    border-radius: 8px; padding: 3px; gap: 2px;
+  }
+  .view-toggle a {
+    background: transparent; border: 0; color: #555;
+    font-family: inherit; font-size: 13px; font-weight: 500;
+    padding: 7px 16px; border-radius: 6px; cursor: pointer;
+    text-decoration: none; display: inline-block;
+    transition: background 0.12s ease, color 0.12s ease;
+  }
+  .view-toggle a:hover { color: #1a1a1a; }
+  .view-toggle a.is-active {
+    background: #fff; color: #1a1a1a; box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+
+  /* FY degradation warning strip */
+  .csr-warn {
+    background: #fef6ec; border: 1px solid #f3d9a8; border-radius: 8px;
+    padding: 10px 14px; margin-bottom: 16px; font-size: 12px; color: #633806;
+  }
+  .csr-warn[hidden] { display: none; }
+
+  /* Stat cards */
+  .csr-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 22px; }
+  .csr-card {
+    background: #fff; border: 0.5px solid #e0dfd8; border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .csr-card.is-headline { border-color: #cfe3d3; background: #f6fbf6; }
+  .csr-card-label {
+    font-size: 10px; font-weight: 600; letter-spacing: 0.08em;
+    text-transform: uppercase; color: #888; margin-bottom: 7px;
+  }
+  .csr-card-value { font-size: 27px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums; }
+  .csr-card.is-headline .csr-card-value { color: #27500A; }
+  .csr-card-sub { font-size: 11px; color: #888; margin-top: 6px; }
+  .csr-card-sub a { color: #0C447C; text-decoration: none; }
+  .csr-card-sub a:hover { text-decoration: underline; }
+
+  @media (max-width: 760px) { .csr-stats { grid-template-columns: 1fr; } }
+
+  /* Filter row */
+  .csr-filter-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+  .csr-filter-row select {
+    font-family: inherit; font-size: 13px; padding: 7px 10px;
+    border: 1px solid #e0dfd8; border-radius: 6px; background: #fff; color: #1a1a1a;
+  }
+  .csr-filter-row select:focus { outline: none; border-color: #1a1a1a; }
+  .csr-filter-spacer { flex: 1; }
+
+  /* Tables */
+  .csr-table-wrap {
+    background: #fff; border: 0.5px solid #e0dfd8; border-radius: 10px;
+    overflow: hidden; margin-bottom: 22px;
+  }
+  .csr-table-head {
+    padding: 12px 16px; border-bottom: 1px solid #f0efe8;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  }
+  .csr-table-title { font-size: 13px; font-weight: 600; }
+  .csr-table-title.is-danger { color: #791F1F; }
+  .csr-table-subtitle { font-size: 12px; color: #888; }
+  .csr-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .csr-table thead tr { background: #f6f6f3; border-bottom: 1px solid #e0dfd8; }
+  .csr-table th {
+    text-align: left; padding: 10px 14px; font-weight: 500; color: #555;
+    font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap;
+  }
+  .csr-table th.r { text-align: right; }
+  .csr-table tbody tr { border-bottom: 1px solid #f0efe8; }
+  .csr-table tbody tr:last-child { border-bottom: 0; }
+  .csr-table td { padding: 11px 14px; vertical-align: middle; }
+  .csr-table td.r { text-align: right; font-variant-numeric: tabular-nums; font-weight: 500; }
+  .csr-table td.col-date { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .csr-table td.col-event { color: #777; font-size: 12px; }
+  .csr-table tr.total-row { background: #f6f6f3; border-top: 2px solid #1a1a1a; }
+  .csr-table tr.total-row td { font-weight: 700; }
+
+  .venue-chip {
+    display: inline-block; font-size: 10px; font-weight: 600; letter-spacing: 0.04em;
+    padding: 2px 7px; border-radius: 5px; background: #f1f0eb; color: #444441; margin-right: 6px;
+  }
+  .deal-chip {
+    display: inline-block; font-size: 10px; font-weight: 500;
+    padding: 2px 7px; border-radius: 4px; background: #e6f1fb; color: #0C447C;
+  }
+
+  /* Red / fail-loud table */
+  .csr-red-wrap { border-color: #f0cccc; }
+  .csr-red-wrap .csr-table-head { background: #fdf3f3; border-bottom-color: #f3dada; }
+  .csr-red-wrap .csr-table thead tr { background: #fdf3f3; border-bottom-color: #f3dada; }
+  .csr-red-wrap .csr-table tbody td.col-stand { color: #791F1F; font-weight: 500; }
+  .csr-red-flag {
+    display: inline-block; font-size: 10px; font-weight: 500;
+    padding: 2px 7px; border-radius: 4px; background: #fceaea; color: #791F1F;
+  }
+  .csr-red-wrap .csr-table tr.total-row { background: #fdf3f3; border-top-color: #791F1F; }
+  .csr-red-wrap .csr-table tr.total-row td { color: #791F1F; }
+
+  /* Show-older + states */
+  .csr-show-older { text-align: center; padding: 12px; border-top: 1px solid #f0efe8; background: #fafaf6; }
+  .btn-link {
+    background: transparent; border: 0; color: #555; font-family: inherit;
+    font-size: 12px; cursor: pointer; padding: 4px 8px;
+  }
+  .btn-link:hover { color: #1a1a1a; text-decoration: underline; }
+  .csr-loading { padding: 50px 20px; text-align: center; color: #aaa; font-size: 13px; }
+  .csr-empty { padding: 44px 20px; text-align: center; color: #888; font-size: 13px; }
+
+  /* Toast */
+  .pc-toast-host { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 2000; pointer-events: none; }
+  .pc-toast {
+    background: #1a1a1a; color: #fff; font-size: 13px; font-weight: 500;
+    padding: 11px 18px; border-radius: 24px; box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+    opacity: 0; transform: translateY(8px); transition: opacity 0.18s ease, transform 0.18s ease;
+  }
+  .pc-toast.is-shown { opacity: 1; transform: translateY(0); }
+
+  body.pre-auth .page-body, body.pre-auth .page-title-row { display: none; }
+</style>
+</head>
+
+<body class="pre-auth">
+
+  <!-- pc-nav.js injects its own <header> -->
+
+  <div class="page-title-row" aria-hidden="true">
+    <h1 class="page-title">Commission Statements Receivable</h1>
+    <span class="page-title-meta">Admin · estimated · current FY to date</span>
+  </div>
+
+  <main class="page-body">
+
+    <!-- VIEW TOGGLE — Coverage is leftmost; family default-opens to Receivables. -->
+    <div class="view-toggle-wrap" aria-label="Accounts receivable view">
+      <span class="view-toggle-label">View</span>
+      <div class="view-toggle">
+        <a href="/accounts-receivable/coverage/" class="is-active" aria-current="page">Coverage</a>
+        <a href="/accounts-receivable/">Receivables</a>
+        <a href="/accounts-receivable/payments/">Receive payment</a>
+      </div>
+    </div>
+
+    <div class="csr-warn" id="csrWarn" hidden></div>
+
+    <!-- Headline snapshot -->
+    <div class="csr-stats" id="csrStats">
+      <div class="csr-card is-headline">
+        <div class="csr-card-label">Awaiting statement (est.)</div>
+        <div class="csr-card-value" id="statCsr">—</div>
+        <div class="csr-card-sub" id="statCsrSub">Estimated commission, no statement yet</div>
+      </div>
+      <div class="csr-card">
+        <div class="csr-card-label">AR open</div>
+        <div class="csr-card-value" id="statAr">—</div>
+        <div class="csr-card-sub">Statemented &amp; invoiced · <a href="/accounts-receivable/">see Receivables</a></div>
+      </div>
+      <div class="csr-card">
+        <div class="csr-card-label">Combined expected</div>
+        <div class="csr-card-value" id="statCombined">—</div>
+        <div class="csr-card-sub">Rough snapshot · est. + open</div>
+      </div>
+    </div>
+
+    <!-- Filter -->
+    <div class="csr-filter-row">
+      <select id="filterVenue" aria-label="Filter by venue">
+        <option value="all">All venues</option>
+      </select>
+      <span class="csr-filter-spacer"></span>
+    </div>
+
+    <!-- Main table: uncovered stands with a deal -->
+    <div class="csr-table-wrap" id="mainWrap">
+      <div class="csr-table-head">
+        <div>
+          <div class="csr-table-title">Uncovered stands — awaiting a statement</div>
+          <div class="csr-table-subtitle" id="mainSubtitle">Loading…</div>
+        </div>
+      </div>
+      <table class="csr-table">
+        <thead>
+          <tr>
+            <th class="col-date">Event date</th>
+            <th>Venue</th>
+            <th>Stand</th>
+            <th>Deal</th>
+            <th class="r">Est. commission</th>
+          </tr>
+        </thead>
+        <tbody id="mainBody"></tbody>
+      </table>
+      <div class="csr-loading" id="mainLoading">Loading…</div>
+      <div class="csr-empty" id="mainEmpty" hidden></div>
+      <div class="csr-show-older" id="showOlderWrap" hidden>
+        <button type="button" class="btn-link" id="btnShowOlder">Show events before this fiscal year →</button>
+      </div>
+    </div>
+
+    <!-- Red table: sales logged but not estimable (no deal / not in catalog) -->
+    <div class="csr-table-wrap csr-red-wrap" id="redWrap" hidden>
+      <div class="csr-table-head">
+        <div>
+          <div class="csr-table-title is-danger">⚠ Sales logged, no commission deal</div>
+          <div class="csr-table-subtitle">Full logged sales shown — your cut is unknown until a deal is configured. Not counted in the estimate above.</div>
+        </div>
+      </div>
+      <table class="csr-table">
+        <thead>
+          <tr>
+            <th class="col-date">Event date</th>
+            <th>Venue</th>
+            <th>Stand</th>
+            <th>Flag</th>
+            <th class="r">Logged sales</th>
+          </tr>
+        </thead>
+        <tbody id="redBody"></tbody>
+      </table>
+    </div>
+
+  </main>
+
+  <div class="pc-toast-host" id="pcToastHost" aria-live="polite" aria-atomic="true"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  // =====================================================================
+  // CONFIG
+  // =====================================================================
+  var SB_URL  = 'https://aoazlttdjowhlfcksoyl.supabase.co';
+  var SB_REST = SB_URL + '/rest/v1/';
+
+  // Stands that are never revenue-commission — mirror the Commission
+  // Tracker's skip set so the red list stays meaningful (genuine no-deal
+  // anomalies, not the expected pseudo-stands).
+  var SKIP_SET = {
+    'Support Staff': true,
+    'Hawking': true,
+    'Client Staffing Needs': true,
+    'Non-Event Labor': true,
+    'Overall': true
+  };
+
+  var DEAL_LABELS = { rev_split: 'Rev split', rev_bev: 'Rev + bev', labor: 'Labor', reimb: 'Reimb' };
+
+  var state = {
+    sales: [],
+    events: [],
+    coveredSet: {},      // 'eventId||standId' -> true (active coverage)
+    standAliases: {},    // 'venue||alias' -> canonical stand
+    venueAliases: {},    // raw venue -> canonical venue
+    arOpen: [],          // [{ net, venue_code }] open/partial invoices
+    fyStartIso: null,
+    dateFloorActive: true,
+    filters: { venue: 'all' },
+    mainRows: [],
+    redRows: []
+  };
+
+  // =====================================================================
+  // UTILITIES
+  // =====================================================================
+  function pad2(n) { n = String(n); return n.length < 2 ? '0' + n : n; }
+  function todayIso() {
+    var d = new Date();
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    var parts = iso.split('-');
+    if (parts.length !== 3) return iso;
+    var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var m = months[parseInt(parts[1], 10) - 1] || '';
+    return m + ' ' + parseInt(parts[2], 10) + ', ' + parts[0];
+  }
+  // Whole-dollar formatting — this is a ballpark estimate page, matching
+  // the Commission Tracker's rounded presentation.
+  function fmtMoney(n) {
+    if (n == null || isNaN(n)) n = 0;
+    var sign = n < 0 ? '-' : '';
+    return sign + '$' + Math.round(Math.abs(n)).toLocaleString('en-US');
+  }
+  function esc(s) {
+    if (s == null) return '';
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function showToast(msg, ms) {
+    ms = ms || 2400;
+    var host = document.getElementById('pcToastHost');
+    if (!host) return;
+    var el = document.createElement('div');
+    el.className = 'pc-toast';
+    el.textContent = msg;
+    host.appendChild(el);
+    requestAnimationFrame(function () { el.classList.add('is-shown'); });
+    setTimeout(function () {
+      el.classList.remove('is-shown');
+      setTimeout(function () { el.remove(); }, 260);
+    }, ms);
+  }
+
+  // =====================================================================
+  // AUTH FETCH (JWT-expiry aware)
+  // =====================================================================
+  function handleAuthFailure() {
+    try {
+      localStorage.removeItem('sb_access_token');
+      localStorage.removeItem('sb_refresh_token');
+    } catch (e) { /* ignore */ }
+    showToast('Session expired. Reloading to sign in again…', 1800);
+    setTimeout(function () { window.location.reload(); }, 1800);
+  }
+  function authFetch(url, options) {
+    return fetch(url, options).then(function (r) {
+      if (!r.ok) {
+        return r.text().then(function (t) {
+          if (r.status === 401 || (t && t.indexOf('JWT expired') !== -1)) {
+            var err = new Error('JWT expired'); err.authFailed = true; throw err;
+          }
+          throw new Error(t || ('HTTP ' + r.status));
+        });
+      }
+      return r.text().then(function (t) {
+        if (!t) return [];
+        try { return JSON.parse(t); } catch (e) { return []; }
+      });
+    });
+  }
+
+  // =====================================================================
+  // FISCAL-YEAR FLOOR
+  //
+  // Resolve the start date of the CURRENT fiscal year via pc-fiscal.js.
+  // The current period carries a 'YYYY-MM' key; the FY-start is that
+  // year's January period. Falls back to calendar Jan 1 of the key's year
+  // with a visible warning if pcFiscal can't resolve it.
+  // =====================================================================
+  function resolveFiscalYearStart() {
+    try {
+      var cur = pcFiscal.getCurrentPeriod ? pcFiscal.getCurrentPeriod() : null;
+      if (!cur || !cur.key) throw new Error('no current period');
+      var year = cur.key.split('-')[0];
+      if (pcFiscal.getPeriodByKey) {
+        var jan = pcFiscal.getPeriodByKey(year + '-01');
+        if (jan && jan.start) return jan.start;
+      }
+      // Fallback within the try: use the current period's own start only if
+      // it IS January; otherwise drop to the calendar fallback below.
+      if (cur.name && cur.name.indexOf('January') === 0 && cur.start) return cur.start;
+      throw new Error('could not resolve FY-start period');
+    } catch (e) {
+      console.warn('[CSR] pcFiscal FY-start resolution failed, using calendar Jan 1:', e);
+      var d = new Date();
+      var warn = document.getElementById('csrWarn');
+      if (warn) {
+        warn.hidden = false;
+        warn.textContent = 'Fiscal-calendar lookup unavailable — using calendar Jan 1, ' +
+          d.getFullYear() + ' as the year start. Totals are otherwise accurate.';
+      }
+      return d.getFullYear() + '-01-01';
+    }
+  }
+
+  // =====================================================================
+  // FETCHES — explicit high limits per project REST conventions.
+  // sales is the large one; 50000 covers a fiscal year (and several) with
+  // headroom. If it ever truncates, move aggregation server-side.
+  // =====================================================================
+  function fetchSales() {
+    var url = SB_REST + 'sales?select=venue,stand,amount,event_date,event_name' +
+      '&event_date=lte.' + todayIso();
+    if (state.dateFloorActive && state.fyStartIso) {
+      url += '&event_date=gte.' + state.fyStartIso;
+    }
+    url += '&order=event_date.desc&limit=50000';
+    return authFetch(url, { headers: pcAuth.headers() });
+  }
+  function fetchEvents() {
+    var url = SB_REST + 'events?select=id,venue,event_date,event_name' +
+      '&event_date=lte.' + todayIso();
+    if (state.dateFloorActive && state.fyStartIso) {
+      url += '&event_date=gte.' + state.fyStartIso;
+    }
+    url += '&order=event_date.desc&limit=10000';
+    return authFetch(url, { headers: pcAuth.headers() });
+  }
+  function fetchCoverage() {
+    return authFetch(
+      SB_REST + 'ar_invoice_stands?select=event_id,stand_id&deleted_at=is.null&limit=10000',
+      { headers: pcAuth.headers() }
+    );
+  }
+  function fetchStandAliases() {
+    return authFetch(SB_REST + 'stand_aliases?select=venue,alias_name,maps_to_stand&limit=10000',
+      { headers: pcAuth.headers() });
+  }
+  function fetchVenueAliases() {
+    return authFetch(SB_REST + 'venue_aliases?select=alias_name,maps_to_venue&limit=10000',
+      { headers: pcAuth.headers() });
+  }
+  function fetchArOpen() {
+    return authFetch(
+      SB_REST + 'ar_invoices?select=net_amount_due,venue_code,status' +
+      '&status=in.(open,partially_paid)&limit=10000',
+      { headers: pcAuth.headers() }
+    );
+  }
+
+  // =====================================================================
+  // RESOLUTION
+  // =====================================================================
+  function resolveVenue(raw) {
+    if (!raw) return null;
+    if (pcCatalog.getVenue(raw)) return raw;            // already canonical
+    if (state.venueAliases[raw]) return state.venueAliases[raw];
+    return null;
+  }
+  function resolveStand(venue, raw) {
+    var key = venue + '||' + raw;
+    if (state.standAliases[key]) return state.standAliases[key];
+    return raw;
+  }
+
+  // =====================================================================
+  // COMPUTE — aggregate sales, classify against coverage + deals.
+  // =====================================================================
+  function compute() {
+    // Events lookup by canonical venue||date.
+    var evByVD = {};
+    state.events.forEach(function (e) {
+      var v = resolveVenue(e.venue) || e.venue;
+      var k = v + '||' + e.event_date;
+      if (!evByVD[k]) evByVD[k] = e;   // first match wins (same-venue-same-day collision is rare)
+    });
+
+    // Aggregate sales by venue||date||canonicalStand.
+    var agg = {};
+    state.sales.forEach(function (s) {
+      if (!s.event_date) return;
+      var v = resolveVenue(s.venue);
+      if (!v) return;                              // unresolvable venue — can't place it
+      var stand = resolveStand(v, s.stand);
+      if (SKIP_SET[stand]) return;                 // expected non-revenue pseudo-stands
+      var amt = parseFloat(s.amount) || 0;
+      var k = v + '||' + s.event_date + '||' + stand;
+      if (!agg[k]) agg[k] = { venue: v, date: s.event_date, stand: stand, gross: 0, eventName: s.event_name || '' };
+      agg[k].gross += amt;
+    });
+
+    var mainRows = [], redRows = [];
+
+    Object.keys(agg).forEach(function (k) {
+      var g = agg[k];
+      if (Math.abs(g.gross) < 0.005) return;       // no real sales -> nothing to estimate
+
+      var ev = evByVD[g.venue + '||' + g.date];
+      var eventId = ev ? ev.id : null;
+      var eventName = (ev && ev.event_name) || g.eventName || '';
+
+      var standObj = pcCatalog.getStand(g.venue, g.stand);
+      var standId = standObj ? standObj.id : null;
+
+      // Covered by an active statement? -> it's in AR now, drop it.
+      if (standId && eventId && state.coveredSet[eventId + '||' + standId]) return;
+
+      // Sales logged, stand not in the catalog -> can't coverage-check, fail loud.
+      if (!standObj) {
+        console.warn('[CSR] stand not in catalog: "' + g.stand + '" (venue ' + g.venue + ', date ' + g.date + ')');
+        redRows.push({ venue: g.venue, date: g.date, eventName: eventName, stand: g.stand, gross: g.gross, reason: 'not_in_catalog' });
+        return;
+      }
+
+      // Sales logged, no deal configured -> red, full sales.
+      var comm = pcCommission.calcCommission(g.venue, g.stand, g.gross);
+      if (comm.dealType === null) {
+        redRows.push({ venue: g.venue, date: g.date, eventName: eventName, stand: g.stand, gross: g.gross, reason: 'no_deal' });
+        return;
+      }
+
+      // Sales + deal, uncovered -> the real receivable.
+      mainRows.push({
+        venue: g.venue, date: g.date, eventName: eventName, stand: g.stand,
+        dealType: comm.dealType, commission: comm.commission
+      });
+    });
+
+    function cmp(a, b) {
+      if (a.date !== b.date) return a.date < b.date ? 1 : -1;   // date desc
+      if (a.venue !== b.venue) return a.venue < b.venue ? -1 : 1;
+      return a.stand < b.stand ? -1 : 1;
+    }
+    mainRows.sort(cmp);
+    redRows.sort(cmp);
+    state.mainRows = mainRows;
+    state.redRows = redRows;
+  }
+
+  // =====================================================================
+  // RENDER
+  // =====================================================================
+  function populateVenueFilter() {
+    var sel = document.getElementById('filterVenue');
+    if (!sel) return;
+    var venues = pcCatalog.getActiveVenues() || [];
+    sel.innerHTML = '<option value="all">All venues</option>' +
+      venues.map(function (v) {
+        return '<option value="' + esc(v.code) + '">' + esc(v.full_name || v.code) + '</option>';
+      }).join('');
+    sel.value = state.filters.venue;
+  }
+
+  function render() {
+    var vf = state.filters.venue;
+    function venuePass(code) { return vf === 'all' || code === vf; }
+
+    var main = state.mainRows.filter(function (r) { return venuePass(r.venue); });
+    var red  = state.redRows.filter(function (r) { return venuePass(r.venue); });
+    var arOpen = state.arOpen.filter(function (r) { return venuePass(r.venue_code); });
+
+    var csrTotal = 0, redTotal = 0, arTotal = 0;
+    main.forEach(function (r) { csrTotal += r.commission; });
+    red.forEach(function (r) { redTotal += r.gross; });
+    arOpen.forEach(function (r) { arTotal += (parseFloat(r.net_amount_due) || 0); });
+
+    // Stat cards
+    document.getElementById('statCsr').textContent = fmtMoney(csrTotal);
+    document.getElementById('statAr').textContent = fmtMoney(arTotal);
+    document.getElementById('statCombined').textContent = fmtMoney(csrTotal + arTotal);
+
+    // Distinct events feeding the estimate
+    var evSet = {};
+    main.forEach(function (r) { evSet[r.venue + '||' + r.date] = true; });
+    var evCount = Object.keys(evSet).length;
+    var sub = document.getElementById('statCsrSub');
+    if (sub) {
+      sub.textContent = main.length + ' stand' + (main.length === 1 ? '' : 's') +
+        ' · ' + evCount + ' event' + (evCount === 1 ? '' : 's') +
+        (state.dateFloorActive ? ' · FY to date' : ' · all past events');
+    }
+
+    // Main table
+    var mainBody = document.getElementById('mainBody');
+    var mainLoading = document.getElementById('mainLoading');
+    var mainEmpty = document.getElementById('mainEmpty');
+    var mainSubtitle = document.getElementById('mainSubtitle');
+    if (mainLoading) mainLoading.hidden = true;
+
+    if (mainSubtitle) {
+      mainSubtitle.textContent = main.length === 0
+        ? 'Nothing outstanding'
+        : (main.length + ' stand' + (main.length === 1 ? '' : 's') + ' awaiting a statement');
+    }
+
+    if (main.length === 0) {
+      mainBody.innerHTML = '';
+      if (mainEmpty) {
+        mainEmpty.hidden = false;
+        mainEmpty.textContent = state.dateFloorActive
+          ? 'No uncovered stands with logged sales this fiscal year. Either everything has a statement, or sales aren\u2019t logged yet.'
+          : 'No uncovered stands with logged sales.';
+      }
+    } else {
+      if (mainEmpty) mainEmpty.hidden = true;
+      var rowsHtml = main.map(function (r) {
+        var label = pcCatalog.getVenueLabel(r.venue) || r.venue;
+        var dealChip = r.dealType
+          ? '<span class="deal-chip">' + esc(DEAL_LABELS[r.dealType] || r.dealType) + '</span>'
+          : '';
+        return '<tr>' +
+          '<td class="col-date">' + esc(fmtDate(r.date)) + '</td>' +
+          '<td><span class="venue-chip">' + esc(r.venue) + '</span>' + esc(label) + '</td>' +
+          '<td>' + esc(r.stand) +
+            (r.eventName ? ' <span class="col-event">· ' + esc(r.eventName) + '</span>' : '') + '</td>' +
+          '<td>' + dealChip + '</td>' +
+          '<td class="r">' + esc(fmtMoney(r.commission)) + '</td>' +
+        '</tr>';
+      }).join('');
+      rowsHtml += '<tr class="total-row">' +
+        '<td colspan="4">Total awaiting statement</td>' +
+        '<td class="r">' + esc(fmtMoney(csrTotal)) + '</td>' +
+      '</tr>';
+      mainBody.innerHTML = rowsHtml;
+    }
+
+    // Show-older affordance — only while the FY floor is active.
+    var olderWrap = document.getElementById('showOlderWrap');
+    if (olderWrap) olderWrap.hidden = !state.dateFloorActive;
+
+    // Red table
+    var redWrap = document.getElementById('redWrap');
+    var redBody = document.getElementById('redBody');
+    if (red.length === 0) {
+      if (redWrap) redWrap.hidden = true;
+      if (redBody) redBody.innerHTML = '';
+    } else {
+      if (redWrap) redWrap.hidden = false;
+      var redHtml = red.map(function (r) {
+        var label = pcCatalog.getVenueLabel(r.venue) || r.venue;
+        var flag = r.reason === 'not_in_catalog'
+          ? '<span class="csr-red-flag">Stand not in catalog</span>'
+          : '<span class="csr-red-flag">No deal configured</span>';
+        return '<tr>' +
+          '<td class="col-date">' + esc(fmtDate(r.date)) + '</td>' +
+          '<td><span class="venue-chip">' + esc(r.venue) + '</span>' + esc(label) + '</td>' +
+          '<td class="col-stand">' + esc(r.stand) +
+            (r.eventName ? ' <span class="col-event">· ' + esc(r.eventName) + '</span>' : '') + '</td>' +
+          '<td>' + flag + '</td>' +
+          '<td class="r">' + esc(fmtMoney(r.gross)) + '</td>' +
+        '</tr>';
+      }).join('');
+      redHtml += '<tr class="total-row">' +
+        '<td colspan="4">Total logged sales (no deal — not in estimate)</td>' +
+        '<td class="r">' + esc(fmtMoney(redTotal)) + '</td>' +
+      '</tr>';
+      redBody.innerHTML = redHtml;
+    }
+  }
+
+  // =====================================================================
+  // WIRING
+  // =====================================================================
+  function wireFilter() {
+    var sel = document.getElementById('filterVenue');
+    if (sel) sel.addEventListener('change', function () {
+      state.filters.venue = sel.value;
+      render();
+    });
+  }
+  function wireShowOlder() {
+    var btn = document.getElementById('btnShowOlder');
+    if (btn) btn.addEventListener('click', function () {
+      state.dateFloorActive = false;
+      reload();
+    });
+  }
+
+  function setLoading(on) {
+    var l = document.getElementById('mainLoading');
+    if (l) l.hidden = !on;
+    if (on) {
+      var b = document.getElementById('mainBody'); if (b) b.innerHTML = '';
+      var e = document.getElementById('mainEmpty'); if (e) e.hidden = true;
+    }
+  }
+
+  // Re-fetch the date-bounded data (sales + events) and recompute. Coverage,
+  // aliases, and AR-open don't depend on the date floor, so they're fetched
+  // once at boot and reused.
+  function reload() {
+    setLoading(true);
+    return Promise.all([fetchSales(), fetchEvents()])
+      .then(function (res) {
+        state.sales = res[0] || [];
+        state.events = res[1] || [];
+        compute();
+        render();
+      })
+      .catch(function (e) {
+        if (e && e.authFailed) { handleAuthFailure(); return; }
+        console.error('[CSR] reload failed:', e);
+        showToast('Could not load data');
+        setLoading(false);
+      });
+  }
+
+  // =====================================================================
+  // BOOT
+  // =====================================================================
+  function onAuthReady(user) {
+    if (typeof pcActivity !== 'undefined' && pcActivity.init) pcActivity.init('accounts-receivable');
+    document.body.classList.remove('pre-auth');
+
+    state.fyStartIso = resolveFiscalYearStart();
+
+    wireFilter();
+    wireShowOlder();
+    setLoading(true);
+
+    Promise.all([
+      pcCatalog.ready(),
+      pcCommission.ready(),
+      fetchCoverage(),
+      fetchStandAliases(),
+      fetchVenueAliases(),
+      fetchArOpen(),
+      fetchSales(),
+      fetchEvents()
+    ]).then(function (res) {
+      // res[0], res[1] = ready() (undefined)
+      (res[2] || []).forEach(function (row) {
+        if (row.event_id && row.stand_id) state.coveredSet[row.event_id + '||' + row.stand_id] = true;
+      });
+      (res[3] || []).forEach(function (row) {
+        state.standAliases[row.venue + '||' + row.alias_name] = row.maps_to_stand;
+      });
+      (res[4] || []).forEach(function (row) {
+        state.venueAliases[row.alias_name] = row.maps_to_venue;
+      });
+      state.arOpen = res[5] || [];
+      state.sales = res[6] || [];
+      state.events = res[7] || [];
+
+      populateVenueFilter();
+      compute();
+      render();
+    }).catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      console.error('[CSR] initial load failed:', e);
+      showToast('Could not load page data');
+      setLoading(false);
+    });
+
+    void user;
+  }
+
+  if (typeof pcAuth === 'undefined' || !pcAuth.require) {
+    document.body.innerHTML =
+      '<div style="padding:60px 22px;font-family:DM Sans,sans-serif;">' +
+      '<h1>Authentication unavailable</h1>' +
+      '<p>pc-auth.js failed to load. Check that it is reachable at <code>/pc-auth.js</code>.</p>' +
+      '</div>';
+  } else {
+    pcAuth.require({ pageSlug: 'accounts-receivable', onReady: onAuthReady });
+  }
+
+})();
+</script>
+
+</body>
+</html>
