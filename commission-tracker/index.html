@@ -274,6 +274,7 @@
 <div class="toast" id="toast"></div>
 
 <script src="/pc-auth.js"></script>
+<script src="/pc-commission.js"></script>
 <script>
 (function() {
 
@@ -436,7 +437,8 @@ function loadAllData() {
     sbGet('pay_rates?select=*'),
     sbGet('venue_aliases?select=*'),
     sbGet('stand_aliases?select=*'),
-    sbGet('client_billing_rates?select=*')
+    sbGet('client_billing_rates?select=*'),
+    pcCommission.ready()
   ]).then(function(res) {
     allSales = res[0] || [];
     allEvents = res[1] || [];
@@ -577,39 +579,13 @@ function getLastEventDate() {
 }
 
 // ---- COMMISSION CALCULATION ----
+// Delegated to the shared pc-commission.js module — the single source of
+// truth for the deal math. pcCommission.ready() is awaited in loadAllData()
+// (below) before any render runs, so the cache is always populated by the
+// time this is called. The Tracker still keeps its own allStandDeals /
+// allDealTemplates for isConfiguredStand() and the mismatch-routing list.
 function calcCommission(venue, stand, grossSales) {
-  var sdKey = venue + '||' + stand;
-  var sd = allStandDeals[sdKey];
-  if (!sd) return {commission: 0, dealType: null, cosRelatable: false};
-
-  var dt = sd.deal_type;
-  var tpl = allDealTemplates[venue + '||' + dt] || {};
-  var result = {dealType: dt, cosRelatable: false, commission: 0};
-
-  if (dt === 'rev_split') {
-    var pct = (sd.has_override && sd.override_rev_split_pct != null) ? sd.override_rev_split_pct : (tpl.rev_split_pct || 70);
-    result.commission = grossSales * pct / 100;
-    result.cosRelatable = true;
-  } else if (dt === 'rev_bev') {
-    var foodPct = (sd.has_override && sd.override_bev_food_pct != null) ? sd.override_bev_food_pct : (tpl.bev_food_pct || 91);
-    var bevPct = (sd.has_override && sd.override_bev_bev_pct != null) ? sd.override_bev_bev_pct : (tpl.bev_bev_pct || 9);
-    var foodCut = (sd.has_override && sd.override_bev_food_cut != null) ? sd.override_bev_food_cut : (tpl.bev_food_cut || 70);
-    var bevComm = (sd.has_override && sd.override_bev_bev_comm != null) ? sd.override_bev_bev_comm : (tpl.bev_bev_comm || 10);
-    var foodSales = grossSales * foodPct / 100;
-    var bevSales = grossSales * bevPct / 100;
-    result.commission = (foodSales * foodCut / 100) + (bevSales * bevComm / 100);
-    result.cosRelatable = true;
-  } else if (dt === 'labor') {
-    var commRate = (sd.has_override && sd.override_labor_comm != null) ? sd.override_labor_comm : (tpl.labor_comm || 15);
-    result.commission = grossSales * commRate / 100;
-    result.cosRelatable = false;
-  } else if (dt === 'reimb') {
-    var reimbComm = (sd.has_override && sd.override_reimb_comm != null) ? sd.override_reimb_comm : (tpl.reimb_comm || 5);
-    result.commission = grossSales * reimbComm / 100;
-    result.cosRelatable = false;
-  }
-
-  return result;
+  return pcCommission.calcCommission(venue, stand, grossSales);
 }
 
 // ---- LABOR ESTIMATION ----
