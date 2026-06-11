@@ -216,9 +216,21 @@
   /* Sign-off control (in quarter band) */
   .luc-signoff-pill { font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 10px; white-space: nowrap; }
   .luc-signoff-pill.is-signed { background: #eaf3de; color: #27500A; }
+  .luc-signoff-pill.is-ready { background: #e6f1fb; color: #0C447C; }
   .luc-signoff-pill.is-unsigned { background: #f1f0eb; color: #777; }
   .luc-signoff-meta { font-size: 11px; color: #888; white-space: nowrap; }
   .luc-signoff-changed { font-size: 11px; color: #854F0B; background: #fef6ec; padding: 2px 8px; border-radius: 8px; white-space: nowrap; }
+  .luc-ready-btn {
+    background: #185FA5; color: #fff; border: 0; font-family: inherit; font-size: 12px;
+    font-weight: 500; padding: 5px 12px; border-radius: 6px; cursor: pointer; white-space: nowrap;
+  }
+  .luc-ready-btn:hover { background: #0C447C; }
+  .luc-ready-btn:disabled { background: #b4b2a9; cursor: not-allowed; }
+  .luc-ready-undo {
+    background: transparent; border: 1px solid #e0dfd8; color: #888; font-family: inherit;
+    font-size: 11px; padding: 4px 9px; border-radius: 6px; cursor: pointer; white-space: nowrap;
+  }
+  .luc-ready-undo:hover { background: #f1f0eb; color: #1a1a1a; }
   .luc-signoff-btn {
     background: #1a1a1a; color: #fff; border: 0; font-family: inherit; font-size: 12px;
     font-weight: 500; padding: 5px 12px; border-radius: 6px; cursor: pointer; white-space: nowrap;
@@ -331,6 +343,10 @@
   // Reserved for the §7 sign-off identity gate — wired next session.
   var CARLO_AUTH_ID = '430b8f09-609b-4f38-8fe7-b33a797bda1f';
 
+  // Admin who marks a quarter ready for sign-off (Keith). RLS enforces this
+  // server-side; the constant only governs whether the control is shown.
+  var KEITH_AUTH_ID = 'c5b26231-43a6-496b-9c63-e174905a6f89';
+
   // Statuses that do NOT accrue a royalty (spec §3, §10.1).
   var EXCLUDED_STATUS = { 'voided': true, 'disputed': true };
 
@@ -351,6 +367,7 @@
     eventNames: {},   // event_id -> name, resolved from the events table (NOT stored on ar_invoices)
     statements: {},   // invoice_id -> [luciano_statements rows] (§8 attachments)
     signoffs: {},     // 'year:q:scope' -> latest luciano_royalty_signoffs row (§7)
+    ready: {},        // 'year:q:scope' -> active luciano_quarter_ready row (admin gate)
     filters: { venue: 'all', period: '' }  // period = 'YYYY:all' | 'YYYY:1'..':4'
   };
 
@@ -1128,6 +1145,19 @@
     });
   }
 
+  function fetchReady() {
+    return authFetch(
+      SB_REST + 'luciano_quarter_ready?select=*&deleted_at=is.null&order=marked_at.asc&limit=10000',
+      { headers: pcAuth.headers() }
+    ).then(function (rows) {
+      var map = {};
+      (rows || []).forEach(function (r) {
+        map[signoffKey(r.period_year, r.period_quarter, r.venue_scope)] = r;
+      });
+      return map;
+    });
+  }
+
   function signoffKey(year, q, scope) { return year + ':' + q + ':' + (scope || 'all'); }
 
   /** Identity gate. Server RLS is the real enforcement; this only governs
@@ -1138,6 +1168,19 @@
       if (u) {
         if (u.auth_id && u.auth_id === CARLO_AUTH_ID) return true;
         if (u.email && String(u.email).toLowerCase() === 'carloluciano@camdenco.com') return true;
+      }
+    } catch (e) {}
+    return false;
+  }
+
+  /** Admin gate for "mark ready for sign-off" (Keith). RLS is the real
+      enforcement; this only governs whether the control is shown. */
+  function isKeith() {
+    try {
+      var u = (pcAuth && pcAuth.getUser) ? pcAuth.getUser() : null;
+      if (u) {
+        if (u.auth_id && u.auth_id === KEITH_AUTH_ID) return true;
+        if (u.email && String(u.email).toLowerCase() === 'keith@camdenco.com') return true;
       }
     } catch (e) {}
     return false;
@@ -1173,6 +1216,114 @@
            Math.abs(Number(so.royalty_due) - q.due) > 0.005;
   }
 
+  /** A quarter is CURRENTLY ready only if an active ready row exists AND its
+      frozen figures still match the live rollup. Any drift auto-un-readies
+      it (the gate falls back to "not ready"); the row stays for the record
+      until Keith re-marks, which supersedes via soft-delete + new insert. */
+  function readyState(q) {
+    var row = state.ready[signoffKey(q.year, q.q, state.filters.venue)];
+    if (!row) return { row: null, current: false, stale: false };
+    var stale = figuresChanged(row, q);   // same fingerprint comparison as sign-off
+    return { row: row, current: !stale, stale: stale };
+  }
+
+  /** Mark the current quarter+scope ready (Keith only). Gated on coverage. */
+  function markReady(q) {
+    var scope = state.filters.venue;
+    var cov = quarterCoverage(q);
+    if (!cov.complete) { showToast('Attach every statement first', 2600); return; }
+
+    var existing = state.ready[signoffKey(q.year, q.q, scope)];
+    var body = {
+      period_year: q.year,
+      period_quarter: q.q,
+      venue_scope: scope,
+      sales_total: q.sales,
+      fees_total: q.fees,
+      commissionable: q.base,
+      royalty_due: q.due,
+      covered_invoice_ids: cov.ids,
+      marked_by: currentActor()
+    };
+    var jsonHdrs = Object.assign({}, pcAuth.headers(), {
+      'Content-Type': 'application/json', 'Prefer': 'return=minimal'
+    });
+    var repHdrs = Object.assign({}, pcAuth.headers(), {
+      'Content-Type': 'application/json', 'Prefer': 'return=representation'
+    });
+
+    // If a stale ready row exists, soft-delete it first (re-mark = supersede),
+    // since the unique index allows only one active row per period+scope.
+    var pre = existing
+      ? AR_softDeleteReady(existing.id)
+      : Promise.resolve();
+
+    pre
+      .then(function () {
+        return authFetch(SB_REST + 'luciano_quarter_ready', {
+          method: 'POST', headers: repHdrs, body: JSON.stringify(body)
+        });
+      })
+      .then(function (rows) {
+        var row = (rows && rows[0]) || body;
+        state.ready[signoffKey(q.year, q.q, scope)] = row;
+        rerender();
+        showToast('Marked Q' + q.q + ' ' + q.year + ' ready for sign-off', 2200);
+      })
+      .catch(function (e) {
+        if (e && e.authFailed) { handleAuthFailure(); return; }
+        var msg = (e && e.message) ? e.message : '';
+        if (msg.indexOf('row-level security') !== -1 || msg.indexOf('42501') !== -1) {
+          showToast('Only Keith can mark a quarter ready', 3200);
+        } else if (msg.indexOf('duplicate') !== -1 || msg.indexOf('23505') !== -1) {
+          showToast('Already marked \u2014 refreshing', 2400);
+          fetchReady().then(function (m) { state.ready = m; rerender(); });
+        } else {
+          showToast('Could not mark ready', 3000);
+        }
+        console.error('[Luciano] markReady failed:', e);
+      });
+
+    void jsonHdrs;
+  }
+
+  /** Soft-delete a ready row (un-mark). Returns a promise. */
+  function AR_softDeleteReady(rowId) {
+    var hdrs = Object.assign({}, pcAuth.headers(), {
+      'Content-Type': 'application/json', 'Prefer': 'return=minimal'
+    });
+    return authFetch(
+      SB_REST + 'luciano_quarter_ready?id=eq.' + encodeURIComponent(rowId) + '&deleted_at=is.null',
+      {
+        method: 'PATCH', headers: hdrs,
+        body: JSON.stringify({ deleted_at: new Date().toISOString(), deleted_by: currentActor() })
+      }
+    );
+  }
+
+  /** Un-mark the current quarter+scope (Keith only). */
+  function unmarkReady(q) {
+    var key = signoffKey(q.year, q.q, state.filters.venue);
+    var row = state.ready[key];
+    if (!row) return;
+    AR_softDeleteReady(row.id)
+      .then(function () {
+        delete state.ready[key];
+        rerender();
+        showToast('Un-marked \u2014 back to building', 2000);
+      })
+      .catch(function (e) {
+        if (e && e.authFailed) { handleAuthFailure(); return; }
+        var msg = (e && e.message) ? e.message : '';
+        if (msg.indexOf('row-level security') !== -1 || msg.indexOf('42501') !== -1) {
+          showToast('Only Keith can un-mark', 3000);
+        } else {
+          showToast('Could not un-mark', 3000);
+        }
+        console.error('[Luciano] unmarkReady failed:', e);
+      });
+  }
+
   /** Verbatim attestation text (§7.2 draft — pending counsel, §9). */
   function buildAttestationText(year, q, scope, figs) {
     var meta = quarterMeta(year, q);
@@ -1191,12 +1342,16 @@
       'and that this acknowledgment authorizes remittance of the amount due.';
   }
 
-  /** HTML for the sign-off slot in a quarter band, scoped to current filter. */
+  /** HTML for the sign-off slot in a quarter band, scoped to current filter.
+      Flow: Building → Ready (Keith) → Signed (Carlo). Coverage gates "ready";
+      "ready" gates Carlo's sign-off. */
   function renderSignoffSlotHtml(q) {
     var scope = state.filters.venue;
     var so = state.signoffs[signoffKey(q.year, q.q, scope)];
     var carlo = isCarlo();
+    var keith = isKeith();
 
+    // ---- Signed state takes precedence ----
     if (so) {
       var when = so.agreed_at ? fmtDateLong(String(so.agreed_at).substring(0, 10)) : '';
       var html = '<span class="luc-signoff-pill is-signed">\u2713 Signed</span>' +
@@ -1211,18 +1366,47 @@
       return html;
     }
 
-    if (!carlo) {
-      return '<span class="luc-signoff-pill is-unsigned">Not signed</span>' +
-        '<span class="luc-signoff-meta">awaiting KBC</span>';
+    var rs = readyState(q);
+    var cov = quarterCoverage(q);
+
+    // ---- Ready state (marked by Keith, figures still current) ----
+    if (rs.current) {
+      var rwhen = rs.row.marked_at ? fmtDateLong(String(rs.row.marked_at).substring(0, 10)) : '';
+      var out = '<span class="luc-signoff-pill is-ready">Ready for KBC</span>' +
+        '<span class="luc-signoff-meta">marked ' + esc(rwhen) + '</span>';
+      if (keith) {
+        out += '<button type="button" class="luc-ready-undo" data-action="unmark-ready" ' +
+          'data-year="' + q.year + '" data-quarter="' + q.q + '">un-mark</button>';
+      }
+      if (carlo) {
+        out += '<button type="button" class="luc-signoff-btn" data-action="signoff" ' +
+          'data-year="' + q.year + '" data-quarter="' + q.q + '">Sign off</button>';
+      } else if (!keith) {
+        out = '<span class="luc-signoff-pill is-ready">Ready for KBC</span>' +
+          '<span class="luc-signoff-meta">awaiting KBC sign-off</span>';
+      }
+      return out;
     }
 
-    var cov = quarterCoverage(q);
-    if (cov.complete) {
-      return '<button type="button" class="luc-signoff-btn" data-action="signoff" ' +
-        'data-year="' + q.year + '" data-quarter="' + q.q + '">Sign off</button>';
+    // ---- Building state (not ready, or ready went stale) ----
+    var staleNote = rs.stale
+      ? '<span class="luc-signoff-changed">figures changed since marked \u2014 re-mark needed</span>'
+      : '';
+
+    if (keith) {
+      if (cov.complete) {
+        return staleNote +
+          '<button type="button" class="luc-ready-btn" data-action="mark-ready" ' +
+          'data-year="' + q.year + '" data-quarter="' + q.q + '">Mark ready for sign-off</button>';
+      }
+      return staleNote +
+        '<button type="button" class="luc-ready-btn" disabled>Mark ready for sign-off</button>' +
+        '<span class="luc-signoff-meta">' + cov.covered + ' of ' + cov.total + ' statements attached</span>';
     }
-    return '<button type="button" class="luc-signoff-btn" disabled>Sign off</button>' +
-      '<span class="luc-signoff-meta">' + cov.covered + ' of ' + cov.total + ' statements attached</span>';
+
+    // Non-Keith, non-signed, not ready → plain status.
+    return '<span class="luc-signoff-pill is-unsigned">Not ready</span>' +
+      '<span class="luc-signoff-meta">in progress</span>';
   }
 
   function findVisibleQuarter(year, q) {
@@ -1396,6 +1580,11 @@
           var qn = parseInt(actionEl.getAttribute('data-quarter'), 10);
           var qObj = findVisibleQuarter(year, qn);
           if (qObj) openSignoffModal(qObj, action === 'resign' ? actionEl.getAttribute('data-supersede') : null);
+        } else if (action === 'mark-ready' || action === 'unmark-ready') {
+          var ry = parseInt(actionEl.getAttribute('data-year'), 10);
+          var rq = parseInt(actionEl.getAttribute('data-quarter'), 10);
+          var rObj = findVisibleQuarter(ry, rq);
+          if (rObj) { if (action === 'mark-ready') markReady(rObj); else unmarkReady(rObj); }
         }
         return;
       }
@@ -1431,11 +1620,13 @@
         return Promise.all([
           fetchEventNames(collectEventIds(lines)),
           fetchStatements(collectInvoiceIds(lines)),
-          fetchSignoffs()
+          fetchSignoffs(),
+          fetchReady()
         ]).then(function (r2) {
           state.eventNames = r2[0];
           state.statements = r2[1];
           state.signoffs = r2[2];
+          state.ready = r2[3];
           buildModel(lines);
           renderFilters();
           renderWarning();
