@@ -182,6 +182,15 @@
   .luc-stands-table td.col-stand { text-align: left; font-weight: 500; }
   .luc-stands-table td.col-fees { color: #791F1F; }
   .luc-stands-table td.col-stmt { text-align: left; color: #b4b2a9; }
+  .luc-stmt-link { color: #0C447C; font-size: 12px; text-decoration: none; }
+  .luc-stmt-link:hover { text-decoration: underline; }
+  .luc-stmt-upload, .luc-stmt-add {
+    background: #fff; border: 1px solid #e0dfd8; color: #555;
+    font-family: inherit; font-size: 11px; font-weight: 500;
+    padding: 3px 9px; border-radius: 5px; cursor: pointer;
+  }
+  .luc-stmt-upload:hover, .luc-stmt-add:hover { background: #f1f0eb; color: #1a1a1a; }
+  .luc-stmt-add { margin-top: 4px; }
 
   /* Empty + loading */
   .luc-state {
@@ -203,6 +212,51 @@
     transition: opacity 0.18s ease, transform 0.18s ease;
   }
   .pc-toast.is-shown { opacity: 1; transform: translateY(0); }
+
+  /* Sign-off control (in quarter band) */
+  .luc-signoff-pill { font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 10px; white-space: nowrap; }
+  .luc-signoff-pill.is-signed { background: #eaf3de; color: #27500A; }
+  .luc-signoff-pill.is-unsigned { background: #f1f0eb; color: #777; }
+  .luc-signoff-meta { font-size: 11px; color: #888; white-space: nowrap; }
+  .luc-signoff-changed { font-size: 11px; color: #854F0B; background: #fef6ec; padding: 2px 8px; border-radius: 8px; white-space: nowrap; }
+  .luc-signoff-btn {
+    background: #1a1a1a; color: #fff; border: 0; font-family: inherit; font-size: 12px;
+    font-weight: 500; padding: 5px 12px; border-radius: 6px; cursor: pointer; white-space: nowrap;
+  }
+  .luc-signoff-btn:hover { background: #2c2c2a; }
+  .luc-signoff-btn:disabled { background: #b4b2a9; cursor: not-allowed; }
+  .luc-signoff-btn.is-resign { background: #854F0B; }
+  .luc-signoff-btn.is-resign:hover { background: #633806; }
+
+  /* Sign-off modal */
+  .luc-modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 1500;
+    display: flex; align-items: flex-start; justify-content: center; padding: 60px 16px; overflow-y: auto;
+  }
+  .luc-modal-card {
+    background: #fff; border-radius: 14px; max-width: 560px; width: 100%;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.18); overflow: hidden;
+  }
+  .luc-modal-head { padding: 18px 22px 14px; border-bottom: 1px solid #f0efe8; display: flex; align-items: center; justify-content: space-between; }
+  .luc-modal-title { font-size: 17px; font-weight: 600; }
+  .luc-modal-close { background: transparent; border: 0; font-size: 22px; color: #888; cursor: pointer; line-height: 1; padding: 2px 6px; }
+  .luc-modal-close:hover { color: #1a1a1a; }
+  .luc-modal-body { padding: 18px 22px; }
+  .luc-modal-foot { padding: 14px 22px; border-top: 1px solid #f0efe8; background: #fafaf6; display: flex; justify-content: flex-end; gap: 10px; }
+  .luc-sign-figs { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
+  .luc-sign-figs td { padding: 7px 0; font-size: 14px; border-bottom: 1px solid #f0efe8; font-variant-numeric: tabular-nums; }
+  .luc-sign-figs td:last-child { text-align: right; font-weight: 500; }
+  .luc-sign-figs tr.is-strong td { font-weight: 700; color: #0C447C; border-bottom: 0; padding-top: 10px; }
+  .luc-sign-coverage { font-size: 12px; color: #27500A; background: #eaf3de; border-radius: 6px; padding: 8px 10px; margin-bottom: 14px; }
+  .luc-sign-attest-label { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #888; margin-bottom: 6px; }
+  .luc-sign-attest { font-size: 13px; line-height: 1.6; color: #333; background: #faf9f6; border: 1px solid #e8e8e4; border-radius: 8px; padding: 12px 14px; margin-bottom: 12px; }
+  .luc-sign-legal { font-size: 11px; color: #854F0B; font-style: italic; }
+  .luc-btn { font-family: inherit; font-size: 13px; font-weight: 500; padding: 9px 16px; border-radius: 6px; cursor: pointer; border: 0; }
+  .luc-btn-secondary { background: transparent; border: 1px solid #e0dfd8; color: #555; }
+  .luc-btn-secondary:hover { background: #f1f0eb; color: #1a1a1a; }
+  .luc-btn-primary { background: #27500A; color: #fff; }
+  .luc-btn-primary:hover { background: #173404; }
+  .luc-btn-primary:disabled { background: #b4b2a9; cursor: not-allowed; }
 
   body.pre-auth .page-body, body.pre-auth .page-title-row { display: none; }
 
@@ -280,6 +334,11 @@
   // Statuses that do NOT accrue a royalty (spec §3, §10.1).
   var EXCLUDED_STATUS = { 'voided': true, 'disputed': true };
 
+  // Statement uploads (§8) — private bucket, signed-URL viewing.
+  var STMT_BUCKET = 'luciano-statements';
+  var ACCEPT_MIME = { 'application/pdf': 1, 'image/jpeg': 1, 'image/png': 1 };
+  var ACCEPT_EXT  = { 'pdf': 1, 'jpg': 1, 'jpeg': 1, 'png': 1 };
+
   var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
   // =====================================================================
@@ -289,6 +348,9 @@
     quarters: [],     // [{year, q, events:[...]}] built from AR data, unfiltered
     unlinked: [],     // qualifying invoices with a null event_id (warning)
     venues: [],       // distinct venue_codes present in data
+    eventNames: {},   // event_id -> name, resolved from the events table (NOT stored on ar_invoices)
+    statements: {},   // invoice_id -> [luciano_statements rows] (§8 attachments)
+    signoffs: {},     // 'year:q:scope' -> latest luciano_royalty_signoffs row (§7)
     filters: { venue: 'all', period: '' }  // period = 'YYYY:all' | 'YYYY:1'..':4'
   };
 
@@ -457,6 +519,31 @@
     return authFetch(url, { headers: pcAuth.headers() });
   }
 
+  // ---- Event names live in the events table, joined by event_id. The AR
+  // form saves event_id but not event_name onto ar_invoices, so we resolve
+  // names here in one bounded follow-up query keyed by the distinct ids. ----
+  function collectEventIds(lines) {
+    var seen = {};
+    (lines || []).forEach(function (ln) {
+      var inv = ln.ar_invoices;
+      if (inv && inv.event_id && !EXCLUDED_STATUS[inv.status]) seen[inv.event_id] = true;
+    });
+    return Object.keys(seen);
+  }
+
+  function fetchEventNames(eventIds) {
+    if (!eventIds || !eventIds.length) return Promise.resolve({});
+    var inList = eventIds.map(encodeURIComponent).join(',');
+    return authFetch(
+      SB_REST + 'events?select=id,event_name&id=in.(' + inList + ')&limit=10000',
+      { headers: pcAuth.headers() }
+    ).then(function (rows) {
+      var map = {};
+      (rows || []).forEach(function (r) { if (r && r.id) map[r.id] = r.event_name || ''; });
+      return map;
+    });
+  }
+
   // =====================================================================
   // MODEL BUILD — lines → invoices → events → calendar quarters
   // =====================================================================
@@ -507,7 +594,7 @@
       if (!byEvent[ek]) {
         byEvent[ek] = {
           event_id: ek,
-          event_name: iv.event_name || '(unnamed event)',
+          event_name: state.eventNames[ek] || iv.event_name || '(unnamed event)',
           venue_code: iv.venue_code,
           period_start: iv.period_start,
           invoices: [],
@@ -732,8 +819,8 @@
         '<div class="luc-quarter-band-title"><span class="luc-cal">▦</span>Q' + q.q + ' ' + q.year +
           ' · ' + q.meta.rangeLabel + '</div>' +
         '<div class="luc-quarter-band-meta">' + esc(bandMeta) + '</div>' +
-        // Reserved slot — §7 sign-off control builds in here next session.
-        '<div class="luc-quarter-signoff" data-quarter-key="' + esc(qkey) + '"></div>' +
+        // §7 sign-off control mounts here, scoped to the active venue filter.
+        '<div class="luc-quarter-signoff" data-quarter-key="' + esc(qkey) + '">' + renderSignoffSlotHtml(q) + '</div>' +
       '</div>';
 
     var head =
@@ -789,7 +876,7 @@
         '<td>' + fmtMoney(iv.sales) + '</td>' +
         '<td class="col-fees">' + fmtMoney(iv.fees) + '</td>' +
         '<td>' + fmtMoney(iv.base) + '</td>' +
-        '<td class="col-stmt">—</td>' +   // §8 statement affordance — next session
+        '<td class="col-stmt" data-invoice-id="' + esc(iv.invoice_id) + '">' + renderStmtCellHtml(iv.invoice_id) + '</td>' +
       '</tr>';
     }).join('');
 
@@ -808,6 +895,456 @@
       '</tr>';
 
     return row + detail;
+  }
+
+  // =====================================================================
+  // STATEMENT UPLOADS (§8)
+  //
+  // Per-stand (= per-invoice) commission-statement attachments. Files live
+  // in the private `luciano-statements` bucket; rows in luciano_statements.
+  // PDF/JPG/PNG only. HEIC is rejected SILENTLY — plain message, no banner,
+  // no iPhone tutorial (single expert uploader, per §8).
+  // =====================================================================
+  var pendingUploadInvoiceId = null;
+
+  function collectInvoiceIds(lines) {
+    var seen = {};
+    (lines || []).forEach(function (ln) {
+      var inv = ln.ar_invoices;
+      if (inv && inv.id && !EXCLUDED_STATUS[inv.status]) seen[inv.id] = true;
+    });
+    return Object.keys(seen);
+  }
+
+  function fetchStatements(invoiceIds) {
+    if (!invoiceIds || !invoiceIds.length) return Promise.resolve({});
+    var inList = invoiceIds.map(encodeURIComponent).join(',');
+    return authFetch(
+      SB_REST + 'luciano_statements?select=id,invoice_id,file_path,original_filename,content_type,uploaded_at' +
+      '&invoice_id=in.(' + inList + ')&deleted_at=is.null&order=uploaded_at.asc&limit=10000',
+      { headers: pcAuth.headers() }
+    ).then(function (rows) {
+      var map = {};
+      (rows || []).forEach(function (r) {
+        if (!r || !r.invoice_id) return;
+        if (!map[r.invoice_id]) map[r.invoice_id] = [];
+        map[r.invoice_id].push(r);
+      });
+      return map;
+    });
+  }
+
+  function currentActor() {
+    try {
+      if (typeof pcAuth !== 'undefined' && pcAuth.getUser) {
+        var u = pcAuth.getUser();
+        return (u && (u.display_name || u.email)) || 'unknown';
+      }
+    } catch (e) {}
+    return 'unknown';
+  }
+
+  function truncate(s, n) {
+    s = String(s == null ? '' : s);
+    return s.length > n ? s.slice(0, n - 1) + '\u2026' : s;
+  }
+
+  function sanitizeName(name) {
+    return String(name || 'file').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 120);
+  }
+
+  /** Inner HTML for a stand's statement cell — view link(s) or upload button. */
+  function renderStmtCellHtml(invoiceId) {
+    var files = state.statements[invoiceId] || [];
+    if (files.length) {
+      var links = files.map(function (f) {
+        return '<a href="#" class="luc-stmt-link" data-action="view-stmt" ' +
+          'data-file-path="' + esc(f.file_path) + '">' + esc(truncate(f.original_filename, 26)) + '</a>';
+      }).join('<br>');
+      links += '<br><button type="button" class="luc-stmt-add" data-action="upload-stmt" ' +
+        'data-invoice-id="' + esc(invoiceId) + '">+ add</button>';
+      return links;
+    }
+    return '<button type="button" class="luc-stmt-upload" data-action="upload-stmt" ' +
+      'data-invoice-id="' + esc(invoiceId) + '">upload</button>';
+  }
+
+  /** Re-render the one stand cell for an invoice after an upload. */
+  function refreshStmtCell(invoiceId) {
+    var host = document.getElementById('lucQuarters');
+    if (!host) return;
+    var cells = host.querySelectorAll('td.col-stmt[data-invoice-id]');
+    for (var i = 0; i < cells.length; i++) {
+      if (cells[i].getAttribute('data-invoice-id') === invoiceId) {
+        cells[i].innerHTML = renderStmtCellHtml(invoiceId);
+      }
+    }
+  }
+
+  // ---- File-type validation: PDF/JPG/PNG only, silent HEIC reject. ----
+  function isHeicBytes(b) {
+    if (!b || b.length < 12) return false;
+    if (!(b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70)) return false; // 'ftyp'
+    var brand = String.fromCharCode(b[8], b[9], b[10], b[11]).toLowerCase();
+    var heicBrands = { heic:1, heix:1, hevc:1, heim:1, heis:1, hevm:1, hevs:1, mif1:1, msf1:1, heif:1 };
+    return !!heicBrands[brand];
+  }
+
+  function validateFile(file) {
+    return new Promise(function (resolve) {
+      var name = (file.name || '').toLowerCase();
+      var ext = name.indexOf('.') !== -1 ? name.split('.').pop() : '';
+      if (ext === 'heic' || ext === 'heif') { resolve({ ok: false }); return; }
+
+      var reader = new FileReader();
+      reader.onload = function () {
+        try {
+          if (isHeicBytes(new Uint8Array(reader.result))) { resolve({ ok: false }); return; }
+        } catch (e) {}
+        resolve({ ok: !!(ACCEPT_MIME[file.type] || ACCEPT_EXT[ext]) });
+      };
+      reader.onerror = function () {
+        resolve({ ok: !!(ACCEPT_MIME[file.type] || ACCEPT_EXT[ext]) });
+      };
+      reader.readAsArrayBuffer(file.slice(0, 16));
+    });
+  }
+
+  function ensureFileInput() {
+    var inp = document.getElementById('lucFileInput');
+    if (inp) return inp;
+    inp = document.createElement('input');
+    inp.type = 'file';
+    inp.id = 'lucFileInput';
+    inp.accept = 'application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png';
+    inp.style.display = 'none';
+    inp.addEventListener('change', onFilePicked);
+    document.body.appendChild(inp);
+    return inp;
+  }
+
+  function startUpload(invoiceId) {
+    if (!invoiceId) return;
+    pendingUploadInvoiceId = invoiceId;
+    var inp = ensureFileInput();
+    inp.value = '';
+    inp.click();
+  }
+
+  function onFilePicked(ev) {
+    var file = ev.target.files && ev.target.files[0];
+    if (!file) return;
+    var invoiceId = pendingUploadInvoiceId;
+    validateFile(file).then(function (res) {
+      if (!res.ok) { showToast('PDF, JPG, or PNG only', 2600); return; }
+      doUpload(invoiceId, file);
+    });
+  }
+
+  function doUpload(invoiceId, file) {
+    showToast('Uploading\u2026', 1400);
+    var path = invoiceId + '/' + Date.now() + '-' + sanitizeName(file.name);
+
+    var upHdrs = Object.assign({}, pcAuth.headers());
+    upHdrs['Content-Type'] = file.type || 'application/octet-stream';
+    upHdrs['x-upsert'] = 'false';
+
+    authFetch(SB_URL + '/storage/v1/object/' + STMT_BUCKET + '/' + encodeURI(path),
+      { method: 'POST', headers: upHdrs, body: file })
+    .then(function () {
+      var insHdrs = Object.assign({}, pcAuth.headers(), {
+        'Content-Type': 'application/json', 'Prefer': 'return=representation'
+      });
+      return authFetch(SB_REST + 'luciano_statements', {
+        method: 'POST', headers: insHdrs,
+        body: JSON.stringify({
+          invoice_id: invoiceId,
+          file_path: path,
+          original_filename: file.name,
+          content_type: file.type || null,
+          uploaded_by: currentActor()
+        })
+      });
+    })
+    .then(function (rows) {
+      var row = (rows && rows[0]) || {
+        invoice_id: invoiceId, file_path: path,
+        original_filename: file.name, content_type: file.type || null
+      };
+      if (!state.statements[invoiceId]) state.statements[invoiceId] = [];
+      state.statements[invoiceId].push(row);
+      refreshStmtCell(invoiceId);
+      showToast('Statement attached', 1800);
+    })
+    .catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      console.error('[Luciano] upload failed:', e);
+      showToast('Upload failed', 3000);
+    });
+  }
+
+  /** Open a statement via a short-lived signed URL. `win` is pre-opened in
+      the click gesture so the popup blocker doesn't eat it. */
+  function viewStatement(filePath, win) {
+    if (!filePath) { if (win) win.close(); showToast('No file'); return; }
+    var hdrs = Object.assign({}, pcAuth.headers(), { 'Content-Type': 'application/json' });
+    authFetch(SB_URL + '/storage/v1/object/sign/' + STMT_BUCKET + '/' + encodeURI(filePath),
+      { method: 'POST', headers: hdrs, body: JSON.stringify({ expiresIn: 3600 }) })
+    .then(function (data) {
+      var signed = data && data.signedURL;
+      if (!signed) { if (win) win.close(); showToast('Could not open file'); return; }
+      var url = SB_URL + '/storage/v1' + signed;
+      if (win) win.location = url; else window.open(url, '_blank');
+    })
+    .catch(function (e) {
+      if (win) win.close();
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      console.error('[Luciano] sign failed:', e);
+      showToast('Could not open file', 2600);
+    });
+  }
+
+  // =====================================================================
+  // SIGN-OFF / ATTESTATION (§7)
+  //
+  // Per quarter + venue-scope, KBC (Carlo) reviews figures + attached
+  // statements and signs an IMMUTABLE row in luciano_royalty_signoffs.
+  // The control is interactive ONLY for Carlo (identity gate); everyone
+  // else sees status. Hard gate: cannot sign until every in-scope invoice
+  // in the quarter has a statement attached (§8). Server RLS independently
+  // enforces that only Carlo's auth_id can INSERT.
+  // =====================================================================
+  function fetchSignoffs() {
+    return authFetch(
+      SB_REST + 'luciano_royalty_signoffs?select=*&deleted_at=is.null&order=agreed_at.asc&limit=10000',
+      { headers: pcAuth.headers() }
+    ).then(function (rows) {
+      var map = {};
+      (rows || []).forEach(function (r) {
+        // asc order → last write wins = the latest sign-off for that key.
+        map[signoffKey(r.period_year, r.period_quarter, r.venue_scope)] = r;
+      });
+      return map;
+    });
+  }
+
+  function signoffKey(year, q, scope) { return year + ':' + q + ':' + (scope || 'all'); }
+
+  /** Identity gate. Server RLS is the real enforcement; this only governs
+      whether the interactive control is shown. */
+  function isCarlo() {
+    try {
+      var u = (pcAuth && pcAuth.getUser) ? pcAuth.getUser() : null;
+      if (u) {
+        if (u.auth_id && u.auth_id === CARLO_AUTH_ID) return true;
+        if (u.email && String(u.email).toLowerCase() === 'carloluciano@camdenco.com') return true;
+      }
+    } catch (e) {}
+    return false;
+  }
+
+  /** Coverage for a (venue-filtered) quarter: how many in-scope invoices
+      have at least one statement attached. */
+  function quarterCoverage(q) {
+    var ids = [], covered = 0;
+    q.events.forEach(function (ev) {
+      ev.invoices.forEach(function (iv) {
+        ids.push(iv.invoice_id);
+        if ((state.statements[iv.invoice_id] || []).length) covered++;
+      });
+    });
+    return { total: ids.length, covered: covered, ids: ids, complete: ids.length > 0 && covered === ids.length };
+  }
+
+  function buildRateNote(events) {
+    var has10 = false, has6 = false;
+    events.forEach(function (ev) { if (ev.rate === 0.10) has10 = true; else has6 = true; });
+    var parts = [];
+    if (has10) parts.push('10% Mann/FMP');
+    if (has6) parts.push('6% elsewhere');
+    return parts.join(' \u00b7 ');
+  }
+
+  /** True if the live rollup differs from the frozen sign-off figures. */
+  function figuresChanged(so, q) {
+    return Math.abs(Number(so.sales_total) - q.sales) > 0.005 ||
+           Math.abs(Number(so.fees_total) - q.fees) > 0.005 ||
+           Math.abs(Number(so.commissionable) - q.base) > 0.005 ||
+           Math.abs(Number(so.royalty_due) - q.due) > 0.005;
+  }
+
+  /** Verbatim attestation text (§7.2 draft — pending counsel, §9). */
+  function buildAttestationText(year, q, scope, figs) {
+    var meta = quarterMeta(year, q);
+    var period = 'Q' + q + ' ' + year + ' (' + meta.rangeLabel + ')';
+    if (scope && scope !== 'all') period += ' \u2014 ' + scope + ' only';
+    return 'I, Carlo Luciano, on behalf of KBC Concessions LLC d/b/a Luciano\u2019s Pizza CO, ' +
+      'acknowledge that I have received the client commission statements underlying the ' +
+      'Luciano\u2019s-branded sales for ' + period + ', and that the figures shown on this page ' +
+      'accurately reflect those statements. I agree that the royalty for this period is properly ' +
+      'calculated on Gross Sales defined as the net payout actually received by Popcorn Chez LLC ' +
+      'from the client for Luciano\u2019s-branded sales, less Luciano\u2019s credit card fees, ' +
+      'consistent with the parties\u2019 shared understanding and course of dealing under the ' +
+      'License Agreement. I confirm the figures shown \u2014 net payout received ' + fmtMoney(figs.sales) +
+      ', Luciano\u2019s credit card fees ' + fmtMoney(figs.fees) + ', commissionable base ' +
+      fmtMoney(figs.base) + ', royalty due ' + fmtMoney(figs.due) + ' \u2014 are true and accurate, ' +
+      'and that this acknowledgment authorizes remittance of the amount due.';
+  }
+
+  /** HTML for the sign-off slot in a quarter band, scoped to current filter. */
+  function renderSignoffSlotHtml(q) {
+    var scope = state.filters.venue;
+    var so = state.signoffs[signoffKey(q.year, q.q, scope)];
+    var carlo = isCarlo();
+
+    if (so) {
+      var when = so.agreed_at ? fmtDateLong(String(so.agreed_at).substring(0, 10)) : '';
+      var html = '<span class="luc-signoff-pill is-signed">\u2713 Signed</span>' +
+        '<span class="luc-signoff-meta">' + esc(so.agreed_by_name || 'KBC') + ' \u00b7 ' + esc(when) + '</span>';
+      if (figuresChanged(so, q)) {
+        html += '<span class="luc-signoff-changed">figures changed since sign-off</span>';
+        if (carlo) {
+          html += '<button type="button" class="luc-signoff-btn is-resign" data-action="resign" ' +
+            'data-year="' + q.year + '" data-quarter="' + q.q + '" data-supersede="' + esc(so.id) + '">Re-sign</button>';
+        }
+      }
+      return html;
+    }
+
+    if (!carlo) {
+      return '<span class="luc-signoff-pill is-unsigned">Not signed</span>' +
+        '<span class="luc-signoff-meta">awaiting KBC</span>';
+    }
+
+    var cov = quarterCoverage(q);
+    if (cov.complete) {
+      return '<button type="button" class="luc-signoff-btn" data-action="signoff" ' +
+        'data-year="' + q.year + '" data-quarter="' + q.q + '">Sign off</button>';
+    }
+    return '<button type="button" class="luc-signoff-btn" disabled>Sign off</button>' +
+      '<span class="luc-signoff-meta">' + cov.covered + ' of ' + cov.total + ' statements attached</span>';
+  }
+
+  function findVisibleQuarter(year, q) {
+    var qs = visibleQuarters();
+    for (var i = 0; i < qs.length; i++) {
+      if (qs[i].year === year && qs[i].q === q) return qs[i];
+    }
+    return null;
+  }
+
+  function figRow(label, val, strong) {
+    return '<tr' + (strong ? ' class="is-strong"' : '') + '><td>' + esc(label) + '</td><td>' + esc(val) + '</td></tr>';
+  }
+
+  function closeSignoffModal() {
+    var m = document.getElementById('lucSignoffModal');
+    if (m && m.parentNode) m.parentNode.removeChild(m);
+  }
+
+  function openSignoffModal(q, supersedeId) {
+    var scope = state.filters.venue;
+    var cov = quarterCoverage(q);
+    if (!cov.complete) { showToast('Attach every statement first', 2600); return; }
+
+    var figs = { sales: q.sales, fees: q.fees, base: q.base, due: q.due };
+    var scopeLabel = (scope && scope !== 'all') ? (' \u00b7 ' + esc(scope) + ' only') : '';
+    var text = buildAttestationText(q.year, q.q, scope, figs);
+
+    var backdrop = document.createElement('div');
+    backdrop.className = 'luc-modal-backdrop';
+    backdrop.id = 'lucSignoffModal';
+    backdrop.innerHTML =
+      '<div class="luc-modal-card" role="dialog" aria-labelledby="lucSignTitle">' +
+        '<div class="luc-modal-head">' +
+          '<div class="luc-modal-title" id="lucSignTitle">Sign off Q' + q.q + ' ' + q.year + scopeLabel + '</div>' +
+          '<button type="button" class="luc-modal-close" data-action="close-signoff" aria-label="Close">\u00d7</button>' +
+        '</div>' +
+        '<div class="luc-modal-body">' +
+          '<table class="luc-sign-figs"><tbody>' +
+            figRow('Luciano sales', fmtMoney(figs.sales)) +
+            figRow('Less CC fees', fmtMoney(figs.fees)) +
+            figRow('Commissionable', fmtMoney(figs.base)) +
+            figRow('Royalty due', fmtMoney(figs.due), true) +
+          '</tbody></table>' +
+          '<div class="luc-sign-coverage">\u2713 All ' + cov.total + ' ' +
+            (cov.total === 1 ? 'statement' : 'statements') + ' attached for this quarter.</div>' +
+          '<div class="luc-sign-attest-label">Attestation</div>' +
+          '<div class="luc-sign-attest">' + esc(text) + '</div>' +
+          '<div class="luc-sign-legal">Provisional wording \u2014 pending review by counsel (\u00a79). ' +
+            'Signing records your acknowledgment; it is not a substitute for legal advice.</div>' +
+        '</div>' +
+        '<div class="luc-modal-foot">' +
+          '<button type="button" class="luc-btn luc-btn-secondary" data-action="close-signoff">Cancel</button>' +
+          '<button type="button" class="luc-btn luc-btn-primary" id="lucSignConfirm">I, Carlo Luciano, confirm &amp; sign</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(backdrop);
+
+    backdrop.addEventListener('click', function (ev) {
+      if (ev.target === backdrop) { closeSignoffModal(); return; }
+      if (ev.target.closest && ev.target.closest('[data-action="close-signoff"]')) closeSignoffModal();
+    });
+    var confirmBtn = document.getElementById('lucSignConfirm');
+    if (confirmBtn) confirmBtn.addEventListener('click', function () {
+      submitSignoff(q, supersedeId, confirmBtn);
+    });
+  }
+
+  function submitSignoff(q, supersedeId, confirmBtn) {
+    var scope = state.filters.venue;
+    var cov = quarterCoverage(q);
+    if (!cov.complete) { showToast('Attach every statement first', 2600); return; }
+    if (confirmBtn) { confirmBtn.disabled = true; confirmBtn.textContent = 'Signing\u2026'; }
+
+    var figs = { sales: q.sales, fees: q.fees, base: q.base, due: q.due };
+    var body = {
+      period_year: q.year,
+      period_quarter: q.q,
+      venue_scope: scope,
+      agreed_by_auth_id: CARLO_AUTH_ID,
+      agreed_by_name: 'Carlo Luciano',
+      attestation_text: buildAttestationText(q.year, q.q, scope, figs),
+      sales_total: q.sales,
+      fees_total: q.fees,
+      commissionable: q.base,
+      royalty_due: q.due,
+      rate_note: buildRateNote(q.events),
+      covered_invoice_ids: cov.ids,
+      created_by: currentActor()
+    };
+    if (supersedeId) body.supersedes_id = supersedeId;
+
+    var hdrs = Object.assign({}, pcAuth.headers(), {
+      'Content-Type': 'application/json', 'Prefer': 'return=representation'
+    });
+
+    authFetch(SB_REST + 'luciano_royalty_signoffs', {
+      method: 'POST', headers: hdrs, body: JSON.stringify(body)
+    })
+    .then(function (rows) {
+      var row = (rows && rows[0]) || body;
+      state.signoffs[signoffKey(q.year, q.q, scope)] = row;
+      closeSignoffModal();
+      rerender();
+      showToast('Signed off Q' + q.q + ' ' + q.year, 2200);
+    })
+    .catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      var msg = (e && e.message) ? e.message : '';
+      if (msg.indexOf('duplicate') !== -1 || msg.indexOf('unique') !== -1 || msg.indexOf('23505') !== -1) {
+        showToast('Already signed \u2014 refreshing', 2600);
+        fetchSignoffs().then(function (m) { state.signoffs = m; closeSignoffModal(); rerender(); });
+        return;
+      }
+      if (msg.indexOf('row-level security') !== -1 || msg.indexOf('42501') !== -1) {
+        showToast('Only Carlo Luciano can sign off', 3200);
+      } else {
+        showToast('Sign-off failed', 3000);
+      }
+      console.error('[Luciano] signoff failed:', e);
+      if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.innerHTML = 'I, Carlo Luciano, confirm &amp; sign'; }
+    });
   }
 
   // =====================================================================
@@ -842,6 +1379,28 @@
     host.addEventListener('click', function (ev) {
       var t = ev.target;
       if (!t || !t.closest) return;
+
+      // Statement affordances (upload / view) fire first and stop here.
+      var actionEl = t.closest('[data-action]');
+      if (actionEl) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        var action = actionEl.getAttribute('data-action');
+        if (action === 'upload-stmt') {
+          startUpload(actionEl.getAttribute('data-invoice-id'));
+        } else if (action === 'view-stmt') {
+          var win = window.open('', '_blank');  // opened inside the user gesture
+          viewStatement(actionEl.getAttribute('data-file-path'), win);
+        } else if (action === 'signoff' || action === 'resign') {
+          var year = parseInt(actionEl.getAttribute('data-year'), 10);
+          var qn = parseInt(actionEl.getAttribute('data-quarter'), 10);
+          var qObj = findVisibleQuarter(year, qn);
+          if (qObj) openSignoffModal(qObj, action === 'resign' ? actionEl.getAttribute('data-supersede') : null);
+        }
+        return;
+      }
+
+      // Otherwise: expand / collapse the event's stand breakdown.
       var row = t.closest('.luc-event-row');
       if (!row) return;
       var key = row.getAttribute('data-event-key');
@@ -868,10 +1427,20 @@
 
     Promise.all([fetchLucianoLines(), catalogReady])
       .then(function (results) {
-        buildModel(results[0] || []);
-        renderFilters();
-        renderWarning();
-        rerender();
+        var lines = results[0] || [];
+        return Promise.all([
+          fetchEventNames(collectEventIds(lines)),
+          fetchStatements(collectInvoiceIds(lines)),
+          fetchSignoffs()
+        ]).then(function (r2) {
+          state.eventNames = r2[0];
+          state.statements = r2[1];
+          state.signoffs = r2[2];
+          buildModel(lines);
+          renderFilters();
+          renderWarning();
+          rerender();
+        });
       })
       .catch(function (e) {
         if (e && e.authFailed) { handleAuthFailure(); return; }
