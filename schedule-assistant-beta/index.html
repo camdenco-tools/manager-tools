@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Schedule Assistant</title>
+<title>Event Workspace</title>
 <script src="/pc-auth.js"></script>
 <script src="/pc-nav.js"></script>
 <script src="/pc-activity.js"></script>
@@ -2212,8 +2212,8 @@ body {
        header bar and ribbon. Page-specific title heading stays here so it
        sits in the page content, not in the global chrome. -->
   <div class="page-title-bar">
-    <h1>Schedule Assistant</h1>
-    <span class="sub">Drag people into stand &amp; role positions &middot; midnight day-of lock</span>
+    <h1>Event Workspace</h1>
+    <span class="sub">Plan and staff your events in one place &middot; midnight day-of lock</span>
   </div>
 
   <div class="filter-strip">
@@ -2504,8 +2504,35 @@ const HAWKING_STAND = 'Hawking';
 const CLIENT_STAND = 'Client Staffing Needs';
 const NONEVENT_STAND = 'Non-Event Labor';
 
-// Stands hidden from the Position Board grid entirely
-const HIDDEN_STANDS = [CLIENT_STAND, NONEVENT_STAND];
+// Stands hidden from the Position Board grid AND coverage counts entirely.
+// Non-Event Labor is the adhoc day-labor flow — never an event position.
+// Client Staffing Needs was formerly here, but as of this change client
+// positions are staffed with our own people (drag into a normal stand card)
+// and DO count toward filled/needed, so it's no longer hidden.
+const HIDDEN_STANDS = [NONEVENT_STAND];
+
+// Stands hidden from the PLAN tab. Narrower than HIDDEN_STANDS: the Plan tab
+// DOES surface Client Staffing Needs (client-contract asks recorded for billing,
+// e.g. "venue wants 10 bartenders"); it just never appears on the Staff position
+// board because we don't place our own people into client-provided slots.
+const PLAN_HIDDEN_STANDS = [NONEVENT_STAND];
+
+// Canonical client role spine, resolved from the role catalog's 'client'
+// category. The client stand is injected synthetically into every event's Plan
+// tab so a manager can record a client ask even on venues whose catalog client
+// stand is inactive / differently-named. Hardcoded fallback if pc-roles hasn't
+// loaded or the category comes back empty.
+function clientRoleSpine() {
+  try {
+    if (typeof pcRoles !== 'undefined' && pcRoles.getRolesForCategory) {
+      const roles = (pcRoles.getRolesForCategory('client') || [])
+        .map(a => a.role_name).filter(Boolean);
+      if (roles.length) return roles;
+    }
+  } catch (e) { /* fall through */ }
+  return ['Supervisor', 'Lead', 'Bar Lead', 'Bartender', 'Cashier',
+          'Cook', 'Pizza Maker', 'Stand Worker', 'Warehouse', 'Cleaner'];
+}
 
 // NEW HIRE badge config.
 // A person pill in the Available panel shows "NEW" if BOTH:
@@ -4040,8 +4067,10 @@ function renderEventRow(ev) {
       '" data-event-tab="' + ev.id + '" data-tab-name="staff">Staff' +
       ' <span class="tab-badge">' + placedCount + ' / ' + plannedCount + '</span>' +
       '</button>';
-    html += '<button class="tab-btn review-tab' + (activeTab === 'review' ? ' active' : '') +
-      '" data-event-tab="' + ev.id + '" data-tab-name="review">Review</button>';
+    // Review tab hidden until built (was a "Coming in Session 4" stub).
+    // To restore: uncomment the two lines below.
+    // html += '<button class="tab-btn review-tab' + (activeTab === 'review' ? ' active' : '') +
+    //   '" data-event-tab="' + ev.id + '" data-tab-name="review">Review</button>';
     html += '<span class="tab-spacer"></span>';
     html += '<button class="audit-link-tab" data-audit-event="' + ev.id + '" title="Open audit log">' +
       '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
@@ -4089,7 +4118,7 @@ function buildPlanEdits(ev) {
   const eventReqs = {};
   const eventStands = new Set();
   state.staffingRequests.filter(r => r.event_id === ev.id).forEach(r => {
-    if (HIDDEN_STANDS.indexOf(r.stand) !== -1) return;
+    if (PLAN_HIDDEN_STANDS.indexOf(r.stand) !== -1) return;
     if (!eventReqs[r.stand]) eventReqs[r.stand] = {};
     eventReqs[r.stand][r.role] = r;
     if ((r.headcount || 0) > 0) eventStands.add(r.stand);
@@ -4104,8 +4133,13 @@ function buildPlanEdits(ev) {
     if (HIDDEN_STANDS.indexOf(s.stand_name) === -1) allStandNames.add(s.stand_name);
   });
   Object.keys(eventReqs).forEach(s => {
-    if (HIDDEN_STANDS.indexOf(s) === -1) allStandNames.add(s);
+    if (PLAN_HIDDEN_STANDS.indexOf(s) === -1) allStandNames.add(s);
   });
+  // Always surface the client-contract stand. The per-venue catalog client
+  // stand is inactive / named 'Client Staffing' rather than our CLIENT_STAND,
+  // so we inject by name here. Writes stay on CLIENT_STAND so AR / coverage /
+  // billing keep matching exactly what Event Planning wrote.
+  allStandNames.add(CLIENT_STAND);
 
   const stands = {};
   allStandNames.forEach(standName => {
@@ -4113,12 +4147,16 @@ function buildPlanEdits(ev) {
     const reqRoles = eventReqs[standName] || {};
     const isActive = eventStands.has(standName);
 
-    // The category allowlist is the role SPINE for this stand.
+    // The category allowlist is the role SPINE for this stand. For the client
+    // stand the spine comes from the global 'client' category, not the per-venue
+    // catalog row (inactive / differently-named on most venues).
     const standRow = pcCatalog.getStand(ev.venue, standName);
     const categoryId = standRow ? standRow.category_id : null;
-    const allowRoles = (pcRoles.getRolesForCategory(categoryId) || [])
-      .map(a => a.role_name)
-      .filter(Boolean);
+    const allowRoles = (standName === CLIENT_STAND)
+      ? clientRoleSpine()
+      : (pcRoles.getRolesForCategory(categoryId) || [])
+          .map(a => a.role_name)
+          .filter(Boolean);
 
     const roles = {};
 
@@ -4272,7 +4310,7 @@ function validatePlanEdits(edits) {
     const totalStaff = Object.values(s.roles).reduce((acc, r) => acc + (r.count || 0), 0);
     if (totalStaff === 0) emptyActiveStands.push(standName);
     // Forecast required on staffed revenue stands (Support Staff / Hawking exempt).
-    const isRevenue = standName !== SUPPORT_STAND && standName !== HAWKING_STAND;
+    const isRevenue = standName !== SUPPORT_STAND && standName !== HAWKING_STAND && standName !== CLIENT_STAND;
     if (isRevenue && totalStaff > 0 && !(s.forecast > 0)) noForecastStands.push(standName);
   });
   if (!anyActive) return { ok: false, msg: 'No active stands. Add staff to at least one stand before submitting.' };
@@ -4867,7 +4905,7 @@ function renderPlanTab(ev) {
   let mostRecentSubmittedAt = null;
   let mostRecentManager = null;
   state.staffingRequests.filter(r => r.event_id === ev.id).forEach(r => {
-    if (HIDDEN_STANDS.indexOf(r.stand) !== -1) return;
+    if (PLAN_HIDDEN_STANDS.indexOf(r.stand) !== -1) return;
     if (r.submitted_at && (!mostRecentSubmittedAt || r.submitted_at > mostRecentSubmittedAt)) {
       mostRecentSubmittedAt = r.submitted_at;
       mostRecentManager = r.manager_name || null;
@@ -4893,6 +4931,7 @@ function renderPlanTab(ev) {
   const orderRank = (s) => {
     if (s === SUPPORT_STAND) return 99;
     if (s === HAWKING_STAND) return 90;
+    if (s === CLIENT_STAND) return 85;
     return 1;
   };
   const sortedStands = Array.from(allStandNames).sort((a, b) => {
@@ -4948,6 +4987,7 @@ function renderPlanTab(ev) {
     const standEdit = edits.stands[stand];
     if (!standEdit) return;
     const isActive = standEdit.isActive;
+    const isClient = (stand === CLIENT_STAND);
 
     // Calculate stand staff total from current edit state
     let standStaffTotal = 0;
@@ -4963,11 +5003,18 @@ function renderPlanTab(ev) {
     html += '<div class="plan-stand-card' + (isActive ? '' : ' defaulted') +
       '" data-plan-stand="' + escapeAttr(stand) + '">';
     html += '<div class="plan-stand-head">';
-    html += '<span class="plan-stand-name">' + escapeHtml(stand) + '</span>';
+    html += '<span class="plan-stand-name">' + escapeHtml(stand) +
+      (isClient ? ' <span style="font-size:10px;font-weight:700;letter-spacing:0.04em;' +
+        'text-transform:uppercase;background:#f0e8fa;color:#7d3fbf;padding:2px 7px;' +
+        'border-radius:5px;vertical-align:middle;">Client Contract</span>' : '') +
+      '</span>';
     html += '<span class="plan-stand-spacer"></span>';
 
     // Forecast input (editable). Dirty class fires when the current
-    // edit-state value differs from the at-load value.
+    // edit-state value differs from the at-load value. The client-contract
+    // stand has no forecast — the manager records the client's headcount ask,
+    // not a sales projection (matches the old Event Planning page).
+    if (!isClient) {
     html += '<span class="plan-forecast-wrap">';
     html += '<span class="plan-forecast-label">Forecast</span>';
     const forecastValue = (standEdit.forecast != null)
@@ -4983,6 +5030,7 @@ function renderPlanTab(ev) {
       (isActive ? '' : ' disabled') +
       ' placeholder="$0">';
     html += '</span>';
+    } // end if (!isClient): client card shows no forecast input
 
     // Staff count pill
     if (isActive) {
