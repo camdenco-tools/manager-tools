@@ -72,6 +72,7 @@
   .luc-warn[hidden] { display: none; }
   .luc-warn strong { font-weight: 600; }
   .luc-warn a { color: #633806; font-weight: 500; }
+  .luc-warn-block + .luc-warn-block { margin-top: 8px; padding-top: 8px; border-top: 1px solid #f3d9a8; }
 
   /* ---- Metric cards ---- */
   .luc-cards {
@@ -368,6 +369,7 @@
     statements: {},   // invoice_id -> [luciano_statements rows] (§8 attachments)
     signoffs: {},     // 'year:q:scope' -> latest luciano_royalty_signoffs row (§7)
     ready: {},        // 'year:q:scope' -> active luciano_quarter_ready row (admin gate)
+    feeIssues: [],    // in-scope invoices with sales but no Luciano CC fee (mislabel guard)
     filters: { venue: 'all', period: '' }  // period = 'YYYY:all' | 'YYYY:1'..':4'
   };
 
@@ -596,6 +598,7 @@
     // 2) Split out unlinked invoices (null event_id) for the warning; the
     //    rest fold into events. Round per-invoice figures to cents.
     var unlinked = [];
+    var feeIssues = [];
     var byEvent = {};
 
     Object.keys(byInvoice).forEach(function (id) {
@@ -604,6 +607,9 @@
       iv.fees = round2(iv.fees);
       iv.base = round2(iv.sales + iv.fees);
       if (iv.venue_code) venueSet[iv.venue_code] = true;
+      // Sales present but no Luciano CC fee → almost certainly a mislabeled
+      // fee line (generic "Credit Card Fees" used instead of Luciano's).
+      if (iv.sales > 0.005 && Math.abs(iv.fees) < 0.005) feeIssues.push(iv);
 
       if (!iv.event_id) { unlinked.push(iv); return; }
 
@@ -661,6 +667,7 @@
 
     state.quarters = quarters;
     state.unlinked = unlinked;
+    state.feeIssues = feeIssues;
     state.venues = venues;
   }
 
@@ -749,22 +756,38 @@
     }
   }
 
-  function renderWarning() {
-    var el = document.getElementById('lucWarn');
-    if (!el) return;
-    if (!state.unlinked.length) { el.hidden = true; el.innerHTML = ''; return; }
-
-    var links = state.unlinked.map(function (iv) {
+  function invoiceLinks(list) {
+    return list.map(function (iv) {
       var label = iv.internal_invoice_number || iv.client_reference || iv.invoice_id;
       return '<a href="/accounts-receivable/?invoice=' + encodeURIComponent(iv.invoice_id) +
         '" target="_blank" rel="noopener">' + esc(label) + '</a>';
     }).join(', ');
+  }
 
+  function renderWarning() {
+    var el = document.getElementById('lucWarn');
+    if (!el) return;
+    var blocks = [];
+
+    if (state.unlinked.length) {
+      blocks.push('<div class="luc-warn-block"><strong>\u26a0 ' + state.unlinked.length + ' Luciano\u2019s ' +
+        (state.unlinked.length === 1 ? 'invoice has' : 'invoices have') +
+        ' no event linked</strong> and are excluded from the rollup until fixed. ' +
+        'Open in A/R to link an event: ' + invoiceLinks(state.unlinked) + '.</div>');
+    }
+
+    if (state.feeIssues.length) {
+      blocks.push('<div class="luc-warn-block"><strong>\u26a0 ' + state.feeIssues.length + ' Luciano\u2019s ' +
+        (state.feeIssues.length === 1 ? 'invoice has' : 'invoices have') +
+        ' sales but no Luciano\u2019s credit-card fee</strong> \u2014 the CC line was likely logged under the ' +
+        'generic \u201cCredit Card Fees\u201d item instead of \u201cLuciano\u2019s Credit Card Fees,\u201d so the fee ' +
+        'isn\u2019t reducing the royalty base. A quarter can\u2019t be marked ready until these are fixed in A/R: ' +
+        invoiceLinks(state.feeIssues) + '.</div>');
+    }
+
+    if (!blocks.length) { el.hidden = true; el.innerHTML = ''; return; }
     el.hidden = false;
-    el.innerHTML = '<strong>⚠ ' + state.unlinked.length + ' Luciano\u2019s ' +
-      (state.unlinked.length === 1 ? 'invoice has' : 'invoices have') +
-      ' no event linked</strong> and are excluded from the rollup until fixed. ' +
-      'Open in A/R to link an event: ' + links + '.';
+    el.innerHTML = blocks.join('');
   }
 
   function renderCards() {
@@ -1199,6 +1222,19 @@
     return { total: ids.length, covered: covered, ids: ids, complete: ids.length > 0 && covered === ids.length };
   }
 
+  /** In-scope invoices in a quarter that have sales but no Luciano CC fee —
+      almost always a mislabeled fee line (generic "Credit Card Fees" used
+      instead of "Luciano's Credit Card Fees"). Blocks mark-ready. */
+  function quarterFeeIssues(q) {
+    var bad = [];
+    q.events.forEach(function (ev) {
+      ev.invoices.forEach(function (iv) {
+        if (iv.sales > 0.005 && Math.abs(iv.fees) < 0.005) bad.push(iv);
+      });
+    });
+    return bad;
+  }
+
   function buildRateNote(events) {
     var has10 = false, has6 = false;
     events.forEach(function (ev) { if (ev.rate === 0.10) has10 = true; else has6 = true; });
@@ -1232,6 +1268,8 @@
     var scope = state.filters.venue;
     var cov = quarterCoverage(q);
     if (!cov.complete) { showToast('Attach every statement first', 2600); return; }
+    var feeBad = quarterFeeIssues(q);
+    if (feeBad.length) { showToast(feeBad.length + ' stand(s) missing Luciano CC fee \u2014 fix in A/R first', 3400); return; }
 
     var existing = state.ready[signoffKey(q.year, q.q, scope)];
     var body = {
@@ -1394,14 +1432,21 @@
       : '';
 
     if (keith) {
-      if (cov.complete) {
+      var feeBad = quarterFeeIssues(q);
+      if (!cov.complete) {
         return staleNote +
-          '<button type="button" class="luc-ready-btn" data-action="mark-ready" ' +
-          'data-year="' + q.year + '" data-quarter="' + q.q + '">Mark ready for sign-off</button>';
+          '<button type="button" class="luc-ready-btn" disabled>Mark ready for sign-off</button>' +
+          '<span class="luc-signoff-meta">' + cov.covered + ' of ' + cov.total + ' statements attached</span>';
+      }
+      if (feeBad.length) {
+        return staleNote +
+          '<button type="button" class="luc-ready-btn" disabled>Mark ready for sign-off</button>' +
+          '<span class="luc-signoff-changed">' + feeBad.length + ' stand' + (feeBad.length === 1 ? '' : 's') +
+          ' missing Luciano CC fee \u2014 fix in A/R</span>';
       }
       return staleNote +
-        '<button type="button" class="luc-ready-btn" disabled>Mark ready for sign-off</button>' +
-        '<span class="luc-signoff-meta">' + cov.covered + ' of ' + cov.total + ' statements attached</span>';
+        '<button type="button" class="luc-ready-btn" data-action="mark-ready" ' +
+        'data-year="' + q.year + '" data-quarter="' + q.q + '">Mark ready for sign-off</button>';
     }
 
     // Non-Keith, non-signed, not ready → plain status.
