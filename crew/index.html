@@ -1119,6 +1119,30 @@ body {
 }
 .evr-role-pill .evr-rate { color: var(--muted); font-weight: 500; }
 .evr-role-pill.on .evr-rate { color: var(--green-600); }
+/* Per-person pay override (Phase 0) — rate field beside an on pill in
+   edit mode, plus the display-mode "set" marker. */
+.evr-role-unit { display: inline-flex; align-items: center; gap: 5px; }
+.evr-rate-wrap {
+  display: inline-flex; align-items: center; gap: 2px;
+  font-size: 12px; color: var(--green-800); font-weight: 600;
+}
+.evr-rate-input {
+  width: 60px; padding: 4px 6px;
+  border: 1px solid #7dc98a; border-radius: 6px;
+  font-family: inherit; font-size: 12px;
+  color: var(--green-800); background: var(--surface);
+}
+.evr-rate-input:focus { outline: none; border-color: var(--green-600); }
+.evr-rate-input.commission {
+  width: auto; border: none; background: transparent;
+  color: var(--muted); font-style: italic; padding: 0;
+}
+.rv-rate-override { color: var(--text); font-weight: 600; }
+.rv-set-dot {
+  display: inline-block; width: 5px; height: 5px;
+  border-radius: 50%; background: #1D9E75;
+  margin-right: 3px; vertical-align: middle;
+}
 @media (max-width: 520px) {
   .evr-editor { flex-direction: column; }
   .evr-venue-col {
@@ -2319,6 +2343,19 @@ body {
 
   function patchCandidate(candId, body) {
     var url = SUPABASE_URL + '/rest/v1/candidates?id=eq.' + encodeURIComponent(candId);
+    var headers = pcAuth.headers();
+    headers['Content-Type'] = 'application/json';
+    headers['Prefer'] = 'return=minimal';
+    return authFetch(url, {
+      method: 'PATCH', headers: headers, body: JSON.stringify(body)
+    });
+  }
+
+  // Targeted PATCH of a single employee_venue_roles row — used only for
+  // pay_rate_override. Eligibility writes stay in pcRoles.setEmployeeVenueRoles;
+  // this is the sibling write that lives alongside it (Phase 0 decision 1b).
+  function patchEmployeeVenueRole(id, body) {
+    var url = SUPABASE_URL + '/rest/v1/employee_venue_roles?id=eq.' + encodeURIComponent(id);
     var headers = pcAuth.headers();
     headers['Content-Type'] = 'application/json';
     headers['Prefer'] = 'return=minimal';
@@ -4085,11 +4122,18 @@ body {
       var rolesHtml = roles.length > 0
         ? roles.map(function(r) {
             var rate = r.effective_rate;
-            var rateLabel = (rate == null)
-              ? ''
-              : (rate === 0
-                  ? ' <span style="color:var(--muted);">comm.</span>'
-                  : ' <span style="color:var(--muted);">$' + Number(rate).toFixed(2) + '</span>');
+            var isOverride = r.pay_rate_override != null;
+            var rateLabel;
+            if (rate == null) {
+              rateLabel = '';
+            } else if (rate === 0) {
+              rateLabel = ' <span style="color:var(--muted);">comm.</span>';
+            } else if (isOverride) {
+              rateLabel = ' <span class="rv-rate-override" title="Custom rate — overrides the venue default">' +
+                '<span class="rv-set-dot"></span>$' + Number(rate).toFixed(2) + '</span>';
+            } else {
+              rateLabel = ' <span style="color:var(--muted);">$' + Number(rate).toFixed(2) + '</span>';
+            }
             return '<span class="rv-role">' + escapeHtml(r.role_name) + rateLabel + '</span>';
           }).join('')
         : '<span class="rv-empty-roles">no roles</span>';
@@ -4154,16 +4198,34 @@ body {
           var on = !!draft.pairs[key];
           var disabled = isMinor && ALCOHOL_ROLES.indexOf(vr.role_name) !== -1;
           var rate = vr.pay_rate;
+          var isCommission = rate === 0;
           var rateLabel = (rate == null) ? ''
-            : (rate === 0
+            : (isCommission
                 ? ' <span class="evr-rate">comm.</span>'
                 : ' <span class="evr-rate">$' + Number(rate).toFixed(2) + '</span>');
-          return '<button type="button" class="evr-role-pill' + (on ? ' on' : '') + (disabled ? ' disabled-role' : '') + '"' +
+          var pillBtn = '<button type="button" class="evr-role-pill' + (on ? ' on' : '') + (disabled ? ' disabled-role' : '') + '"' +
             (disabled ? ' disabled' : ' data-evr-role="' + escapeHtml(vr.role_name) + '"') + '>' +
             '<span class="evr-role-check">' + (on ? '&#10003;' : '+') + '</span>' +
             escapeHtml(vr.role_name) + rateLabel +
             (disabled ? ' <span class="evr-rate">(minor)</span>' : '') +
           '</button>';
+
+          // Per-person rate — only when the role is on and not minor-blocked.
+          // Blank input = inherit the venue default (shown as placeholder).
+          var rateField = '';
+          if (on && !disabled) {
+            if (isCommission) {
+              rateField = '<span class="evr-rate-input commission" title="Commission role — no hourly rate">commission</span>';
+            } else {
+              var ov = (draft.overrides && draft.overrides[key] != null) ? draft.overrides[key] : '';
+              var ph = (rate == null) ? 'rate' : Number(rate).toFixed(2);
+              rateField = '<span class="evr-rate-wrap">$<input type="number" inputmode="decimal" step="0.25" min="0" ' +
+                'class="evr-rate-input" data-evr-rate="' + escapeHtml(key) + '" ' +
+                'value="' + escapeHtml(ov) + '" placeholder="' + escapeHtml(ph) + '" ' +
+                'title="Blank inherits the venue default ($' + (rate == null ? '\u2014' : Number(rate).toFixed(2)) + ')" /></span>';
+            }
+          }
+          return '<span class="evr-role-unit">' + pillBtn + rateField + '</span>';
         }).join('');
         rightHtml = '<div class="evr-rolepane-head">Roles at ' + escapeHtml(VENUE_LABELS[vcode] || vcode) + '</div>' +
           '<div class="evr-role-pills">' + pillsHtml + '</div>';
@@ -4763,7 +4825,7 @@ body {
   // with a small tag to distinguish baseline rows from real edits.
   function renderHistoryRow(row) {
     var isSystem = row.changed_by === 'System import';
-    var fieldLabel = HISTORY_FIELD_LABELS[row.field_name] || row.field_name;
+    var fieldLabel = formatHistoryFieldLabel(row.field_name);
     var oldDisplay = formatHistoryValue(row.field_name, row.old_value);
     var newDisplay = formatHistoryValue(row.field_name, row.new_value);
     var lineHtml;
@@ -4785,6 +4847,19 @@ body {
     '</div>';
   }
 
+  // Builds a readable label for a logged field. Pay overrides use a
+  // dynamic 'pay::<venue>::<role>' field_name so they're unambiguous when
+  // someone holds the same role at multiple venues.
+  function formatHistoryFieldLabel(fieldName) {
+    if (fieldName && fieldName.indexOf('pay::') === 0) {
+      var bits = fieldName.split('::');
+      var vcode = bits[1] || '';
+      var role = bits[2] || '';
+      return 'Pay \u2014 ' + (VENUE_LABELS[vcode] || vcode) + ' ' + role;
+    }
+    return HISTORY_FIELD_LABELS[fieldName] || fieldName;
+  }
+
   // Field-name display labels. Add entries here as new fields get logged.
   var HISTORY_FIELD_LABELS = {
     home_venue: 'Home venue',
@@ -4793,6 +4868,11 @@ body {
   };
 
   function formatHistoryValue(fieldName, value) {
+    if (fieldName && fieldName.indexOf('pay::') === 0) {
+      if (value == null || value === '') return 'venue default';
+      var n = Number(value);
+      return isNaN(n) ? value : '$' + n.toFixed(2);
+    }
     if (value == null || value === '') return '(unset)';
     if (fieldName === 'home_venue') {
       if (value === 'NA') return "Doesn't apply";
@@ -5163,6 +5243,17 @@ body {
         renderCardModal();
       });
     }
+    // Pay-override inputs: update the draft silently on input (no re-render,
+    // so the field keeps focus while typing). Parsed/validated at save time.
+    var evrRateInputs = root.querySelectorAll('[data-evr-rate]');
+    for (var ri2 = 0; ri2 < evrRateInputs.length; ri2++) {
+      evrRateInputs[ri2].addEventListener('input', function(ev) {
+        if (!state.modalEditDraft) return;
+        if (!state.modalEditDraft.overrides) state.modalEditDraft.overrides = {};
+        var k = ev.currentTarget.getAttribute('data-evr-rate');
+        state.modalEditDraft.overrides[k] = ev.currentTarget.value;
+      });
+    }
     // Notes save
     var notesBtn = root.querySelector('[data-notes-save]');
     if (notesBtn) {
@@ -5257,16 +5348,20 @@ body {
       // 'venueCode||roleName'. Open pane defaults to the first venue the
       // person already works, else the first venue in the list.
       var pairs = {};
+      var overrides = {};
       var rows = state.evrByEmpId[emp.id] || [];
       var firstVenue = null;
       rows.forEach(function(r) {
         if (!r.is_active || !r.venue_code || !r.role_name) return;
-        pairs[r.venue_code + '||' + r.role_name] = true;
+        var key = r.venue_code + '||' + r.role_name;
+        pairs[key] = true;
+        if (r.pay_rate_override != null) overrides[key] = String(r.pay_rate_override);
         if (!firstVenue) firstVenue = r.venue_code;
       });
       state.modalEditDraft = {
         selectedVenue: firstVenue || (VENUE_ORDER.length ? VENUE_ORDER[0] : null),
-        pairs: pairs
+        pairs: pairs,
+        overrides: overrides
       };
     }
     state.modalSection = section;
@@ -5457,7 +5552,8 @@ body {
   //
   // Auto-creates the candidate row for legacy employees (for the mirror write).
   function saveRolesSection(emp, cand, draft, errEl) {
-    draft = draft || { pairs: {} };
+    draft = draft || { pairs: {}, overrides: {} };
+    if (!draft.overrides) draft.overrides = {};
 
     // Desired (venue, role) pairs from the picker + derived flat mirrors.
     var desiredPairs = [];
@@ -5474,15 +5570,89 @@ body {
     var venuesMirror = Object.keys(venueSet);
     var rolesMirror = Object.keys(roleSet);
 
+    // Validate + parse per-person pay overrides up front. Blank = inherit
+    // (null); a number = an override. Commission roles (venue default 0)
+    // never carry an override. High rates pass with a soft warning; only
+    // non-numeric / negative aborts the save.
+    var parsedOverrides = {}; // key -> number | null
+    var highWarn = false;
+    var invalidLabel = null;
+    desiredPairs.forEach(function(p) {
+      if (invalidLabel) return;
+      var key = p.venueCode + '||' + p.roleName;
+      var def = null;
+      try { def = pcRoles.getPayRate(p.venueCode, p.roleName); } catch (e) { def = null; }
+      if (def === 0) return; // commission — no override
+      var raw = (draft.overrides[key] != null) ? String(draft.overrides[key]).trim() : '';
+      if (raw === '') { parsedOverrides[key] = null; return; }
+      var num = Number(raw);
+      if (isNaN(num) || num < 0) {
+        invalidLabel = (VENUE_LABELS[p.venueCode] || p.venueCode) + ' ' + p.roleName;
+        return;
+      }
+      if (num > 100) highWarn = true;
+      parsedOverrides[key] = Math.round(num * 100) / 100;
+    });
+    if (invalidLabel) {
+      if (errEl) errEl.textContent = 'Invalid pay rate for ' + invalidLabel +
+        ' — enter a number 0 or greater, or leave it blank to inherit the venue default.';
+      return;
+    }
+
     var actor = (pcAuth.getUser && pcAuth.getUser()) || null;
     var actorName = actor ? (actor.display_name || actor.email || 'Unknown') : 'Unknown';
 
     var saveBtn = document.querySelector('[data-section-save="roles"]');
-    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving\u2026'; }
 
-    // 1) Per-venue eligibility — the source of truth.
+    function ovEqual(a, b) {
+      if (a == null && b == null) return true;
+      if (a == null || b == null) return false;
+      return Math.abs(a - b) < 0.005;
+    }
+
+    // 1) Per-venue eligibility — the source of truth (never touches pay).
     pcRoles.setEmployeeVenueRoles(emp.id, desiredPairs, actorName)
-      // 2) Mirror the flat arrays onto candidates (transition support).
+      // 2) Refetch so every desired pair has a row id + current override.
+      .then(function(eligResult) {
+        return pcRoles.getEmployeeVenueRoles(emp.id).then(function(rows) {
+          rows = rows || [];
+          var rowByKey = {};
+          rows.forEach(function(r) {
+            if (r.venue_code && r.role_name) rowByKey[r.venue_code + '||' + r.role_name] = r;
+          });
+
+          // 3) Diff overrides, PATCH only changed rows, log each change.
+          var ops = [];
+          var payChanges = 0;
+          Object.keys(parsedOverrides).forEach(function(key) {
+            var row = rowByKey[key];
+            if (!row || !row.id) return;
+            var current = (row.pay_rate_override == null) ? null : Number(row.pay_rate_override);
+            var desired = parsedOverrides[key];
+            if (ovEqual(current, desired)) return;
+            payChanges++;
+            var bits = key.split('||');
+            var fieldName = 'pay::' + bits[0] + '::' + bits[1];
+            ops.push(
+              patchEmployeeVenueRole(row.id, { pay_rate_override: desired }).then(function() {
+                logCardChange(emp.id, fieldName, current, desired);
+              })
+            );
+            // Mutate the fetched row so the cache we set below is correct.
+            row.pay_rate_override = desired;
+            row.effective_rate = (desired != null) ? desired : row.default_rate;
+          });
+
+          return Promise.all(ops).then(function() {
+            state.evrByEmpId[emp.id] = rows;
+            return { elig: eligResult, payChanges: payChanges };
+          });
+        });
+      })
+      // 4) Mirror the flat arrays onto candidates (transition support).
+      //    Eligibility only; starting_pay_rate intentionally not written —
+      //    per-person pay now lives in employee_venue_roles.pay_rate_override.
       .then(function(result) {
         return ensureCandidateRow(emp).then(function(activeCand) {
           return patchCandidate(activeCand.id, {
@@ -5496,21 +5666,20 @@ body {
           });
         });
       })
-      // 3) Refresh the cache from the DB so display mode reflects the truth.
-      .then(function(result) {
-        return pcRoles.getEmployeeVenueRoles(emp.id).then(function(rows) {
-          state.evrByEmpId[emp.id] = rows || [];
-          return result;
-        });
-      })
+      // 5) Done — combined eligibility + pay summary.
       .then(function(result) {
         state.modalSection = null;
         state.modalEditDraft = null;
         var bits = [];
-        if (result && result.added) bits.push(result.added + ' added');
-        if (result && result.reactivated) bits.push(result.reactivated + ' restored');
-        if (result && result.retired) bits.push(result.retired + ' removed');
-        showToast(bits.length ? ('Roles saved — ' + bits.join(', ')) : 'No role changes', 'success');
+        var er = result.elig;
+        if (er && er.added) bits.push(er.added + ' added');
+        if (er && er.reactivated) bits.push(er.reactivated + ' restored');
+        if (er && er.retired) bits.push(er.retired + ' removed');
+        if (result.payChanges) bits.push(result.payChanges + ' pay change' + (result.payChanges === 1 ? '' : 's'));
+        showToast(bits.length ? ('Roles saved \u2014 ' + bits.join(', ')) : 'No changes', 'success');
+        if (highWarn) {
+          setTimeout(function() { showToast('Heads up: a rate above $100/hr was saved', null); }, 2400);
+        }
         renderCardModal();
       })
       .catch(function(err) {
