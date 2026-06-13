@@ -739,10 +739,11 @@ var VENUE_OPTIONS = ['ACCC','Boardwalk Hall','Mann Music Center','FMP','Cure Ins
 
 // Reason labels — keep in sync with Purchases page modal
 var RETURN_REASON_LABELS = {
-  'not_food':  'Not food',
-  'duplicate': 'Duplicate',
-  'unknown':   "Don't recognize",
-  'other':     'Other'
+  'not_food':       'Not food',
+  'duplicate':      'Duplicate',
+  'unknown':        "Don't recognize",
+  'other':          'Other',
+  'manager_upload': 'Manager receipt'
 };
 
 var KNOWN_VENDORS = [];
@@ -1604,6 +1605,7 @@ function renderReturned() {
     html += '<span class="' + reasonClass + '">' + escapeHtml(reasonLabel) + '</span>';
     html += '<span class="returned-by-label">returned by ' + escapeHtml(c.returned_by || '?') + '</span>';
     if (c.return_note) html += '<span class="returned-note">&ldquo;' + escapeHtml(c.return_note) + '&rdquo;</span>';
+    if (c.photo_url) html += '<a href="' + escapeHtml(c.photo_url) + '" target="_blank" style="color:#0C447C;font-weight:600;text-decoration:underline;">view receipt</a>';
     html += '</div>';
 
     // Action row: category select + per-row buttons
@@ -1661,7 +1663,7 @@ function toggleReturnedCheck(id, checked) {
 // ── Load returned charges from DB ──
 async function loadReturned() {
   try {
-    var res = await fetch(SUPA_URL + '/rest/v1/bank_charges?status=eq.returned&select=id,charge_date,vendor_name,amount,returned_by,returned_at,return_reason,return_note,category_id,raw_description,batch_note&order=charge_date.asc', { headers: hdrs() });
+    var res = await fetch(SUPA_URL + '/rest/v1/bank_charges?status=eq.returned&select=id,charge_date,vendor_name,amount,returned_by,returned_at,return_reason,return_note,category_id,raw_description,batch_note,photo_url,status&order=charge_date.asc', { headers: hdrs() });
     var rows = await res.json();
     if (!Array.isArray(rows)) { returnedCharges = []; renderReview(); return; }
     returnedCharges = rows;
@@ -2523,10 +2525,11 @@ async function confirmDiscard() {
     });
     if (!res.ok) throw new Error();
 
+    var savedSource = pendingDiscardSource;
     closeDiscardModal();
 
     // Refresh whichever list it came from + trash
-    if (pendingDiscardSource === 'returned') {
+    if (savedSource === 'returned') {
       await loadReturned();
     } else {
       await loadPendingCharges();
