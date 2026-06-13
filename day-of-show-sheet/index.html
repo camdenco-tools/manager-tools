@@ -301,6 +301,7 @@ body.dos-previewing #dosPrintSheet {
   <button class="dos-btn dos-btn-save" id="dosSaveBtn">Save</button>
   <button class="dos-btn dos-btn-print" id="dosPreviewBtn" disabled title="Save first to preview">Preview</button>
   <button class="dos-btn dos-btn-print" id="dosPrintBtn" disabled title="Save first to print">Print</button>
+  <button class="dos-btn dos-btn-print" id="dosSavePdfBtn" disabled title="Save first to download a PDF">Save PDF</button>
 </div>
 
 <div class="dos-toast" id="dosToast"></div>
@@ -309,6 +310,7 @@ body.dos-previewing #dosPrintSheet {
 <div id="dosPrintSheet" aria-hidden="true">
   <div class="dos-preview-bar">
     <button class="dos-pv-print" id="dosPvPrintBtn" type="button">Print</button>
+    <button class="dos-pv-print" id="dosPvPdfBtn" type="button">Save PDF</button>
     <button class="dos-pv-close" id="dosPvCloseBtn" type="button">Close</button>
   </div>
   <div class="dos-sheet" id="dosSheetBody"></div>
@@ -521,7 +523,9 @@ body.dos-previewing #dosPrintSheet {
     $('dosSaveBtn').onclick = onSave;
     $('dosPrintBtn').onclick = function () { renderSheetNow(); window.print(); };
     $('dosPreviewBtn').onclick = openPreview;
+    $('dosSavePdfBtn').onclick = savePdf;
     $('dosPvPrintBtn').onclick = function () { window.print(); };
+    $('dosPvPdfBtn').onclick = savePdf;
     $('dosPvCloseBtn').onclick = closePreview;
   }
 
@@ -532,6 +536,155 @@ body.dos-previewing #dosPrintSheet {
   }
   function closePreview() { document.body.classList.remove('dos-previewing'); }
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closePreview(); });
+
+  // =====================================================================
+  // SAVE AS PDF — lazy-loads html2pdf on first use, renders the same sheet
+  // the Print path uses, inlines the run-of-show image so the cross-origin
+  // capture doesn't taint, and triggers a real .pdf download. Managers
+  // without a printer can attach the file to a 7Shifts message.
+  // No window.open() / document.write() here, so the poison-string rule doesn't apply.
+  // =====================================================================
+  var HTML2PDF_SRC = 'https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.2/dist/html2pdf.bundle.min.js';
+  var _pdfLibPromise = null;
+  function loadPdfLib() {
+    if (window.html2pdf) return Promise.resolve(window.html2pdf);
+    if (_pdfLibPromise) return _pdfLibPromise;
+    _pdfLibPromise = new Promise(function (resolve, reject) {
+      var s = document.createElement('script');
+      s.src = HTML2PDF_SRC;
+      s.onload = function () {
+        if (window.html2pdf) resolve(window.html2pdf);
+        else reject(new Error('PDF library loaded but unavailable.'));
+      };
+      s.onerror = function () { _pdfLibPromise = null; reject(new Error('could not load the PDF library (offline or blocked).')); };
+      document.head.appendChild(s);
+    });
+    return _pdfLibPromise;
+  }
+
+  function blobToDataUrl(blob) {
+    return new Promise(function (resolve, reject) {
+      var fr = new FileReader();
+      fr.onload = function () { resolve(fr.result); };
+      fr.onerror = function () { reject(new Error('image read failed')); };
+      fr.readAsDataURL(blob);
+    });
+  }
+
+  // Swap any http(s) <img> in the sheet for a data URL so html2canvas can
+  // capture it. If a fetch fails (no CORS), leave the tag and move on —
+  // the rest of the sheet still renders.
+  function inlineSheetImages(root) {
+    var imgs = root.querySelectorAll('img');
+    var jobs = [];
+    for (var i = 0; i < imgs.length; i++) {
+      (function (img) {
+        var src = img.getAttribute('src') || '';
+        if (src.indexOf('data:') === 0 || src.indexOf('http') !== 0) return;
+        jobs.push(
+          fetch(src, { mode: 'cors' })
+            .then(function (r) { if (!r.ok) throw new Error('img ' + r.status); return r.blob(); })
+            .then(blobToDataUrl)
+            .then(function (durl) { img.setAttribute('src', durl); })
+            .catch(function () { /* leave as-is */ })
+        );
+      })(imgs[i]);
+    }
+    return Promise.all(jobs);
+  }
+
+  function pdfFilename() {
+    function slug(s) { return String(s || '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, ''); }
+    var date = (ST.event && String(ST.event.event_date).slice(0, 10)) || '';
+    var ev = (ST.event && ST.event.event_name) || 'sheet';
+    return 'DayOfShow_' + slug(ST.venueCode) + '_' + (date || slug(ev)) + '.pdf';
+  }
+
+  function setPdfBusy(on) {
+    var a = $('dosSavePdfBtn'), b = $('dosPvPdfBtn');
+    if (a) { a.disabled = on || !ST.saved; a.textContent = on ? 'Building\u2026' : 'Save PDF'; }
+    if (b) { b.disabled = on; b.textContent = on ? 'Building\u2026' : 'Save PDF'; }
+  }
+
+  function savePdf() {
+    if (!ST.saved) return;
+    setPdfBusy(true); clearSaveMsg(); toast('Building PDF\u2026');
+
+    loadPdfLib().then(function (html2pdf) {
+      renderSheetNow();
+      var wrap = $('dosPrintSheet');
+      var sheetEl = wrap.querySelector('.dos-sheet');
+      var previewing = document.body.classList.contains('dos-previewing');
+      var savedStyle = wrap.getAttribute('style') || '';
+
+      // Lay the sheet out at a real (non-negative) position so html2canvas gets
+      // valid geometry — a large negative offset captures blank. Hide it from the
+      // manager by parking it BEHIND the page (z-index:-1) for the fraction of a
+      // second the capture takes. Width matches the printable area (7.5in) so
+      // there's no scaling drift.
+      if (!previewing) {
+        wrap.style.display = 'block';
+        wrap.style.position = 'fixed';
+        wrap.style.left = '0';
+        wrap.style.top = '0';
+        wrap.style.width = '7.5in';
+        wrap.style.background = '#fff';
+        wrap.style.padding = '0';
+        wrap.style.zIndex = '-1';
+      }
+
+      // html2pdf supplies the page margin, so neutralize the sheet's own 0.5in
+      // padding during capture (Print/Preview still want it — restored after).
+      var sheetPadSaved = sheetEl.style.padding;
+      sheetEl.style.padding = '0';
+
+      // Auto-fit to one page. Printable height at 0.4in top/bottom margins on a
+      // letter page is ~10.2in. If the rendered sheet runs taller than one page
+      // but is within reach, scale it down (top-left origin) so the capture is
+      // pre-shrunk to fit. Floor at 0.78 — past that it genuinely needs 2 pages
+      // and cramming further would hurt legibility on a phone.
+      var PRINTABLE_IN = 10.2, DPI = 96;
+      var sheetTransformSaved = sheetEl.style.transform;
+      var sheetTOSaved = sheetEl.style.transformOrigin;
+      var sheetMBSaved = sheetEl.style.marginBottom;
+      var natH = sheetEl.scrollHeight;
+      var pageH = PRINTABLE_IN * DPI;
+      if (natH > pageH) {
+        var fit = pageH / natH;
+        if (fit >= 0.78) {
+          sheetEl.style.transformOrigin = 'top left';
+          sheetEl.style.transform = 'scale(' + fit + ')';
+          sheetEl.style.marginBottom = (-(natH * (1 - fit))) + 'px';
+        }
+      }
+
+      function restore() {
+        if (!previewing) wrap.setAttribute('style', savedStyle);
+        sheetEl.style.padding = sheetPadSaved;
+        sheetEl.style.transform = sheetTransformSaved;
+        sheetEl.style.transformOrigin = sheetTOSaved;
+        sheetEl.style.marginBottom = sheetMBSaved;
+      }
+
+      return inlineSheetImages(sheetEl).then(function () {
+        var opt = {
+          margin: [0.4, 0.5, 0.4, 0.5],
+          filename: pdfFilename(),
+          image: { type: 'jpeg', quality: 0.95 },
+          html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false, scrollX: 0, scrollY: 0 },
+          jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' },
+          pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+        };
+        return html2pdf().set(opt).from(sheetEl).save()
+          .then(function () { restore(); }, function (err) { restore(); throw err; });
+      });
+    })
+    .then(function () { setPdfBusy(false); toast('PDF saved \u2014 check your downloads'); })
+    .catch(function (e) {
+      setPdfBusy(false);
+      setSaveErr('Couldn\u2019t build the PDF: ' + e.message + ' You can still use Print.');
+    });
+  }
 
   function setMode(mode) {
     ST.mode = mode;
@@ -1292,10 +1445,14 @@ body.dos-previewing #dosPrintSheet {
       $('dosPreviewBtn').style.display = '';
       $('dosPreviewBtn').disabled = !ST.saved;
       $('dosPreviewBtn').title = ST.saved ? 'Preview the printed sheet' : 'Save first to preview';
+      $('dosSavePdfBtn').style.display = '';
+      $('dosSavePdfBtn').disabled = !ST.saved;
+      $('dosSavePdfBtn').title = ST.saved ? 'Download this sheet as a PDF' : 'Save first to download a PDF';
     } else {
       $('dosSaveBtn').textContent = 'Save defaults';
       $('dosPrintBtn').style.display = 'none';
       $('dosPreviewBtn').style.display = 'none';
+      $('dosSavePdfBtn').style.display = 'none';
     }
   }
 
