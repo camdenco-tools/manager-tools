@@ -2213,7 +2213,7 @@ body {
        sits in the page content, not in the global chrome. -->
   <div class="page-title-bar">
     <h1>Event Workspace</h1>
-    <span class="sub">Plan and staff your events in one place &middot; midnight day-of lock</span>
+    <span class="sub">Plan and staff your events in one place &middot; locks at event start</span>
   </div>
 
   <div class="filter-strip">
@@ -2534,6 +2534,23 @@ function clientRoleSpine() {
           'Cook', 'Pizza Maker', 'Stand Worker', 'Warehouse', 'Cleaner'];
 }
 
+// Canonical support-staff role spine, same idea as clientRoleSpine(). The
+// Support Staff stand has no active per-venue catalog row, so we inject it
+// synthetically into every event's Plan tab and resolve its roles here.
+// Tries a 'support' role category first; hardcoded fallback if pc-roles
+// hasn't loaded or the category is empty. Edit the fallback list below to
+// change which roles a defaulted Support Staff card offers.
+function supportRoleSpine() {
+  try {
+    if (typeof pcRoles !== 'undefined' && pcRoles.getRolesForCategory) {
+      const roles = (pcRoles.getRolesForCategory('support') || [])
+        .map(a => a.role_name).filter(Boolean);
+      if (roles.length) return roles;
+    }
+  } catch (e) { /* fall through */ }
+  return ['Supervisor', 'Venue Manager', 'Cleaner', 'Warehouse'];
+}
+
 // NEW HIRE badge config.
 // A person pill in the Available panel shows "NEW" if BOTH:
 //   (a) the employee is pipeline-hired — i.e. has a candidates row that
@@ -2768,9 +2785,17 @@ function fmtDateTime(iso) {
   return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
-// Lock = midnight of event_date (i.e. start of event_date in local time)
-function isLocked(eventDateIso) {
-  const lockTime = new Date(eventDateIso + 'T00:00:00');
+// Lock = the event's start time on its date. "Start" = gates_open, falling
+// back to show_time, then to midnight day-of when neither is set (legacy
+// behavior, so an event with no times still locks rather than never locking).
+// Changed Jun 15, 2026 from a fixed midnight day-of lock so managers keep
+// edit access through the day right up until the event actually begins.
+function isLocked(ev) {
+  if (!ev) return false;
+  const startClock = ev.gates_open || ev.show_time || null;
+  const lockTime = startClock
+    ? new Date(ev.event_date + 'T' + startClock)
+    : new Date(ev.event_date + 'T00:00:00');
   return new Date() >= lockTime;
 }
 
@@ -3932,7 +3957,7 @@ function renderEventRow(ev) {
   let fillCls = 'red';
   if (pct >= 100) fillCls = 'green';
   else if (pct >= 50) fillCls = 'amber';
-  const locked = isLocked(ev.event_date) && !state.unlockedEvents.has(ev.id);
+  const locked = isLocked(ev) && !state.unlockedEvents.has(ev.id);
 
   // Display Report time (gates - 1 hour, or explicit report_time) instead of
   // gates time. This is the time staff are actually told to arrive.
@@ -4141,6 +4166,14 @@ function buildPlanEdits(ev) {
   // so we inject by name here. Writes stay on CLIENT_STAND so AR / coverage /
   // billing keep matching exactly what Event Planning wrote.
   allStandNames.add(CLIENT_STAND);
+  // Always surface the Support Staff stand too. Like the client stand, there's
+  // no active per-venue catalog Support Staff stand, so before this it only
+  // appeared when an event already had support staffing_requests rows — which
+  // meant a brand-new event couldn't add support staff at all (the pre-merge
+  // planning page could). Injecting by name gives every event a Support Staff
+  // card the manager can Open and staff; the Staff tab already renders it via
+  // renderSupportSection. Added Jun 15, 2026.
+  allStandNames.add(SUPPORT_STAND);
 
   const stands = {};
   allStandNames.forEach(standName => {
@@ -4155,9 +4188,11 @@ function buildPlanEdits(ev) {
     const categoryId = standRow ? standRow.category_id : null;
     const allowRoles = (standName === CLIENT_STAND)
       ? clientRoleSpine()
-      : (pcRoles.getRolesForCategory(categoryId) || [])
-          .map(a => a.role_name)
-          .filter(Boolean);
+      : (standName === SUPPORT_STAND)
+        ? supportRoleSpine()
+        : (pcRoles.getRolesForCategory(categoryId) || [])
+            .map(a => a.role_name)
+            .filter(Boolean);
 
     const roles = {};
 
@@ -4510,9 +4545,13 @@ function onAddRoleClick(eventId, stand, anchorBtn) {
     const c = pcRoles.legacyToCanonical(r);
     if (c) haveCanon.add(c);
   });
-  let candidates = (pcRoles.getRolesForCategory(categoryId) || [])
-    .map(a => a.role_name)
-    .filter(r => r && !haveCanon.has(r));
+  // Source candidate roles from the same spine buildPlanEdits uses, so the
+  // client and support stands (which have no active catalog category) offer
+  // their proper role lists instead of an empty picker. Added Jun 15, 2026.
+  const spine = (stand === CLIENT_STAND) ? clientRoleSpine()
+              : (stand === SUPPORT_STAND) ? supportRoleSpine()
+              : (pcRoles.getRolesForCategory(categoryId) || []).map(a => a.role_name);
+  let candidates = spine.filter(r => r && !haveCanon.has(r));
   candidates.sort((a, b) => roleSortKey(a) - roleSortKey(b));
 
   // Build the picker
@@ -5142,7 +5181,7 @@ function renderExpanded(ev, locked) {
     const isScheduler = pcAuth.isAdmin();
     html += '<div class="locked-overlay">';
     html += '<span class="lock-icon">🔒</span>';
-    html += '<span><strong>This event is locked.</strong> Position changes after midnight day-of require a scheduler. Empty slots can still be filled.</span>';
+    html += '<span><strong>This event is locked.</strong> Position changes after the event starts require a scheduler. Empty slots can still be filled.</span>';
     html += '<button class="unlock-link' + (isScheduler ? '' : ' disabled') + '" data-unlock-event="' + ev.id + '">' + (isScheduler ? 'Unlock' : 'Unlock (admin only)') + '</button>';
     html += '</div>';
   }
@@ -5193,7 +5232,9 @@ function renderSummaryBar(ev) {
   html += '<span class="sb-label">Summary</span>';
   html += '<span class="summary-chip ' + fillCls + '"><span class="summary-chip-label">Filled</span><span class="num">' + totalFilled + '</span><span class="denom">/ ' + totalNeed + '</span></span>';
   html += '<span class="summary-chip neutral"><span class="summary-chip-label">Stands ready</span><span class="num">' + standsReady + '</span><span class="denom">/ ' + standGroups.length + '</span></span>';
-  html += '<span class="summary-chip neutral"><span class="summary-chip-label">Locks</span><span class="num">12:01 AM</span><span class="denom">' + fmtDayHeader(ev.event_date).split(',')[0] + '</span></span>';
+  const _lockClock = ev.gates_open || ev.show_time;
+  const _lockLabel = _lockClock ? fmtTime(_lockClock) : '12:00 AM';
+  html += '<span class="summary-chip neutral"><span class="summary-chip-label">Locks</span><span class="num">' + _lockLabel + '</span><span class="denom">' + fmtDayHeader(ev.event_date).split(',')[0] + '</span></span>';
   // Created chip — accessible but not prominent. Shows "Created May 12 ·
   // 3 weeks ago" so the manager can answer "when did this event even get
   // created" without leaving the expanded event view. Hidden when
