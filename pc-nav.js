@@ -55,7 +55,8 @@
     ],
     dashboards: [
       { label: 'Staffing dashboard',           href: '/dashboard/',          slug: 'dashboard' },
-      { label: 'Weather Impacts',               href: '/weather-impacts/',    slug: 'weather-impacts' }
+      { label: 'Weather Impacts',               href: '/weather-impacts/',    slug: 'weather-impacts' },
+      { label: 'Popfax — Event history',        href: '/popfax/',             slug: 'popfax' }
     ],
     admin: [
       { label: 'Event master list',              href: '/events-admin/',           slug: 'events-admin' },
