@@ -1,0 +1,1074 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Popfax — Event History | Camden Co. Manager Tools</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800;9..40,900&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #f0f0ec;
+  --card: #ffffff;
+  --primary: #1a1a1a;
+  --label: #666;
+  --border: #e8e8e4;
+  --border-strong: #d8d8d4;
+
+  --green: #1D9E75;
+  --green-light: #e8f7f2;
+  --green-mid: #d0ecdf;
+  --green-dark: #0F6E56;
+
+  --red: #c0392b;
+  --red-light: #fdecea;
+  --red-border: #f0c8c4;
+
+  --amber: #d97706;
+  --amber-light: #fffbeb;
+  --amber-border: #fcd34d;
+  --amber-dark: #92400e;
+
+  --blue: #378ADD;
+  --blue-light: #E6F1FB;
+  --blue-mid: #cfe1f4;
+  --blue-dark: #0C447C;
+
+  --purple: #7c3aed;
+  --purple-light: #f3edff;
+  --purple-mid: #e0d4fb;
+  --purple-dark: #5b21b6;
+
+  --slate: #475569;
+  --slate-light: #f1f5f9;
+
+  /* Popfax wordmark blue — a deeper, "official report" blue, distinct
+     from the toolkit's action blue so the banner reads as branding. */
+  --fax-blue: #1c4e8a;
+  --fax-blue-dark: #143a68;
+
+  --font: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 2px 8px rgba(0,0,0,0.06);
+  --shadow-lg: 0 4px 16px rgba(0,0,0,0.08);
+}
+
+body {
+  background: var(--bg);
+  font-family: var(--font);
+  color: var(--primary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.shell { max-width: 1100px; margin: 0 auto; padding: 16px; }
+
+/* ============================================================
+ * POPFAX WORDMARK — the page's signature element. Carfax-style
+ * blue banner with a bold blocky wordmark, a tagline, and a
+ * fox-free "report" framing. The slash + tilted block on the F
+ * nods to the Carfax mark without copying it.
+ * ============================================================ */
+.popfax-header {
+  background: linear-gradient(180deg, var(--fax-blue) 0%, var(--fax-blue-dark) 100%);
+  border-radius: 12px;
+  padding: 18px 22px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  box-shadow: var(--shadow-md);
+}
+.popfax-mark {
+  display: inline-flex;
+  align-items: stretch;
+  background: white;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+  flex-shrink: 0;
+}
+.popfax-mark .mark-icon {
+  background: var(--fax-blue);
+  color: white;
+  font-weight: 900;
+  font-size: 22px;
+  letter-spacing: -0.04em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  position: relative;
+}
+.popfax-mark .mark-icon::after {
+  /* diagonal "report check" slash */
+  content: '';
+  position: absolute;
+  right: -1px; top: 0; bottom: 0;
+  width: 10px;
+  background: white;
+  transform: skewX(-14deg);
+  transform-origin: top;
+}
+.popfax-mark .mark-word {
+  color: var(--fax-blue);
+  font-weight: 900;
+  font-size: 22px;
+  letter-spacing: -0.03em;
+  padding: 7px 14px 7px 12px;
+  text-transform: lowercase;
+}
+.popfax-titleblock { flex: 1; min-width: 200px; }
+.popfax-titleblock .pf-line1 {
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.popfax-titleblock .pf-line2 {
+  color: rgba(255,255,255,0.72);
+  font-size: 12px;
+  margin-top: 2px;
+}
+.popfax-tagline {
+  color: rgba(255,255,255,0.92);
+  font-size: 12px;
+  font-style: italic;
+  text-align: right;
+  max-width: 240px;
+  line-height: 1.4;
+}
+
+.page-sub {
+  font-size: 12px; color: var(--label);
+  padding: 4px 4px 14px;
+}
+
+.filter-strip {
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px 14px; margin-bottom: 16px;
+  box-shadow: var(--shadow-sm);
+}
+.filter-strip .label {
+  font-size: 11px; color: var(--label); font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.filter-strip select {
+  font-family: inherit; font-size: 13px; border: 1px solid var(--border);
+  border-radius: 7px; padding: 5px 9px; background: white; color: var(--primary);
+}
+.filter-strip .spacer { flex: 1; }
+.legend {
+  display: inline-flex; gap: 12px; align-items: center; font-size: 11px; color: var(--label);
+}
+.legend .lg { display: inline-flex; align-items: center; gap: 4px; }
+.legend .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.legend .dot.green { background: var(--green); }
+.legend .dot.amber { background: var(--amber); }
+.legend .dot.red { background: var(--red); }
+.legend .dot.na { background: var(--border-strong); }
+
+/* Day group header — same as Event Workspace */
+.day-group {
+  border-top: 3px solid var(--primary);
+  padding: 14px 4px 8px;
+  display: flex; align-items: center; gap: 14px;
+  margin-top: 6px; flex-wrap: wrap;
+}
+.day-group h2 { font-size: 16px; font-weight: 800; letter-spacing: -0.01em; }
+.day-group .day-meta { font-size: 11px; color: var(--label); }
+
+/* ============================================================
+ * EVENT ROW — collapsed shows a Carfax-style badge strip.
+ * ============================================================ */
+.event-row {
+  background: var(--card); border: 1px solid var(--border);
+  border-left-width: 3px; border-radius: 10px;
+  margin-bottom: 8px; overflow: hidden; box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.15s ease;
+}
+.event-row:hover { box-shadow: var(--shadow-md); }
+.event-row.grade-green { border-left-color: var(--green); }
+.event-row.grade-amber { border-left-color: var(--amber); }
+.event-row.grade-red { border-left-color: var(--red); }
+.event-row.expanded { box-shadow: var(--shadow-md); }
+
+.event-head {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; cursor: pointer; flex-wrap: wrap;
+}
+.venue-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 44px; height: 24px; padding: 0 8px; border-radius: 5px;
+  background: white; border: 1px solid var(--border-strong);
+  font-size: 10px; font-weight: 800; letter-spacing: 0.04em;
+  color: var(--slate); flex-shrink: 0;
+}
+.event-name { font-weight: 700; font-size: 14px; color: var(--primary); }
+.event-time { font-size: 12px; color: var(--label); }
+.flagship-tag {
+  font-size: 9px; font-weight: 800; letter-spacing: 0.05em;
+  background: var(--green-dark); color: white;
+  padding: 2px 7px; border-radius: 4px; text-transform: uppercase;
+}
+.event-spacer { flex: 1; min-width: 12px; }
+
+/* Badge strip — one pip per band, Carfax-icon style */
+.badge-strip { display: inline-flex; gap: 6px; align-items: center; }
+.badge-pip {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 10px; font-weight: 700;
+  padding: 4px 9px; border-radius: 16px;
+  border: 1px solid;
+  white-space: nowrap;
+}
+.badge-pip .pip-ico { font-size: 11px; line-height: 1; }
+.badge-pip.green { background: var(--green-light); color: var(--green-dark); border-color: var(--green-mid); }
+.badge-pip.amber { background: var(--amber-light); color: var(--amber-dark); border-color: var(--amber-border); }
+.badge-pip.red { background: var(--red-light); color: var(--red); border-color: var(--red-border); }
+.badge-pip.na { background: var(--slate-light); color: var(--label); border-color: var(--border-strong); }
+
+.chevron {
+  background: none; border: none; cursor: pointer; padding: 4px;
+  color: var(--label); font-size: 14px; transition: transform 0.2s ease;
+}
+.event-row.expanded .chevron { transform: rotate(180deg); }
+
+/* ============================================================
+ * EXPANDED REPORT BODY — flat, scrollable, three bands.
+ * ============================================================ */
+.report-body {
+  border-top: 1px solid var(--border);
+  background: rgba(255,255,255,0.5);
+  padding: 0;
+}
+
+/* Section — colored header bar carries the at-a-glance signal */
+.pf-section { border-bottom: 1px solid var(--border); }
+.pf-section:last-child { border-bottom: none; }
+.pf-section-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px;
+  font-size: 11px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.pf-section-head .sh-title { display: inline-flex; align-items: center; gap: 8px; }
+.pf-section-head .sh-status {
+  margin-left: auto; font-size: 10px; font-weight: 700;
+  padding: 2px 9px; border-radius: 10px;
+  text-transform: none; letter-spacing: 0;
+}
+.pf-section-head.green { background: var(--green-light); color: var(--green-dark); }
+.pf-section-head.green .sh-status { background: var(--green-mid); color: var(--green-dark); }
+.pf-section-head.amber { background: var(--amber-light); color: var(--amber-dark); }
+.pf-section-head.amber .sh-status { background: var(--amber-border); color: var(--amber-dark); }
+.pf-section-head.red { background: var(--red-light); color: var(--red); }
+.pf-section-head.red .sh-status { background: var(--red-border); color: var(--red); }
+.pf-section-head.neutral { background: #faf8f3; color: var(--slate); }
+.pf-section-head.neutral .sh-status { background: var(--slate-light); color: var(--slate); }
+
+.pf-section-body { padding: 14px 16px; }
+
+/* ---- Financials: two big numbers ---- */
+.fin-big-row {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  margin-bottom: 12px;
+}
+@media (max-width: 640px) { .fin-big-row { grid-template-columns: 1fr; } }
+.fin-tile {
+  background: white; border: 1px solid var(--border);
+  border-radius: 8px; padding: 14px 16px;
+}
+.fin-tile .ft-label {
+  font-size: 10px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--label); margin-bottom: 8px;
+}
+.fin-compare { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.fin-compare .fc-forecast { font-size: 14px; color: var(--label); font-weight: 600; }
+.fin-compare .fc-actual { font-size: 24px; font-weight: 800; color: var(--primary); }
+.fin-compare .fc-arrow { color: var(--label); }
+.fin-variance {
+  font-size: 12px; font-weight: 800; padding: 3px 9px; border-radius: 6px;
+}
+.fin-variance.up { background: var(--green-light); color: var(--green-dark); }
+.fin-variance.down { background: var(--red-light); color: var(--red); }
+.fin-variance.flat { background: var(--slate-light); color: var(--slate); }
+
+.payroll-pair { display: flex; gap: 22px; flex-wrap: wrap; }
+.perperson-pair { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.payroll-one .po-num { font-size: 22px; font-weight: 800; }
+.payroll-one .po-sub { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--label); }
+.payroll-one.planned .po-num { color: var(--slate); }
+.payroll-one.actual .po-num { color: var(--primary); }
+
+/* Per-stand expandable table */
+.stand-table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 12px; }
+.stand-table th {
+  text-align: right; font-size: 9px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--label); padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.stand-table th:first-child { text-align: left; }
+.stand-table td { padding: 7px 8px; text-align: right; border-bottom: 1px solid #f4f4f0; }
+.stand-table td:first-child { text-align: left; font-weight: 600; }
+.stand-table .var-up { color: var(--green-dark); font-weight: 700; }
+.stand-table .var-down { color: var(--red); font-weight: 700; }
+.stand-table tr.missing td { background: var(--red-light); }
+.stand-table .miss-tag {
+  font-size: 9px; font-weight: 800; color: var(--red);
+  background: white; border: 1px solid var(--red-border);
+  padding: 1px 6px; border-radius: 3px; text-transform: uppercase;
+}
+.expand-toggle {
+  font-size: 11px; font-weight: 700; color: var(--blue-dark);
+  background: none; border: none; cursor: pointer; padding: 4px 0;
+  font-family: inherit; text-decoration: underline;
+}
+.inline-expand { padding: 0; margin-left: 4px; font-size: 10px; }
+.reveal-box {
+  background: var(--slate-light); border: 1px solid var(--border);
+  border-radius: 6px; padding: 8px 12px; margin: 2px 0 4px;
+}
+.reveal-box .reveal-label {
+  font-size: 10px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--label); margin-bottom: 6px;
+}
+.reveal-box .hist-line { grid-template-columns: 120px 1fr; }
+.name-chip.missing-chip { background: var(--red-light); color: var(--red); border-color: var(--red-border); }
+
+/* ---- Checklist rows (Carfax additional-history style) ---- */
+.check-list { display: flex; flex-direction: column; gap: 1px; }
+.check-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; background: white;
+  border: 1px solid var(--border); border-radius: 6px;
+}
+.check-row .ck-ico {
+  width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 800; color: white;
+}
+.check-row .ck-ico.green { background: var(--green); }
+.check-row .ck-ico.amber { background: var(--amber); }
+.check-row .ck-ico.red { background: var(--red); }
+.check-row .ck-ico.na { background: var(--border-strong); color: var(--label); }
+.check-row .ck-label { font-weight: 600; flex: 1; }
+.check-row .ck-detail { font-size: 12px; color: var(--label); text-align: right; }
+.check-row .ck-detail strong { color: var(--primary); }
+
+/* ---- History-style dated lists (override log, manual fills, missing) ---- */
+.history-block { margin-top: 12px; }
+.history-block .hb-title {
+  font-size: 10px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--label);
+  margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid var(--border);
+}
+.hist-line {
+  display: grid; grid-template-columns: 130px 1fr;
+  gap: 12px; padding: 7px 4px; border-bottom: 1px solid #f4f4f0;
+  font-size: 12px; align-items: baseline;
+}
+.hist-line:last-child { border-bottom: none; }
+.hist-line .hl-who { font-weight: 700; }
+.hist-line .hl-detail { color: var(--slate); }
+.hist-line .hl-detail .hl-by { color: var(--label); font-style: italic; }
+.hist-line .hl-reason {
+  display: block; margin-top: 3px; font-size: 11px; font-style: italic;
+  color: var(--amber-dark); background: var(--amber-light);
+  border-left: 3px solid var(--amber-border); padding: 3px 8px; border-radius: 0 4px 4px 0;
+}
+.name-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.name-chip {
+  font-size: 11px; font-weight: 600; color: var(--primary);
+  background: var(--slate-light); border: 1px solid var(--border-strong);
+  padding: 2px 9px; border-radius: 12px;
+}
+.name-chip.by { color: var(--purple-dark); background: var(--purple-light); border-color: var(--purple-mid); }
+.empty-good {
+  font-size: 12px; color: var(--green-dark); font-style: italic;
+  padding: 4px 0;
+}
+
+/* Coverage figure (neutral, never red) */
+.coverage-figure { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-end; }
+.cov-one .cov-num { font-size: 20px; font-weight: 800; }
+.cov-one .cov-sub { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--label); }
+.cov-note {
+  font-size: 11px; color: var(--label); font-style: italic;
+  flex-basis: 100%; padding-top: 6px;
+}
+
+/* ---- Shift feedback stub ---- */
+.stub-section { background: repeating-linear-gradient(45deg, #fafafa, #fafafa 10px, #f4f4f0 10px, #f4f4f0 20px); }
+.stub-inner {
+  background: rgba(255,255,255,0.85);
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+  padding: 20px;
+  text-align: center;
+}
+.stub-inner .si-title { font-size: 14px; font-weight: 700; color: var(--slate); margin-bottom: 6px; }
+.stub-inner .si-body { font-size: 12px; color: var(--label); line-height: 1.6; max-width: 460px; margin: 0 auto; }
+.stub-preview { display: flex; gap: 14px; justify-content: center; margin-top: 14px; opacity: 0.5; flex-wrap: wrap; }
+.stub-score { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; text-align: center; }
+.stub-score .ss-num { font-size: 20px; font-weight: 800; color: var(--label); }
+.stub-score .ss-lab { font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--label); }
+
+/* Loading / empty states for the timeline */
+.pf-state {
+  text-align: center; color: var(--label); font-size: 13px;
+  padding: 48px 24px; background: var(--card);
+  border: 1px solid var(--border); border-radius: 10px;
+}
+
+.footer-note {
+  text-align: center; font-size: 11px; color: var(--label);
+  padding: 24px 0 8px; font-style: italic;
+}
+</style>
+</head>
+<body>
+
+<!-- Header + ribbon + back-to-top injected by pc-nav.js -->
+<!-- Activity tracking (page_load / heartbeat / page_unload) handled by pc-activity.js -->
+
+<div class="shell">
+
+  <div class="popfax-header">
+    <span class="popfax-mark">
+      <span class="mark-icon">P</span>
+      <span class="mark-word">popfax</span>
+    </span>
+    <div class="popfax-titleblock">
+      <div class="pf-line1">Event History Report</div>
+      <div class="pf-line2">The maintenance log for every event we ran</div>
+    </div>
+    <div class="popfax-tagline">Most recent event up top. Scroll back through time. What got planned, what got done, what got skipped.</div>
+  </div>
+  <div class="page-sub">Read-only &middot; a snapshot of each event after it closed out</div>
+
+  <div class="filter-strip">
+    <span class="label">Venue</span>
+    <select id="venueFilter"><option value="all">All venues</option></select>
+    <span class="label">Range</span>
+    <select id="rangeFilter">
+      <option value="14">Last 14 days</option>
+      <option value="30">Last 30 days</option>
+      <option value="60">Last 60 days</option>
+    </select>
+    <span class="spacer"></span>
+    <span class="legend">
+      <span class="lg"><span class="dot green"></span>clean</span>
+      <span class="lg"><span class="dot amber"></span>needs attention</span>
+      <span class="lg"><span class="dot red"></span>missing</span>
+      <span class="lg"><span class="dot na"></span>n/a</span>
+    </span>
+  </div>
+
+  <div id="content">
+    <div class="pf-state">Loading&hellip;</div>
+  </div>
+
+  <div class="footer-note" id="footerNote">Sample data &middot; FMP shown as the reference standard &middot; numbers are illustrative until live reads are wired</div>
+
+</div>
+
+<script src="/pc-auth.js"></script>
+<script src="/pc-nav.js"></script>
+<script src="/pc-activity.js"></script>
+<script>
+/* ====================================================================
+ * Popfax — Event History Report
+ * Session 1, step 1: shell + render layer, fed by SAMPLE DATA.
+ * The rendering model matches popfax-mockup.html / spec v1 §5.
+ * Step 2 swaps SAMPLE_EVENTS for live Supabase reads (Financials +
+ * Reporting bands). Everything below the data block is final.
+ * ==================================================================== */
+
+var SB_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
+
+/* --- SAMPLE DATA (replaced by live reads in step 2) -----------------
+ *   FMP clean (flagship), Mann sloppy, a smaller FMP event mostly clean.
+ * ------------------------------------------------------------------ */
+var SAMPLE_EVENTS = [
+  {
+    id: 'e1', venue: 'FMP', name: 'Phillies vs Mets', date: 'Saturday, June 13', time: 'Report 4:30 PM – 11:00 PM',
+    flagship: true,
+    grade: 'green',
+    bands: { fin: 'green', plan: 'green', report: 'green' },
+    fin: {
+      forecastTotal: 48000, actualTotal: 52400,
+      plannedPayrollPct: 18.2, actualPayrollPct: 17.1,
+      forecastPerPerson: 2667, actualPerPerson: 2911,
+      stands: [
+        { stand: 'Beer Garden', forecast: 14000, actual: 16100 },
+        { stand: 'Main Concourse', forecast: 12000, actual: 12800 },
+        { stand: 'Pizza Stand', forecast: 9000, actual: 9600 },
+        { stand: 'Hawking', forecast: 7000, actual: 7400 },
+        { stand: 'Pretzel Cart', forecast: 6000, actual: 6500 }
+      ]
+    },
+    plan: {
+      leadDays: 47, signupPool: 22, needed: 18,
+      prepDone: true, dayOfSheet: true,
+      ghosts: [],
+      notified: { done: true, count: 2 }, clientEmail: { done: true, hoursAhead: 52 },
+      manualFills: [],
+      overrides: [],
+      coverage: { home: 17, imported: 1, manual: 0, leftovers: 0, lateHomeSignups: 1 }
+    },
+    report: {
+      standsLogged: { logged: 5, total: 5, missing: [] },
+      fields: {
+        register: { state: 'all', missing: [] },
+        units: { state: 'all', missing: [] },
+        signin: { state: 'all', missing: [] }
+      },
+      missingHandbook: [],
+      missingShirt: [],
+      eventNotes: 'Sold out beer garden by 7th inning. Re-stocked pretzels twice.'
+    }
+  },
+  {
+    id: 'e2', venue: 'Mann', name: 'Summer Concert Series — Night 3', date: 'Saturday, June 13', time: 'Report 5:00 PM – 11:30 PM',
+    flagship: false,
+    grade: 'red',
+    bands: { fin: 'amber', plan: 'red', report: 'red' },
+    fin: {
+      forecastTotal: 31000, actualTotal: 26800,
+      plannedPayrollPct: 19.0, actualPayrollPct: null,
+      forecastPerPerson: 2583, actualPerPerson: null,
+      stands: [
+        { stand: 'Lawn Bar', forecast: 11000, actual: 9200 },
+        { stand: 'Pavilion Concessions', forecast: 10000, actual: 9100 },
+        { stand: 'Pizza Stand', forecast: 6000, actual: 6300 },
+        { stand: 'Hawking', forecast: 4000, actual: 2200 }
+      ]
+    },
+    plan: {
+      leadDays: 2, signupPool: 5, needed: 12,
+      prepDone: false, dayOfSheet: false,
+      ghosts: [
+        { name: 'Devon Marsh', was: 'Lawn Bar / Bartender' },
+        { name: 'Ashley Kim', was: 'Pavilion Concessions / Cashier' }
+      ],
+      notified: { done: true, count: 1 }, clientEmail: { done: false, hoursAhead: null },
+      manualFills: [
+        { name: 'Tyler Brooks', by: 'B. Helmuth' },
+        { name: 'Sam Ortiz', by: 'B. Helmuth' },
+        { name: 'Pat Quinn', by: 'B. Helmuth' }
+      ],
+      overrides: [
+        { who: 'Maria Gonzalez', from: 'FMP', by: 'B. Helmuth', reason: 'No Mann-home bartenders signed up in time; pulled from FMP pool to cover lawn bar.' }
+      ],
+      coverage: { home: 4, imported: 2, manual: 3, leftovers: 0, lateHomeSignups: 3 }
+    },
+    report: {
+      standsLogged: { logged: 2, total: 4, missing: ['Pavilion Concessions', 'Hawking'] },
+      fields: {
+        register: { state: 'partial', missing: ['Lawn Bar'] },
+        units: { state: 'none', missing: ['Lawn Bar', 'Pizza Stand'] },
+        signin: { state: 'none', missing: ['Lawn Bar', 'Pizza Stand'] }
+      },
+      missingHandbook: ['Tyler Brooks', 'Sam Ortiz'],
+      missingShirt: ['Tyler Brooks', 'Pat Quinn', 'Dana Lee'],
+      eventNotes: null
+    }
+  },
+  {
+    id: 'e3', venue: 'FMP', name: 'Union vs Red Bulls', date: 'Friday, June 12', time: 'Report 5:30 PM – 10:30 PM',
+    flagship: true,
+    grade: 'amber',
+    bands: { fin: 'green', plan: 'green', report: 'amber' },
+    fin: {
+      forecastTotal: 22000, actualTotal: 22900,
+      plannedPayrollPct: 18.8, actualPayrollPct: 18.4,
+      forecastPerPerson: 2000, actualPerPerson: 2082,
+      stands: [
+        { stand: 'Beer Garden', forecast: 8000, actual: 8600 },
+        { stand: 'Main Concourse', forecast: 7000, actual: 7100 },
+        { stand: 'Pizza Stand', forecast: 4000, actual: 4200 },
+        { stand: 'Pretzel Cart', forecast: 3000, actual: 3000 }
+      ]
+    },
+    plan: {
+      leadDays: 33, signupPool: 16, needed: 11,
+      prepDone: true, dayOfSheet: true,
+      ghosts: [],
+      notified: { done: true, count: 1 }, clientEmail: { done: true, hoursAhead: 30 },
+      manualFills: [ { name: 'Chris Vance', by: 'J. Rodriguez' } ],
+      overrides: [],
+      coverage: { home: 10, imported: 0, manual: 1, leftovers: 2, lateHomeSignups: 0 }
+    },
+    report: {
+      standsLogged: { logged: 4, total: 4, missing: [] },
+      fields: {
+        register: { state: 'all', missing: [] },
+        units: { state: 'none', missing: ['Beer Garden', 'Main Concourse', 'Pizza Stand', 'Pretzel Cart'] },
+        signin: { state: 'all', missing: [] }
+      },
+      missingHandbook: [],
+      missingShirt: ['Chris Vance'],
+      eventNotes: null
+    }
+  }
+];
+
+/* --- working set (step 2 will populate this from Supabase) --- */
+var EVENTS = SAMPLE_EVENTS.slice();
+
+var expanded = {};
+var defaultExpandSet = false;
+
+/* ==================================================================
+ * FORMAT HELPERS
+ * ================================================================== */
+function money(n) { return '$' + Number(n).toLocaleString(); }
+function pct(n) { return n == null ? '—' : n.toFixed(1) + '%'; }
+
+function varianceBadge(forecast, actual) {
+  var diff = actual - forecast;
+  var pctDiff = forecast > 0 ? (diff / forecast * 100) : 0;
+  var cls = Math.abs(pctDiff) < 2 ? 'flat' : (diff >= 0 ? 'up' : 'down');
+  var sign = diff >= 0 ? '+' : '−';
+  return '<span class="fin-variance ' + cls + '">' + sign + money(Math.abs(diff)) +
+    ' (' + sign + Math.abs(pctDiff).toFixed(1) + '%)</span>';
+}
+
+function ckIco(state) {
+  var sym = { green: '✓', amber: '!', red: '✕', na: '–' };
+  return '<span class="ck-ico ' + state + '">' + sym[state] + '</span>';
+}
+
+/* ==================================================================
+ * RENDER — badge strip
+ * ================================================================== */
+function renderBadgeStrip(ev) {
+  var b = ev.bands;
+  function pip(state, ico, label) {
+    return '<span class="badge-pip ' + state + '"><span class="pip-ico">' + ico + '</span>' + label + '</span>';
+  }
+  return '<div class="badge-strip">' +
+    pip(b.fin, '💲', 'Financials') +
+    pip(b.plan, '📋', 'Planning') +
+    pip(b.report, '📊', 'Reporting') +
+    '<span class="badge-pip na"><span class="pip-ico">⭐</span>Feedback</span>' +
+    '</div>';
+}
+
+/* ==================================================================
+ * RENDER — Financials band
+ * ================================================================== */
+function renderFinancials(ev) {
+  var f = ev.fin;
+  var head = ev.bands.fin;
+  var statusTxt = head === 'green' ? 'Beat forecast' : (head === 'amber' ? 'Under forecast' : 'Check');
+  var html = '<div class="pf-section">';
+  html += '<div class="pf-section-head ' + head + '"><span class="sh-title">💲 Financials</span>' +
+    '<span class="sh-status">' + statusTxt + '</span></div>';
+  html += '<div class="pf-section-body">';
+
+  // two big tiles
+  html += '<div class="fin-big-row">';
+  // sales
+  html += '<div class="fin-tile"><div class="ft-label">Forecast vs Actual Sales</div>' +
+    '<div class="fin-compare">' +
+      '<span class="fc-forecast">' + money(f.forecastTotal) + ' forecast</span>' +
+      '<span class="fc-arrow">→</span>' +
+      '<span class="fc-actual">' + money(f.actualTotal) + '</span>' +
+      varianceBadge(f.forecastTotal, f.actualTotal) +
+    '</div></div>';
+  // payroll % + per-person, stacked in one tile
+  html += '<div class="fin-tile"><div class="ft-label">Labor &amp; Per-Person</div>' +
+    '<div class="payroll-pair">' +
+      '<div class="payroll-one planned"><div class="po-num">' + pct(f.plannedPayrollPct) + '</div><div class="po-sub">Planned payroll %</div></div>' +
+      '<div class="payroll-one actual"><div class="po-num">' + pct(f.actualPayrollPct) + '</div><div class="po-sub">Actual payroll %</div></div>' +
+    '</div>' +
+    '<div class="payroll-pair perperson-pair">' +
+      '<div class="payroll-one planned"><div class="po-num">' + money(f.forecastPerPerson) + '</div><div class="po-sub">Forecast $/person</div></div>' +
+      '<div class="payroll-one actual"><div class="po-num">' + (f.actualPerPerson == null ? '—' : money(f.actualPerPerson)) + '</div><div class="po-sub">Actual $/person</div></div>' +
+    '</div>';
+  if (f.actualPayrollPct == null || f.actualPerPerson == null) {
+    html += '<div style="font-size:11px;color:var(--amber-dark);margin-top:8px;font-style:italic;">⚠ Actuals can\'t be computed — sign-in sheet missing for this event.</div>';
+  }
+  html += '</div>';
+  html += '</div>';
+
+  // per-stand expandable
+  html += '<button class="expand-toggle" data-toggle-stands="' + ev.id + '">Show breakdown by stand ▾</button>';
+  html += '<div id="stands-' + ev.id + '" style="display:none;">';
+  html += '<table class="stand-table"><thead><tr><th>Stand</th><th>Forecast</th><th>Actual</th><th>Variance</th></tr></thead><tbody>';
+  f.stands.forEach(function(s) {
+    var diff = s.actual - s.forecast;
+    var vcls = diff >= 0 ? 'var-up' : 'var-down';
+    var sign = diff >= 0 ? '+' : '−';
+    html += '<tr><td>' + s.stand + '</td><td>' + money(s.forecast) + '</td><td>' + money(s.actual) +
+      '</td><td class="' + vcls + '">' + sign + money(Math.abs(diff)) + '</td></tr>';
+  });
+  html += '</tbody></table></div>';
+
+  html += '</div></div>';
+  return html;
+}
+
+/* ==================================================================
+ * RENDER — Planning band
+ * ================================================================== */
+function renderPlanning(ev) {
+  var p = ev.plan;
+  var head = ev.bands.plan;
+  var statusTxt = head === 'green' ? 'Well planned' : (head === 'amber' ? 'Some gaps' : 'Multiple gaps');
+  var html = '<div class="pf-section">';
+  html += '<div class="pf-section-head ' + head + '"><span class="sh-title">📋 Planning</span>' +
+    '<span class="sh-status">' + statusTxt + '</span></div>';
+  html += '<div class="pf-section-body">';
+
+  // lead time + pool
+  var leadState = p.leadDays >= 14 ? 'green' : (p.leadDays >= 5 ? 'amber' : 'red');
+  var poolState = p.signupPool >= p.needed * 1.3 ? 'green' : (p.signupPool >= p.needed ? 'amber' : 'red');
+  html += '<div class="check-list" style="margin-bottom:12px;">';
+  html += '<div class="check-row">' + ckIco(leadState) +
+    '<span class="ck-label">Lead time — how long the event was open for signups</span>' +
+    '<span class="ck-detail"><strong>' + p.leadDays + ' days</strong> ahead</span></div>';
+  html += '<div class="check-row">' + ckIco(poolState) +
+    '<span class="ck-label">Signup pool — bodies available vs needed</span>' +
+    '<span class="ck-detail"><strong>' + p.signupPool + '</strong> signed up · ' + p.needed + ' needed · <strong>' +
+    (p.signupPool - p.needed) + '</strong> cushion</span></div>';
+  html += '<div class="check-row">' + ckIco(p.prepDone ? 'green' : 'red') +
+    '<span class="ck-label">Prep &amp; production planned</span>' +
+    '<span class="ck-detail">' + (p.prepDone ? 'Yes' : 'Not done') + '</span></div>';
+  html += '<div class="check-row">' + ckIco(p.dayOfSheet ? 'green' : 'red') +
+    '<span class="ck-label">Day-of-show sheet on file</span>' +
+    '<span class="ck-detail">' + (p.dayOfSheet ? 'Yes' : 'Not created') + '</span></div>';
+  html += '<div class="check-row">' + ckIco(p.ghosts.length === 0 ? 'green' : 'red') +
+    '<span class="ck-label">Ghost positions handled at lock' +
+    (p.ghosts.length ? ' <button class="expand-toggle inline-expand" data-reveal="ghosts-' + ev.id + '">show ▾</button>' : '') +
+    '</span>' +
+    '<span class="ck-detail">' + (p.ghosts.length === 0 ? 'None left' : '<strong>' + p.ghosts.length + '</strong> unhandled') + '</span></div>';
+  if (p.ghosts.length) {
+    html += '<div class="reveal-box" id="ghosts-' + ev.id + '" style="display:none;">';
+    p.ghosts.forEach(function(g) {
+      html += '<div class="hist-line"><span class="hl-who">' + g.name + '</span>' +
+        '<span class="hl-detail">left as ghost — was: <strong>' + g.was + '</strong> (stand/role removed from plan, never re-placed or released)</span></div>';
+    });
+    html += '</div>';
+  }
+  html += '<div class="check-row">' + ckIco(p.notified.done ? 'green' : 'red') +
+    '<span class="ck-label">Submitted — staffing notified</span>' +
+    '<span class="ck-detail">' + (p.notified.done ? '<strong>' + p.notified.count + '×</strong> notified' : 'Never notified') + '</span></div>';
+  var ceState = p.clientEmail.done ? (p.clientEmail.hoursAhead >= 24 ? 'green' : 'amber') : 'red';
+  html += '<div class="check-row">' + ckIco(ceState) +
+    '<span class="ck-label">Staff list emailed to client ≥24h ahead</span>' +
+    '<span class="ck-detail">' + (p.clientEmail.done ? '<strong>' + p.clientEmail.hoursAhead + 'h</strong> ahead' : 'Not sent') + '</span></div>';
+  html += '</div>';
+
+  // home component — neutral figure
+  html += '<div class="history-block"><div class="hb-title">Home-component coverage (figure — not graded)</div>';
+  html += '<div class="coverage-figure">' +
+    '<div class="cov-one"><div class="cov-num">' + p.coverage.home + '</div><div class="cov-sub">Home venue</div></div>' +
+    '<div class="cov-one"><div class="cov-num">' + p.coverage.imported + '</div><div class="cov-sub">Imported</div></div>' +
+    '<div class="cov-one"><div class="cov-num">' + p.coverage.manual + '</div><div class="cov-sub">Typed in</div></div>' +
+    '<div class="cov-one"><div class="cov-num">' + p.coverage.leftovers + '</div><div class="cov-sub">Home leftovers</div></div>' +
+    '<div class="cov-one"><div class="cov-num">' + p.coverage.lateHomeSignups + '</div><div class="cov-sub">Late home signups</div></div>' +
+    '</div>';
+  if (p.coverage.leftovers > 0 && p.coverage.manual > 0) {
+    html += '<div class="cov-note">⚠ ' + p.coverage.leftovers + ' home-venue people sat unplaced while ' + p.coverage.manual +
+      ' name(s) were typed in. Worth a look — but late signups may explain it.</div>';
+  } else {
+    html += '<div class="cov-note">Shown for context. Late home-venue signups are a coaching point for the building manager, not a placement fault.</div>';
+  }
+  html += '</div>';
+
+  // manual fills by name + manager
+  html += '<div class="history-block"><div class="hb-title">Manual / placeholder fills — who, and who typed them</div>';
+  if (p.manualFills.length === 0) {
+    html += '<div class="empty-good">✓ None — every placed person came from a real signup.</div>';
+  } else {
+    p.manualFills.forEach(function(m) {
+      html += '<div class="hist-line"><span class="hl-who">' + m.name + '</span>' +
+        '<span class="hl-detail">typed in manually <span class="hl-by">by ' + m.by + '</span></span></div>';
+    });
+  }
+  html += '</div>';
+
+  // override log
+  html += '<div class="history-block"><div class="hb-title">Override log — non-home placements with a typed reason</div>';
+  if (p.overrides.length === 0) {
+    html += '<div class="empty-good">✓ No overrides on this event.</div>';
+  } else {
+    p.overrides.forEach(function(o) {
+      html += '<div class="hist-line"><span class="hl-who">' + o.who + '</span>' +
+        '<span class="hl-detail">placed from <strong>' + o.from + '</strong> <span class="hl-by">overridden by ' + o.by + '</span>' +
+        '<span class="hl-reason">"' + o.reason + '"</span></span></div>';
+    });
+  }
+  html += '</div>';
+
+  html += '</div></div>';
+  return html;
+}
+
+/* ==================================================================
+ * RENDER — Reporting band
+ * ================================================================== */
+function renderReporting(ev) {
+  var r = ev.report;
+  var head = ev.bands.report;
+  var statusTxt = head === 'green' ? 'Fully logged' : (head === 'amber' ? 'Minor gaps' : 'Logging incomplete');
+  var html = '<div class="pf-section">';
+  html += '<div class="pf-section-head ' + head + '"><span class="sh-title">📊 Reporting</span>' +
+    '<span class="sh-status">' + statusTxt + '</span></div>';
+  html += '<div class="pf-section-body">';
+
+  // stands logged
+  html += '<div class="check-list" style="margin-bottom:12px;">';
+  html += '<div class="check-row">' + ckIco(r.standsLogged.logged >= r.standsLogged.total ? 'green' : 'red') +
+    '<span class="ck-label">Every staffed stand has sales logged' +
+    (r.standsLogged.missing.length ? ' <button class="expand-toggle inline-expand" data-reveal="slog-' + ev.id + '">show ▾</button>' : '') +
+    '</span>' +
+    '<span class="ck-detail"><strong>' + r.standsLogged.logged + ' / ' + r.standsLogged.total + '</strong> stands</span></div>';
+  if (r.standsLogged.missing.length) {
+    html += '<div class="reveal-box" id="slog-' + ev.id + '" style="display:none;">' +
+      '<div class="reveal-label">Not logged:</div><div class="name-chips">' +
+      r.standsLogged.missing.map(function(s){ return '<span class="name-chip missing-chip">' + s + '</span>'; }).join('') +
+      '</div></div>';
+  }
+
+  // field completeness — register & sign-in high weight, units low
+  function fieldState(v, lowWeight) {
+    if (v === 'all') return 'green';
+    if (v === 'partial') return 'amber';
+    return lowWeight ? 'na' : 'red';
+  }
+  function fieldTxt(v) { return v === 'all' ? 'All stands' : (v === 'partial' ? 'Some missing' : 'Missing'); }
+
+  function fieldRow(key, fieldObj, label, sublabel, lowWeight) {
+    var st = fieldState(fieldObj.state, lowWeight);
+    var hasMissing = fieldObj.missing && fieldObj.missing.length;
+    var h = '<div class="check-row">' + ckIco(st) +
+      '<span class="ck-label">' + label +
+      (sublabel ? ' <span style="font-weight:400;color:var(--label);font-size:11px;">' + sublabel + '</span>' : '') +
+      (hasMissing ? ' <button class="expand-toggle inline-expand" data-reveal="' + key + '-' + ev.id + '">show ▾</button>' : '') +
+      '</span>' +
+      '<span class="ck-detail">' + fieldTxt(fieldObj.state) + '</span></div>';
+    if (hasMissing) {
+      h += '<div class="reveal-box" id="' + key + '-' + ev.id + '" style="display:none;">' +
+        '<div class="reveal-label">Missing on:</div><div class="name-chips">' +
+        fieldObj.missing.map(function(s){ return '<span class="name-chip missing-chip">' + s + '</span>'; }).join('') +
+        '</div></div>';
+    }
+    return h;
+  }
+
+  html += fieldRow('reg', r.fields.register, 'Register total entered', '', false);
+  html += fieldRow('sign', r.fields.signin, 'Sign-in sheet attached', '(drives tips, $/person, showed-vs-scheduled)', false);
+  html += fieldRow('units', r.fields.units, 'Units sold entered', '(optional, low weight)', true);
+  html += '</div>';
+
+  // sign-in downstream warning
+  if (r.fields.signin.state === 'none') {
+    html += '<div style="font-size:11px;color:var(--red);background:var(--red-light);border:1px solid var(--red-border);padding:8px 10px;border-radius:6px;margin-bottom:12px;">' +
+      '⛔ No sign-in sheet means no tips report, no sales-per-person, and no showed-vs-scheduled for this event. This knocks out a whole chain.</div>';
+  }
+
+  // missing handbook
+  html += '<div class="history-block"><div class="hb-title">On schedule, missing handbook signature</div>';
+  if (r.missingHandbook.length === 0) {
+    html += '<div class="empty-good">✓ Everyone scheduled has a handbook signature on file.</div>';
+  } else {
+    html += '<div class="name-chips">' + r.missingHandbook.map(function(n){ return '<span class="name-chip">' + n + '</span>'; }).join('') + '</div>';
+  }
+  html += '</div>';
+
+  // missing shirt
+  html += '<div class="history-block"><div class="hb-title">On schedule, missing shirt size</div>';
+  if (r.missingShirt.length === 0) {
+    html += '<div class="empty-good">✓ Everyone scheduled has a shirt size on file.</div>';
+  } else {
+    html += '<div class="name-chips">' + r.missingShirt.map(function(n){ return '<span class="name-chip">' + n + '</span>'; }).join('') + '</div>';
+  }
+  html += '</div>';
+
+  // event notes
+  html += '<div class="history-block"><div class="hb-title">Notes left on the sales logging page</div>';
+  if (r.eventNotes) {
+    html += '<div style="font-size:12px;background:white;border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-style:italic;">"' + r.eventNotes + '"</div>';
+  } else {
+    html += '<div style="font-size:12px;color:var(--label);font-style:italic;">No notes left.</div>';
+  }
+  html += '</div>';
+
+  html += '</div></div>';
+  return html;
+}
+
+/* ==================================================================
+ * RENDER — Feedback stub (Band 4, no data wiring in v1)
+ * ================================================================== */
+function renderFeedbackStub() {
+  return '<div class="pf-section stub-section">' +
+    '<div class="pf-section-head neutral"><span class="sh-title">⭐ Shift Feedback</span>' +
+    '<span class="sh-status">Coming with time-clock build</span></div>' +
+    '<div class="pf-section-body">' +
+    '<div class="stub-inner">' +
+      '<div class="si-title">Clock-out ratings will live here</div>' +
+      '<div class="si-body">When the 7shifts replacement lands, employees rate their shift at clock-out — score, positive-feedback tags, and comments — and it surfaces in this section per event.</div>' +
+      '<div class="stub-preview">' +
+        '<div class="stub-score"><div class="ss-num">—</div><div class="ss-lab">Avg shift score</div></div>' +
+        '<div class="stub-score"><div class="ss-num">—</div><div class="ss-lab">Responses</div></div>' +
+        '<div class="stub-score"><div class="ss-num">—</div><div class="ss-lab">Comments</div></div>' +
+      '</div>' +
+    '</div>' +
+    '</div></div>';
+}
+
+/* ==================================================================
+ * RENDER — event row (collapsed + expanded)
+ * ================================================================== */
+function renderEventRow(ev) {
+  var isExp = !!expanded[ev.id];
+  var html = '<div class="event-row grade-' + ev.grade + (isExp ? ' expanded' : '') + '" data-event="' + ev.id + '">';
+  html += '<div class="event-head" data-head="' + ev.id + '">';
+  html += '<span class="venue-badge">' + ev.venue + '</span>';
+  html += '<span class="event-name">' + ev.name + '</span>';
+  html += '<span class="event-time">' + ev.time + '</span>';
+  if (ev.flagship) html += '<span class="flagship-tag">★ Reference standard</span>';
+  html += '<span class="event-spacer"></span>';
+  html += renderBadgeStrip(ev);
+  html += '<button class="chevron">▼</button>';
+  html += '</div>';
+
+  if (isExp) {
+    html += '<div class="report-body">';
+    html += renderFinancials(ev);
+    html += renderPlanning(ev);
+    html += renderReporting(ev);
+    html += renderFeedbackStub();
+    html += '</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+/* ==================================================================
+ * FILTERS — venue + range. Range is cosmetic until live dates land
+ * in step 2 (sample dates are illustrative).
+ * ================================================================== */
+function getFilteredEvents() {
+  var venue = document.getElementById('venueFilter').value;
+  return EVENTS.filter(function(ev) {
+    if (venue !== 'all' && ev.venue !== venue) return false;
+    return true;
+  });
+}
+
+function populateVenueFilter() {
+  var sel = document.getElementById('venueFilter');
+  var seen = {};
+  var venues = [];
+  EVENTS.forEach(function(ev) {
+    if (!seen[ev.venue]) { seen[ev.venue] = true; venues.push(ev.venue); }
+  });
+  venues.sort();
+  var html = '<option value="all">All venues</option>';
+  venues.forEach(function(v) { html += '<option value="' + v + '">' + v + '</option>'; });
+  sel.innerHTML = html;
+}
+
+/* ==================================================================
+ * RENDER — full timeline (newest-first, grouped by day)
+ * ================================================================== */
+function render() {
+  var list = getFilteredEvents();
+
+  // default-expand the most recent (first) event, once
+  if (!defaultExpandSet && list.length) {
+    expanded[list[0].id] = true;
+    defaultExpandSet = true;
+  }
+
+  var content = document.getElementById('content');
+  if (!list.length) {
+    content.innerHTML = '<div class="pf-state">No completed events in this window.</div>';
+    return;
+  }
+
+  // group by date, preserving the order in EVENTS (already newest-first)
+  var byDate = [];
+  var seen = {};
+  list.forEach(function(ev) {
+    if (!seen[ev.date]) { seen[ev.date] = []; byDate.push({ date: ev.date, events: seen[ev.date] }); }
+    seen[ev.date].push(ev);
+  });
+
+  var html = '';
+  byDate.forEach(function(group) {
+    html += '<div class="day-group"><h2>' + group.date + '</h2>' +
+      '<span class="day-meta">' + group.events.length + ' event' + (group.events.length === 1 ? '' : 's') + '</span></div>';
+    group.events.forEach(function(ev) { html += renderEventRow(ev); });
+  });
+  content.innerHTML = html;
+  attach();
+}
+
+/* ==================================================================
+ * EVENT WIRING — row expand, reveal toggles, per-stand breakdown.
+ * (data-toggle-stands was dead in the mockup; wired here.)
+ * ================================================================== */
+function attach() {
+  document.querySelectorAll('[data-head]').forEach(function(head) {
+    head.addEventListener('click', function() {
+      var id = head.getAttribute('data-head');
+      expanded[id] = !expanded[id];
+      render();
+    });
+  });
+  document.querySelectorAll('[data-reveal]').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var box = document.getElementById(btn.getAttribute('data-reveal'));
+      if (!box) return;
+      if (box.style.display === 'none') { box.style.display = ''; btn.innerHTML = 'hide ▴'; }
+      else { box.style.display = 'none'; btn.innerHTML = 'show ▾'; }
+    });
+  });
+  document.querySelectorAll('[data-toggle-stands]').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var box = document.getElementById('stands-' + btn.getAttribute('data-toggle-stands'));
+      if (!box) return;
+      if (box.style.display === 'none') { box.style.display = ''; btn.innerHTML = 'Hide breakdown by stand ▴'; }
+      else { box.style.display = 'none'; btn.innerHTML = 'Show breakdown by stand ▾'; }
+    });
+  });
+}
+
+/* ==================================================================
+ * BOOT
+ * ================================================================== */
+function init() {
+  populateVenueFilter();
+  document.getElementById('venueFilter').addEventListener('change', function() {
+    defaultExpandSet = true; // don't re-pop expansion on filter change
+    render();
+  });
+  document.getElementById('rangeFilter').addEventListener('change', function() {
+    render(); // no-op on sample data; wired to date math in step 2
+  });
+  render();
+}
+
+pcAuth.require({
+  pageSlug: 'popfax',
+  onReady: function(user) {
+    // Header + user pill painted by pc-nav.js — no manual setup here.
+    pcActivity.init('popfax');
+    init();
+  }
+});
+</script>
+</body>
+</html>
