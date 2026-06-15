@@ -3,10 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Schedule Assistant</title>
+<title>Event Workspace</title>
 <script src="/pc-auth.js"></script>
 <script src="/pc-nav.js"></script>
 <script src="/pc-activity.js"></script>
+<script src="/pc-catalog.js"></script>
+<script src="/pc-roles.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -174,6 +176,565 @@ body {
 .event-row.submitted { background: var(--amber-light); border-left-color: var(--amber); }
 .event-row.not-submitted { background: var(--red-light); border-left-color: var(--red); }
 .event-row.expanded { box-shadow: var(--shadow-md); }
+
+/* ============================================================
+ * EVENT WORKSPACE TAB STRIP — Session 1 (May 25, 2026)
+ * ------------------------------------------------------------
+ * Three tabs (Plan / Staff / Review) inside each expanded event,
+ * with an audit-log text link on the right. The tabs sit between
+ * the event head and the tab panel body. Audit log is styled as
+ * a text link (not a fourth tab button) so it reads as "this
+ * opens a modal" rather than "this is another workspace view".
+ * Cancelled events do not render tabs (they're non-expandable).
+ * ============================================================ */
+.tab-strip {
+  display: flex; align-items: center; gap: 4px;
+  padding: 8px 14px 0;
+  border-top: 1px solid var(--border);
+  background: rgba(255,255,255,0.6);
+}
+.tab-strip .tab-btn {
+  background: transparent; border: none;
+  padding: 8px 14px 9px;
+  font-family: inherit; font-size: 12px; font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--label); cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  display: inline-flex; align-items: center; gap: 6px;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+.tab-strip .tab-btn:hover { color: var(--primary); }
+.tab-strip .tab-btn.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+.tab-strip .tab-btn .tab-badge {
+  display: inline-flex; align-items: center;
+  font-size: 10px; font-weight: 800;
+  background: var(--slate-light); color: var(--slate);
+  padding: 1px 6px; border-radius: 8px;
+  letter-spacing: 0;
+}
+.tab-strip .tab-btn.active .tab-badge {
+  background: var(--primary); color: white;
+}
+.tab-strip .tab-btn.staff-tab.short .tab-badge {
+  background: var(--red-light); color: var(--red);
+}
+.tab-strip .tab-btn.staff-tab.short.active .tab-badge {
+  background: var(--red); color: white;
+}
+.tab-strip .tab-spacer { flex: 1; }
+.tab-strip .audit-link-tab {
+  background: none; border: none;
+  font-family: inherit; font-size: 12px; font-weight: 600;
+  color: var(--blue-dark); cursor: pointer;
+  padding: 6px 10px;
+  display: inline-flex; align-items: center; gap: 5px;
+  border-radius: 5px;
+}
+.tab-strip .audit-link-tab:hover {
+  background: var(--blue-light);
+  color: var(--blue-dark);
+  text-decoration: underline;
+}
+
+/* Tab panel — the body that switches based on active tab. The
+   Staff panel inherits all the existing .event-body styling
+   (workspace grid, summary bar, stands grid, etc) unchanged. */
+.tab-panel { /* hook for future per-panel tweaks */ }
+.tab-panel-stub {
+  padding: 32px 24px;
+  text-align: center;
+  color: var(--label);
+  font-size: 13px;
+  line-height: 1.6;
+  background: rgba(255,255,255,0.6);
+  border-top: 1px solid var(--border);
+}
+.tab-panel-stub .stub-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--primary);
+  margin-bottom: 6px;
+}
+.tab-panel-stub .stub-hint {
+  font-size: 11px;
+  font-style: italic;
+  margin-top: 4px;
+}
+
+/* ============================================================
+ * PLAN TAB — Session 2 (May 25, 2026)
+ * ------------------------------------------------------------
+ * Read-only view of staffing_requests + par_levels for an event.
+ * Each stand in the venue's catalog renders as a card. Cards
+ * with at least one staffing_requests override show as "active"
+ * (solid border, venue-colored pill, confirmed numbers). Cards
+ * with no overrides show as "defaulted" (dashed border, italic
+ * grey numbers, DEFAULTED pill) so the manager can see at a
+ * glance which stands have been touched vs. inherited from par.
+ * Session 3 will make inputs editable; Session 2 leaves them disabled.
+ * ============================================================ */
+.plan-tab-body {
+  padding: 14px;
+  background: rgba(255,255,255,0.6);
+  border-top: 1px solid var(--border);
+}
+.plan-header-strip {
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  background: #faf8f3;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--primary);
+}
+.plan-header-strip .plan-submitted-by-label {
+  font-weight: 700; color: var(--label);
+  text-transform: uppercase; font-size: 10px;
+  letter-spacing: 0.06em;
+}
+.plan-header-strip .plan-submitted-by-name { font-weight: 700; }
+.plan-header-strip .plan-header-meta {
+  color: var(--label); font-style: italic;
+}
+.plan-not-submitted-strip {
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  background: var(--red-light);
+  border: 1px solid var(--red-border);
+  border-radius: 8px;
+  font-size: 12px; color: var(--red);
+}
+.plan-not-submitted-strip strong { font-weight: 700; }
+
+.plan-stands-list {
+  display: flex; flex-direction: column;
+  gap: 10px;
+}
+
+.plan-stand-card {
+  background: #faf8f3;
+  border: 1.5px solid #bfb8a8;
+  border-radius: 8px;
+  padding: 14px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+.plan-stand-card.defaulted {
+  background: #f5f3ed;
+  border: 1.5px dashed #c8c1b1;
+  opacity: 0.92;
+  box-shadow: none;
+}
+.plan-stand-head {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.plan-stand-name {
+  font-size: 14px; font-weight: 800;
+  color: var(--primary);
+  letter-spacing: -0.01em;
+}
+.plan-stand-card.defaulted .plan-stand-name {
+  font-style: italic;
+  color: var(--label);
+  font-weight: 700;
+}
+.plan-stand-head .plan-stand-spacer { flex: 1; min-width: 8px; }
+
+.plan-forecast-wrap {
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.plan-forecast-label {
+  font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--label);
+}
+.plan-forecast-input {
+  width: 100px; padding: 6px 10px;
+  font-family: inherit; font-size: 13px; font-weight: 700;
+  text-align: right;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: white;
+  color: var(--primary);
+}
+.plan-forecast-input:disabled {
+  background: white;
+  color: var(--primary);
+  cursor: default;
+}
+/* Editable state — active stand, focused or hovered. Subtle blue ring
+   matches the convention used elsewhere on the toolkit. */
+.plan-forecast-input:focus {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px var(--blue-light);
+}
+.plan-forecast-input.dirty {
+  border-color: var(--amber);
+  background: var(--amber-light);
+}
+.plan-stand-card.defaulted .plan-forecast-input {
+  background: transparent;
+  color: var(--label);
+  font-style: italic;
+  font-weight: 500;
+  border-style: dashed;
+}
+/* When user clicks into a defaulted stand's input, the visual jumps to
+   active. The dotted-to-solid transition is intentional — it signals
+   "this stand is now in play." JS handles the actual promotion to active
+   state; this is just the visual confirmation. */
+.plan-stand-card.defaulted .plan-forecast-input:focus {
+  background: white;
+  color: var(--primary);
+  font-style: normal;
+  font-weight: 700;
+  border-style: solid;
+  border-color: var(--blue);
+}
+.plan-stand-card.defaulted .plan-forecast-input:disabled,
+.plan-stand-card.defaulted .plan-role-input:disabled {
+  cursor: not-allowed;
+}
+.plan-open-stand-btn {
+  background: var(--primary);
+  color: white;
+  border: 1px solid var(--primary);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-left: 8px;
+}
+.plan-open-stand-btn:hover { background: #000; }
+
+.plan-stand-pill {
+  display: inline-flex; align-items: center;
+  font-size: 12px; font-weight: 800;
+  padding: 5px 12px;
+  border-radius: 6px;
+  letter-spacing: -0.01em;
+  color: white;
+  /* venue color set inline */
+}
+.plan-stand-pill.defaulted {
+  background: var(--slate-light);
+  color: var(--label);
+  font-weight: 700;
+  border: 1px dashed var(--border-strong);
+  font-style: italic;
+}
+
+/* Per-stand action buttons — "Clear stand" and "Add role for tonight"
+   sit in the stand head, right side. Small text buttons so they don't
+   compete with the stand name or staff pill for attention. Hidden on
+   defaulted stands until the manager activates the stand (no point
+   showing "Clear" on a stand that doesn't exist yet). */
+.plan-stand-actions {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  margin-left: 8px;
+}
+.plan-stand-card.defaulted .plan-stand-actions {
+  display: none;
+}
+.plan-stand-action-btn {
+  background: white;
+  border: 1px solid var(--border-strong);
+  color: var(--label);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 4px 9px;
+  border-radius: 5px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.plan-stand-action-btn:hover {
+  background: var(--slate-light);
+  color: var(--primary);
+}
+.plan-stand-action-btn.danger {
+  color: var(--red);
+  border-color: var(--red-border);
+}
+.plan-stand-action-btn.danger:hover {
+  background: var(--red-light);
+  color: var(--red);
+}
+.plan-stand-action-btn.add {
+  color: var(--blue-dark);
+  border-color: var(--blue-mid);
+}
+.plan-stand-action-btn.add:hover {
+  background: var(--blue-light);
+}
+
+/* Role-picker dropdown — appears under the "Add role" button. Lists
+   roles from par_levels (for now) that aren't already on this stand.
+   Small floating panel, closes on outside click. */
+.plan-role-picker {
+  position: absolute;
+  background: white;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  box-shadow: var(--shadow-md);
+  min-width: 200px;
+  max-height: 240px;
+  overflow-y: auto;
+  z-index: 50;
+  padding: 4px;
+}
+.plan-role-picker-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 7px 10px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--primary);
+  border-radius: 4px;
+}
+.plan-role-picker-item:hover {
+  background: var(--blue-light);
+  color: var(--blue-dark);
+}
+.plan-role-picker-empty {
+  padding: 10px 12px;
+  font-size: 11px;
+  color: var(--label);
+  font-style: italic;
+}
+
+/* Dirty role input — same amber treatment as the forecast input so
+   the manager can see at a glance what they've changed since load. */
+.plan-role-input.dirty {
+  border-color: var(--amber);
+  background: var(--amber-light);
+}
+.plan-role-input:focus {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px var(--blue-light);
+}
+
+.plan-roles-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 8px;
+}
+.plan-role-cell {
+  background: #f0eee5;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  text-align: center;
+}
+.plan-stand-card.defaulted .plan-role-cell {
+  background: rgba(240, 238, 229, 0.5);
+  border-style: dashed;
+}
+.plan-role-label {
+  font-size: 9px; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--label);
+  margin-bottom: 4px;
+}
+.plan-role-input {
+  width: 56px; padding: 4px 6px;
+  font-family: inherit; font-size: 15px; font-weight: 800;
+  text-align: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: white;
+  color: var(--primary);
+}
+.plan-role-input:disabled {
+  background: white;
+  color: var(--primary);
+  cursor: default;
+}
+.plan-stand-card.defaulted .plan-role-input {
+  background: transparent;
+  color: var(--label);
+  font-style: italic;
+  font-weight: 500;
+  border-style: dashed;
+}
+
+.plan-empty-stand-note {
+  font-size: 11px; color: var(--label); font-style: italic;
+  padding: 4px 0;
+}
+
+.plan-footer {
+  margin-top: 16px;
+  padding: 12px 14px;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: flex; align-items: baseline; gap: 14px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+.plan-footer .plan-footer-label {
+  font-size: 10px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--label);
+}
+.plan-footer .plan-footer-stat {
+  font-weight: 700; color: var(--primary);
+}
+.plan-footer .plan-footer-stat strong { font-size: 15px; }
+.plan-footer .plan-footer-divider {
+  color: var(--label); opacity: 0.5;
+}
+
+.plan-empty-state {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--label);
+  font-size: 13px;
+  background: white;
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+}
+.plan-empty-state .pes-title {
+  font-size: 14px; font-weight: 700; color: var(--primary);
+  margin-bottom: 6px;
+}
+
+/* Submit bar — sticks to the top of the Plan tab body as the manager
+   scrolls. Sits above the "Submitted by" strip so it reads as the
+   primary commit control. position:sticky pins it to the top of the
+   nearest scroll container. The negative top margin pulls it flush with
+   the tab body's top edge. */
+.plan-submit-bar {
+  margin-top: 16px;
+  padding: 12px 14px;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.plan-submit-status {
+  font-size: 12px;
+  color: var(--label);
+  font-weight: 600;
+}
+.plan-submit-status.dirty {
+  color: var(--amber-dark);
+}
+.plan-submit-status.dirty strong {
+  color: var(--amber-dark);
+}
+.plan-submit-spacer { flex: 1; min-width: 8px; }
+.plan-submit-btn {
+  background: var(--primary);
+  color: white;
+  border: 1px solid var(--primary);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 9px 22px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.plan-submit-btn:hover { background: #000; }
+.plan-submit-btn:disabled {
+  background: #aaa;
+  border-color: #aaa;
+  cursor: not-allowed;
+}
+.plan-submit-btn.has-changes {
+  background: var(--green-dark);
+  border-color: var(--green-dark);
+}
+.plan-submit-btn.has-changes:hover { background: var(--green); }
+.plan-discard-btn {
+  background: transparent;
+  color: var(--label);
+  border: 1px solid var(--border-strong);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 9px 16px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.plan-discard-btn:hover {
+  background: #f0f0ec;
+  color: var(--primary);
+}
+.plan-validation-msg {
+  font-size: 11px;
+  color: var(--red);
+  font-weight: 600;
+  flex-basis: 100%;
+  padding-top: 4px;
+}
+
+/* Clear-stand confirmation modal — opens when "Clear stand" is clicked
+   on a stand that has placements. Lists the placed people with their
+   roles so the manager can verify intent before orphaning the pills
+   into ghost positions. */
+.clear-stand-info {
+  background: var(--red-light);
+  border: 1px solid var(--red-border);
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--red);
+  margin-bottom: 12px;
+}
+.clear-stand-info strong { color: var(--red); }
+.clear-stand-list {
+  list-style: none;
+  padding: 0;
+  margin: 6px 0 0 0;
+}
+.clear-stand-list li {
+  padding: 4px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary);
+}
+.clear-stand-list li::before {
+  content: '• ';
+  color: var(--red);
+  font-weight: 800;
+}
+.clear-stand-list li .clear-stand-role {
+  color: var(--label);
+  font-weight: 500;
+  font-style: italic;
+  margin-left: 4px;
+}
 
 /* ============================================================
  * CANCELLED EVENT ROW — added May 13, 2026
@@ -509,7 +1070,7 @@ body {
    .synced class → pill turns GREEN. Any movement of a green pill
    (drag, role change, removal) reverts it to red. When a green pill
    is X'd off, the person reappears in the Available panel tinted
-   RED — flagging staffing that they still need to be removed from 7shifts.
+   RED — flagging Meg that they still need to be removed from 7shifts.
 
    IMPORTANT: the available-panel pill that shows "✓ HERE" for a
    person currently placed at this event uses class .person-pill.placed
@@ -561,9 +1122,9 @@ body {
 .sync-toggle.synced:hover { background: var(--green); }
 
 /* Available-panel pill tinted RED — means this person was placed AND
-   synced to 7shifts, then released back to the pool. Until staffing
-   clicks the dismiss check (✓) — confirming they've been removed from
-   7shifts — the red tint persists across re-renders. */
+   synced to 7shifts, then released back to the pool. Until Meg clicks
+   the dismiss check (✓) — confirming she's removed them from 7shifts
+   — the red tint persists across re-renders. */
 .person-pill.was-synced {
   background: var(--red-light) !important;
   border-color: var(--red-border) !important;
@@ -749,6 +1310,7 @@ body {
 .stand-fill-tag.partial { background: var(--amber-light); color: var(--amber-dark); }
 .stand-fill-tag.empty { background: var(--red-light); color: var(--red); }
 .stand-fill-tag.over { background: var(--red-light); color: var(--red); border: 1px solid var(--red-border); }
+.alcohol-badge { font-size: 0.92em; line-height: 1; vertical-align: -1px; cursor: help; }
 
 /* Over-staffing badge on the role header — shown when a manager reduces
    headcount in event planning after people were already placed. */
@@ -1085,6 +1647,126 @@ body {
 .log-entry .log-action.notified_staffing { color: var(--blue-dark); }
 .log-entry .log-time { color: var(--label); font-family: monospace; }
 .log-entry .log-actor { color: var(--label); }
+
+/* ============================================================
+ * AUDIT LOG REDESIGN — Session 4 (May 26, 2026)
+ * ------------------------------------------------------------
+ * Filter chips, sort toggle, pill-style action labels, before/
+ * after rendering for plan_* actions, "during staffing" annotation.
+ * Pure rendering pass — no DB or backend changes. Data lives in
+ * position_assignment_log.details with prev_value/new_value
+ * already captured by Session 3.
+ * ============================================================ */
+.audit-controls {
+  display: flex; align-items: center; gap: 10px;
+  flex-wrap: wrap;
+  padding-bottom: 12px; margin-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.audit-chips { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.audit-chip {
+  background: white;
+  border: 1px solid var(--border-strong);
+  color: var(--label);
+  font-family: inherit;
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 0.04em; text-transform: uppercase;
+  padding: 4px 10px; border-radius: 14px;
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.audit-chip:hover { background: var(--slate-light); color: var(--primary); }
+.audit-chip.active {
+  background: var(--primary); color: white; border-color: var(--primary);
+}
+.audit-chip .chip-count {
+  font-size: 10px; font-weight: 700;
+  background: var(--slate-light); color: var(--slate);
+  padding: 0 6px; border-radius: 8px;
+  letter-spacing: 0;
+}
+.audit-chip.active .chip-count {
+  background: rgba(255,255,255,0.25); color: white;
+}
+.audit-controls .audit-spacer { flex: 1; }
+.audit-sort-select {
+  font-family: inherit; font-size: 12px; font-weight: 600;
+  border: 1px solid var(--border-strong); border-radius: 6px;
+  padding: 4px 8px; background: white; color: var(--primary);
+}
+.audit-empty-filtered {
+  padding: 24px; text-align: center;
+  font-size: 12px; color: var(--label); font-style: italic;
+}
+
+/* New row layout — wider description column, pill replaces the bold
+   uppercase text label. Plan rows get a subtle purple background tint
+   so they stripe visually even before chip-filtering. */
+.log-entry {
+  grid-template-columns: 110px 130px 1fr 110px;
+  align-items: center;
+  padding: 10px 10px;
+}
+.log-entry.cat-plan {
+  background: linear-gradient(to right,
+    rgba(124,58,237,0.05) 0%,
+    rgba(124,58,237,0.02) 60%,
+    transparent 100%);
+}
+.log-pill {
+  display: inline-flex; align-items: center;
+  font-size: 10px; font-weight: 800;
+  letter-spacing: 0.04em; text-transform: uppercase;
+  padding: 3px 9px; border-radius: 10px;
+  white-space: nowrap;
+  border: 1px solid;
+}
+.log-pill.cat-plan {
+  background: var(--purple-light); color: var(--purple-dark);
+  border-color: var(--purple-mid);
+}
+.log-pill.cat-staff {
+  background: var(--blue-light); color: var(--blue-dark);
+  border-color: var(--blue-mid);
+}
+.log-pill.cat-removed {
+  background: var(--amber-light); color: var(--amber-dark);
+  border-color: var(--amber-border);
+}
+.log-pill.cat-notify {
+  background: var(--green-light); color: var(--green-dark);
+  border-color: var(--green-mid);
+}
+.log-pill.cat-other {
+  background: var(--slate-light); color: var(--slate);
+  border-color: var(--border-strong);
+}
+.log-desc {
+  font-size: 12px; line-height: 1.45;
+  color: var(--primary);
+}
+.log-desc strong { font-weight: 700; }
+.log-desc .arrow {
+  color: var(--label); margin: 0 2px;
+}
+.log-desc .delta-old {
+  color: var(--label);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+.log-desc .delta-new {
+  font-weight: 700; color: var(--primary);
+}
+.log-during-staffing {
+  display: inline-block;
+  font-size: 10px; font-style: italic; font-weight: 600;
+  color: var(--amber-dark);
+  background: var(--amber-light);
+  border: 1px solid var(--amber-border);
+  padding: 1px 6px; border-radius: 3px;
+  margin-left: 6px;
+  vertical-align: 1px;
+}
 
 /* ============================================================
    CLICKABLE PERSON NAME — added May 11, 2026
@@ -1531,26 +2213,9 @@ body {
        header bar and ribbon. Page-specific title heading stays here so it
        sits in the page content, not in the global chrome. -->
   <div class="page-title-bar">
-    <h1>Schedule Assistant</h1>
-    <span class="sub">Drag people into stand &amp; role positions &middot; midnight day-of lock</span>
+    <h1>Event Workspace</h1>
+    <span class="sub">Plan and staff your events in one place &middot; locks at event start</span>
   </div>
-
-  <!-- Event Workspace migration banner — added during beta rollout.
-       Purely additive: directs staffing work to the new merged Event
-       Workspace. This page still works as a fallback. No behavior change. -->
-  <a href="/schedule-assistant-beta/" style="display:block;text-decoration:none;background:#c0392b;color:#fff;border-radius:14px;padding:20px 24px;margin-bottom:16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;box-shadow:0 4px 18px rgba(192,57,43,0.30);">
-    <div style="display:flex;align-items:center;gap:14px;">
-      <span style="font-size:24px;flex-shrink:0;line-height:1;">&#9888;</span>
-      <span style="flex:1;min-width:0;font-size:19px;font-weight:800;line-height:1.3;">Staff your events in the new Event Workspace</span>
-      <span style="font-size:17px;font-weight:800;white-space:nowrap;">Open Workspace &rarr;</span>
-    </div>
-    <ul style="margin:12px 0 0;padding-left:34px;font-size:14px;font-weight:600;line-height:1.7;color:#ffe3df;">
-      <li>Plan and staff each event on one screen &mdash; no jumping between pages</li>
-      <li>7Shifts sync tracking lives there: mark each placement synced, and released-after-sync people get flagged for removal</li>
-      <li>Ghost positions (someone placed after the plan changed) surface automatically so nobody falls through</li>
-      <li>This page is being retired &mdash; use it only as a fallback</li>
-    </ul>
-  </a>
 
   <div class="filter-strip">
     <span class="label">Venue</span>
@@ -1760,6 +2425,32 @@ body {
   </div>
 </div>
 
+<!-- Clear-stand confirmation modal — added Session 3 (May 25, 2026).
+     Opens when "Clear stand" is clicked on a stand that has placements.
+     Lists the placed people so the manager can verify intent before
+     orphaning the pills into ghost positions. Closing without clicking
+     "Clear stand and orphan placements" leaves everything untouched. -->
+<div class="modal-backdrop" id="clear-stand-modal">
+  <div class="modal" style="max-width: 460px;">
+    <div class="modal-head">
+      <h3>Clear this stand?</h3>
+      <button class="modal-close" data-close-modal="clear-stand-modal">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="clear-stand-info" id="clear-stand-info"></div>
+      <div style="font-size: 12px; color: var(--label); line-height: 1.5; margin-top: 12px;">
+        Clearing this stand will set all its role counts to zero and remove the forecast.
+        Anyone currently placed at this stand will become a <strong>ghost position</strong>
+        on the Staff tab &mdash; you'll need to either drag them to a live slot or release them.
+      </div>
+    </div>
+    <div class="override-actions" style="padding: 12px 18px;">
+      <button class="btn-cancel" data-close-modal="clear-stand-modal">Cancel</button>
+      <button class="btn-confirm" id="clear-stand-confirm-btn" style="background: var(--red); border-color: var(--red);">Clear stand and orphan placements</button>
+    </div>
+  </div>
+</div>
+
 <!-- Home-venue override dialog. Shown when placing a non-home-venue person
      ahead of unplaced home-venue people for the event. Manager must type a
      reason (>= 15 chars) before "Save and place" enables. Cancel = no
@@ -1814,8 +2505,52 @@ const HAWKING_STAND = 'Hawking';
 const CLIENT_STAND = 'Client Staffing Needs';
 const NONEVENT_STAND = 'Non-Event Labor';
 
-// Stands hidden from the Position Board grid entirely
-const HIDDEN_STANDS = [CLIENT_STAND, NONEVENT_STAND];
+// Stands hidden from the Position Board grid AND coverage counts entirely.
+// Non-Event Labor is the adhoc day-labor flow — never an event position.
+// Client Staffing Needs was formerly here, but as of this change client
+// positions are staffed with our own people (drag into a normal stand card)
+// and DO count toward filled/needed, so it's no longer hidden.
+const HIDDEN_STANDS = [NONEVENT_STAND];
+
+// Stands hidden from the PLAN tab. Narrower than HIDDEN_STANDS: the Plan tab
+// DOES surface Client Staffing Needs (client-contract asks recorded for billing,
+// e.g. "venue wants 10 bartenders"); it just never appears on the Staff position
+// board because we don't place our own people into client-provided slots.
+const PLAN_HIDDEN_STANDS = [NONEVENT_STAND];
+
+// Canonical client role spine, resolved from the role catalog's 'client'
+// category. The client stand is injected synthetically into every event's Plan
+// tab so a manager can record a client ask even on venues whose catalog client
+// stand is inactive / differently-named. Hardcoded fallback if pc-roles hasn't
+// loaded or the category comes back empty.
+function clientRoleSpine() {
+  try {
+    if (typeof pcRoles !== 'undefined' && pcRoles.getRolesForCategory) {
+      const roles = (pcRoles.getRolesForCategory('client') || [])
+        .map(a => a.role_name).filter(Boolean);
+      if (roles.length) return roles;
+    }
+  } catch (e) { /* fall through */ }
+  return ['Supervisor', 'Lead', 'Bar Lead', 'Bartender', 'Cashier',
+          'Cook', 'Pizza Maker', 'Stand Worker', 'Warehouse', 'Cleaner'];
+}
+
+// Canonical support-staff role spine, same idea as clientRoleSpine(). The
+// Support Staff stand has no active per-venue catalog row, so we inject it
+// synthetically into every event's Plan tab and resolve its roles here.
+// Tries a 'support' role category first; hardcoded fallback if pc-roles
+// hasn't loaded or the category is empty. Edit the fallback list below to
+// change which roles a defaulted Support Staff card offers.
+function supportRoleSpine() {
+  try {
+    if (typeof pcRoles !== 'undefined' && pcRoles.getRolesForCategory) {
+      const roles = (pcRoles.getRolesForCategory('support') || [])
+        .map(a => a.role_name).filter(Boolean);
+      if (roles.length) return roles;
+    }
+  } catch (e) { /* fall through */ }
+  return ['Supervisor', 'Venue Manager', 'Cleaner', 'Warehouse'];
+}
 
 // NEW HIRE badge config.
 // A person pill in the Available panel shows "NEW" if BOTH:
@@ -1885,8 +2620,40 @@ const ROLE_ORDER = [
 ];
 
 function roleSortKey(role) {
+  // Try direct match first — handles legacy role strings ("Concessions
+  // Cashier", "Pizza Lead", etc.) which are still what's in the DB
+  // today on rows written before the migration_markers cutover.
   const i = ROLE_ORDER.indexOf(role);
-  return i === -1 ? 999 : i;
+  if (i !== -1) return i;
+
+  // Phase -2 bridge (May 26, 2026): rows written AFTER the migration
+  // marker (2026-05-19) use canonical role names ('Cashier', 'Lead',
+  // 'Cook', etc). Those won't be in ROLE_ORDER directly. Walk
+  // ROLE_ORDER once and find the first slot whose own canonical form
+  // matches the input. This preserves the existing legacy-driven
+  // display order (Concessions Lead before Pizza Lead, etc) — canonical
+  // strings inherit the position of their first legacy equivalent in
+  // the array.
+  //
+  // Concrete example: a new row with role='Cashier' matches the
+  // ROLE_ORDER slot 'Concessions Cashier' (index 6), so it sorts in
+  // the same position concessions cashiers always did.
+  //
+  // pcRoles.legacyToCanonical is safe on canonical input (pass-through),
+  // so this comparison works whether ROLE_ORDER's entry is legacy or
+  // canonical.
+  if (typeof pcRoles !== 'undefined' && pcRoles.legacyToCanonical) {
+    const inputCanon = pcRoles.legacyToCanonical(role);
+    if (inputCanon != null) {
+      for (let j = 0; j < ROLE_ORDER.length; j++) {
+        if (pcRoles.legacyToCanonical(ROLE_ORDER[j]) === inputCanon) {
+          return j;
+        }
+      }
+    }
+  }
+
+  return 999;
 }
 
 // ---------- Auth helpers ----------
@@ -2019,9 +2786,17 @@ function fmtDateTime(iso) {
   return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
-// Lock = midnight of event_date (i.e. start of event_date in local time)
-function isLocked(eventDateIso) {
-  const lockTime = new Date(eventDateIso + 'T00:00:00');
+// Lock = the event's start time on its date. "Start" = gates_open, falling
+// back to show_time, then to midnight day-of when neither is set (legacy
+// behavior, so an event with no times still locks rather than never locking).
+// Changed Jun 15, 2026 from a fixed midnight day-of lock so managers keep
+// edit access through the day right up until the event actually begins.
+function isLocked(ev) {
+  if (!ev) return false;
+  const startClock = ev.gates_open || ev.show_time || null;
+  const lockTime = startClock
+    ? new Date(ev.event_date + 'T' + startClock)
+    : new Date(ev.event_date + 'T00:00:00');
   return new Date() >= lockTime;
 }
 
@@ -2050,41 +2825,40 @@ function fmtCancelledAt(iso) {
     d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
-// Format an events.created_at timestamp as a short date string for the
-// summary bar chip. Returns "May 12" or "May 12, 2025" (year shown only
-// when not current year, to keep the chip compact in the common case).
+// Created-timestamp helpers — used by the "Created" summary chip on the
+// expanded event head and the audit log's synthetic "Event created" row.
+// (Session 4 referenced these but never defined them — defined here Jun 3.)
+// fmtCreatedDate    → prominent short date, e.g. "May 13"
+// fmtCreatedRelative→ "today" / "3 days ago" / "2 weeks ago" / "1 year ago"
+// fmtCreatedDateTime→ full tooltip date+time, e.g. "May 13, 2026 at 3:53 PM"
 function fmtCreatedDate(iso) {
   if (!iso) return '';
   const d = new Date(iso);
   if (isNaN(d.getTime())) return '';
-  const now = new Date();
-  const sameYear = d.getFullYear() === now.getFullYear();
-  return d.toLocaleDateString('en-US', sameYear
-    ? { month: 'short', day: 'numeric' }
-    : { month: 'short', day: 'numeric', year: 'numeric' });
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
-
-// Returns a human-readable relative time for a creation timestamp.
-// The "when the hell did this get created" signal — a 3-week-old empty
-// event reads very differently than a 2-day-old one.
 function fmtCreatedRelative(iso) {
   if (!iso) return '';
   const d = new Date(iso);
   if (isNaN(d.getTime())) return '';
-  const now = new Date();
-  const diffMs = now - d;
-  const diffDays = Math.floor(diffMs / 86400000);
-  if (diffDays < 1) return 'today';
+  const diffDays = Math.floor((new Date() - d) / 86400000);
+  if (diffDays <= 0) return 'today';
   if (diffDays === 1) return 'yesterday';
   if (diffDays < 7) return diffDays + ' days ago';
-  const diffWeeks = Math.floor(diffDays / 7);
-  if (diffWeeks === 1) return '1 week ago';
-  if (diffWeeks < 5) return diffWeeks + ' weeks ago';
-  const diffMonths = Math.floor(diffDays / 30);
-  if (diffMonths === 1) return '1 month ago';
-  if (diffMonths < 12) return diffMonths + ' months ago';
-  const diffYears = Math.floor(diffDays / 365);
-  return diffYears === 1 ? '1 year ago' : diffYears + ' years ago';
+  if (diffDays < 14) return '1 week ago';
+  if (diffDays < 30) return Math.floor(diffDays / 7) + ' weeks ago';
+  if (diffDays < 60) return '1 month ago';
+  if (diffDays < 365) return Math.floor(diffDays / 30) + ' months ago';
+  const years = Math.floor(diffDays / 365);
+  return years === 1 ? '1 year ago' : years + ' years ago';
+}
+function fmtCreatedDateTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) +
+    ' at ' +
+    d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
 // Initials from name
@@ -2137,6 +2911,15 @@ const state = {
   recentSignups: [],
   recentSignupEvents: {},
 
+  // Par levels — the venue/stand/role/tier catalog of default headcounts.
+  // Read once at page load and indexed by venue+tier for the Plan tab.
+  // Plan tab reads from this for "defaulted" stand state and uses
+  // staffing_requests rows to override per-event.
+  // Shape: [{ id, venue, stand, role, default_count, tier, ... }]
+  // Built lookup: parIndex[venue][tier][stand] = [{role, default_count}, ...]
+  parLevels: [],
+  parIndex: {},
+
   // Approved email recipients (loaded from approved_email_recipients table).
   // Used by the per-event "Email staff list" modal. Each row:
   //   { id, label, email, venue, is_active }
@@ -2152,6 +2935,49 @@ const state = {
   expandedEvents: new Set(),
   expandedRemoved: new Set(),  // event IDs whose "Removed" section is open
   unlockedEvents: new Set(),
+  // Per-event active tab. Default 'staff' so behavior matches today's
+  // page: expanding an event drops straight into the Available panel +
+  // stand grid that managers already know. Plan and Review tabs are
+  // opt-in click. Keyed by event_id so two expanded events can sit on
+  // different tabs simultaneously.
+  activeTab: {},
+
+  // ============================================================
+  // PLAN TAB EDIT STATE — Session 3 (May 25, 2026)
+  // ------------------------------------------------------------
+  // Per-event local edit state for the Plan tab. Built fresh from
+  // staffing_requests + par_levels when the manager opens the Plan
+  // tab for an event. Accumulates edits until Submit fires, at which
+  // point we upsert all active stands and clear orphaned rows.
+  //
+  // Shape:
+  //   planEdits[eventId] = {
+  //     stands: {
+  //       [standName]: {
+  //         isActive: bool,           // was active at load, OR promoted via edit
+  //         wasActiveAtLoad: bool,    // for orphan detection on submit
+  //         roles: { [roleName]: { count: int, prevCount: int } },
+  //         forecast: number|null,
+  //         prevForecast: number|null,
+  //         addedDuringEdit: bool,    // for plan_stand_added log entry
+  //       }
+  //     },
+  //     dirty: bool,                  // true if any edit made since load
+  //     loadedAt: ISO timestamp,
+  //     submitting: bool              // prevents double-submit
+  //   }
+  //
+  // prevCount / prevForecast capture the at-load values so audit log
+  // entries can render "4 → 5" style before/after pairs. wasActiveAtLoad
+  // distinguishes "stand removed from plan" (was active, now no roles
+  // with headcount > 0) from "stand was never planned" (defaulted at
+  // load, stayed defaulted).
+  planEdits: {},
+
+  // Role picker open state — which stand on which event has its
+  // "Add role for tonight" dropdown open. Null when no picker is open.
+  planRolePicker: null,  // { eventId, stand } or null
+
   drag: null,         // { staffName, source, fromPositionId? }
   typing: null,        // { eventId, venue, stand, role, value, focusedIndex }
 
@@ -2359,6 +3185,15 @@ function loadAll() {
     '/rest/v1/employee_certifications' +
     '?select=id,employee_id,cert_type,issued_at,expires_at' +
     '&removed_at=is.null';
+
+  // Par levels — the per-venue/stand/role/tier default headcounts.
+  // Used by the Plan tab to render "defaulted" stand state. Explicit
+  // limit=10000 per sql-delivery-rules — par_levels has a few hundred
+  // rows max but the default 100 cap would silently truncate at scale.
+  const parLevelsUrl = SUPABASE_URL +
+    '/rest/v1/par_levels' +
+    '?select=id,venue,stand,role,default_count,tier,show_in_planning,excluded_from_total' +
+    '&limit=10000';
   const certTypesUrl = SUPABASE_URL +
     '/rest/v1/cert_types' +
     '?select=id,display_name,state,category,requires_expiration' +
@@ -2396,8 +3231,10 @@ function loadAll() {
     // Certifications + cert types for the crew-card modal (May 11, 2026).
     // Read-only on this page — editing happens on /certifications/.
     authFetch(certsUrl, { headers: apiHeaders() }),
-    authFetch(certTypesUrl, { headers: apiHeaders() })
-  ]).then(([events, employees, allAvail, pastPlacements, candidateRows, recentSignups, approvedRecipients, eventManagers, certs, certTypes]) => {
+    authFetch(certTypesUrl, { headers: apiHeaders() }),
+    // Par levels for the Plan tab — Session 2 (May 25, 2026).
+    authFetch(parLevelsUrl, { headers: apiHeaders() })
+  ]).then(([events, employees, allAvail, pastPlacements, candidateRows, recentSignups, approvedRecipients, eventManagers, certs, certTypes, parLevels]) => {
     state.events = events || [];
     state.employees = employees || [];
     state.recentSignups = recentSignups || [];
@@ -2416,6 +3253,27 @@ function loadAll() {
     state.certs = certs || [];
     state.certTypesById = {};
     (certTypes || []).forEach(t => { state.certTypesById[t.id] = t; });
+
+    // Par levels (May 25 — Session 2). Build lookup keyed by venue → tier → stand
+    // so renderPlanTab() can resolve par defaults in O(1) per stand. show_in_planning
+    // and excluded_from_total are honored at filter time (skip rows where either
+    // flag would hide the row from planning).
+    state.parLevels = parLevels || [];
+    state.parIndex = {};
+    state.parLevels.forEach(pl => {
+      if (pl.show_in_planning === false) return;
+      if (pl.excluded_from_total === true) return;
+      const venue = pl.venue;
+      const tier = pl.tier || 'full';
+      const stand = pl.stand;
+      if (!state.parIndex[venue]) state.parIndex[venue] = {};
+      if (!state.parIndex[venue][tier]) state.parIndex[venue][tier] = {};
+      if (!state.parIndex[venue][tier][stand]) state.parIndex[venue][tier][stand] = [];
+      state.parIndex[venue][tier][stand].push({
+        role: pl.role,
+        default_count: pl.default_count || 0
+      });
+    });
 
 
     // Build historical signup counts per staff_name. Used to sort the
@@ -2643,6 +3501,7 @@ function standsForEvent(eventId, venue) {
   const order = (s) => {
     if (s === SUPPORT_STAND) return 99;
     if (s === HAWKING_STAND) return 90;
+    if (s === CLIENT_STAND) return 85;
     return 1;
   };
   standNames.sort((a, b) => {
@@ -3099,7 +3958,7 @@ function renderEventRow(ev) {
   let fillCls = 'red';
   if (pct >= 100) fillCls = 'green';
   else if (pct >= 50) fillCls = 'amber';
-  const locked = isLocked(ev.event_date) && !state.unlockedEvents.has(ev.id);
+  const locked = isLocked(ev) && !state.unlockedEvents.has(ev.id);
 
   // Display Report time (gates - 1 hour, or explicit report_time) instead of
   // gates time. This is the time staff are actually told to arrive.
@@ -3219,9 +4078,1099 @@ function renderEventRow(ev) {
   html += '<button class="chevron">▼</button>';
   html += '</div>';
 
-  if (isExpanded) html += renderExpanded(ev, locked);
+  if (isExpanded) {
+    // Tab strip + tab panel. Cancelled events bail out earlier in this
+    // function, so by this branch we know the event is live and expandable.
+    const activeTab = state.activeTab[ev.id] || 'staff';
+    const placedCount = eventTotalFilled(ev.id);
+    const plannedCount = eventTotalNeeded(ev.id);
+    const staffShort = plannedCount > 0 && placedCount < plannedCount;
+
+    html += '<div class="tab-strip">';
+    html += '<button class="tab-btn plan-tab' + (activeTab === 'plan' ? ' active' : '') +
+      '" data-event-tab="' + ev.id + '" data-tab-name="plan">Plan</button>';
+    html += '<button class="tab-btn staff-tab' + (activeTab === 'staff' ? ' active' : '') +
+      (staffShort ? ' short' : '') +
+      '" data-event-tab="' + ev.id + '" data-tab-name="staff">Staff' +
+      ' <span class="tab-badge">' + placedCount + ' / ' + plannedCount + '</span>' +
+      '</button>';
+    // Review tab hidden until built (was a "Coming in Session 4" stub).
+    // To restore: uncomment the two lines below.
+    // html += '<button class="tab-btn review-tab' + (activeTab === 'review' ? ' active' : '') +
+    //   '" data-event-tab="' + ev.id + '" data-tab-name="review">Review</button>';
+    html += '<span class="tab-spacer"></span>';
+    html += '<button class="audit-link-tab" data-audit-event="' + ev.id + '" title="Open audit log">' +
+      '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+        '<path d="M3 3h10v10H3z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>' +
+        '<path d="M5.5 6.5h5M5.5 9h5M5.5 11h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>' +
+      '</svg>' +
+      'Audit log' +
+    '</button>';
+    html += '</div>';
+
+    // Tab panel body — switch on active tab.
+    if (activeTab === 'staff') {
+      html += renderExpanded(ev, locked);
+    } else if (activeTab === 'plan') {
+      html += renderPlanTab(ev);
+    } else if (activeTab === 'review') {
+      html += renderReviewTabStub(ev);
+    }
+  }
   html += '</div>';
   return html;
+}
+
+// ============================================================
+// PLAN TAB EDIT STATE BUILDERS — Session 3 (May 25, 2026)
+// ------------------------------------------------------------
+// buildPlanEdits constructs state.planEdits[ev.id] from the current
+// staffing_requests + par_levels data. Called when the Plan tab opens
+// for an event, or when Submit succeeds (to reset the dirty state).
+// Safe to call multiple times — it overwrites the existing entry.
+//
+// ensurePlanEdits is a lazy variant that only builds if no entry exists.
+// Used by render paths so re-renders don't blow away mid-edit state.
+// ============================================================
+function buildPlanEdits(ev) {
+  const tier = ev.staffing_tier || 'full';
+  const venueIndex = state.parIndex[ev.venue] || {};
+  const tierIndex = venueIndex[tier] || {};
+
+  // Index existing staffing_requests by stand → role for this event.
+  // Role keys stay as their STORED string (legacy or canonical) so the
+  // submit diff and the placement join (position_assignments stand||role)
+  // keep matching live DB rows exactly — we never rename a row out from
+  // under a placed person.
+  const eventReqs = {};
+  const eventStands = new Set();
+  state.staffingRequests.filter(r => r.event_id === ev.id).forEach(r => {
+    if (PLAN_HIDDEN_STANDS.indexOf(r.stand) !== -1) return;
+    if (!eventReqs[r.stand]) eventReqs[r.stand] = {};
+    eventReqs[r.stand][r.role] = r;
+    if ((r.headcount || 0) > 0) eventStands.add(r.stand);
+  });
+
+  // Stand list now comes from the CATALOG (active stands for the venue),
+  // unioned with any event-only stands that already have rows but aren't in
+  // the active catalog. This drops retired stands (783/UD1) and surfaces
+  // brand-new catalog stands that have no par rows yet.
+  const allStandNames = new Set();
+  (pcCatalog.getActiveStandsForVenue(ev.venue) || []).forEach(s => {
+    if (HIDDEN_STANDS.indexOf(s.stand_name) === -1) allStandNames.add(s.stand_name);
+  });
+  Object.keys(eventReqs).forEach(s => {
+    if (PLAN_HIDDEN_STANDS.indexOf(s) === -1) allStandNames.add(s);
+  });
+  // Always surface the client-contract stand. The per-venue catalog client
+  // stand is inactive / named 'Client Staffing' rather than our CLIENT_STAND,
+  // so we inject by name here. Writes stay on CLIENT_STAND so AR / coverage /
+  // billing keep matching exactly what Event Planning wrote.
+  allStandNames.add(CLIENT_STAND);
+  // Always surface the Support Staff stand too. Like the client stand, there's
+  // no active per-venue catalog Support Staff stand, so before this it only
+  // appeared when an event already had support staffing_requests rows — which
+  // meant a brand-new event couldn't add support staff at all (the pre-merge
+  // planning page could). Injecting by name gives every event a Support Staff
+  // card the manager can Open and staff; the Staff tab already renders it via
+  // renderSupportSection. Added Jun 15, 2026.
+  allStandNames.add(SUPPORT_STAND);
+
+  const stands = {};
+  allStandNames.forEach(standName => {
+    const parRoles = tierIndex[standName] || [];
+    const reqRoles = eventReqs[standName] || {};
+    const isActive = eventStands.has(standName);
+
+    // The category allowlist is the role SPINE for this stand. For the client
+    // stand the spine comes from the global 'client' category, not the per-venue
+    // catalog row (inactive / differently-named on most venues).
+    const standRow = pcCatalog.getStand(ev.venue, standName);
+    const categoryId = standRow ? standRow.category_id : null;
+    const allowRoles = (standName === CLIENT_STAND)
+      ? clientRoleSpine()
+      : (standName === SUPPORT_STAND)
+        ? supportRoleSpine()
+        : (pcRoles.getRolesForCategory(categoryId) || [])
+            .map(a => a.role_name)
+            .filter(Boolean);
+
+    const roles = {};
+
+    if (isActive) {
+      // Active stand: keep every existing row under its stored name (write
+      // path + placements untouched), then surface any allowlist role not
+      // already covered (by canonical identity) at 0 so the full spine shows.
+      Object.keys(reqRoles).forEach(role => {
+        const hc = reqRoles[role].headcount || 0;
+        roles[role] = { count: hc, prevCount: hc };
+      });
+      const haveCanon = {};
+      Object.keys(roles).forEach(role => {
+        const c = pcRoles.legacyToCanonical(role);
+        if (c) haveCanon[c] = true;
+      });
+      allowRoles.forEach(role => {
+        if (haveCanon[role] || roles[role]) return;
+        roles[role] = { count: 0, prevCount: 0 };
+      });
+    } else {
+      // Defaulted stand: build PURELY from the allowlist (clean canonical
+      // spine — this is the screenshot case, where Barback/Beer Tender are
+      // simply gone). Seed each role's default by summing every par row whose
+      // canonical maps to it (the approved sum-dedup, done at read time).
+      const parByCanon = {};
+      parRoles.forEach(p => {
+        const c = pcRoles.legacyToCanonical(p.role);
+        if (!c) return; // dropped legacy par row (e.g. Barback) — skip
+        parByCanon[c] = (parByCanon[c] || 0) + (p.default_count || 0);
+      });
+      allowRoles.forEach(role => {
+        roles[role] = { count: parByCanon[role] || 0, prevCount: null };
+      });
+      // Loud (not silent): par headcount on a role outside this stand's
+      // allowlist — data worth cleaning, never shown or blocked.
+      Object.keys(parByCanon).forEach(c => {
+        if (allowRoles.indexOf(c) === -1 && parByCanon[c] > 0) {
+          console.warn('[plan] ' + ev.venue + ' / ' + standName +
+            ': par default for off-allowlist role "' + c + '" (' +
+            parByCanon[c] + ') not shown — category ' + categoryId);
+        }
+      });
+    }
+
+    // Resolve forecast — first row with non-null sales_forecast wins
+    let forecast = null;
+    if (isActive) {
+      const reqWithForecast = Object.values(reqRoles).find(r => r.sales_forecast != null);
+      if (reqWithForecast) forecast = reqWithForecast.sales_forecast;
+    }
+
+    stands[standName] = {
+      isActive: isActive,
+      wasActiveAtLoad: isActive,
+      roles: roles,
+      forecast: forecast,
+      prevForecast: isActive ? forecast : null,
+      addedDuringEdit: false
+    };
+  });
+
+  state.planEdits[ev.id] = {
+    stands: stands,
+    dirty: false,
+    loadedAt: new Date().toISOString(),
+    submitting: false
+  };
+}
+
+function ensurePlanEdits(ev) {
+  if (!state.planEdits[ev.id]) buildPlanEdits(ev);
+}
+
+// Mark the plan as dirty — called from every edit handler. Centralizing
+// this makes it easy to add side effects later (autosave, etc).
+function markPlanDirty(eventId) {
+  if (state.planEdits[eventId]) state.planEdits[eventId].dirty = true;
+}
+
+// Discard all unsaved Plan edits — rebuilds the edit state fresh from the
+// DB (staffing_requests + par_levels), clearing the dirty flag and reverting
+// every in-progress change (forecasts, counts, activations). The escape
+// hatch for an edit the manager can't or doesn't want to save.
+function discardPlanEdits(eventId) {
+  const ev = state.events.find(e => e.id === eventId);
+  if (!ev) return;
+  buildPlanEdits(ev); // overwrites state.planEdits[ev.id], dirty=false
+  render();
+}
+
+// Submit bar at the bottom of the Plan tab. Status text on left,
+// Submit/Resubmit button on right. Validation message rendered below
+// when submit is blocked. Returns HTML string for the bar.
+function renderPlanSubmitBar(ev, edits) {
+  const isResubmit = !!state.staffingRequests.find(r => r.event_id === ev.id);
+  const validation = validatePlanEdits(edits);
+  const canSubmit = validation.ok && (edits.dirty || !isResubmit);
+
+  let html = '<div class="plan-submit-bar">';
+
+  // Status text
+  if (edits.submitting) {
+    html += '<span class="plan-submit-status">Submitting&hellip;</span>';
+  } else if (edits.dirty) {
+    html += '<span class="plan-submit-status dirty">' +
+      '<strong>Unsaved changes</strong> &middot; click ' +
+      (isResubmit ? 'Resubmit' : 'Submit plan') + ' to save' +
+    '</span>';
+  } else if (isResubmit) {
+    html += '<span class="plan-submit-status">No unsaved changes.</span>';
+  } else {
+    html += '<span class="plan-submit-status">Make your edits, then click Submit plan.</span>';
+  }
+
+  html += '<span class="plan-submit-spacer"></span>';
+
+  // Discard changes — only when there are unsaved edits. Reverts to the
+  // last-saved DB values so the manager can back out of an edit.
+  if (edits.dirty && !edits.submitting) {
+    html += '<button class="plan-discard-btn" data-plan-discard="' + ev.id + '">Discard changes</button>';
+  }
+
+  const btnLabel = isResubmit ? 'Resubmit' : 'Submit plan';
+  const btnCls = 'plan-submit-btn' + (edits.dirty && validation.ok ? ' has-changes' : '');
+  html += '<button class="' + btnCls + '"' +
+    ' data-plan-submit="' + ev.id + '"' +
+    (canSubmit ? '' : ' disabled') + '>' +
+    btnLabel +
+  '</button>';
+
+  if (!validation.ok && validation.msg) {
+    html += '<div class="plan-validation-msg">&#9888; ' + escapeHtml(validation.msg) + '</div>';
+  }
+
+  return html + '</div>';
+}
+
+// Validate edits before submit. Returns { ok: bool, msg: string|null }.
+// Rules:
+//   - At least one stand must be active
+//   - Every active stand must have at least one role with count > 0
+function validatePlanEdits(edits) {
+  let anyActive = false;
+  const emptyActiveStands = [];
+  const noForecastStands = [];
+  Object.keys(edits.stands).forEach(standName => {
+    const s = edits.stands[standName];
+    if (!s.isActive) return;
+    anyActive = true;
+    const totalStaff = Object.values(s.roles).reduce((acc, r) => acc + (r.count || 0), 0);
+    if (totalStaff === 0) emptyActiveStands.push(standName);
+    // Forecast required on staffed revenue stands (Support Staff / Hawking exempt).
+    const isRevenue = standName !== SUPPORT_STAND && standName !== HAWKING_STAND && standName !== CLIENT_STAND;
+    if (isRevenue && totalStaff > 0 && !(s.forecast > 0)) noForecastStands.push(standName);
+  });
+  if (!anyActive) return { ok: false, msg: 'No active stands. Add staff to at least one stand before submitting.' };
+  if (emptyActiveStands.length > 0) {
+    return {
+      ok: false,
+      msg: 'Active stand' + (emptyActiveStands.length === 1 ? '' : 's') +
+        ' with no staff: ' + emptyActiveStands.join(', ') +
+        '. Set a headcount or clear the stand.'
+    };
+  }
+  if (noForecastStands.length > 0) {
+    return {
+      ok: false,
+      msg: 'Sales forecast required on staffed stand' + (noForecastStands.length === 1 ? '' : 's') +
+        ': ' + noForecastStands.join(', ') +
+        '. Enter a forecast amount or clear the stand.'
+    };
+  }
+  return { ok: true, msg: null };
+}
+
+// ============================================================
+// PLAN TAB INPUT HANDLERS — Session 3 (May 25, 2026)
+// ------------------------------------------------------------
+// Parse a "$1,200" / "1200" / "" forecast input into a numeric
+// value (or null). Strips $ and commas, accepts empty as null.
+// Used by the forecast input change handler.
+// ============================================================
+function parsePlanForecast(raw) {
+  if (raw == null) return null;
+  const clean = String(raw).replace(/[$,\s]/g, '');
+  if (clean === '') return null;
+  const n = Number(clean);
+  if (isNaN(n) || n < 0) return null;
+  return n;
+}
+
+// Parse a role count input. Empty → 0. Negative or NaN → 0.
+function parsePlanCount(raw) {
+  if (raw == null || raw === '') return 0;
+  const n = parseInt(String(raw).replace(/[,\s]/g, ''), 10);
+  if (isNaN(n) || n < 0) return 0;
+  return n;
+}
+
+// Open (activate) a defaulted stand. The explicit alternative to the old
+// type-into-a-grey-box auto-promote. Sets active, marks dirty, re-renders
+// (which sorts it up with the other active stands).
+function openPlanStand(eventId, stand) {
+  const edits = state.planEdits[eventId];
+  if (!edits || !edits.stands[stand]) return;
+  if (edits.stands[stand].isActive) return;
+  edits.stands[stand].isActive = true;
+  markPlanDirty(eventId);
+  render();
+}
+
+// Handle a forecast input change. Auto-promotes the stand to active
+// if it was defaulted (any edit means "manager is planning this stand").
+function onPlanForecastChange(eventId, stand, rawValue) {
+  const edits = state.planEdits[eventId];
+  if (!edits || !edits.stands[stand]) return;
+  const standEdit = edits.stands[stand];
+  const newValue = parsePlanForecast(rawValue);
+  if (standEdit.forecast === newValue) return;
+  standEdit.forecast = newValue;
+  if (!standEdit.isActive) {
+    standEdit.isActive = true; // auto-promote
+  }
+  markPlanDirty(eventId);
+  render();
+}
+
+// Handle a role count change. Auto-promotes the stand.
+function onPlanRoleChange(eventId, stand, role, rawValue) {
+  const edits = state.planEdits[eventId];
+  if (!edits || !edits.stands[stand]) return;
+  const standEdit = edits.stands[stand];
+  if (!standEdit.roles[role]) return;
+  const newCount = parsePlanCount(rawValue);
+  if (standEdit.roles[role].count === newCount) return;
+  standEdit.roles[role].count = newCount;
+  if (!standEdit.isActive) {
+    standEdit.isActive = true; // auto-promote
+  }
+  markPlanDirty(eventId);
+  render();
+}
+
+// ============================================================
+// CLEAR STAND — Session 3 (May 25, 2026)
+// ------------------------------------------------------------
+// Click handler for the "Clear stand" button. If the stand has any
+// placements (real or ghost) on the Staff tab, opens a confirmation
+// modal. Otherwise clears immediately.
+//
+// "Clearing" a stand means: set all role counts to 0, set forecast
+// to null, mark isActive=false. The stand stays in edits.stands so
+// it can re-render as defaulted; submit will detect this as an
+// "orphaned active stand" if it was active at load and delete its
+// staffing_requests rows.
+// ============================================================
+let _clearStandContext = null;  // { eventId, stand } while modal open
+
+function onClearStandClick(eventId, stand) {
+  const ev = state.events.find(e => e.id === eventId);
+  if (!ev) return;
+  // Find placements at this stand (active + ghost-flagged both qualify)
+  const placements = state.positions.filter(p =>
+    p.event_id === eventId && p.stand === stand
+  );
+  if (placements.length === 0) {
+    // No placements → just clear, no confirmation
+    _commitClearStand(eventId, stand);
+    return;
+  }
+  // Has placements → open confirm modal listing them
+  _clearStandContext = { eventId, stand };
+  const info = document.getElementById('clear-stand-info');
+  let html = "You're clearing <strong>" + escapeHtml(stand) +
+    '</strong>, but it has ' + placements.length + ' placed person' +
+    (placements.length === 1 ? '' : ' people') + ':';
+  html += '<ul class="clear-stand-list">';
+  placements.forEach(p => {
+    html += '<li>' + escapeHtml(p.staff_name) +
+      '<span class="clear-stand-role">&mdash; ' + escapeHtml(p.role) + '</span></li>';
+  });
+  html += '</ul>';
+  info.innerHTML = html;
+  document.getElementById('clear-stand-modal').classList.add('show');
+}
+
+function _commitClearStand(eventId, stand) {
+  const edits = state.planEdits[eventId];
+  if (!edits || !edits.stands[stand]) return;
+  const standEdit = edits.stands[stand];
+  standEdit.isActive = false;
+  standEdit.forecast = null;
+  Object.keys(standEdit.roles).forEach(role => {
+    standEdit.roles[role].count = 0;
+  });
+  markPlanDirty(eventId);
+  render();
+  // If placements exist, toast pointer to Staff tab
+  const placementCount = state.positions.filter(p =>
+    p.event_id === eventId && p.stand === stand
+  ).length;
+  if (placementCount > 0) {
+    showToast('Cleared ' + stand + ' — ' + placementCount + ' placement' +
+      (placementCount === 1 ? '' : 's') + ' now ghosted. Resolve on Staff tab after submit.', 'success');
+  } else {
+    showToast('Cleared ' + stand, 'success');
+  }
+}
+
+function confirmClearStand() {
+  if (!_clearStandContext) return;
+  const ctx = _clearStandContext;
+  _clearStandContext = null;
+  document.getElementById('clear-stand-modal').classList.remove('show');
+  _commitClearStand(ctx.eventId, ctx.stand);
+}
+
+// ============================================================
+// ADD ROLE — Session 3 (May 25, 2026)
+// ------------------------------------------------------------
+// Click handler for "+ Add role" button. Opens a small dropdown
+// listing roles from par_levels (for this venue/tier) that aren't
+// already on this stand. Manager clicks one → role added with
+// count=0 and stand auto-promoted to active.
+// ============================================================
+function onAddRoleClick(eventId, stand, anchorBtn) {
+  const ev = state.events.find(e => e.id === eventId);
+  if (!ev) return;
+  const edits = state.planEdits[eventId];
+  if (!edits || !edits.stands[stand]) return;
+  const standEdit = edits.stands[stand];
+
+  // Remove any existing picker first (toggle behavior)
+  const existing = document.getElementById('plan-role-picker-popup');
+  if (existing) {
+    const wasSame = existing.dataset.stand === stand && existing.dataset.eventId === eventId;
+    existing.remove();
+    if (wasSame) return; // clicked same button → close
+  }
+
+  // Source candidate roles from the stand's CATEGORY ALLOWLIST (the curated
+  // catalog), not par_levels. Offer only allowlist roles whose canonical
+  // identity isn't already on this stand — so we never offer a second
+  // "Bartender" when a legacy "Beer Tender" row is already present.
+  const standRow = pcCatalog.getStand(ev.venue, stand);
+  const categoryId = standRow ? standRow.category_id : null;
+  const haveCanon = new Set();
+  Object.keys(standEdit.roles).forEach(r => {
+    const c = pcRoles.legacyToCanonical(r);
+    if (c) haveCanon.add(c);
+  });
+  // Source candidate roles from the same spine buildPlanEdits uses, so the
+  // client and support stands (which have no active catalog category) offer
+  // their proper role lists instead of an empty picker. Added Jun 15, 2026.
+  const spine = (stand === CLIENT_STAND) ? clientRoleSpine()
+              : (stand === SUPPORT_STAND) ? supportRoleSpine()
+              : (pcRoles.getRolesForCategory(categoryId) || []).map(a => a.role_name);
+  let candidates = spine.filter(r => r && !haveCanon.has(r));
+  candidates.sort((a, b) => roleSortKey(a) - roleSortKey(b));
+
+  // Build the picker
+  const picker = document.createElement('div');
+  picker.id = 'plan-role-picker-popup';
+  picker.className = 'plan-role-picker';
+  picker.dataset.eventId = eventId;
+  picker.dataset.stand = stand;
+  if (candidates.length === 0) {
+    picker.innerHTML = '<div class="plan-role-picker-empty">' +
+      'All roles for this stand\'s category are already added.' +
+    '</div>';
+  } else {
+    picker.innerHTML = candidates.map(r =>
+      '<button class="plan-role-picker-item" data-pick-role="' + escapeAttr(r) + '">' +
+        escapeHtml(r) +
+      '</button>'
+    ).join('');
+  }
+
+  // Position under the button
+  const rect = anchorBtn.getBoundingClientRect();
+  picker.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+  picker.style.left = (rect.left + window.scrollX) + 'px';
+  document.body.appendChild(picker);
+
+  // Wire item clicks
+  picker.querySelectorAll('[data-pick-role]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const role = btn.getAttribute('data-pick-role');
+      _commitAddRole(eventId, stand, role);
+      picker.remove();
+    });
+  });
+
+  // Close on outside click
+  setTimeout(() => {
+    document.addEventListener('click', function closePicker(e) {
+      if (!picker.contains(e.target)) {
+        picker.remove();
+        document.removeEventListener('click', closePicker);
+      }
+    });
+  }, 0);
+}
+
+function _commitAddRole(eventId, stand, role) {
+  const edits = state.planEdits[eventId];
+  if (!edits || !edits.stands[stand]) return;
+  const standEdit = edits.stands[stand];
+  if (standEdit.roles[role]) return; // already exists, no-op
+  standEdit.roles[role] = { count: 0, prevCount: null };
+  if (!standEdit.isActive) standEdit.isActive = true; // auto-promote
+  markPlanDirty(eventId);
+  render();
+  showToast('Added ' + role + ' to ' + stand + ' — set a headcount', 'success');
+}
+
+// ============================================================
+// SUBMIT PLAN — Session 3 (May 25, 2026)
+// ------------------------------------------------------------
+// Click handler for the Submit/Resubmit button. Computes the diff
+// between edit state and the live staffing_requests rows for this
+// event, then applies it: POST new rows, PATCH changed rows, DELETE
+// orphaned rows. Writes a Session-4-ready audit log for every change.
+//
+// Sequencing rationale: we do writes serially via Promise.all on
+// arrays of independent operations. The Supabase REST API doesn't
+// support multi-statement transactions, so each row is its own
+// request. If something fails partway, the diff logic is idempotent
+// — re-submitting will complete what's left.
+//
+// After all writes succeed, we refetch the canonical staffing_requests
+// rows from Supabase (so server-generated columns like submitted_at
+// land correctly), rebuild planEdits from the fresh data, and re-render.
+// ============================================================
+function onSubmitPlanClick(eventId) {
+  const edits = state.planEdits[eventId];
+  if (!edits) return;
+  if (edits.submitting) return;  // double-click guard
+  const validation = validatePlanEdits(edits);
+  if (!validation.ok) {
+    showToast(validation.msg, 'error');
+    return;
+  }
+  const ev = state.events.find(e => e.id === eventId);
+  if (!ev) return;
+
+  const actor = (state.user && state.user.display_name) ||
+                (state.user && state.user.email) || 'unknown';
+  const isResubmit = !!state.staffingRequests.find(r => r.event_id === eventId);
+
+  // ---- Step 1: Build the "desired" row set from edit state.
+  // For every active stand × role with count > 0, we need a DB row.
+  // Defaulted stands and zero-count roles produce no rows.
+  const desired = [];  // [{ stand, role, headcount, sales_forecast }]
+  Object.keys(edits.stands).forEach(standName => {
+    const s = edits.stands[standName];
+    if (!s.isActive) return;
+    Object.keys(s.roles).forEach(role => {
+      const count = s.roles[role].count || 0;
+      if (count <= 0) return;
+      desired.push({
+        stand: standName,
+        role: role,
+        headcount: count,
+        sales_forecast: s.forecast
+      });
+    });
+  });
+
+  // Index desired rows by stand||role for O(1) diff lookup
+  const desiredByKey = {};
+  desired.forEach(d => { desiredByKey[d.stand + '||' + d.role] = d; });
+
+  // ---- Step 2: Diff against current DB state.
+  const existingRows = state.staffingRequests.filter(r => r.event_id === eventId);
+  const existingByKey = {};
+  existingRows.forEach(r => { existingByKey[r.stand + '||' + r.role] = r; });
+
+  const toInsert = [];  // new rows
+  const toUpdate = [];  // { row, newHeadcount, newForecast }
+  const toDelete = [];  // existing rows whose key isn't in desired
+  const auditEntries = [];  // queued log entries — written after data writes succeed
+
+  // Decide insert vs update for each desired row
+  desired.forEach(d => {
+    const key = d.stand + '||' + d.role;
+    const existing = existingByKey[key];
+    if (!existing) {
+      // New row
+      toInsert.push(d);
+      auditEntries.push({
+        action: 'plan_role_added',
+        details: {
+          stand: d.stand,
+          role: d.role,
+          headcount: d.headcount,
+          forecast: d.sales_forecast
+        }
+      });
+    } else {
+      // Existing row — check for changes
+      const oldCount = existing.headcount || 0;
+      const newCount = d.headcount;
+      const oldForecast = existing.sales_forecast;
+      const newForecast = d.sales_forecast;
+      const countChanged = oldCount !== newCount;
+      const forecastChanged = oldForecast !== newForecast;
+      if (countChanged || forecastChanged) {
+        toUpdate.push({ row: existing, newHeadcount: newCount, newForecast: newForecast });
+      }
+      if (countChanged) {
+        auditEntries.push({
+          action: 'plan_headcount_set',
+          details: {
+            stand: d.stand,
+            role: d.role,
+            prev_value: oldCount,
+            new_value: newCount
+          }
+        });
+      }
+    }
+  });
+
+  // Decide deletes — any existing row not in the desired set
+  existingRows.forEach(r => {
+    const key = r.stand + '||' + r.role;
+    if (!desiredByKey[key]) {
+      toDelete.push(r);
+      auditEntries.push({
+        action: 'plan_role_removed',
+        details: {
+          stand: r.stand,
+          role: r.role,
+          prev_value: r.headcount || 0
+        }
+      });
+    }
+  });
+
+  // ---- Step 3: Detect stand-level adds and removes for richer audit.
+  // A stand is "added" if it has insert rows AND no existing rows had this stand.
+  // A stand is "removed" if all existing rows for that stand are being deleted
+  // AND no rows for that stand remain in desired.
+  const existingStands = new Set(existingRows.map(r => r.stand));
+  const desiredStands = new Set(desired.map(d => d.stand));
+
+  desiredStands.forEach(stand => {
+    if (!existingStands.has(stand)) {
+      const roleCount = desired.filter(d => d.stand === stand).length;
+      auditEntries.push({
+        action: 'plan_stand_added',
+        details: { stand: stand, role_count: roleCount }
+      });
+    }
+  });
+  existingStands.forEach(stand => {
+    if (!desiredStands.has(stand)) {
+      // All rows for this stand are being deleted. Check for placements.
+      const placementCount = state.positions.filter(p =>
+        p.event_id === eventId && p.stand === stand
+      ).length;
+      auditEntries.push({
+        action: 'plan_stand_removed',
+        details: {
+          stand: stand,
+          had_placements: placementCount > 0,
+          placement_count: placementCount
+        }
+      });
+    }
+  });
+
+  // ---- Step 4: Per-stand forecast change tracking.
+  // Walk active stands in edit state, compare forecast to wasActiveAtLoad's
+  // first-row sales_forecast. We do this at stand level (not row level)
+  // because forecast is conceptually a stand attribute, even though the DB
+  // stores it on each row.
+  Object.keys(edits.stands).forEach(standName => {
+    const s = edits.stands[standName];
+    if (!s.isActive) return;
+    if (s.forecast === s.prevForecast) return;
+    auditEntries.push({
+      action: 'plan_forecast_set',
+      details: {
+        stand: standName,
+        prev_value: s.prevForecast,
+        new_value: s.forecast
+      }
+    });
+  });
+
+  // ---- Step 5: Aggregate plan_submit row (always written, even on first submit).
+  const totalStaff = desired.reduce((sum, d) => sum + d.headcount, 0);
+  const totalForecast = Object.keys(edits.stands)
+    .filter(name => edits.stands[name].isActive)
+    .reduce((sum, name) => sum + (edits.stands[name].forecast || 0), 0);
+  auditEntries.unshift({  // unshift so it appears first in the log batch
+    action: 'plan_submit',
+    details: {
+      stand_count: desiredStands.size,
+      staff_total: totalStaff,
+      forecast_total: totalForecast,
+      is_resubmit: isResubmit
+    }
+  });
+
+  // ---- Step 6: Execute. Lock state, fire data writes, then audit, then refetch.
+  edits.submitting = true;
+  render();  // re-render to disable the button via the submitting flag
+
+  const insertBody = toInsert.map(d => ({
+    event_id: eventId,
+    venue: ev.venue,
+    stand: d.stand,
+    role: d.role,
+    headcount: d.headcount,
+    sales_forecast: d.sales_forecast,
+    manager_name: actor
+  }));
+
+  // Build update promises. Each PATCH also stamps manager_name to actor
+  // (per Keith's preference: always overwrite on every submit).
+  const updatePromises = toUpdate.map(u => {
+    return authFetch(SUPABASE_URL + '/rest/v1/staffing_requests?id=eq.' + u.row.id, {
+      method: 'PATCH',
+      headers: apiHeadersJson(),
+      body: JSON.stringify({
+        headcount: u.newHeadcount,
+        sales_forecast: u.newForecast,
+        manager_name: actor,
+        submitted_at: new Date().toISOString()
+      })
+    });
+  });
+
+  // Build delete promises — one DELETE per orphaned row
+  const deletePromises = toDelete.map(r => {
+    return authFetch(SUPABASE_URL + '/rest/v1/staffing_requests?id=eq.' + r.id, {
+      method: 'DELETE',
+      headers: apiHeaders()
+    });
+  });
+
+  // Insert is one POST with the full array (Supabase REST supports bulk POST)
+  const insertPromise = insertBody.length > 0
+    ? authFetch(SUPABASE_URL + '/rest/v1/staffing_requests', {
+        method: 'POST',
+        headers: apiHeadersJson(),
+        body: JSON.stringify(insertBody)
+      })
+    : Promise.resolve([]);
+
+  // Also patch manager_name on rows that didn't change values but are in the
+  // desired set — keeps the "Submitted by" header accurate. This is a separate
+  // pass so it doesn't bloat the diff logic above.
+  const unchangedRows = existingRows.filter(r => {
+    const key = r.stand + '||' + r.role;
+    if (!desiredByKey[key]) return false;  // being deleted
+    return !toUpdate.find(u => u.row.id === r.id);  // not already being updated
+  });
+  const stampPromises = unchangedRows.map(r => {
+    return authFetch(SUPABASE_URL + '/rest/v1/staffing_requests?id=eq.' + r.id, {
+      method: 'PATCH',
+      headers: apiHeadersJson(),
+      body: JSON.stringify({
+        manager_name: actor,
+        submitted_at: new Date().toISOString()
+      })
+    });
+  });
+
+  // Fire all data writes in parallel. They're independent — different rows.
+  Promise.all([insertPromise].concat(updatePromises, deletePromises, stampPromises))
+    .then(() => {
+      // ---- Step 7: Write audit log entries. Sequential (and non-blocking on
+      // failure — log writes already use .catch in logAction).
+      return Promise.all(auditEntries.map(entry =>
+        logAction(eventId, null, entry.action, entry.details)
+      ));
+    })
+    .then(() => {
+      // ---- Step 8: Refetch staffing_requests for this event to get the
+      // canonical state (server-generated submitted_at, etc.).
+      return authFetch(
+        SUPABASE_URL + '/rest/v1/staffing_requests?event_id=eq.' + eventId + '&headcount=gt.0',
+        { headers: apiHeaders() }
+      );
+    })
+    .then(freshRows => {
+      // Replace this event's rows in state.staffingRequests
+      state.staffingRequests = state.staffingRequests.filter(r => r.event_id !== eventId)
+        .concat(freshRows || []);
+      // Rebuild edit state from fresh data — clears dirty flag, captures new
+      // prevCount/prevForecast for the next round of edits.
+      buildPlanEdits(ev);
+      render();
+      const verb = isResubmit ? 'Resubmitted' : 'Submitted';
+      showToast(verb + ' plan — ' + desiredStands.size + ' stand' +
+        (desiredStands.size === 1 ? '' : 's') + ', ' + totalStaff + ' staff', 'success');
+    })
+    .catch(err => {
+      if (err.authFailed) { handleAuthFailure(); return; }
+      console.error('plan submit failed:', err);
+      // Clear submitting flag so the button re-enables and the user can retry
+      const e2 = state.planEdits[eventId];
+      if (e2) e2.submitting = false;
+      render();
+      showToast('Submit failed: ' + (err.message || 'check console'), 'error');
+    });
+}
+
+// Wire up the clear-stand modal once at page init (modal is reused).
+document.getElementById('clear-stand-confirm-btn').addEventListener('click', confirmClearStand);
+document.querySelectorAll('#clear-stand-modal [data-close-modal]').forEach(b => {
+  b.addEventListener('click', () => {
+    _clearStandContext = null;
+    document.getElementById('clear-stand-modal').classList.remove('show');
+  });
+});
+
+// Plan tab — Session 3 (May 25, 2026): editable view of the planning
+// data for this event.
+//
+// Reads from state.planEdits[ev.id] (built lazily via ensurePlanEdits).
+// Every input edit, "Clear stand" click, and "Add role" action mutates
+// the edit state locally and re-renders. Submit upserts everything.
+//
+// Each stand is either:
+//   - ACTIVE: was loaded with staffing_requests rows OR promoted via
+//     an edit. Editable inputs, "Clear stand" + "Add role" buttons,
+//     venue-colored "N staff" pill.
+//   - DEFAULTED: par-only at load, no edits. Dashed border, italic.
+//     Clicking any input auto-promotes to active.
+//
+// Footer totals + "Submit" button reflect ONLY active stands.
+function renderPlanTab(ev) {
+  ensurePlanEdits(ev);
+  const edits = state.planEdits[ev.id];
+  const tier = ev.staffing_tier || 'full';
+  const venueIndex = state.parIndex[ev.venue] || {};
+  const tierIndex = venueIndex[tier] || {};
+  const parStandNames = Object.keys(tierIndex).filter(s => HIDDEN_STANDS.indexOf(s) === -1);
+
+  // Resolve most-recent submitter from staffing_requests for the header strip.
+  // (Stand state itself comes from state.planEdits, but submitter info is
+  // metadata we read from the DB rows directly.)
+  let mostRecentSubmittedAt = null;
+  let mostRecentManager = null;
+  state.staffingRequests.filter(r => r.event_id === ev.id).forEach(r => {
+    if (PLAN_HIDDEN_STANDS.indexOf(r.stand) !== -1) return;
+    if (r.submitted_at && (!mostRecentSubmittedAt || r.submitted_at > mostRecentSubmittedAt)) {
+      mostRecentSubmittedAt = r.submitted_at;
+      mostRecentManager = r.manager_name || null;
+    }
+  });
+
+  // Merge stand list: par-catalog stands + any event-only stands that aren't
+  // in the par catalog (legacy "Add stand for tonight" submissions or stands
+  // retired from par since the plan was submitted). Filter out HIDDEN_STANDS
+  // (Client Staffing Needs / Non-Event Labor) — same filter the Staff tab
+  // applies. These are admin bookkeeping stands, not real positions, and
+  // would otherwise leak onto the Plan tab from par_levels even though
+  // they're suppressed everywhere else.
+  // Stand names come from the edit state — buildPlanEdits already merged
+  // par-catalog stands with any event-only stands and filtered HIDDEN_STANDS.
+  const allStandNames = new Set(Object.keys(edits.stands));
+  // Sort: order rank first (revenue=1, hawking=90, support=99) so support
+  // and hawking always sit at the bottom. Within each rank, ACTIVE stands
+  // come before DEFAULTED — managers want to scan what's planned first,
+  // and the empty cards below them act as "what's available to add" rather
+  // than visual noise interrupting the planned work. Alpha within each
+  // active/defaulted bucket.
+  const orderRank = (s) => {
+    if (s === SUPPORT_STAND) return 99;
+    if (s === HAWKING_STAND) return 90;
+    if (s === CLIENT_STAND) return 85;
+    return 1;
+  };
+  const sortedStands = Array.from(allStandNames).sort((a, b) => {
+    const oa = orderRank(a), ob = orderRank(b);
+    if (oa !== ob) return oa - ob;
+    // Active-vs-defaulted comes from edit state, not direct DB read,
+    // so auto-promoted stands sort with active ones in real time.
+    const aActive = (edits.stands[a] && edits.stands[a].isActive) ? 0 : 1;
+    const bActive = (edits.stands[b] && edits.stands[b].isActive) ? 0 : 1;
+    if (aActive !== bActive) return aActive - bActive;
+    return a.localeCompare(b);
+  });
+
+  // Header strip — "Submitted by [name]" if any staffing_requests exists.
+  // Otherwise the not-submitted strip in red.
+  let html = '<div class="plan-tab-body">';
+  if (mostRecentManager) {
+    html += '<div class="plan-header-strip">' +
+      '<span class="plan-submitted-by-label">Submitted by</span>' +
+      '<span class="plan-submitted-by-name">' + escapeHtml(mostRecentManager) + '</span>' +
+      '<span class="plan-header-meta">&middot; ' + escapeHtml(parStandNames.length) +
+        ' stand' + (parStandNames.length === 1 ? '' : 's') + ' in this venue\'s catalog' +
+        (tier !== 'full' ? ' (' + escapeHtml(tier) + ' tier)' : '') +
+      '</span>' +
+    '</div>';
+  } else if (parStandNames.length > 0) {
+    html += '<div class="plan-not-submitted-strip">' +
+      '<strong>Not submitted yet.</strong> Showing par-level defaults for ' +
+      escapeHtml(ev.venue) + (tier !== 'full' ? ' (' + escapeHtml(tier) + ' tier)' : '') +
+      '. Editing comes in Session 3.' +
+    '</div>';
+  }
+
+  // Empty state — venue has no par_levels rows at all
+  if (sortedStands.length === 0) {
+    html += '<div class="plan-empty-state">' +
+      '<div class="pes-title">No catalog stands for ' + escapeHtml(ev.venue) + '</div>' +
+      'Par levels for this venue/tier have not been set up yet. ' +
+      'Once the Default Staffing page exists, this tab will render automatically.' +
+    '</div>';
+    html += '</div>';
+    return html;
+  }
+
+  // Stand cards
+  const venueColor = VENUE_COLORS[ev.venue] || '#666';
+  let totalActiveStands = 0;
+  let totalActiveStaff = 0;
+  let totalActiveForecast = 0;
+
+  html += '<div class="plan-stands-list">';
+  sortedStands.forEach(stand => {
+    const standEdit = edits.stands[stand];
+    if (!standEdit) return;
+    const isActive = standEdit.isActive;
+    const isClient = (stand === CLIENT_STAND);
+
+    // Calculate stand staff total from current edit state
+    let standStaffTotal = 0;
+    Object.values(standEdit.roles).forEach(r => { standStaffTotal += (r.count || 0); });
+
+    if (isActive) {
+      totalActiveStands++;
+      totalActiveStaff += standStaffTotal;
+      totalActiveForecast += (standEdit.forecast || 0);
+    }
+
+    // Render the card
+    html += '<div class="plan-stand-card' + (isActive ? '' : ' defaulted') +
+      '" data-plan-stand="' + escapeAttr(stand) + '">';
+    html += '<div class="plan-stand-head">';
+    html += '<span class="plan-stand-name">' + escapeHtml(stand) +
+      alcoholBadge(ev.venue, stand) +
+      (isClient ? ' <span style="font-size:10px;font-weight:700;letter-spacing:0.04em;' +
+        'text-transform:uppercase;background:#f0e8fa;color:#7d3fbf;padding:2px 7px;' +
+        'border-radius:5px;vertical-align:middle;">Client Contract</span>' : '') +
+      '</span>';
+    html += '<span class="plan-stand-spacer"></span>';
+
+    // Forecast input (editable). Dirty class fires when the current
+    // edit-state value differs from the at-load value. The client-contract
+    // stand has no forecast — the manager records the client's headcount ask,
+    // not a sales projection (matches the old Event Planning page).
+    if (!isClient) {
+    html += '<span class="plan-forecast-wrap">';
+    html += '<span class="plan-forecast-label">Forecast</span>';
+    const forecastValue = (standEdit.forecast != null)
+      ? '$' + Number(standEdit.forecast).toLocaleString()
+      : '';
+    const forecastDirty = isActive && standEdit.forecast !== standEdit.prevForecast;
+    html += '<input class="plan-forecast-input' + (forecastDirty ? ' dirty' : '') +
+      '" type="text" inputmode="numeric"' +
+      ' data-plan-input="forecast"' +
+      ' data-plan-event="' + ev.id + '"' +
+      ' data-plan-stand="' + escapeAttr(stand) + '"' +
+      ' value="' + escapeAttr(forecastValue) + '"' +
+      (isActive ? '' : ' disabled') +
+      ' placeholder="$0">';
+    html += '</span>';
+    } // end if (!isClient): client card shows no forecast input
+
+    // Staff count pill
+    if (isActive) {
+      html += '<span class="plan-stand-pill" style="background:' + venueColor + ';">' +
+        standStaffTotal + ' staff</span>';
+    } else {
+      html += '<span class="plan-stand-pill defaulted">' + standStaffTotal + ' staff</span>';
+    }
+
+    // Open stand — explicit activate affordance on a defaulted card.
+    // Replaces the old "type into a grey box to auto-promote" behavior.
+    if (!isActive) {
+      html += '<button class="plan-open-stand-btn"' +
+        ' data-plan-open-stand="' + escapeAttr(stand) + '"' +
+        ' data-plan-event="' + ev.id + '"' +
+        ' title="Open this stand so you can set staff and a forecast">Open stand</button>';
+    }
+
+    // Per-stand action buttons. CSS hides them on defaulted stands so
+    // managers don't see "Clear" on a stand that doesn't exist yet.
+    html += '<span class="plan-stand-actions">';
+    html += '<button class="plan-stand-action-btn add"' +
+      ' data-plan-add-role="' + escapeAttr(stand) + '"' +
+      ' data-plan-event="' + ev.id + '"' +
+      ' title="Add a role to this stand for tonight only">+ Add role</button>';
+    html += '<button class="plan-stand-action-btn danger"' +
+      ' data-plan-clear-stand="' + escapeAttr(stand) + '"' +
+      ' data-plan-event="' + ev.id + '"' +
+      ' title="Clear all roles and forecast on this stand">Clear stand</button>';
+    html += '</span>';
+
+    html += '</div>';
+
+    // Role cells grid — read from edit state, editable input per role.
+    const roleNames = Object.keys(standEdit.roles).sort((a, b) => roleSortKey(a) - roleSortKey(b));
+    if (roleNames.length === 0) {
+      html += '<div class="plan-empty-stand-note">No roles on this stand. Use "+ Add role" to add one for tonight.</div>';
+    } else {
+      html += '<div class="plan-roles-grid">';
+      roleNames.forEach(role => {
+        const roleEdit = standEdit.roles[role];
+        const roleDirty = isActive && roleEdit.prevCount != null && roleEdit.count !== roleEdit.prevCount;
+        html += '<div class="plan-role-cell">';
+        html += '<div class="plan-role-label">' +
+          escapeHtml(pcRoles.legacyToCanonical(role) || role) + '</div>';
+        html += '<input class="plan-role-input' + (roleDirty ? ' dirty' : '') +
+          '" type="text" inputmode="numeric"' +
+          ' data-plan-input="role"' +
+          ' data-plan-event="' + ev.id + '"' +
+          ' data-plan-stand="' + escapeAttr(stand) + '"' +
+          ' data-plan-role="' + escapeAttr(role) + '"' +
+          (isActive ? '' : ' disabled') +
+          ' value="' + roleEdit.count + '">';
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+
+    html += '</div>';
+  });
+  html += '</div>'; // .plan-stands-list
+
+  // Footer totals — active stands only
+  html += '<div class="plan-footer">';
+  html += '<span class="plan-footer-label">Totals</span>';
+  html += '<span class="plan-footer-stat"><strong>' + totalActiveStaff + '</strong> staff</span>';
+  html += '<span class="plan-footer-divider">&middot;</span>';
+  html += '<span class="plan-footer-stat"><strong>' + totalActiveStands + '</strong> stand' +
+    (totalActiveStands === 1 ? '' : 's') + ' active</span>';
+  if (totalActiveForecast > 0) {
+    html += '<span class="plan-footer-divider">&middot;</span>';
+    html += '<span class="plan-footer-stat">Forecast <strong>$' +
+      Number(totalActiveForecast).toLocaleString() + '</strong></span>';
+  }
+  html += '</div>';
+
+  // Submit bar — sits at the bottom of the Plan tab body so it's
+  // unambiguously scoped to this event. Sticky-to-viewport was
+  // considered and rejected — with multiple events expanded at once,
+  // pinning a submit bar to the viewport made it visually ambiguous
+  // which event a click would commit. Bottom-anchored = no ambiguity.
+  html += renderPlanSubmitBar(ev, edits);
+
+  html += '</div>'; // .plan-tab-body
+  return html;
+}
+
+// Review tab placeholder. Session 4 will populate this with manager
+// notes, summary cards, and deep-links to existing post-event pages.
+function renderReviewTabStub(ev) {
+  return '<div class="tab-panel-stub">' +
+    '<div class="stub-title">Review tab</div>' +
+    'Post-event manager notes and summary.<br>' +
+    'Coming in Session 4.' +
+    '<div class="stub-hint">' +
+      'Sales, tips, and labor detail will continue to live on their existing pages.' +
+    '</div>' +
+  '</div>';
 }
 
 function renderExpanded(ev, locked) {
@@ -3234,7 +5183,7 @@ function renderExpanded(ev, locked) {
     const isScheduler = pcAuth.isAdmin();
     html += '<div class="locked-overlay">';
     html += '<span class="lock-icon">🔒</span>';
-    html += '<span><strong>This event is locked.</strong> Position changes after midnight day-of require a scheduler. Empty slots can still be filled.</span>';
+    html += '<span><strong>This event is locked.</strong> Position changes after the event starts require a scheduler. Empty slots can still be filled.</span>';
     html += '<button class="unlock-link' + (isScheduler ? '' : ' disabled') + '" data-unlock-event="' + ev.id + '">' + (isScheduler ? 'Unlock' : 'Unlock (admin only)') + '</button>';
     html += '</div>';
   }
@@ -3285,14 +5234,16 @@ function renderSummaryBar(ev) {
   html += '<span class="sb-label">Summary</span>';
   html += '<span class="summary-chip ' + fillCls + '"><span class="summary-chip-label">Filled</span><span class="num">' + totalFilled + '</span><span class="denom">/ ' + totalNeed + '</span></span>';
   html += '<span class="summary-chip neutral"><span class="summary-chip-label">Stands ready</span><span class="num">' + standsReady + '</span><span class="denom">/ ' + standGroups.length + '</span></span>';
-  html += '<span class="summary-chip neutral"><span class="summary-chip-label">Locks</span><span class="num">12:01 AM</span><span class="denom">' + fmtDayHeader(ev.event_date).split(',')[0] + '</span></span>';
+  const _lockClock = ev.gates_open || ev.show_time;
+  const _lockLabel = _lockClock ? fmtTime(_lockClock) : '12:00 AM';
+  html += '<span class="summary-chip neutral"><span class="summary-chip-label">Locks</span><span class="num">' + _lockLabel + '</span><span class="denom">' + fmtDayHeader(ev.event_date).split(',')[0] + '</span></span>';
   // Created chip — accessible but not prominent. Shows "Created May 12 ·
   // 3 weeks ago" so the manager can answer "when did this event even get
-  // created" without leaving the expanded event view.
+  // created" without leaving the expanded event view. Hidden when
+  // created_at is missing (legacy events from before the column existed,
+  // though all events should have it given the DEFAULT now()).
   if (ev.created_at) {
-    const createdTip = 'Event added to the calendar on ' +
-      new Date(ev.created_at).toLocaleString('en-US',
-        { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    const createdTip = 'Event added to the calendar on ' + fmtCreatedDateTime(ev.created_at);
     html += '<span class="summary-chip neutral" title="' + escapeAttr(createdTip) + '">' +
       '<span class="summary-chip-label">Created</span>' +
       '<span class="num" style="font-size:13px;font-weight:700;">' + escapeHtml(fmtCreatedDate(ev.created_at)) + '</span>' +
@@ -3300,8 +5251,9 @@ function renderSummaryBar(ev) {
     '</span>';
   }
   html += '<span class="event-spacer"></span>';
-  html += '<button class="audit-link" data-callable-event="' + ev.id + '" style="margin-right:14px;">📞 Available to call</button>';
-  html += '<button class="audit-link" data-audit-event="' + ev.id + '">Open audit log</button>';
+  html += '<button class="audit-link" data-callable-event="' + ev.id + '">📞 Available to call</button>';
+  // Note: audit-log button moved into the tab strip (May 25, 2026 — Session 1).
+  // It now lives at the right edge of the tab strip as a text link.
   html += '</div>';
   return html;
 }
@@ -3493,7 +5445,7 @@ function renderStandCard(ev, group, locked) {
 
   let html = '<div class="stand-card" data-stand="' + escapeAttr(group.stand) + '">';
   html += '<div class="stand-card-head"><div class="stand-card-name">';
-  html += escapeHtml(group.stand);
+  html += escapeHtml(group.stand) + alcoholBadge(ev.venue, group.stand);
   html += '<span class="stand-fill-tag ' + tagCls + '"' +
     (isOver ? ' title="Over-staffed by ' + (fill - need) + '. Headcount was reduced after people were placed. Use ✕ to release the extras."' : '') +
     '>' + fill + ' / ' + need + '</span>';
@@ -3600,7 +5552,7 @@ function renderFilledSlot(ev, p, locked) {
   if (p.source === 'manual') html += '<span class="manual-tag">TYPED</span>';
   if (p.source === 'placeholder') html += '<span class="placeholder-tag">PLACEHOLDER</span>';
   // 7s toggle — present on every placed pill except JMAC (JMAC is an
-  // agency staffing record, not a person staffing copies into 7shifts).
+  // agency staffing record, not a person Meg copies into 7shifts).
   // Stays interactive even after midnight lock so late additions /
   // corrections to 7shifts can be tracked.
   if (p.source !== 'jmac') {
@@ -3812,6 +5764,23 @@ function escapeHtml(s) {
 }
 function escapeAttr(s) { return escapeHtml(s); }
 
+// Alcohol-stand indicator. Returns a 🍺 <span> (with tooltip) when the
+// catalog flags this stand as selling alcohol, else ''. Added Jun 15, 2026
+// as a scheduling prompt — reminds the manager to confirm placed staff hold
+// a current alcohol cert. Purely visual; no enforcement (yet). Reads the
+// sells_alcohol flag threaded through pc-catalog.js. Injected stands with no
+// catalog row (Client Staffing Needs / Support Staff / event-only stands)
+// return null from getStand → no icon, which is correct.
+function alcoholBadge(venue, standName) {
+  try {
+    var s = pcCatalog.getStand(venue, standName);
+    if (s && s.sells_alcohol === true) {
+      return ' <span class="alcohol-badge" title="This stand sells alcohol — confirm placed staff hold a current alcohol certification.">🍺</span>';
+    }
+  } catch (e) { /* catalog not ready / unknown stand — no badge */ }
+  return '';
+}
+
 // ---------- Helper: clear typing state cleanly ----------
 // Centralized so every code path that ends a typing session removes
 // the document-level outsideTypingClick listener. Without this, a stale
@@ -3846,7 +5815,12 @@ function attachRecentSignupsHandlers() {
 function attachEventHandlers() {
   document.querySelectorAll('.event-head').forEach(head => {
     head.addEventListener('click', e => {
-      if (e.target.closest('.btn') || e.target.closest('.audit-link') || e.target.closest('.notified-pill')) return;
+      // Clicks on action buttons / audit links / notified-pill / print-split
+      // / tab strip should never toggle event expansion. (.tab-strip is a
+      // sibling of .event-head — added here as defense in depth in case
+      // future markup nests it.)
+      if (e.target.closest('.btn') || e.target.closest('.audit-link') ||
+          e.target.closest('.notified-pill') || e.target.closest('.tab-strip')) return;
       const row = head.closest('.event-row');
       // Cancelled rows are not expandable — click does nothing.
       if (row.classList.contains('cancelled-row')) return;
@@ -3854,6 +5828,100 @@ function attachEventHandlers() {
       if (state.expandedEvents.has(id)) state.expandedEvents.delete(id);
       else state.expandedEvents.add(id);
       render();
+    });
+  });
+
+  // Tab strip buttons — switch between Plan / Staff / Review inside
+  // the expanded event. State per event_id so multiple events can sit
+  // on different tabs simultaneously. The active tab is rendered
+  // fresh on every render() call.
+  document.querySelectorAll('[data-event-tab]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const eventId = btn.getAttribute('data-event-tab');
+      const tabName = btn.getAttribute('data-tab-name');
+      if (!eventId || !tabName) return;
+      state.activeTab[eventId] = tabName;
+      render();
+    });
+  });
+
+  // ============================================================
+  // PLAN TAB EDIT HANDLERS — Session 3 (May 25, 2026)
+  // ------------------------------------------------------------
+  // Forecast and role-count inputs fire on `change` (i.e. when the
+  // input loses focus or Enter is pressed) rather than `input`
+  // (every keystroke) so the manager can type "1500" without each
+  // keystroke triggering a re-render and losing the focus position.
+  // ============================================================
+  document.querySelectorAll('[data-plan-input="forecast"]').forEach(input => {
+    input.addEventListener('change', e => {
+      const eventId = input.getAttribute('data-plan-event');
+      const stand = input.getAttribute('data-plan-stand');
+      onPlanForecastChange(eventId, stand, input.value);
+    });
+    // Stop blur on Enter, commit value
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+    });
+  });
+
+  document.querySelectorAll('[data-plan-input="role"]').forEach(input => {
+    input.addEventListener('change', e => {
+      const eventId = input.getAttribute('data-plan-event');
+      const stand = input.getAttribute('data-plan-stand');
+      const role = input.getAttribute('data-plan-role');
+      onPlanRoleChange(eventId, stand, role, input.value);
+    });
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+    });
+  });
+
+  // "+ Add role" button — opens the role picker dropdown
+  document.querySelectorAll('[data-plan-add-role]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const eventId = btn.getAttribute('data-plan-event');
+      const stand = btn.getAttribute('data-plan-add-role');
+      onAddRoleClick(eventId, stand, btn);
+    });
+  });
+
+  // "Clear stand" button — opens confirm modal if placements exist
+  document.querySelectorAll('[data-plan-clear-stand]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const eventId = btn.getAttribute('data-plan-event');
+      const stand = btn.getAttribute('data-plan-clear-stand');
+      onClearStandClick(eventId, stand);
+    });
+  });
+
+  // Submit / Resubmit button — Patch 6 will replace the stub
+  document.querySelectorAll('[data-plan-submit]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      if (btn.disabled) return;
+      const eventId = btn.getAttribute('data-plan-submit');
+      onSubmitPlanClick(eventId);
+    });
+  });
+
+  document.querySelectorAll('[data-plan-open-stand]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const eventId = btn.getAttribute('data-plan-event');
+      const stand = btn.getAttribute('data-plan-open-stand');
+      openPlanStand(eventId, stand);
+    });
+  });
+
+  document.querySelectorAll('[data-plan-discard]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const eventId = btn.getAttribute('data-plan-discard');
+      discardPlanEdits(eventId);
     });
   });
 
@@ -4840,12 +6908,12 @@ function logAction(eventId, positionId, action, details) {
 // (staff_name, event_id), or null if none exists. Used by the
 // Available panel to decide whether to tint a pill red.
 //
-// Why event_id matters: if a person was synced at Mann and released,
-// they only need cleanup on the Mann signup. If they also signed up
-// at FMP the same day, that pill should NOT be red — there was no
-// FMP sync to undo. (They'd reappear on multiple events' available
-// panels via their availability rows; we want the red only on the one
-// they were actually placed and synced at.)
+// Why event_id matters: if Maya was synced at Mann and released, she
+// only needs cleanup on the Mann signup. If she also signed up at FMP
+// the same day, that pill should NOT be red — there was no FMP sync
+// to undo. (She'd reappear on multiple events' available panels via
+// her availability rows; we want the red only on the one she was
+// actually placed and synced at.)
 function wasRecentlySyncedAndReleased(staffName, eventId) {
   if (!staffName || !eventId) return null;
   for (let i = 0; i < state.removedSyncedPlacements.length; i++) {
@@ -5766,83 +7834,360 @@ function printCallableList() {
 document.getElementById('callable-print-btn').addEventListener('click', printCallableList);
 
 // ---------- Audit log modal ----------
+//
+// Session 4 (May 26, 2026): redesigned to use filter chips, sort toggle,
+// pill-style action labels, before/after rendering for plan_* actions,
+// and a "during staffing" annotation when plan changes happen after
+// the first placement. All data already lives in position_assignment_log
+// — this is purely a rendering pass.
+
+// Category mapping for the filter chips and pill colors.
+// 'plan'    = the 7 plan_* actions written by Session 3's submit handler
+// 'staff'   = placements, moves, sync events, locks
+// 'removed' = position removals + 7shifts unsync events
+// 'notify'  = staffing-notification emails
+// 'other'   = anything else (event_cancelled, event_restored, locked/unlocked, etc)
+const AUDIT_CATEGORY = {
+  plan_submit:        'plan',
+  plan_stand_added:   'plan',
+  plan_stand_removed: 'plan',
+  plan_role_added:    'plan',
+  plan_role_removed:  'plan',
+  plan_headcount_set: 'plan',
+  plan_forecast_set:  'plan',
+  placed:             'staff',
+  moved:              'staff',
+  synced_7s:          'staff',
+  locked:             'other',
+  unlocked:           'other',
+  removed:            'removed',
+  unsynced_7s:        'removed',
+  notified_staffing:  'notify',
+  event_cancelled:    'other',
+  event_restored:     'other'
+};
+
+// Human-readable pill labels. The pill replaces the previous bold
+// uppercase action text — labels here are still uppercase but spelled
+// out so they read like phrases instead of constant names.
+const AUDIT_PILL_LABEL = {
+  plan_submit:        'Plan submitted',
+  plan_stand_added:   'Stand added',
+  plan_stand_removed: 'Stand removed',
+  plan_role_added:    'Role added',
+  plan_role_removed:  'Role removed',
+  plan_headcount_set: 'Headcount',
+  plan_forecast_set:  'Forecast',
+  placed:             'Placed',
+  moved:              'Moved',
+  removed:            'Removed',
+  synced_7s:          'Synced 7s',
+  unsynced_7s:        'Unsynced 7s',
+  notified_staffing:  'Notified',
+  locked:             'Locked',
+  unlocked:           'Unlocked',
+  event_cancelled:    'Cancelled',
+  event_restored:     'Restored'
+};
+
+function auditCategoryOf(action) {
+  return AUDIT_CATEGORY[action] || 'other';
+}
+
+function auditPillLabelOf(action) {
+  return AUDIT_PILL_LABEL[action] || action;
+}
+
+// Format a forecast number for the audit description.
+// null → "(none)", numeric → "$1,200".
+function fmtAuditForecast(v) {
+  if (v == null) return '(none)';
+  const n = Number(v);
+  if (isNaN(n)) return String(v);
+  return '$' + n.toLocaleString();
+}
+
+// Build the description HTML for a single audit row. Returns the inner
+// HTML of the .log-desc span — NOT including the pill or actor columns.
+// Falls back to a JSON dump for unknown action vocabulary so misspelled
+// actions are still visible (low-severity bug, easy to grep for).
+function renderAuditDescription(row) {
+  const d = row.details || {};
+  const a = row.action;
+  switch (a) {
+    case 'plan_submit': {
+      const stands = d.stand_count || 0;
+      const staff = d.staff_total || 0;
+      const fcast = d.forecast_total;
+      const verb = d.is_resubmit ? 'Plan resubmitted' : 'Plan submitted';
+      let s = '<strong>' + verb + '</strong> &mdash; ' +
+        stands + ' stand' + (stands === 1 ? '' : 's') + ', ' +
+        staff + ' staff';
+      if (fcast != null && Number(fcast) > 0) {
+        s += ', ' + fmtAuditForecast(fcast) + ' forecast';
+      }
+      return s;
+    }
+    case 'plan_stand_added':
+      return '<strong>' + escapeHtml(d.stand || '?') + '</strong> added to plan' +
+        (d.role_count ? ' &mdash; ' + d.role_count + ' role' +
+          (d.role_count === 1 ? '' : 's') : '');
+    case 'plan_stand_removed': {
+      let s = '<strong>' + escapeHtml(d.stand || '?') + '</strong> removed from plan';
+      if (d.had_placements && d.placement_count) {
+        s += ' &mdash; ' + d.placement_count + ' placement' +
+          (d.placement_count === 1 ? '' : 's') + ' orphaned';
+      }
+      return s;
+    }
+    case 'plan_role_added':
+      return escapeHtml(d.role || '?') + ' added at <strong>' +
+        escapeHtml(d.stand || '?') + '</strong>' +
+        (d.headcount ? ' &mdash; ' + d.headcount + ' staff' : '');
+    case 'plan_role_removed':
+      return escapeHtml(d.role || '?') + ' removed from <strong>' +
+        escapeHtml(d.stand || '?') + '</strong>' +
+        (d.prev_value ? ' (was ' + d.prev_value + ')' : '');
+    case 'plan_headcount_set':
+      return escapeHtml(d.role || '?') + ' at <strong>' +
+        escapeHtml(d.stand || '?') + '</strong>: ' +
+        '<span class="delta-old">' + (d.prev_value != null ? d.prev_value : '?') + '</span>' +
+        '<span class="arrow"> &rarr; </span>' +
+        '<span class="delta-new">' + (d.new_value != null ? d.new_value : '?') + '</span>';
+    case 'plan_forecast_set':
+      return 'Forecast for <strong>' + escapeHtml(d.stand || '?') + '</strong>: ' +
+        '<span class="delta-old">' + fmtAuditForecast(d.prev_value) + '</span>' +
+        '<span class="arrow"> &rarr; </span>' +
+        '<span class="delta-new">' + fmtAuditForecast(d.new_value) + '</span>';
+    case 'placed':
+      return '<strong>' + escapeHtml(d.staff_name || '?') + '</strong> &rarr; ' +
+        escapeHtml(d.stand || '?') + ' / ' + escapeHtml(d.role || '?') +
+        (d.source ? ' <span style="color:var(--label);">(' + escapeHtml(d.source) + ')</span>' : '') +
+        (d.override ? ' <span style="color:var(--amber-dark);font-weight:700;">&#9888; OVERRIDE</span>' : '');
+    case 'removed': {
+      let s = '<strong>' + escapeHtml(d.staff_name || '?') + '</strong> from ' +
+        escapeHtml(d.stand || '?') + ' / ' + escapeHtml(d.role || '?');
+      if (d.was_synced) s += ' <span style="color:var(--label);font-style:italic;">(was synced to 7shifts)</span>';
+      return s;
+    }
+    case 'moved':
+      return '<strong>' + escapeHtml(d.staff_name || '?') + '</strong>: ' +
+        escapeHtml(d.from && d.from.stand) + ' / ' + escapeHtml(d.from && d.from.role) +
+        '<span class="arrow"> &rarr; </span>' +
+        escapeHtml(d.to && d.to.stand) + ' / ' + escapeHtml(d.to && d.to.role);
+    case 'synced_7s':
+      return '<strong>' + escapeHtml(d.staff_name || '?') + '</strong> marked synced at ' +
+        escapeHtml(d.stand || '?') + ' / ' + escapeHtml(d.role || '?');
+    case 'unsynced_7s': {
+      const reasonLabel =
+        d.reason === 'manual_uncheck'          ? 'manually unmarked' :
+        d.reason === 'moved'                   ? 'auto-cleared (moved)' :
+        d.reason === 'role_changed'            ? 'auto-cleared (role changed)' :
+        d.reason === 'stand_changed'           ? 'auto-cleared (stand changed)' :
+        d.reason === 'event_changed'           ? 'auto-cleared (event changed)' :
+        d.reason === 'removed'                 ? 'auto-cleared (removed from schedule)' :
+        d.reason === 'dismissed_after_release' ? 'dismissed (removed from 7shifts)' :
+        d.reason || 'cleared';
+      return '<strong>' + escapeHtml(d.staff_name || '?') + '</strong> &mdash; ' +
+        'sync flag ' + escapeHtml(reasonLabel);
+    }
+    case 'notified_staffing': {
+      let s = 'Staffing notified at <strong>' +
+        escapeHtml(d.recipient || 'staffing@camdenco.com') + '</strong>';
+      if (d.cc) s += ' (CC: ' + escapeHtml(d.cc) + ')';
+      if (d.note) s += ' &mdash; Note: <em>' + escapeHtml(d.note) + '</em>';
+      return s;
+    }
+    case 'unlocked': return 'Manually unlocked';
+    case 'locked':   return 'Locked';
+    default:
+      return '<span style="color:var(--label);font-family:monospace;font-size:11px;">' +
+        escapeHtml(JSON.stringify(d)) + '</span>';
+  }
+}
+
+// Per-event audit log state. Filter chip + sort direction. Keyed by
+// event_id so two open audit modals on different events (we only show
+// one at a time but the state persists in case we reopen) don't share.
+const _auditState = {
+  eventId: null,
+  rows: [],
+  filter: 'all',
+  sort: 'desc'   // 'desc' = newest first, 'asc' = oldest first
+};
+
 function openAuditLog(eventId) {
   const ev = state.events.find(e => e.id === eventId);
   document.getElementById('audit-title').textContent = 'Audit Log — ' + (ev ? ev.event_name : eventId);
   document.getElementById('audit-body').innerHTML = '<div class="loader">Loading…</div>';
   document.getElementById('audit-modal').classList.add('show');
 
-  authFetch(SUPABASE_URL + '/rest/v1/position_assignment_log?event_id=eq.' + eventId + '&order=actor_at.desc&limit=200',
+  // Reset state on every open. Filter resets to 'all', sort to newest-first.
+  _auditState.eventId = eventId;
+  _auditState.rows = [];
+  _auditState.filter = 'all';
+  _auditState.sort = 'desc';
+
+  // Explicit limit baked into the URL per sql-delivery-rules.md.
+  // 5000 is generous — a heavily-edited event with many resubmits and
+  // hundreds of placements still won't approach it, and Supabase REST
+  // would otherwise silently cap at the server's max_rows.
+  authFetch(SUPABASE_URL + '/rest/v1/position_assignment_log?event_id=eq.' + eventId +
+            '&order=actor_at.desc&limit=5000',
     { headers: apiHeaders() })
   .then(rows => {
-    if (!rows || !rows.length) {
-      document.getElementById('audit-body').innerHTML = '<div class="empty-state">No log entries yet.</div>';
-      return;
-    }
-    let html = '';
-    rows.forEach(r => {
-      const d = r.details || {};
-      let desc = '';
-      if (r.action === 'placed') desc = (d.staff_name || '?') + ' → ' + (d.stand || '?') + ' / ' + (d.role || '?') + (d.source ? ' (' + d.source + ')' : '') + (d.override ? ' ⚠ OVERRIDE' : '');
-      else if (r.action === 'removed') {
-        desc = (d.staff_name || '?') + ' from ' + (d.stand || '?') + ' / ' + (d.role || '?');
-        if (d.was_synced) desc += ' (was synced to 7shifts)';
-      }
-      else if (r.action === 'moved') desc = (d.staff_name || '?') + ': ' + (d.from && d.from.stand) + ' / ' + (d.from && d.from.role) + ' → ' + (d.to && d.to.stand) + ' / ' + (d.to && d.to.role);
-      else if (r.action === 'unlocked') desc = 'Manually unlocked';
-      else if (r.action === 'synced_7s') desc = (d.staff_name || '?') + ' marked synced to 7shifts at ' + (d.stand || '?') + ' / ' + (d.role || '?');
-      else if (r.action === 'unsynced_7s') {
-        const reasonLabel =
-          d.reason === 'manual_uncheck'         ? 'manually unmarked' :
-          d.reason === 'moved'                  ? 'auto-cleared (moved)' :
-          d.reason === 'role_changed'           ? 'auto-cleared (role changed)' :
-          d.reason === 'stand_changed'          ? 'auto-cleared (stand changed)' :
-          d.reason === 'event_changed'          ? 'auto-cleared (event changed)' :
-          d.reason === 'removed'                ? 'auto-cleared (removed from schedule)' :
-          d.reason === 'dismissed_after_release' ? 'dismissed (removed from 7shifts)' :
-          d.reason || 'cleared';
-        desc = (d.staff_name || '?') + ' — sync flag ' + reasonLabel;
-      }
-      else if (r.action === 'notified_staffing') {
-        desc = 'Staffing notified at ' + (d.recipient || 'staffing@camdenco.com');
-        if (d.cc) desc += ' (CC: ' + d.cc + ')';
-        if (d.note) desc += ' — Note: "' + d.note + '"';
-      }
-      else desc = JSON.stringify(d);
-      html += '<div class="log-entry">';
-      html += '<span class="log-time">' + fmtDateTime(r.actor_at) + '</span>';
-      html += '<span class="log-action ' + r.action + '">' + r.action + '</span>';
-      html += '<span>' + escapeHtml(desc) + '</span>';
-      html += '<span class="log-actor">' + escapeHtml(r.actor || '') + '</span>';
-      // Override reason shown on a second line in muted amber. Only
-      // present for placements that fired the home-venue override dialog.
-      if (d.override_reason) {
-        html += '<div class="log-reason">Reason: ' + escapeHtml(d.override_reason) + '</div>';
-      }
-      html += '</div>';
-    });
-    // Synthetic "Event created" row at the bottom (oldest entry in
-    // DESC-sorted timeline). Not a real position_assignment_log row —
-    // we read events.created_at and render it inline so every audit log
-    // ends with "first thing that happened: it got created." Helps a
-    // manager looking at an empty event answer "when did this even get
-    // added" without leaving the audit log view.
-    if (ev && ev.created_at) {
-      html += '<div class="log-entry">' +
-        '<span class="log-time">' + fmtDateTime(ev.created_at) + '</span>' +
-        '<span class="log-action" style="color:var(--label);">event created</span>' +
-        '<span>Event added to the calendar ' +
-          '<span style="color:var(--label);">(' + escapeHtml(fmtCreatedRelative(ev.created_at)) + ')</span>' +
-        '</span>' +
-        '<span class="log-actor"></span>' +
-      '</div>';
-    }
-    document.getElementById('audit-body').innerHTML = html;
+    _auditState.rows = rows || [];
+    renderAuditLogBody();
   })
   .catch(err => {
     if (err.authFailed) { handleAuthFailure(); return; }
-    document.getElementById('audit-body').innerHTML = '<div class="empty-state">Could not load log: ' + (err.message || '') + '</div>';
+    document.getElementById('audit-body').innerHTML =
+      '<div class="empty-state">Could not load log: ' + (err.message || '') + '</div>';
   });
+}
+
+// Render the audit modal body from _auditState. Called once after fetch,
+// and again whenever the filter chip or sort direction changes.
+function renderAuditLogBody() {
+  const rows = _auditState.rows;
+  const body = document.getElementById('audit-body');
+
+  if (!rows || !rows.length) {
+    body.innerHTML = '<div class="empty-state">No log entries yet.</div>';
+    return;
+  }
+
+  // Count by category for the chip badges (computed from the full row
+  // set, not just the filtered view — chips show "how many of each kind
+  // exist", not "how many are currently shown").
+  const counts = { all: rows.length, plan: 0, staff: 0, removed: 0, notify: 0 };
+  rows.forEach(r => {
+    const cat = auditCategoryOf(r.action);
+    if (counts[cat] != null) counts[cat]++;
+  });
+
+  // Identify the first placement (sorted by actor_at) so we can mark
+  // any plan_* actions that occurred AFTER it as "during staffing".
+  // Walks the rows once; rows are already sorted DESC from the fetch
+  // so we look for the last 'placed' entry's timestamp.
+  let firstPlacedAt = null;
+  for (let i = rows.length - 1; i >= 0; i--) {
+    if (rows[i].action === 'placed') {
+      firstPlacedAt = rows[i].actor_at;
+      break;
+    }
+  }
+
+  // Apply filter
+  const filter = _auditState.filter;
+  let filtered = (filter === 'all')
+    ? rows.slice()
+    : rows.filter(r => auditCategoryOf(r.action) === filter);
+
+  // Apply sort. Rows from the fetch are DESC; reverse if user picked ASC.
+  if (_auditState.sort === 'asc') filtered.reverse();
+
+  // Build controls HTML — chips + sort dropdown
+  const chipBtn = (key, label) => {
+    const active = (filter === key) ? ' active' : '';
+    const count = counts[key] != null ? counts[key] : 0;
+    return '<button class="audit-chip' + active + '" data-audit-filter="' + key + '">' +
+      label + '<span class="chip-count">' + count + '</span>' +
+    '</button>';
+  };
+  let html = '<div class="audit-controls">';
+  html += '<div class="audit-chips">';
+  html += chipBtn('all',     'All');
+  html += chipBtn('plan',    'Plan');
+  html += chipBtn('staff',   'Staff');
+  html += chipBtn('removed', 'Removed');
+  html += chipBtn('notify',  'Notify');
+  html += '</div>';
+  html += '<span class="audit-spacer"></span>';
+  html += '<select class="audit-sort-select" data-audit-sort>' +
+    '<option value="desc"' + (_auditState.sort === 'desc' ? ' selected' : '') + '>Newest first</option>' +
+    '<option value="asc"'  + (_auditState.sort === 'asc'  ? ' selected' : '') + '>Oldest first</option>' +
+  '</select>';
+  html += '</div>';
+
+  // Empty-filtered branch
+  if (filtered.length === 0) {
+    html += '<div class="audit-empty-filtered">No ' +
+      escapeHtml(filter) + ' actions on this event.</div>';
+    body.innerHTML = html;
+    attachAuditControlHandlers();
+    return;
+  }
+
+  // Rows
+  filtered.forEach(r => {
+    const cat = auditCategoryOf(r.action);
+    const label = auditPillLabelOf(r.action);
+    const desc = renderAuditDescription(r);
+    const isDuringStaffing = cat === 'plan' && firstPlacedAt &&
+                             r.actor_at > firstPlacedAt;
+    html += '<div class="log-entry cat-' + cat + '">';
+    html += '<span class="log-time">' + fmtDateTime(r.actor_at) + '</span>';
+    html += '<span class="log-pill cat-' + cat + '">' + escapeHtml(label) + '</span>';
+    html += '<span class="log-desc">' + desc;
+    if (isDuringStaffing) {
+      html += '<span class="log-during-staffing" title="This plan change happened after the first placement on this event — may have caused ghost positions on the Staff tab.">&uarr; during staffing</span>';
+    }
+    html += '</span>';
+    html += '<span class="log-actor">' + escapeHtml(r.actor || '') + '</span>';
+    // Override reason on a second line — preserved from the previous design.
+    const d = r.details || {};
+    if (d.override_reason) {
+      html += '<div class="log-reason">Reason: ' + escapeHtml(d.override_reason) + '</div>';
+    }
+    html += '</div>';
+  });
+
+  // Synthetic "Event created" row — appended last when sort is DESC
+  // (newest first), so the oldest event in the timeline sits at the
+  // bottom; prepended when sort is ASC. This isn't a real DB row in
+  // position_assignment_log; we read events.created_at and render it
+  // inline so the audit log opens with "first thing that happened on
+  // this event: it got created." Only rendered when the filter is
+  // 'all' since it doesn't fit any of the action categories cleanly
+  // — manager filtering to "Plan" or "Staff" wants those actions
+  // only, not the creation marker.
+  const ev = state.events.find(e => e.id === _auditState.eventId);
+  if (ev && ev.created_at && _auditState.filter === 'all') {
+    const createdRow = '<div class="log-entry cat-other">' +
+      '<span class="log-time">' + fmtDateTime(ev.created_at) + '</span>' +
+      '<span class="log-pill cat-other">Event created</span>' +
+      '<span class="log-desc">Event added to the calendar ' +
+        '<span style="color:var(--label);">(' + escapeHtml(fmtCreatedRelative(ev.created_at)) + ')</span>' +
+      '</span>' +
+      '<span class="log-actor"></span>' +
+    '</div>';
+    // DESC sort: oldest at end → append. ASC sort: oldest at top → prepend.
+    if (_auditState.sort === 'desc') html += createdRow;
+    else html = createdRow + html.substring(html.indexOf('<div class="log-entry'));
+  }
+
+  body.innerHTML = html;
+  attachAuditControlHandlers();
+}
+
+// Wire the filter chips and sort dropdown. Re-bound on every render
+// because we replace the modal body's innerHTML.
+function attachAuditControlHandlers() {
+  document.querySelectorAll('[data-audit-filter]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      _auditState.filter = btn.getAttribute('data-audit-filter');
+      renderAuditLogBody();
+    });
+  });
+  const sortSel = document.querySelector('[data-audit-sort]');
+  if (sortSel) {
+    sortSel.addEventListener('change', () => {
+      _auditState.sort = sortSel.value;
+      renderAuditLogBody();
+    });
+  }
 }
 
 document.addEventListener('click', e => {
@@ -6202,7 +8547,7 @@ function sendStaffListEmail() {
   const realStaff = positions
     .filter(p => p.source !== 'jmac')
     .map(p => p.staff_name)
-    .sort((a, b) => formatLastFirst(a).localeCompare(formatLastFirst(b)));
+    .sort((a, b) => a.localeCompare(b));
   const jmacCount = positions.filter(p => p.source === 'jmac').length;
 
   const reportT = getReportTime(ev);
@@ -6572,7 +8917,26 @@ function startApp(user) {
   // Default custom range inputs
   document.getElementById('custom-from').value = todayIsoLocal();
   document.getElementById('custom-to').value = isoFromOffset(14);
-  loadAll();
+
+  // Phase -2b wiring (May 26, 2026): wait for the shared stand/venue
+  // catalog (pc-catalog.js) and the role catalog (pc-roles.js) to load
+  // before kicking off the main data fetch. Both helpers cache for the
+  // page session — the first ready() call triggers the fetch; subsequent
+  // calls return the same promise. If either fails to load (network
+  // hiccup, RLS issue), we log and proceed with hardcoded fallbacks
+  // still in place. Nothing on this page depends on the catalogs yet —
+  // this just gets them warmed up so subsequent patches can swap reads
+  // in surgically without changing the load sequence each time.
+  Promise.all([
+    pcCatalog.ready(),
+    pcRoles.ready()
+  ]).then(() => {
+    console.log('[catalog] pc-catalog and pc-roles ready');
+    loadAll();
+  }).catch(err => {
+    console.warn('[catalog] catalog load failed, proceeding with hardcoded fallbacks:', err);
+    loadAll();
+  });
 }
 
 pcAuth.require({
