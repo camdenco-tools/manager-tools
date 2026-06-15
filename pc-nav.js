@@ -72,7 +72,8 @@
       { label: 'Commission tracker',             href: '/commission-tracker/',     slug: 'commission-tracker' },
       { label: 'Item catalog',                   href: '/item-catalog/',           slug: 'item-catalog' },
       { label: 'Venue item profiles',            href: '/venue-item-profiles/',    slug: 'venue-item-profiles' },
-      { label: 'Activity heartbeat',             href: '/activity-heartbeat/',     slug: 'activity-heartbeat' }
+      { label: 'Activity heartbeat',             href: '/activity-heartbeat/',     slug: 'activity-heartbeat' },
+      { label: 'User access',                    href: '/user-access/',            slug: 'user-access' }
     ]
   };
 
