@@ -644,7 +644,7 @@ async function loadData() {
       SB_URL + '/rest/v1/sales?event_date=gte.' + start + '&event_date=lte.' + today +
         '&select=id,event_date,venue,event_name,stand,amount,staff_count,photo_url,units_photo_url&limit=5000',
       SB_URL + '/rest/v1/staffing_requests?event_id=in.' + idIn +
-        '&select=event_id,stand,headcount,sales_forecast&limit=5000',
+        '&headcount=gt.0&select=event_id,stand,headcount,sales_forecast&limit=5000',
       SB_URL + '/rest/v1/position_assignments?event_id=in.' + idIn + '&removed_at=is.null' +
         '&select=event_id,venue,stand,role,staff_name&limit=5000',
       SB_URL + '/rest/v1/handbook_signatures?handbook_version=eq.' + HANDBOOK_VERSION +
@@ -948,8 +948,8 @@ function buildEvent(ev, ctx) {
   evSR.forEach(function(r) {
     if (r.sales_forecast != null) {
       var s = r.stand || '(unspecified)';
-      forecastByStand[s] = (forecastByStand[s] || 0) + Number(r.sales_forecast);
-      forecastTotal += Number(r.sales_forecast);
+      if ((Number(r.headcount) || 0) > 0 || !(s in forecastByStand)) forecastByStand[s] = Number(r.sales_forecast);
+      // per-stand forecast set above; total is summed after the loop
     }
   });
   var actualByStand = {}, actualTotal = 0;
@@ -963,6 +963,7 @@ function buildEvent(ev, ctx) {
   var stands = standNames.map(function(s) {
     return { stand: s, forecast: forecastByStand[s] || 0, actual: actualByStand[s] || 0 };
   }).sort(function(a, b) { return (b.forecast - a.forecast) || (b.actual - a.actual); });
+  Object.keys(forecastByStand).forEach(function(s) { forecastTotal += forecastByStand[s]; });
   var noForecast = !(forecastTotal > 0);
 
   // ---- F3 + actual headcount (sign-in preferred) ----
