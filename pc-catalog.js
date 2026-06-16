@@ -87,7 +87,7 @@
     );
 
     var standsReq = sbGet(
-      'stands?select=id,venue_code,stand_name,stand_type,category_id,is_active,sort_order' +
+      'stands?select=id,venue_code,stand_name,stand_type,category_id,sells_alcohol,is_active,sort_order' +
       '&order=venue_code.asc,sort_order.asc,stand_name.asc&limit=10000'
     );
 
@@ -111,6 +111,7 @@
           stand_name: s.stand_name,
           stand_type: s.stand_type || 'revenue',
           category_id: s.category_id || null,
+          sells_alcohol: s.sells_alcohol === true,
           is_active: s.is_active !== false,
           sort_order: typeof s.sort_order === 'number' ? s.sort_order : 0
         };
@@ -340,6 +341,7 @@
       stand_name: s.stand_name,
       stand_type: s.stand_type,
       category_id: s.category_id,
+      sells_alcohol: s.sells_alcohol,
       is_active: s.is_active,
       sort_order: s.sort_order
     };
