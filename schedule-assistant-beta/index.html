@@ -1310,6 +1310,7 @@ body {
 .stand-fill-tag.partial { background: var(--amber-light); color: var(--amber-dark); }
 .stand-fill-tag.empty { background: var(--red-light); color: var(--red); }
 .stand-fill-tag.over { background: var(--red-light); color: var(--red); border: 1px solid var(--red-border); }
+.alcohol-badge { font-size: 0.92em; line-height: 1; vertical-align: -1px; cursor: help; }
 
 /* Over-staffing badge on the role header — shown when a manager reduces
    headcount in event planning after people were already placed. */
@@ -5044,6 +5045,7 @@ function renderPlanTab(ev) {
       '" data-plan-stand="' + escapeAttr(stand) + '">';
     html += '<div class="plan-stand-head">';
     html += '<span class="plan-stand-name">' + escapeHtml(stand) +
+      alcoholBadge(ev.venue, stand) +
       (isClient ? ' <span style="font-size:10px;font-weight:700;letter-spacing:0.04em;' +
         'text-transform:uppercase;background:#f0e8fa;color:#7d3fbf;padding:2px 7px;' +
         'border-radius:5px;vertical-align:middle;">Client Contract</span>' : '') +
@@ -5443,7 +5445,7 @@ function renderStandCard(ev, group, locked) {
 
   let html = '<div class="stand-card" data-stand="' + escapeAttr(group.stand) + '">';
   html += '<div class="stand-card-head"><div class="stand-card-name">';
-  html += escapeHtml(group.stand);
+  html += escapeHtml(group.stand) + alcoholBadge(ev.venue, group.stand);
   html += '<span class="stand-fill-tag ' + tagCls + '"' +
     (isOver ? ' title="Over-staffed by ' + (fill - need) + '. Headcount was reduced after people were placed. Use ✕ to release the extras."' : '') +
     '>' + fill + ' / ' + need + '</span>';
@@ -5761,6 +5763,23 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 function escapeAttr(s) { return escapeHtml(s); }
+
+// Alcohol-stand indicator. Returns a 🍺 <span> (with tooltip) when the
+// catalog flags this stand as selling alcohol, else ''. Added Jun 15, 2026
+// as a scheduling prompt — reminds the manager to confirm placed staff hold
+// a current alcohol cert. Purely visual; no enforcement (yet). Reads the
+// sells_alcohol flag threaded through pc-catalog.js. Injected stands with no
+// catalog row (Client Staffing Needs / Support Staff / event-only stands)
+// return null from getStand → no icon, which is correct.
+function alcoholBadge(venue, standName) {
+  try {
+    var s = pcCatalog.getStand(venue, standName);
+    if (s && s.sells_alcohol === true) {
+      return ' <span class="alcohol-badge" title="This stand sells alcohol — confirm placed staff hold a current alcohol certification.">🍺</span>';
+    }
+  } catch (e) { /* catalog not ready / unknown stand — no badge */ }
+  return '';
+}
 
 // ---------- Helper: clear typing state cleanly ----------
 // Centralized so every code path that ends a typing session removes
