@@ -417,7 +417,7 @@ body {
     <div class="pf-state">Loading&hellip;</div>
   </div>
 
-  <div class="footer-note" id="footerNote">Live data &middot; Financials &amp; Reporting wired &middot; Planning lands next session &middot; FMP shown as the reference standard</div>
+  <div class="footer-note" id="footerNote">Live data &middot; Financials, Planning &amp; Reporting wired &middot; Feedback pending the time-clock build &middot; FMP shown as the reference standard</div>
 
 </div>
 
@@ -453,6 +453,15 @@ var SB_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
 var HANDBOOK_VERSION = '2026-04-24'; // mirror /handbook-signatures/ — update if the handbook rolls
 var MAX_WINDOW_DAYS = 60;
 var NON_SALES_STANDS = { 'support staff': 1, 'hawking': 1, 'non-event labor': 1, 'client staffing needs': 1 };
+
+// ----- Planning band thresholds — tune against real cards, no logic change -----
+var PLAN_LEADTIME_GREEN_DAYS = 14;   // median pool lead >= this -> green
+var PLAN_LEADTIME_AMBER_DAYS = 5;    // >= this -> amber; below -> red
+var PLAN_POOL_RATIO_GREEN = 1.25;    // pool >= 1.25x planned need -> green
+var PLAN_POOL_RATIO_AMBER = 0.9;     // >= 0.9x -> amber; below -> red
+var PLAN_LATE_HOME_DAYS = 5;         // home-venue signup within N days = "late" (informational)
+var PLAN_POST_LEAD_GREEN_DAYS = 21;  // event must be posted >= this many days out -> green, else red (no yellow)
+var SYSTEM_LOG_START = '2026-04-30'; // position_assignment_log floor; off-pool timing NA before this
 
 var EVENTS = [];
 var expanded = {};
@@ -628,11 +637,20 @@ async function loadData() {
         '&select=event_id,venue,stand,role,staff_name&limit=5000',
       SB_URL + '/rest/v1/handbook_signatures?handbook_version=eq.' + HANDBOOK_VERSION +
         '&select=employee_first_name,employee_last_name&limit=5000',
-      SB_URL + '/rest/v1/employees?is_active=eq.true&select=id,first_name,last_name,shirt_size&limit=5000',
+      SB_URL + '/rest/v1/employees?is_active=eq.true&select=id,first_name,last_name,shirt_size,home_venue&limit=5000',
       SB_URL + '/rest/v1/venues?select=id,code&limit=200',
       SB_URL + '/rest/v1/roles?select=id,name&limit=200',
       SB_URL + '/rest/v1/employee_venue_roles?is_active=eq.true&pay_rate_override=not.is.null' +
-        '&select=employee_id,venue_id,role_id,pay_rate_override&limit=5000'
+        '&select=employee_id,venue_id,role_id,pay_rate_override&limit=5000',
+      SB_URL + '/rest/v1/availability?event_id=in.' + idIn + '&removed_at=is.null' +
+        '&select=event_id,staff_name,submitted_at&limit=20000',
+      SB_URL + '/rest/v1/position_assignment_log?event_id=in.' + idIn +
+        '&action=in.(placed,notified_staffing)&select=event_id,action,details,actor_at&limit=20000',
+      SB_URL + '/rest/v1/staff_list_email_log?event_date=gte.' + start + '&event_date=lte.' + today +
+        '&select=event_date,venue,sent_at&limit=5000',
+      SB_URL + '/rest/v1/prep_wholesale_needs?need_date=gte.' + start + '&need_date=lte.' + today +
+        '&deleted_at=is.null&select=venue_code,need_date&limit=5000',
+      SB_URL + '/rest/v1/prep_claims?is_active=eq.true&select=venue_code,week_start&limit=5000'
     ];
     var res = await Promise.all(urls.map(function(u) {
       return fetch(u, { headers: apiHeaders() }).then(function(r) { return r.json(); });
@@ -681,10 +699,28 @@ async function loadData() {
     var ssaCountBySale = {};
     ssa.forEach(function(a) { ssaCountBySale[a.sale_id] = (ssaCountBySale[a.sale_id] || 0) + 1; });
 
+    // ---- Planning band indexes ----
+    var availRows = res[8] || [], palRows = res[9] || [], emailLog = res[10] || [],
+        prepNeeds = res[11] || [], prepClaims = res[12] || [];
+    var availByEvent = {};
+    availRows.forEach(function(r) { (availByEvent[r.event_id] = availByEvent[r.event_id] || []).push(r); });
+    var palByEvent = {};
+    palRows.forEach(function(r) { (palByEvent[r.event_id] = palByEvent[r.event_id] || []).push(r); });
+    var emailKeySet = {};
+    emailLog.forEach(function(r) { if (r.event_date && r.venue) emailKeySet[r.event_date + '||' + r.venue] = 1; });
+    var prepNeedsKeySet = {};
+    prepNeeds.forEach(function(r) { if (r.venue_code && r.need_date) prepNeedsKeySet[r.venue_code + '||' + r.need_date] = 1; });
+    var claimsByVenue = {};
+    prepClaims.forEach(function(r) { if (r.venue_code && r.week_start) (claimsByVenue[r.venue_code] = claimsByVenue[r.venue_code] || []).push(r.week_start); });
+    var nameToHomeVenue = {};
+    emp.forEach(function(r) { nameToHomeVenue[normName((r.first_name || '') + ' ' + (r.last_name || ''))] = r.home_venue || null; });
+
     var ctx = {
       salesByEvent: salesByEvent, srByEvent: srByEvent, paByEvent: paByEvent,
       hbSet: hbSet, empShirt: empShirt, photoBySale: photoBySale, ssaCountBySale: ssaCountBySale,
       nameToEmpId: nameToEmpId, overrideRate: overrideRate,
+      availByEvent: availByEvent, palByEvent: palByEvent, emailKeySet: emailKeySet,
+      prepNeedsKeySet: prepNeedsKeySet, claimsByVenue: claimsByVenue, nameToHomeVenue: nameToHomeVenue,
       ratesReady: ratesReady
     };
 
@@ -693,7 +729,8 @@ async function loadData() {
     console.log('[popfax] window', start, '\u2192', today, '\u00b7 events', EVENTS.length,
       '\u00b7 sales', sales.length, '\u00b7 placements', pa.length,
       '\u00b7 photos', photos.length, '\u00b7 signin-rows', ssa.length, '\u00b7 ratesReady', ratesReady,
-      '\u00b7 overrides', Object.keys(overrideRate).length);
+      '\u00b7 overrides', Object.keys(overrideRate).length,
+      '\u00b7 signups', availRows.length, '\u00b7 log', palRows.length, '\u00b7 emails', emailLog.length);
 
     populateVenueFilter();
     render();
@@ -722,6 +759,170 @@ function fieldStateFor(saleRows, kind, ctx) {
   if (missing.length === 0) return { state: 'all', missing: [] };
   if (missing.length === stands.length) return { state: 'none', missing: missing };
   return { state: 'partial', missing: missing };
+}
+
+/* ==================================================================
+ * PLANNING BAND — compute
+ * Reads pre-fetched arrays from ctx; no DOM, no fetch. Thresholds are
+ * the PLAN_* constants up top. Returns a band ('na'|'green'|'amber'|'red')
+ * plus per-check detail for the renderer.
+ * ================================================================== */
+function medianOf(arr) {
+  if (!arr.length) return null;
+  var s = arr.slice().sort(function(a, b) { return a - b; });
+  var m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+function isoToLocalDate(iso) {
+  var p = String(iso).split('-');
+  return new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10));
+}
+function leadDaysFor(eventIso, submittedTs) {
+  var ev = isoToLocalDate(eventIso).getTime();
+  var sub = new Date(submittedTs).getTime();
+  if (isNaN(ev) || isNaN(sub)) return null;
+  return (ev - sub) / 86400000;
+}
+
+function buildPlanning(ev, ctx, plannedHeadcount) {
+  // buildEvent passes the raw event row, which carries event_date (not the
+  // _iso alias the return object uses). Normalize so the date math works.
+  if (ev._iso == null) ev._iso = ev.event_date;
+  var avail = ctx.availByEvent[ev.id] || [];
+  var pal = ctx.palByEvent[ev.id] || [];
+  var poolCount = avail.length;
+
+  // ---- Event posted with enough lead time (created_at = when it went up) ----
+  // Upstream of signup lead time: people can't sign up earlier than the event
+  // was posted. Green/red, no yellow, per the 21-day rule.
+  var postLead = ev.created_at != null ? leadDaysFor(ev._iso, ev.created_at) : null;
+  var postState, postDetail;
+  if (postLead == null) {
+    postState = 'na'; postDetail = 'No posted date on file';
+  } else if (postLead >= PLAN_POST_LEAD_GREEN_DAYS) {
+    postState = 'green'; postDetail = 'Posted ' + Math.round(postLead) + 'd before the event';
+  } else {
+    postState = 'red'; postDetail = 'Posted only ' + Math.round(postLead) + 'd before the event';
+  }
+
+  // ---- Signup lead time (median days the pool committed ahead) ----
+  var leads = [];
+  avail.forEach(function(s) {
+    var d = leadDaysFor(ev._iso, s.submitted_at);
+    if (d != null) leads.push(d);
+  });
+  var medLead = medianOf(leads);
+  var leadState, leadDetail;
+  if (poolCount === 0 || medLead == null) {
+    leadState = 'na'; leadDetail = 'No signups to measure';
+  } else {
+    leadState = medLead >= PLAN_LEADTIME_GREEN_DAYS ? 'green'
+      : (medLead >= PLAN_LEADTIME_AMBER_DAYS ? 'amber' : 'red');
+    leadDetail = 'Median ' + Math.round(medLead) + 'd ahead';
+    // Context: signups can't beat the posting date — show why late may be OK.
+    if (postLead != null) leadDetail += ' \u00b7 event posted ' + Math.round(postLead) + 'd out';
+  }
+
+  // ---- Signup pool depth (pool vs planned need) ----
+  var poolState, poolDetail;
+  if (!(plannedHeadcount > 0)) {
+    poolState = 'na'; poolDetail = poolCount + ' signed up \u00b7 no planned headcount to compare';
+  } else {
+    var ratio = poolCount / plannedHeadcount;
+    poolState = ratio >= PLAN_POOL_RATIO_GREEN ? 'green'
+      : (ratio >= PLAN_POOL_RATIO_AMBER ? 'amber' : 'red');
+    poolDetail = poolCount + ' signed up vs ' + plannedHeadcount + ' needed';
+  }
+
+  // ---- Late home-venue signups (informational; never worse than amber) ----
+  var lateHome = [];
+  avail.forEach(function(s) {
+    if (ctx.nameToHomeVenue[normName(s.staff_name)] !== ev.venue) return;
+    var d = leadDaysFor(ev._iso, s.submitted_at);
+    if (d != null && d <= PLAN_LATE_HOME_DAYS) lateHome.push(s.staff_name);
+  });
+  var lateHomeState = lateHome.length > 0 ? 'amber' : 'green';
+
+  // ---- Staffing re-notified ----
+  var notifyCount = 0;
+  pal.forEach(function(r) { if (r.action === 'notified_staffing') notifyCount++; });
+  var renotifyState, renotifyDetail;
+  if (notifyCount === 0) { renotifyState = 'na'; renotifyDetail = 'Not notified'; }
+  else if (notifyCount === 1) { renotifyState = 'green'; renotifyDetail = 'Notified once'; }
+  else { renotifyState = 'green'; renotifyDetail = 'Notified \u2014 ' + notifyCount + ' sends'; }
+
+  // ---- Client emailed the staff list (matched on date + venue) ----
+  var emailed = !!ctx.emailKeySet[ev._iso + '||' + ev.venue];
+  var emailState = emailed ? 'green' : 'red';
+
+  // ---- Off-pool placements (timing-aware; never worse than amber) ----
+  // Off-pool = a 'placed' log row whose source isn't 'signup'. It only
+  // counts against the event when, at the moment of placement, pool people
+  // had signed up but weren't yet placed from the pool (slack bypassed).
+  // Off-pool when the pool was empty or already used up is gap-filling, not
+  // a gap. Point-in-time data only exists from the log start; older = NA.
+  var offState, offDetail, offNames = [];
+  if (ev._iso < SYSTEM_LOG_START) {
+    offState = 'na'; offDetail = 'No placement history before ' + SYSTEM_LOG_START;
+  } else {
+    var subs = [];
+    avail.forEach(function(s) {
+      var t = new Date(s.submitted_at).getTime();
+      if (!isNaN(t)) subs.push(t);
+    });
+    var placedRows = pal.filter(function(r) { return r.action === 'placed'; })
+      .slice().sort(function(a, b) {
+        return new Date(a.actor_at).getTime() - new Date(b.actor_at).getTime();
+      });
+    var signupPlacedByThen = 0, offTotal = 0, bypassed = 0;
+    placedRows.forEach(function(r) {
+      var src = (r.details && r.details.source) || null;
+      if (src === 'signup') { signupPlacedByThen++; return; }
+      offTotal++;
+      var t = new Date(r.actor_at).getTime();
+      var signedUpByThen = 0;
+      for (var i = 0; i < subs.length; i++) { if (subs[i] <= t) signedUpByThen++; }
+      if (signedUpByThen - signupPlacedByThen > 0) {
+        bypassed++;
+        var nm = (r.details && r.details.staff_name) || null;
+        if (nm) offNames.push(nm);
+      }
+    });
+    if (offTotal === 0) { offState = 'green'; offDetail = 'No off-pool placements'; }
+    else if (bypassed === 0) { offState = 'green'; offDetail = offTotal + ' off-pool \u2014 all gap-fills (pool empty or used up)'; }
+    else { offState = 'amber'; offDetail = bypassed + ' of ' + offTotal + ' placed off-pool while signups were available'; }
+  }
+
+  // ---- Prep & production entered (matched on venue + date) ----
+  var hasNeeds = !!ctx.prepNeedsKeySet[ev.venue + '||' + ev._iso];
+  var claimsForVenue = ctx.claimsByVenue[ev.venue] || [];
+  var evDateMs = isoToLocalDate(ev._iso).getTime();
+  var hasClaim = false;
+  for (var ci = 0; ci < claimsForVenue.length; ci++) {
+    var ws = isoToLocalDate(claimsForVenue[ci]).getTime();
+    if (evDateMs >= ws && evDateMs < ws + 7 * 86400000) { hasClaim = true; break; }
+  }
+  var prepState, prepDetail;
+  if (!hasNeeds && !hasClaim) { prepState = 'na'; prepDetail = 'No prep entered'; }
+  else {
+    prepState = 'green';
+    prepDetail = (hasNeeds ? 'Needs entered' : '') + (hasNeeds && hasClaim ? ' \u00b7 ' : '') + (hasClaim ? 'Claimed' : '');
+  }
+
+  var states = [postState, leadState, poolState, lateHomeState, renotifyState, emailState, offState, prepState];
+  var allNa = states.every(function(s) { return s === 'na'; });
+
+  return {
+    band: allNa ? 'na' : gradeOf(states),
+    post: { state: postState, detail: postDetail },
+    lead: { state: leadState, detail: leadDetail },
+    poolDepth: { state: poolState, detail: poolDetail },
+    lateHome: { state: lateHomeState, names: lateHome },
+    renotify: { state: renotifyState, detail: renotifyDetail },
+    email: { state: emailState, emailed: emailed },
+    offpool: { state: offState, detail: offDetail, names: offNames },
+    prep: { state: prepState, detail: prepDetail }
+  };
 }
 
 function buildEvent(ev, ctx) {
@@ -819,12 +1020,15 @@ function buildEvent(ev, ctx) {
     return sz !== undefined && (!sz || !String(sz).trim());
   });
 
+  // ---- Planning band ----
+  var planning = buildPlanning(ev, ctx, plannedHeadcount);
+
   // ---- bands + grade ----
   var finBand = noForecast ? 'na' : (actualTotal >= forecastTotal ? 'green' : 'amber');
   var redReport = (standsLogged.total > 0 && missingLogged.length > 0) || register.state === 'none' || signin.state === 'none';
   var amberReport = register.state === 'partial' || signin.state === 'partial' || missingHandbook.length > 0 || missingShirt.length > 0;
   var reportBand = redReport ? 'red' : (amberReport ? 'amber' : 'green');
-  var grade = gradeOf([finBand, reportBand]);
+  var grade = gradeOf([finBand, planning.band, reportBand]);
 
   return {
     id: ev.id,
@@ -835,7 +1039,7 @@ function buildEvent(ev, ctx) {
     _iso: ev.event_date,
     flagship: ev.venue === 'FMP',
     grade: grade,
-    bands: { fin: finBand, plan: 'na', report: reportBand },
+    bands: { fin: finBand, plan: planning.band, report: reportBand },
     fin: {
       forecastTotal: forecastTotal, actualTotal: actualTotal, noForecast: noForecast,
       forecastPerPerson: forecastPerPerson, actualPerPerson: actualPerPerson,
@@ -851,7 +1055,8 @@ function buildEvent(ev, ctx) {
       missingHandbook: missingHandbook,
       missingShirt: missingShirt,
       eventNotes: ev.manager_notes || null
-    }
+    },
+    plan: planning
   };
 }
 
@@ -955,13 +1160,53 @@ function renderFinancials(ev) {
 }
 
 function renderPlanning(ev) {
-  return '<div class="pf-section stub-section">' +
-    '<div class="pf-section-head neutral"><span class="sh-title">\uD83D\uDCCB Planning</span>' +
-    '<span class="sh-status">Wiring next session</span></div>' +
-    '<div class="pf-section-body"><div class="stub-inner" style="text-align:left;">' +
-    '<div class="si-title">Planning checks land in the next session</div>' +
-    '<div class="si-body" style="margin:0;max-width:none;">Lead time, signup pool depth, prep &amp; production, day-of-show sheet, staffing-notified, client email, manual fills, the override log, ghost positions, and home-component coverage each read from tables that need their own pre-flight. They\u2019ll fill in here next \u2014 Financials and Reporting above are live now.</div>' +
-    '</div></div></div>';
+  var p = ev.plan;
+  if (!p) return '';
+  var head = ev.bands.plan;
+  var statusTxt = head === 'green' ? 'Clean plan'
+    : (head === 'amber' ? 'Some gaps'
+    : (head === 'red' ? 'Planning gaps' : 'No planning data'));
+  var html = '<div class="pf-section">';
+  html += '<div class="pf-section-head ' + head + '"><span class="sh-title">\uD83D\uDCCB Planning</span>' +
+    '<span class="sh-status">' + statusTxt + '</span></div>';
+  html += '<div class="pf-section-body">';
+
+  html += '<div class="check-list" style="margin-bottom:12px;">';
+  function row(state, label, detail, extra) {
+    return '<div class="check-row">' + ckIco(state) +
+      '<span class="ck-label">' + label + (extra || '') + '</span>' +
+      '<span class="ck-detail">' + detail + '</span></div>';
+  }
+  html += row(p.post.state, 'Event posted with enough lead time', escapeHtml(p.post.detail));
+  html += row(p.lead.state, 'Signups came in ahead of time', escapeHtml(p.lead.detail));
+  html += row(p.poolDepth.state, 'Signup pool covered the need', escapeHtml(p.poolDepth.detail));
+  html += row(p.renotify.state, 'Staffing notified', escapeHtml(p.renotify.detail));
+  html += row(p.email.state, 'Staff list emailed to client', p.email.emailed ? 'Sent' : 'No record');
+
+  var offExtra = p.offpool.names.length
+    ? ' <button class="expand-toggle inline-expand" data-reveal="offp-' + ev.id + '">show \u25BE</button>'
+    : '';
+  html += row(p.offpool.state, 'Placements used the signup pool', escapeHtml(p.offpool.detail), offExtra);
+  if (p.offpool.names.length) {
+    html += '<div class="reveal-box" id="offp-' + ev.id + '" style="display:none;">' +
+      '<div class="reveal-label">Placed off-pool while signups were available:</div>' +
+      chipList(p.offpool.names, true) + '</div>';
+  }
+  html += row(p.prep.state, 'Prep &amp; production entered', escapeHtml(p.prep.detail));
+  html += '</div>'; // check-list
+
+  // Late home-venue signups — informational
+  html += '<div class="history-block"><div class="hb-title">Home-venue staff who signed up late ' +
+    '<span style="font-weight:400;color:var(--label);font-size:11px;">(within ' + PLAN_LATE_HOME_DAYS + ' days)</span></div>';
+  if (p.lateHome.names.length === 0) {
+    html += '<div class="empty-good">\u2713 No home-venue staff signed up at the last minute.</div>';
+  } else {
+    html += chipList(p.lateHome.names, false);
+  }
+  html += '</div>';
+
+  html += '</div></div>';
+  return html;
 }
 
 function renderReporting(ev) {
@@ -1112,7 +1357,7 @@ function populateVenueFilter() {
 
 function render() {
   var list = getFilteredEvents();
-  if (!defaultExpandSet && list.length) { expanded[list[0].id] = true; defaultExpandSet = true; }
+  // Default to all events collapsed; managers expand the ones they want.
 
   var content = document.getElementById('content');
   if (!list.length) { content.innerHTML = '<div class="pf-state">No completed events in this window.</div>'; return; }
