@@ -151,6 +151,16 @@ body {
   font-family: inherit; font-size: 13px; border: 1px solid var(--border);
   border-radius: 7px; padding: 5px 9px; background: white; color: var(--primary);
 }
+.filter-strip .date-input {
+  font-family: inherit; font-size: 13px; border: 1px solid var(--border);
+  border-radius: 7px; padding: 4px 8px; background: white; color: var(--primary);
+}
+.filter-strip .range-apply {
+  font-family: inherit; font-size: 12px; font-weight: 700;
+  border: 1px solid var(--fax-blue); background: var(--fax-blue); color: white;
+  border-radius: 7px; padding: 5px 12px; cursor: pointer;
+}
+.filter-strip .range-apply:hover { background: var(--fax-blue-dark); }
 .filter-strip .spacer { flex: 1; }
 .legend {
   display: inline-flex; gap: 12px; align-items: center; font-size: 11px; color: var(--label);
@@ -412,10 +422,16 @@ body {
     <select id="venueFilter"><option value="all">All venues</option></select>
     <span class="label">Range</span>
     <select id="rangeFilter">
+      <option value="7">Last 7 days</option>
       <option value="14">Last 14 days</option>
-      <option value="30">Last 30 days</option>
-      <option value="60">Last 60 days</option>
+      <option value="custom">Custom range&hellip;</option>
     </select>
+    <span id="customWrap" style="display:none; align-items:center; gap:6px;">
+      <input type="date" id="customStart" class="date-input">
+      <span style="font-size:11px; color:var(--label);">to</span>
+      <input type="date" id="customEnd" class="date-input">
+      <button id="customApply" class="range-apply">Apply</button>
+    </span>
     <span class="spacer"></span>
     <span class="legend">
       <span class="lg"><span class="dot green"></span>clean</span>
@@ -494,6 +510,9 @@ function isoMinusDays(iso, days) {
   var d = new Date(parseInt(p[0],10), parseInt(p[1],10) - 1, parseInt(p[2],10));
   d.setDate(d.getDate() - days);
   return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+}
+function daysBetweenIso(a, b) {
+  return (isoToLocalDate(b).getTime() - isoToLocalDate(a).getTime()) / 86400000;
 }
 function dateLabel(iso) {
   var p = iso.split('-');
@@ -624,13 +643,31 @@ async function loadData() {
   try { await pcRoles.ready(); ratesReady = true; }
   catch (e) { console.warn('[popfax] pcRoles load failed — planned payroll will read blank:', e); }
 
-  var days = parseInt(document.getElementById('rangeFilter').value, 10) || 14;
-  if (days > MAX_WINDOW_DAYS) days = MAX_WINDOW_DAYS;
   var today = todayIso();
-  var start = isoMinusDays(today, days);
+  var rangeVal = document.getElementById('rangeFilter').value;
+  var start, endBound;
+  if (rangeVal === 'custom') {
+    var csEl = document.getElementById('customStart');
+    var ceEl = document.getElementById('customEnd');
+    endBound = (ceEl && ceEl.value) ? ceEl.value : today;
+    start = (csEl && csEl.value) ? csEl.value : isoMinusDays(endBound, 30);
+    if (start > endBound) { var _t = start; start = endBound; endBound = _t; }
+    // Cap the span to the tested envelope so the event IN() list and the
+    // bounded fetches stay safe. Clamp the start forward if needed.
+    if (daysBetweenIso(start, endBound) > MAX_WINDOW_DAYS) {
+      start = isoMinusDays(endBound, MAX_WINDOW_DAYS);
+      if (csEl) csEl.value = start;
+      console.warn('[popfax] custom range capped to ' + MAX_WINDOW_DAYS + ' days');
+    }
+  } else {
+    var days = parseInt(rangeVal, 10) || 7;
+    if (days > MAX_WINDOW_DAYS) days = MAX_WINDOW_DAYS;
+    endBound = today;
+    start = isoMinusDays(today, days);
+  }
 
   try {
-    var evUrl = SB_URL + '/rest/v1/events?event_date=gte.' + start + '&event_date=lte.' + today +
+    var evUrl = SB_URL + '/rest/v1/events?event_date=gte.' + start + '&event_date=lte.' + endBound +
       '&cancelled_at=is.null&deleted_at=is.null' +
       '&select=id,venue,event_name,event_date,report_time,show_time,estimated_end_time,gates_open,created_at,staffing_notified_at,manager_notes' +
       '&order=event_date.desc,venue.asc&limit=500';
@@ -641,7 +678,7 @@ async function loadData() {
     var idIn = '(' + ids.join(',') + ')';
 
     var urls = [
-      SB_URL + '/rest/v1/sales?event_date=gte.' + start + '&event_date=lte.' + today +
+      SB_URL + '/rest/v1/sales?event_date=gte.' + start + '&event_date=lte.' + endBound +
         '&select=id,event_date,venue,event_name,stand,amount,staff_count,photo_url,units_photo_url&limit=5000',
       SB_URL + '/rest/v1/staffing_requests?event_id=in.' + idIn +
         '&headcount=gt.0&select=event_id,stand,headcount,sales_forecast&limit=5000',
@@ -658,9 +695,9 @@ async function loadData() {
         '&select=event_id,staff_name,submitted_at&limit=20000',
       SB_URL + '/rest/v1/position_assignment_log?event_id=in.' + idIn +
         '&action=in.(placed,notified_staffing)&select=event_id,action,details,actor_at&limit=20000',
-      SB_URL + '/rest/v1/staff_list_email_log?event_date=gte.' + start + '&event_date=lte.' + today +
+      SB_URL + '/rest/v1/staff_list_email_log?event_date=gte.' + start + '&event_date=lte.' + endBound +
         '&select=event_date,venue,sent_at&limit=5000',
-      SB_URL + '/rest/v1/prep_wholesale_needs?need_date=gte.' + start + '&need_date=lte.' + today +
+      SB_URL + '/rest/v1/prep_wholesale_needs?need_date=gte.' + start + '&need_date=lte.' + endBound +
         '&deleted_at=is.null&select=venue_code,need_date&limit=5000',
       SB_URL + '/rest/v1/prep_claims?is_active=eq.true&select=venue_code,week_start&limit=5000'
     ];
@@ -738,7 +775,7 @@ async function loadData() {
 
     EVENTS = evs.map(function(ev) { return buildEvent(ev, ctx); });
 
-    console.log('[popfax] window', start, '\u2192', today, '\u00b7 events', EVENTS.length,
+    console.log('[popfax] window', start, '\u2192', endBound, '\u00b7 events', EVENTS.length,
       '\u00b7 sales', sales.length, '\u00b7 placements', pa.length,
       '\u00b7 photos', photos.length, '\u00b7 signin-rows', ssa.length, '\u00b7 ratesReady', ratesReady,
       '\u00b7 overrides', Object.keys(overrideRate).length,
@@ -1426,6 +1463,23 @@ function init() {
     render();
   });
   document.getElementById('rangeFilter').addEventListener('change', function() {
+    var wrap = document.getElementById('customWrap');
+    if (this.value === 'custom') {
+      // Reveal the date inputs and seed sensible defaults — but DON'T query.
+      // Nothing loads until the user defines the range and hits Apply, so we
+      // never fire a fetch on a half-defined window.
+      var today = todayIso();
+      var csEl = document.getElementById('customStart');
+      var ceEl = document.getElementById('customEnd');
+      if (!ceEl.value) ceEl.value = today;
+      if (!csEl.value) csEl.value = isoMinusDays(today, 30);
+      wrap.style.display = 'inline-flex';
+    } else {
+      wrap.style.display = 'none';
+      loadData();
+    }
+  });
+  document.getElementById('customApply').addEventListener('click', function() {
     loadData();
   });
   loadData();
