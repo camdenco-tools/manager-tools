@@ -2240,6 +2240,7 @@ body {
       <input type="date" id="custom-from">
       <span style="color:var(--label);font-size:11px">to</span>
       <input type="date" id="custom-to">
+      <button class="btn btn-print" id="custom-apply">Apply</button>
     </span>
 
     <span class="spacer"></span>
@@ -8729,10 +8730,15 @@ document.getElementById('venue-filter').addEventListener('change', e => {
 document.getElementById('range-filter').addEventListener('change', e => {
   state.filters.range = e.target.value;
   document.getElementById('custom-range').classList.toggle('show', e.target.value === 'custom');
+  // Presets are fully defined the instant they're picked, so they load
+  // immediately. "Custom" only reveals the date inputs — it does NOT load.
+  // Nothing fetches until both dates are set and the user hits Apply, so we
+  // never fire the heavy load cascade on a half-defined range.
   if (e.target.value !== 'custom') loadAll();
 });
-document.getElementById('custom-from').addEventListener('change', () => loadAll());
-document.getElementById('custom-to').addEventListener('change', () => loadAll());
+// Custom range is a paired control: editing one date shouldn't fire a query
+// while the other is still being decided. Apply is the only trigger.
+document.getElementById('custom-apply').addEventListener('click', () => loadAll());
 document.querySelectorAll('[data-stands]').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('[data-stands]').forEach(b => b.classList.remove('active'));
