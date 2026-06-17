@@ -842,6 +842,28 @@
 
   /* Lines block */
   .draft-lines-block { }
+  .draft-add-another-row { margin-top: 10px; }
+  .btn-add-another {
+    width: 100%;
+    background: #fff;
+    border: 1px dashed #c9c8bf;
+    color: #1a1a1a;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: border-color 0.12s ease, background 0.12s ease;
+  }
+  .btn-add-another:hover { border-color: #1a1a1a; background: #fafaf6; }
+  .draft-add-another-hint {
+    display: block;
+    font-size: 11px;
+    color: #888;
+    margin-top: 6px;
+    text-align: center;
+  }
   .draft-lines-empty {
     padding: 24px 16px;
     text-align: center;
@@ -2154,7 +2176,7 @@
           </h2>
           <div class="draft-head-actions">
             <span class="draft-running-total" id="draftRunningTotal">$0.00</span>
-            <button type="button" class="btn-primary" id="btnAddLine">+ Add line</button>
+            <button type="button" class="btn-primary" id="btnAddLine">+ Add expense</button>
             <button type="button" class="btn-icon" id="btnDraftMore" aria-label="More" title="More options">⋯</button>
           </div>
         </div>
@@ -3812,16 +3834,26 @@
     }
 
     // Build the lines block
+    var addAnotherBtnHtml = '';
+    if (!draftState.fixMode && draftState.lines.length > 0) {
+      addAnotherBtnHtml = '' +
+        '<div class="draft-add-another-row">' +
+          '<button type="button" class="btn-add-another" id="btnAddLineBottom">+ Add another expense</button>' +
+          '<span class="draft-add-another-hint">Add every expense for this check to this one report — one report becomes one check.</span>' +
+        '</div>';
+    }
+
     var linesHtml;
     if (draftState.lines.length === 0) {
       linesHtml = '' +
         '<div class="draft-lines-block">' +
-          '<p class="draft-subhead">Lines</p>' +
-          '<div class="draft-lines-empty">No lines yet. Click <strong>+ Add line</strong> above to start.</div>' +
+          '<p class="draft-subhead">Expenses on this report</p>' +
+          '<div class="draft-lines-empty">No expenses yet. Click <strong>+ Add expense</strong> above to start — you can add as many as you need to this one report.</div>' +
         '</div>';
     } else {
-      linesHtml = '<div class="draft-lines-block"><p class="draft-subhead">Lines</p>' +
+      linesHtml = '<div class="draft-lines-block"><p class="draft-subhead">Expenses on this report</p>' +
         draftState.lines.map(function (line) { return renderLineRow(line); }).join('') +
+        addAnotherBtnHtml +
       '</div>';
     }
 
@@ -3875,6 +3907,9 @@
     });
     var submitBtn = document.getElementById('btnSubmitDraft');
     if (submitBtn) submitBtn.addEventListener('click', handleSubmitDraft);
+
+    var addBottomBtn = document.getElementById('btnAddLineBottom');
+    if (addBottomBtn) addBottomBtn.addEventListener('click', function () { addLine(); });
 
     // Session 6b — Exit fix mode button (in the fix-card header)
     var exitBtn = document.getElementById('btnExitFixModeHeader');
