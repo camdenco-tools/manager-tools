@@ -491,7 +491,8 @@
         <button id="pcProdWeekNext" type="button" aria-label="Next week" style="appearance:none;border:1px solid var(--pc-line);background:#fff;border-radius:7px;width:30px;height:32px;font-size:16px;line-height:1;cursor:pointer;color:var(--pc-ink);">&rsaquo;</button>
         <span class="pc-toolbar-label" style="margin-left:8px;">Venue</span>
         <select id="pcProdVenueFilter" style="padding:7px 12px;border:1px solid var(--pc-line);border-radius:7px;font-family:inherit;font-size:13px;background:#fff;cursor:pointer;min-width:150px;"></select>
-        <button id="pcPrintBtn" type="button" style="margin-left:auto;appearance:none;border:1px solid var(--pc-ops);background:var(--pc-ops-soft);color:var(--pc-ops);border-radius:7px;padding:7px 14px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;">Print make-list</button>
+        <button id="pcDistroBtn" type="button" style="margin-left:auto;appearance:none;border:1px solid var(--pc-ops);background:#fff;color:var(--pc-ops);border-radius:7px;padding:7px 14px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;">Distribution sheet</button>
+        <button id="pcPrintBtn" type="button" style="appearance:none;border:1px solid var(--pc-ops);background:var(--pc-ops-soft);color:var(--pc-ops);border-radius:7px;padding:7px 14px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;">Print make-list</button>
         <span id="pcProdCount" style="font-size:12px;color:var(--pc-faint);"></span>
       </div>
       <!-- END PATCH ANCHOR: PROD_TOOLBAR -->
@@ -601,6 +602,31 @@
       <div style="display:flex;gap:10px;align-items:center;margin-left:auto;">
         <button class="pc-btn-ghost" id="pcPrintCancel" type="button">Cancel</button>
         <button class="pc-btn-primary" id="pcPrintGo" type="button" disabled>Print</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="pc-modal-backdrop" id="pcDistroBackdrop">
+  <div class="pc-modal" role="dialog" aria-label="Distribution sheet">
+    <div class="pc-modal-head">
+      <div>
+        <div class="pc-modal-title">Distribution sheet</div>
+        <div class="pc-modal-sub">Per-bar breakdown for one event &mdash; what to pack and where it goes. Combines the client's submitted needs with our own planned needs for the same items.</div>
+      </div>
+      <button class="pc-modal-x" id="pcDistroClose" type="button" aria-label="Close">&times;</button>
+    </div>
+    <div class="pc-modal-selectors">
+      <div style="flex:1;"><label class="pc-fld-label">Event</label><select id="pcDistroEvent" class="pc-fld"></select></div>
+    </div>
+    <div class="pc-modal-body" id="pcDistroBody">
+      <div class="pc-modal-empty">Pick an event to see its distribution.</div>
+    </div>
+    <div class="pc-modal-foot">
+      <span class="pc-mix-total"></span>
+      <div style="display:flex;gap:10px;align-items:center;margin-left:auto;">
+        <button class="pc-btn-ghost" id="pcDistroCancel" type="button">Close</button>
+        <button class="pc-btn-primary" id="pcDistroPrint" type="button" disabled>Print</button>
       </div>
     </div>
   </div>
@@ -2336,6 +2362,203 @@
     setTimeout(function () { try { win.print(); } catch (e) {} }, 250);
   };
 
+  // ---- Distribution sheet (per-event per-bar pick/pack) -------------
+  PC._distroOrders = [];
+  PC._distroItemsByVenue = {};
+  PC._distroData = null;
+
+  PC.initDistro = function () {
+    function wire(id, fn) { var el = document.getElementById(id); if (el && !el._wired) { el.addEventListener('click', fn); el._wired = true; } }
+    wire('pcDistroBtn', PC.openDistro);
+    wire('pcDistroClose', PC.closeDistro);
+    wire('pcDistroCancel', PC.closeDistro);
+    wire('pcDistroPrint', PC.printDistro);
+    var bd = document.getElementById('pcDistroBackdrop');
+    if (bd && !bd._wired) { bd.addEventListener('click', function (e) { if (e.target === bd) PC.closeDistro(); }); bd._wired = true; }
+    var sel = document.getElementById('pcDistroEvent');
+    if (sel && !sel._wired) { sel.addEventListener('change', function () { PC.onDistroEvent(sel.value); }); sel._wired = true; }
+  };
+
+  PC.closeDistro = function () { document.getElementById('pcDistroBackdrop').classList.remove('is-on'); };
+
+  PC.openDistro = function () {
+    var w = PC.weeks[PC.prodWeekIndex]; if (!w) return;
+    document.getElementById('pcDistroBackdrop').classList.add('is-on');
+    document.getElementById('pcDistroBody').innerHTML = '<div class="pc-modal-empty">Loading\u2026</div>';
+    document.getElementById('pcDistroPrint').disabled = true;
+    var ordersUrl = '/rest/v1/distro_orders?select=id,event_id,event_date,venue_code,events(event_name)' +
+      '&event_date=gte.' + w.start + '&event_date=lte.' + w.end + '&deleted_at=is.null&order=event_date.asc&limit=500';
+    var itemsUrl = '/rest/v1/distro_account_items?select=item_id,sort_order,prep_items(name),distro_accounts!inner(venue_code,is_active)' +
+      '&distro_accounts.is_active=is.true&deleted_at=is.null&order=sort_order.asc&limit=200';
+    Promise.all([PC.authFetch(ordersUrl), PC.authFetch(itemsUrl)]).then(function (res) {
+      PC._distroOrders = res[0] || [];
+      PC._distroItemsByVenue = {};
+      (res[1] || []).forEach(function (r) {
+        if (!r.distro_accounts || !r.prep_items) return;
+        var v = r.distro_accounts.venue_code;
+        if (!PC._distroItemsByVenue[v]) PC._distroItemsByVenue[v] = [];
+        PC._distroItemsByVenue[v].push({ item_id: r.item_id, name: r.prep_items.name, sort_order: r.sort_order });
+      });
+      var sel = document.getElementById('pcDistroEvent');
+      if (!PC._distroOrders.length) {
+        sel.innerHTML = '<option value="">No distribution orders this week</option>';
+        document.getElementById('pcDistroBody').innerHTML = '<div class="pc-modal-empty">No client distribution orders for this week yet.</div>';
+        return;
+      }
+      sel.innerHTML = PC._distroOrders.map(function (o) {
+        var nm = (o.events && o.events.event_name) ? o.events.event_name : '(event)';
+        return '<option value="' + o.id + '">' + escAttr(fmtMD(o.event_date) + ' \u00b7 ' + o.venue_code + ' \u2014 ' + nm) + '</option>';
+      }).join('');
+      PC.onDistroEvent(PC._distroOrders[0].id);
+    }).catch(function (err) {
+      document.getElementById('pcDistroBody').innerHTML = '<div class="pc-modal-empty">' + escAttr(err.message || 'Failed to load') + '</div>';
+    });
+  };
+
+  PC.onDistroEvent = function (orderId) {
+    var order = null, i;
+    for (i = 0; i < PC._distroOrders.length; i++) { if (PC._distroOrders[i].id === orderId) { order = PC._distroOrders[i]; break; } }
+    if (!order) return;
+    var body = document.getElementById('pcDistroBody');
+    body.innerHTML = '<div class="pc-modal-empty">Loading\u2026</div>';
+    document.getElementById('pcDistroPrint').disabled = true;
+    var linesUrl = '/rest/v1/distro_order_lines?select=qty,item_id,distro_stands(area,area_sort,stand_name,sort_order)' +
+      '&order_id=eq.' + orderId + '&deleted_at=is.null&limit=5000';
+    var oursUrl = '/rest/v1/prep_plan_lines?select=planned_qty,item_id,stands(stand_name)' +
+      '&event_id=eq.' + order.event_id + '&deleted_at=is.null&limit=5000';
+    Promise.all([PC.authFetch(linesUrl), PC.authFetch(oursUrl)]).then(function (res) {
+      PC._distroData = PC.buildDistro(order, res[0] || [], res[1] || []);
+      PC.renderDistro();
+      document.getElementById('pcDistroPrint').disabled = false;
+    }).catch(function (err) {
+      body.innerHTML = '<div class="pc-modal-empty">' + escAttr(err.message || 'Failed to load') + '</div>';
+    });
+  };
+
+  PC.buildDistro = function (order, clientLines, ourLines) {
+    var items = (PC._distroItemsByVenue[order.venue_code] || []).slice();
+    var byItem = {};
+    items.forEach(function (it) { byItem[it.item_id] = { name: it.name, sort_order: it.sort_order, areas: {}, ours: [], total: 0 }; });
+    clientLines.forEach(function (l) {
+      if (byItem[l.item_id]) return;
+      var m = (PC._itemMeta && PC._itemMeta[l.item_id]) || {};
+      byItem[l.item_id] = { name: m.name || '(item)', sort_order: (m.sort_order == null ? 999 : m.sort_order), areas: {}, ours: [], total: 0 };
+      items.push({ item_id: l.item_id, name: byItem[l.item_id].name, sort_order: byItem[l.item_id].sort_order });
+    });
+    clientLines.forEach(function (l) {
+      var q = Number(l.qty) || 0; if (q <= 0) return;
+      var bucket = byItem[l.item_id]; if (!bucket) return;
+      var s = l.distro_stands || {};
+      var area = s.area || 'Other';
+      if (!bucket.areas[area]) bucket.areas[area] = { area_sort: (s.area_sort == null ? 999 : s.area_sort), stands: [] };
+      bucket.areas[area].stands.push({ name: s.stand_name || '(bar)', qty: q, sort: (s.sort_order == null ? 999 : s.sort_order) });
+      bucket.total += q;
+    });
+    ourLines.forEach(function (l) {
+      var q = Number(l.planned_qty) || 0; if (q <= 0) return;
+      var bucket = byItem[l.item_id]; if (!bucket) return;
+      var s = l.stands || {};
+      bucket.ours.push({ name: s.stand_name || '(stand)', qty: q });
+      bucket.total += q;
+    });
+    items.sort(function (a, b) { return (a.sort_order || 0) - (b.sort_order || 0); });
+    var list = items.map(function (it) { return byItem[it.item_id]; });
+    return { order: order, items: list };
+  };
+
+  PC.renderDistro = function () {
+    var d = PC._distroData; var body = document.getElementById('pcDistroBody');
+    if (!d) return;
+    var html = '';
+    d.items.forEach(function (it) {
+      html += '<div style="margin-bottom:18px;">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid var(--pc-line);padding-bottom:6px;margin-bottom:6px;">' +
+        '<span style="font-size:15px;font-weight:700;">' + escAttr(it.name) + '</span>' +
+        '<span style="font-size:13px;font-weight:700;">Total ' + it.total.toLocaleString() + '</span></div>';
+      if (!it.total) {
+        html += '<div style="font-size:12.5px;color:var(--pc-faint);padding:4px 0;">Nothing for this item this event.</div>';
+      } else {
+        var areaNames = Object.keys(it.areas).sort(function (a, b) { return it.areas[a].area_sort - it.areas[b].area_sort; });
+        areaNames.forEach(function (an) {
+          html += '<div style="font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--pc-faint);margin:8px 0 3px;">' + escAttr(an) + '</div>';
+          it.areas[an].stands.sort(function (a, b) { return a.sort - b.sort; }).forEach(function (st) {
+            html += '<div style="display:flex;justify-content:space-between;padding:4px 2px;border-bottom:1px solid var(--pc-line-soft);font-size:13.5px;">' +
+              '<span>' + escAttr(st.name) + '</span><span style="font-variant-numeric:tabular-nums;font-weight:600;">' + st.qty.toLocaleString() + '</span></div>';
+          });
+        });
+        if (it.ours.length) {
+          html += '<div style="font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--pc-ops);margin:8px 0 3px;">Our stands</div>';
+          it.ours.sort(function (a, b) { return a.name < b.name ? -1 : 1; }).forEach(function (st) {
+            html += '<div style="display:flex;justify-content:space-between;padding:4px 2px;border-bottom:1px solid var(--pc-line-soft);font-size:13.5px;">' +
+              '<span>' + escAttr(st.name) + ' <span style="font-size:10px;color:var(--pc-ops);">ours</span></span><span style="font-variant-numeric:tabular-nums;font-weight:600;">' + st.qty.toLocaleString() + '</span></div>';
+          });
+        }
+      }
+      html += '</div>';
+    });
+    body.innerHTML = html;
+  };
+
+  PC.printDistro = function () {
+    var d = PC._distroData; if (!d) return;
+    var order = d.order;
+    var nm = (order.events && order.events.event_name) ? order.events.event_name : '(event)';
+    var win = window.open('', '_blank');
+    if (!win) { PC.toast('Allow pop-ups to print', true); return; }
+    var doc = win.document; doc.title = 'Distribution sheet';
+    var style = doc.createElement('style');
+    style.textContent =
+      '@page{margin:0.6in;}' +
+      'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;color:#1a1a1a;margin:0;}' +
+      'h1{font-size:18px;margin:0 0 2px;}' +
+      '.sub{font-size:12px;color:#666;margin:0 0 16px;}' +
+      '.list{break-inside:avoid;margin:0 0 18px;}' +
+      '.lhead{display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid #333;padding-bottom:5px;margin-bottom:4px;}' +
+      '.lname{font-size:16px;font-weight:700;} .ltot{font-size:14px;font-weight:700;}' +
+      '.area{font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#888;margin:9px 0 2px;}' +
+      '.row{display:flex;justify-content:space-between;padding:4px 2px;border-bottom:1px solid #eee;font-size:13px;}' +
+      '.chk{display:inline-block;width:13px;height:13px;border:1px solid #999;border-radius:3px;margin-right:9px;vertical-align:-2px;}' +
+      '.q{font-variant-numeric:tabular-nums;font-weight:700;}';
+    doc.head.appendChild(style);
+    var h1 = doc.createElement('h1'); h1.textContent = 'Distribution sheet'; doc.body.appendChild(h1);
+    var sub = doc.createElement('p'); sub.className = 'sub';
+    sub.textContent = order.venue_code + ' \u00b7 ' + nm + ' \u00b7 ' + fmtMD(order.event_date); doc.body.appendChild(sub);
+
+    function rowEl(name, qty, tag) {
+      var row = doc.createElement('div'); row.className = 'row';
+      var left = doc.createElement('span');
+      var chk = doc.createElement('span'); chk.className = 'chk';
+      left.appendChild(chk); left.appendChild(doc.createTextNode(name + (tag ? '  (' + tag + ')' : '')));
+      var q = doc.createElement('span'); q.className = 'q'; q.textContent = qty.toLocaleString();
+      row.appendChild(left); row.appendChild(q); return row;
+    }
+
+    d.items.forEach(function (it) {
+      var box = doc.createElement('div'); box.className = 'list';
+      var head = doc.createElement('div'); head.className = 'lhead';
+      var ln = doc.createElement('span'); ln.className = 'lname'; ln.textContent = it.name;
+      var lt = doc.createElement('span'); lt.className = 'ltot'; lt.textContent = 'Total ' + it.total.toLocaleString();
+      head.appendChild(ln); head.appendChild(lt); box.appendChild(head);
+      if (!it.total) {
+        var none = doc.createElement('div'); none.className = 'row'; none.style.color = '#888';
+        none.appendChild(doc.createTextNode('Nothing for this item this event.')); box.appendChild(none);
+      } else {
+        var areaNames = Object.keys(it.areas).sort(function (a, b) { return it.areas[a].area_sort - it.areas[b].area_sort; });
+        areaNames.forEach(function (an) {
+          var ah = doc.createElement('div'); ah.className = 'area'; ah.textContent = an; box.appendChild(ah);
+          it.areas[an].stands.sort(function (a, b) { return a.sort - b.sort; }).forEach(function (st) { box.appendChild(rowEl(st.name, st.qty, null)); });
+        });
+        if (it.ours.length) {
+          var oh = doc.createElement('div'); oh.className = 'area'; oh.textContent = 'Our stands'; box.appendChild(oh);
+          it.ours.sort(function (a, b) { return a.name < b.name ? -1 : 1; }).forEach(function (st) { box.appendChild(rowEl(st.name, st.qty, 'ours')); });
+        }
+      }
+      doc.body.appendChild(box);
+    });
+    win.focus();
+    setTimeout(function () { try { win.print(); } catch (e) {} }, 250);
+  };
+
   // ---- Boot ----------------------------------------------------------
   // Login-only gate (no pageSlug): entry is allowed for anyone signed in,
   // then the two slugs decide which side(s) they actually see. A user with
@@ -2378,6 +2601,7 @@
       if (PC.canPlan) PC.initWholesale();
       if (PC.canProduce) PC.initBuildBar();
       if (PC.canProduce) PC.initPrint();
+      if (PC.canProduce) PC.initDistro();
       // END PATCH ANCHOR: BOOT_HOOK
     }
   });
