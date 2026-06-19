@@ -1493,6 +1493,47 @@ body {
 }
 
 /* ============================================================
+ * SCRATCHPAD — event manager notes (free-form context).
+ * Always-open box in the main column under Support Staff. Writes
+ * events.manager_notes (shared with Log Sales + Sales History).
+ * Autosaves on blur; last-saved stamp confirms the write.
+ * ============================================================ */
+.notes-card {
+  margin-top: 16px; padding: 14px;
+  background: #fffef7;
+  border: 1px solid var(--amber-border);
+  border-left: 3px solid var(--amber);
+  border-radius: 8px;
+  max-width: 520px;
+}
+.notes-card-head {
+  font-size: 12px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--amber-dark);
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; margin-bottom: 8px;
+}
+.notes-card-head .notes-save-stamp {
+  font-size: 10px; font-weight: 600; letter-spacing: 0;
+  text-transform: none; color: var(--label);
+  font-style: italic;
+}
+.notes-card-head .notes-save-stamp.saved { color: var(--green-dark); }
+.notes-textarea {
+  width: 100%; box-sizing: border-box;
+  min-height: 64px;
+  padding: 9px 11px;
+  font-family: inherit; font-size: 13px; line-height: 1.5;
+  color: var(--primary);
+  border: 1px solid var(--border-strong); border-radius: 6px;
+  background: white; resize: none; overflow: hidden;
+}
+.notes-textarea:focus {
+  outline: none; border-color: var(--amber);
+  box-shadow: 0 0 0 2px var(--amber-light);
+}
+.notes-textarea::placeholder { color: #b8b29c; font-style: italic; }
+
+/* ============================================================
  * GHOST POSITIONS BOX — added for the plan-reduction orphan bug.
  * Shows position_assignments rows whose (stand, role) no longer
  * has a matching staffing_requests row with headcount > 0. Happens
@@ -4029,6 +4070,10 @@ function renderEventRow(ev) {
     }
   }
   if (locked) html += '<span class="lock-tag">🔒 Locked</span>';
+  if (ev.manager_notes && ev.manager_notes.trim()) {
+    html += '<span class="lock-tag" title="' + escapeAttr(ev.manager_notes.trim()) +
+      '" style="background:var(--amber-light);color:var(--amber-dark);">📝 Scratchpad</span>';
+  }
   html += '<span class="event-spacer"></span>';
 
   // Dual coverage meter: signed-up + filled side by side
@@ -5212,8 +5257,72 @@ function renderExpanded(ev, locked) {
     }
   }
 
+  html += renderNotesCard(ev);
+
   html += '</div></div></div>';
   return html;
+}
+
+// Scratchpad card — free-form manager notes for an event. Always open,
+// auto-grows with content, autosaves on blur. Reads/writes the shared
+// events.manager_notes column (same one Log Sales + Sales History use).
+// Editable any time here regardless of the staffing lock — a "who's still
+// tentative" note has communication value right up to and past event start.
+function renderNotesCard(ev) {
+  const notes = ev.manager_notes || '';
+  let stamp = '';
+  if (ev.manager_notes_updated_at) {
+    const who = ev.manager_notes_updated_by || 'someone';
+    stamp = '<span class="notes-save-stamp">Saved by ' + escapeHtml(who) +
+      ' &middot; ' + escapeHtml(fmtNotifiedAt(ev.manager_notes_updated_at)) + '</span>';
+  }
+  let html = '<div class="notes-card">';
+  html += '<div class="notes-card-head"><span>Scratchpad</span>' +
+    '<span class="notes-stamp-slot" data-notes-stamp="' + ev.id + '">' + stamp + '</span></div>';
+  html += '<textarea class="notes-textarea" data-notes-input="' + ev.id + '"' +
+    ' placeholder="Notes for this event — why someone\'s on the schedule, who still needs a call, anything the next manager should know.">' +
+    escapeHtml(notes) + '</textarea>';
+  html += '</div>';
+  return html;
+}
+
+// Autosave handler. PATCHes events.manager_notes + stamps updated_by/at,
+// updates state.events in place (no refetch), and refreshes the saved stamp.
+// No-op when the value is unchanged from what's already on the event.
+function saveEventNotes(eventId, rawValue) {
+  const ev = state.events.find(e => e.id === eventId);
+  if (!ev) return;
+  const newValue = (rawValue == null ? '' : rawValue).trim();
+  const current = (ev.manager_notes || '').trim();
+  if (newValue === current) return; // nothing changed
+
+  const actor = (state.user && state.user.display_name) ||
+                (state.user && state.user.email) || 'unknown';
+  const now = new Date().toISOString();
+
+  authFetch(SUPABASE_URL + '/rest/v1/events?id=eq.' + eventId, {
+    method: 'PATCH', headers: apiHeadersJson(),
+    body: JSON.stringify({
+      manager_notes: newValue || null,
+      manager_notes_updated_by: actor,
+      manager_notes_updated_at: now
+    })
+  }).then(() => {
+    ev.manager_notes = newValue || null;
+    ev.manager_notes_updated_by = actor;
+    ev.manager_notes_updated_at = now;
+    // Refresh just the stamp in place so we don't blow away the textarea
+    // (which would yank focus / cursor if the user clicked back in).
+    const slot = document.querySelector('[data-notes-stamp="' + eventId + '"]');
+    if (slot) {
+      slot.innerHTML = '<span class="notes-save-stamp saved">Saved &#10003; by ' +
+        escapeHtml(actor) + ' &middot; ' + escapeHtml(fmtNotifiedAt(now)) + '</span>';
+    }
+  }).catch(err => {
+    if (err.authFailed) { handleAuthFailure(); return; }
+    console.error('notes save failed:', err);
+    showToast('Could not save notes: ' + (err.message || ''), 'error');
+  });
 }
 
 function renderSummaryBar(ev) {
@@ -6207,6 +6316,18 @@ function attachEventHandlers() {
       if (state.expandedRemoved.has(eventId)) state.expandedRemoved.delete(eventId);
       else state.expandedRemoved.add(eventId);
       render();
+    });
+  });
+
+  // Scratchpad autosave — fires on blur (clicking away / tabbing out) and
+  // auto-grows the textarea as lines are added. Matches the Plan tab's
+  // fire-on-change convention.
+  document.querySelectorAll('[data-notes-input]').forEach(ta => {
+    const grow = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
+    grow();
+    ta.addEventListener('input', grow);
+    ta.addEventListener('blur', () => {
+      saveEventNotes(ta.getAttribute('data-notes-input'), ta.value);
     });
   });
 
