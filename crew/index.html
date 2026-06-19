@@ -1653,6 +1653,47 @@ body {
   font-size: 12px; color: var(--red-600);
   margin-top: 6px; min-height: 16px;
 }
+.deact-release-block {
+  background: var(--amber-50);
+  border: 1px solid var(--amber-100);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+}
+.deact-release-block.loading {
+  background: var(--bg);
+  border-color: var(--border);
+  color: var(--muted);
+  font-size: 12px;
+  font-style: italic;
+}
+.deact-release-block.warn {
+  background: var(--amber-50);
+  border-color: var(--amber-400);
+  color: var(--amber-800);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.deact-release-head {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--amber-800);
+  margin-bottom: 6px;
+}
+.deact-release-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.deact-release-row {
+  font-size: 12px;
+  color: var(--text);
+  padding: 3px 0;
+  line-height: 1.4;
+}
+.deact-release-when { font-weight: 600; }
+.deact-release-event { color: var(--muted); }
+.deact-release-slot { color: var(--muted); font-style: italic; }
 
 /* Mobile */
 @media (max-width: 600px) {
@@ -5724,6 +5765,160 @@ body {
   }
 
   // ============================================================
+  // DEACTIVATE → AUTO-RELEASE PLACEMENTS  (spec v1, Jun 18 2026)
+  // ------------------------------------------------------------
+  // When an employee is deactivated, release (soft-delete) their
+  // placements on every event that HAS NOT YET STARTED, so the slot
+  // reopens (event drops back to amber on its own) and — for synced
+  // placements — the Event Workspace's red 7shifts-cleanup tint fires.
+  //
+  // ONE function, called two ways so preview and commit never drift:
+  //   releaseUpcomingPlacements(emp, { commit:false }) -> returns the list
+  //   releaseUpcomingPlacements(emp, { commit:true  }) -> performs the writes
+  //
+  // Placements are matched by staff_name (string), the same key the
+  // Event Workspace records placements under. Past / already-started /
+  // cancelled events are never touched.
+  // ============================================================
+
+  // Mirror of isLocked() in the Event Workspace: an event has "started"
+  // at gates_open, falling back to show_time, then midnight day-of. Kept
+  // deliberately in sync with that page's canonical definition of when an
+  // event begins — if that definition ever changes, change it there too.
+  function hasEventStarted(ev, now) {
+    var startClock = ev.gates_open || ev.show_time || '00:00:00';
+    var startMs = new Date(ev.event_date + 'T' + startClock).getTime();
+    var nowMs = now ? now.getTime() : Date.now();
+    return nowMs >= startMs;
+  }
+
+  // Targeted PATCH of a single position_assignments row. Mirrors the
+  // patchEmployee/patchCandidate header pattern used elsewhere on the page.
+  function patchPosition(positionId, body) {
+    var url = SUPABASE_URL + '/rest/v1/position_assignments?id=eq.' + encodeURIComponent(positionId);
+    var headers = pcAuth.headers();
+    headers['Content-Type'] = 'application/json';
+    headers['Prefer'] = 'return=minimal';
+    return authFetch(url, { method: 'PATCH', headers: headers, body: JSON.stringify(body) });
+  }
+
+  // Write one row to position_assignment_log, mirroring the Event
+  // Workspace's logAction() shape so the audit modal renders it correctly.
+  // Fire-and-forget: a failed log write never rolls back the release.
+  function logPositionAction(eventId, positionId, action, details) {
+    var actor = (pcAuth.getUser && pcAuth.getUser()) || null;
+    var actorName = actor ? (actor.display_name || actor.email || 'Unknown') : 'Unknown';
+    var url = SUPABASE_URL + '/rest/v1/position_assignment_log';
+    var headers = pcAuth.headers();
+    headers['Content-Type'] = 'application/json';
+    headers['Prefer'] = 'return=minimal';
+    return authFetch(url, {
+      method: 'POST', headers: headers,
+      body: JSON.stringify({
+        event_id: eventId,
+        position_assignment_id: positionId,
+        action: action,
+        details: details || {},
+        actor: actorName
+      })
+    }).catch(function(err) {
+      console.warn('Position log write failed (non-blocking):', err);
+    });
+  }
+
+  // The core function. Resolves to:
+  //   { placements: [ <row with ._event attached>, ... ],
+  //     released: <count>, syncedReleased: <count> }
+  // On commit:false, released/syncedReleased are 0 and no writes happen.
+  function releaseUpcomingPlacements(emp, opts) {
+    opts = opts || {};
+    var commit = opts.commit === true;
+    var name = emp ? fullName(emp) : '';
+    var empty = { placements: [], released: 0, syncedReleased: 0 };
+    if (!name) return Promise.resolve(empty);
+
+    // Step 1 — all active placements recorded under this name.
+    var placementsUrl = SUPABASE_URL + '/rest/v1/position_assignments' +
+      '?staff_name=eq.' + encodeURIComponent(name) +
+      '&removed_at=is.null' +
+      '&select=id,event_id,venue,stand,role,staff_name,source,seven_shifts_synced' +
+      '&limit=10000';
+
+    return authFetch(placementsUrl, { headers: pcAuth.headers() }).then(function(placements) {
+      placements = placements || [];
+      if (placements.length === 0) return empty;
+
+      // Step 2 — resolve their events (date + start clock + cancelled flag).
+      var eventIds = [];
+      placements.forEach(function(p) {
+        if (p.event_id && eventIds.indexOf(p.event_id) === -1) eventIds.push(p.event_id);
+      });
+      if (eventIds.length === 0) return empty;
+      var inList = '(' + eventIds.map(function(id) { return '"' + id + '"'; }).join(',') + ')';
+      var eventsUrl = SUPABASE_URL + '/rest/v1/events' +
+        '?id=in.' + inList +
+        '&select=id,event_name,event_date,venue,gates_open,show_time,cancelled_at' +
+        '&limit=10000';
+
+      return authFetch(eventsUrl, { headers: pcAuth.headers() }).then(function(events) {
+        var evById = {};
+        (events || []).forEach(function(e) { evById[e.id] = e; });
+
+        // Step 3 — keep only not-yet-started, non-cancelled events.
+        var now = new Date();
+        var toRelease = [];
+        placements.forEach(function(p) {
+          var ev = evById[p.event_id];
+          if (!ev) return;                 // unknown event — never touch
+          if (ev.cancelled_at) return;     // cancelled — placements already handled
+          if (hasEventStarted(ev, now)) return; // started/past — preserve history
+          p._event = ev;                   // attach for the preview render
+          toRelease.push(p);
+        });
+
+        // Preview path — list only, no writes.
+        if (!commit) {
+          return { placements: toRelease, released: 0, syncedReleased: 0 };
+        }
+
+        // Commit path — soft-delete each, leaving seven_shifts_synced
+        // intact so the red 7shifts-cleanup tint fires downstream.
+        var actor = (pcAuth.getUser && pcAuth.getUser()) || null;
+        var actorName = actor ? (actor.display_name || actor.email || 'Unknown') : 'Unknown';
+        var nowIso = new Date().toISOString();
+        var syncedCount = 0;
+
+        var ops = toRelease.map(function(p) {
+          var wasSynced = p.seven_shifts_synced === true;
+          if (wasSynced) syncedCount++;
+          return patchPosition(p.id, { removed_at: nowIso, removed_by: actorName })
+            .then(function() {
+              return logPositionAction(p.event_id, p.id, 'removed', {
+                stand: p.stand, role: p.role, staff_name: p.staff_name,
+                was_synced: wasSynced, reason: 'employee_deactivated'
+              });
+            })
+            .then(function() {
+              if (!wasSynced) return;
+              return logPositionAction(p.event_id, p.id, 'unsynced_7s', {
+                staff_name: p.staff_name, stand: p.stand, role: p.role,
+                trigger: 'auto', reason: 'employee_deactivated'
+              });
+            });
+        });
+
+        return Promise.all(ops).then(function() {
+          return {
+            placements: toRelease,
+            released: toRelease.length,
+            syncedReleased: syncedCount
+          };
+        });
+      });
+    });
+  }
+
+  // ============================================================
   // DEACTIVATE SUB-MODAL
   // ============================================================
 
@@ -5738,14 +5933,80 @@ body {
       category: null,
       rehire: null, // 'yes' | 'no' | null (Don't know)
       notes: '',
-      confirmText: ''
+      confirmText: '',
+      releasePreview: null,        // null = still loading; array = loaded
+      releasePreviewError: false
     };
     renderDeactivateModal();
+    // Load the not-yet-started placements that deactivation will release,
+    // so the modal shows the manager exactly what's about to reopen.
+    // commit:false — no writes. Non-blocking: a failure just hides the block.
+    releaseUpcomingPlacements(emp, { commit: false }).then(function(result) {
+      if (!deactState || deactState.emp !== emp) return; // modal closed/changed
+      deactState.releasePreview = (result && result.placements) || [];
+      renderDeactivateModal();
+    }).catch(function(err) {
+      if (err && err.authFailed) { handleAuthFailure(); return; }
+      console.warn('Release preview failed (non-blocking):', err);
+      if (!deactState || deactState.emp !== emp) return;
+      deactState.releasePreview = [];
+      deactState.releasePreviewError = true;
+      renderDeactivateModal();
+    });
   }
 
   function closeDeactivateModal() {
     deactState = null;
     document.getElementById('deactModalRoot').innerHTML = '';
+  }
+
+  // Format one not-yet-started placement for the preview list:
+  //   "Jun 20 · FMP — Beer Stand 1 / Bartender"
+  function formatReleasePreviewRow(p) {
+    var ev = p._event || {};
+    var dateLabel = '';
+    if (ev.event_date) {
+      var parts = String(ev.event_date).split('-');
+      if (parts.length === 3) {
+        var d = new Date(parseInt(parts[0],10), parseInt(parts[1],10)-1, parseInt(parts[2],10));
+        if (!isNaN(d.getTime())) {
+          dateLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        }
+      }
+    }
+    var venue = ev.venue ? (VENUE_LABELS[ev.venue] || ev.venue) : (p.venue || '');
+    var evName = ev.event_name || '';
+    var left = [dateLabel, venue].filter(Boolean).join(' \u00b7 ');
+    var slot = escapeHtml(p.stand || '?') + ' / ' + escapeHtml(p.role || '?');
+    return '<li class="deact-release-row">' +
+      '<span class="deact-release-when">' + escapeHtml(left) + '</span>' +
+      (evName ? ' <span class="deact-release-event">' + escapeHtml(evName) + '</span>' : '') +
+      ' <span class="deact-release-slot">' + slot + '</span>' +
+    '</li>';
+  }
+
+  // Builds the preview block shown in the modal body. Three states:
+  //   loading  -> quiet "checking…" line
+  //   empty    -> nothing rendered (no upcoming placements)
+  //   loaded   -> "Placed on N upcoming events:" + list
+  function renderReleasePreviewBlock() {
+    if (!deactState) return '';
+    var list = deactState.releasePreview;
+    if (list === null) {
+      return '<div class="deact-release-block loading">Checking upcoming placements\u2026</div>';
+    }
+    if (deactState.releasePreviewError) {
+      return '<div class="deact-release-block warn">Couldn\u2019t check upcoming placements. ' +
+        'Deactivation will still proceed and release any not-yet-started placements.</div>';
+    }
+    if (!list.length) return '';
+    var rows = list.map(formatReleasePreviewRow).join('');
+    return '<div class="deact-release-block">' +
+      '<div class="deact-release-head">Placed on ' + list.length +
+        ' upcoming event' + (list.length === 1 ? '' : 's') +
+        ' \u2014 these slots will reopen:</div>' +
+      '<ul class="deact-release-list">' + rows + '</ul>' +
+    '</div>';
   }
 
   function renderDeactivateModal() {
@@ -5782,6 +6043,7 @@ body {
         '<div class="deact-modal">' +
           '<h3>Deactivate ' + escapeHtml(name) + '</h3>' +
           '<p>This removes them from the availability sign-up list immediately. Their record is preserved.</p>' +
+          renderReleasePreviewBlock() +
           '<div class="deact-field">' +
             '<label class="deact-label">Reason <span class="req">*</span></label>' +
             '<div class="deact-radio-group" data-deact-cats>' + catHtml + '</div>' +
@@ -5904,8 +6166,25 @@ body {
         cand.stage_updated_at = now;
         cand.stage_updated_by = actorName;
       }
+      // Deactivation committed — now release their not-yet-started placements.
+      // commit:true re-fetches fresh (same fn as the preview, so no drift).
+      // Best-effort: if it fails, the person is still deactivated; we warn so
+      // the manager can clear the slots by hand in the Event Workspace.
+      return releaseUpcomingPlacements(emp, { commit: true }).catch(function(err) {
+        if (err && err.authFailed) throw err; // let auth failures bubble
+        console.warn('Auto-release after deactivate failed (non-blocking):', err);
+        return { released: 0, syncedReleased: 0, failed: true };
+      });
+    }).then(function(rel) {
       closeDeactivateModal();
-      showToast('Employee deactivated', 'success');
+      if (rel && rel.failed) {
+        showToast('Deactivated, but couldn\u2019t auto-release placements \u2014 clear them in Event Workspace', 'error');
+      } else if (rel && rel.released > 0) {
+        showToast('Deactivated \u00b7 released ' + rel.released + ' placement' +
+          (rel.released === 1 ? '' : 's'), 'success');
+      } else {
+        showToast('Employee deactivated', 'success');
+      }
       // Re-render everything that reflects the new status.
       renderStatusTabs();
       renderList();
