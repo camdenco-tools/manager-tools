@@ -1904,7 +1904,7 @@ async function loadScoreboard() {
       }
     } catch(e) {}
 
-    var grandTotal = rows.reduce(function(s,r) { return s + parseFloat(r.amount); }, 0);
+    var grandTotal = rows.reduce(function(s,r) { return s + (parseFloat(r.amount) || 0); }, 0);
     var grandTips = rows.reduce(function(s,r) { return s + (parseFloat(r.tip_amount) || 0); }, 0);
     document.getElementById('scoreboard-total').textContent = '$' + Math.round(grandTotal).toLocaleString();
     var evtNamesSet = {};
@@ -1920,14 +1920,14 @@ async function loadScoreboard() {
     });
     var venueEntries = Object.keys(byVenue).map(function(v) { return [v, byVenue[v]]; });
     venueEntries.sort(function(a,b) {
-      return b[1].reduce(function(s,r){return s+parseFloat(r.amount);},0) - a[1].reduce(function(s,r){return s+parseFloat(r.amount);},0);
+      return b[1].reduce(function(s,r){return s+(parseFloat(r.amount)||0);},0) - a[1].reduce(function(s,r){return s+(parseFloat(r.amount)||0);},0);
     });
 
     var html = '';
     venueEntries.forEach(function(entry) {
       var venue = entry[0];
       var stands = entry[1];
-      var total = stands.reduce(function(s,r) { return s+parseFloat(r.amount); }, 0);
+      var total = stands.reduce(function(s,r) { return s+(parseFloat(r.amount)||0); }, 0);
       var venueTips = stands.reduce(function(s,r) { return s+(parseFloat(r.tip_amount)||0); }, 0);
       var label = VENUE_LABELS[venue] || venue;
       var venueStaffTotal = stands.reduce(function(s,r) { return s + (parseInt(r.staff_count) || 0); }, 0);
@@ -1945,7 +1945,7 @@ async function loadScoreboard() {
       html += '<div class="chevron" id="vb-ch-' + venue + '">&#9654;</div></div></div>';
       html += '<div class="stand-rows" id="vb-rows-' + venue + '">';
 
-      stands.sort(function(a,b) { return parseFloat(b.amount)-parseFloat(a.amount); });
+      stands.sort(function(a,b) { return (parseFloat(b.amount)||0)-(parseFloat(a.amount)||0); });
       stands.forEach(function(r) {
         var hasSigning = !!signinHas[r.id];
         var staffCount = parseInt(r.staff_count) || 0;
