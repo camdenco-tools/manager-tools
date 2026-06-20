@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Popcorn Chez — Re-parse Sign-in Sheets</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f0ec; min-height: 100vh; }
+
+.page-body { padding: 20px 16px 60px; }
+.container { max-width: 980px; margin: 0 auto; }
+
+.page-title-bar { padding: 18px 4px 14px; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.page-title-bar h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+.page-title-bar .sub { font-size: 12px; color: #999; }
+.util-tag { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: #1a1a1a; color: white; padding: 3px 8px; border-radius: 20px; }
+
+.intro { background: #fff; border-radius: 14px; padding: 16px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); margin-bottom: 14px; font-size: 13px; color: #555; line-height: 1.55; }
+.intro strong { color: #1a1a1a; }
+
+.toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.btn { font-size: 13px; font-weight: 600; padding: 9px 18px; border-radius: 10px; border: 1px solid #ddd; background: white; color: #333; cursor: pointer; font-family: inherit; }
+.btn:hover { border-color: #1a1a1a; color: #1a1a1a; }
+.btn-primary { background: #1a1a1a; color: white; border-color: #1a1a1a; }
+.btn-primary:hover { background: #333; color: white; }
+.btn:disabled { background: #ccc; color: #fff; border-color: #ccc; cursor: not-allowed; }
+
+.tally { display: flex; gap: 10px; flex-wrap: wrap; margin-left: auto; }
+.tally-chip { font-size: 12px; font-weight: 600; padding: 5px 11px; border-radius: 20px; }
+.tally-pending { background: #f0f0f0; color: #777; }
+.tally-done { background: #EAF3DE; color: #27500A; }
+.tally-fail { background: #FCEBEB; color: #791F1F; }
+
+.status-line { font-size: 13px; color: #999; padding: 10px 2px; }
+
+.rows { display: flex; flex-direction: column; gap: 10px; }
+.row { background: white; border-radius: 14px; padding: 14px 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); border: 1px solid transparent; display: flex; gap: 14px; align-items: flex-start; }
+.row.done { border-color: #97C459; }
+.row.fail { border-color: #F09595; }
+.row.running { border-color: #B5D4F4; }
+
+.thumb { width: 58px; height: 58px; border-radius: 8px; overflow: hidden; border: 1px solid #e0e0e0; flex-shrink: 0; cursor: pointer; background: #fafafa; }
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.row-main { flex: 1; min-width: 0; }
+.row-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.row-stand { font-size: 14px; font-weight: 700; color: #1a1a1a; }
+.row-venue { font-size: 12px; color: #777; }
+.row-meta { font-size: 11px; color: #aaa; margin-top: 2px; }
+
+.row-status { margin-top: 8px; }
+.pill { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 5px; }
+.pill-pending { background: #f0f0f0; color: #888; }
+.pill-running { background: #E6F1FB; color: #0C447C; }
+.pill-done { background: #EAF3DE; color: #27500A; }
+.pill-fail { background: #FCEBEB; color: #791F1F; }
+
+.names { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 5px; }
+.name-chip { font-size: 11px; padding: 2px 8px; border-radius: 20px; background: #f6f6f3; color: #444; }
+.name-chip .c-high { color: #27500A; }
+.name-chip .c-medium { color: #633806; }
+.name-chip .c-low { color: #791F1F; }
+
+.row-action { flex-shrink: 0; }
+.reparse-btn { font-size: 12px; font-weight: 600; padding: 7px 14px; border-radius: 9px; border: 1px solid #ddd; background: white; color: #185FA5; cursor: pointer; font-family: inherit; white-space: nowrap; }
+.reparse-btn:hover { border-color: #185FA5; background: #E6F1FB; }
+.reparse-btn:disabled { color: #bbb; border-color: #eee; background: #fafafa; cursor: not-allowed; }
+
+.empty { background: white; border-radius: 14px; padding: 40px 20px; text-align: center; color: #aaa; font-size: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+
+.spinner { display: inline-block; width: 9px; height: 9px; border: 1.5px solid #B5D4F4; border-top-color: #0C447C; border-radius: 50%; animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Lightbox */
+.lightbox { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.88); z-index: 9999; align-items: center; justify-content: center; }
+.lightbox.open { display: flex; }
+.lightbox-inner { position: relative; max-width: 90vw; max-height: 90vh; }
+.lightbox-inner img { max-width: 90vw; max-height: 85vh; border-radius: 8px; display: block; object-fit: contain; }
+.lightbox-close { position: absolute; top: -14px; right: -14px; width: 32px; height: 32px; border-radius: 50%; background: white; border: none; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #1a1a1a; line-height: 1; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+
+@media (max-width: 600px) {
+  .toolbar { gap: 8px; }
+  .tally { margin-left: 0; width: 100%; }
+  .row { flex-wrap: wrap; }
+  .row-action { width: 100%; }
+  .reparse-btn { width: 100%; }
+}
+</style>
+</head>
+<body>
+
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <div class="lightbox-inner" onclick="event.stopPropagation()">
+    <button class="lightbox-close" onclick="closeLightbox()">&#215;</button>
+    <img id="lightbox-img" src="" alt="">
+  </div>
+</div>
+
+<!-- Header + ribbon injected by pc-nav.js -->
+
+<div class="page-body">
+  <div class="container">
+
+    <div class="page-title-bar">
+      <h1>Re-parse Sign-in Sheets</h1>
+      <span class="util-tag">Utility</span>
+      <span class="sub">Finds sales whose sign-in sheet never produced names and re-reads them</span>
+    </div>
+
+    <div class="intro">
+      This page scans every sale that has a sign-in sheet photo but <strong>zero parsed names</strong>, and lets you
+      re-run the AI read. Re-parsing is safe to repeat &mdash; each run replaces that sale's prior names. After a
+      sale turns green here, open it on Tips Report to confirm the names show up.
+    </div>
+
+    <div class="toolbar">
+      <button class="btn" id="scan-btn" onclick="scan()">&#128269; Rescan</button>
+      <button class="btn btn-primary" id="all-btn" onclick="reparseAll()" disabled>Re-parse all</button>
+      <div class="tally" id="tally" style="display:none;">
+        <span class="tally-chip tally-pending" id="t-pending">0 pending</span>
+        <span class="tally-chip tally-done" id="t-done">0 done</span>
+        <span class="tally-chip tally-fail" id="t-fail">0 failed</span>
+      </div>
+    </div>
+
+    <div class="status-line" id="status-line">Loading…</div>
+    <div class="rows" id="rows"></div>
+
+  </div>
+</div>
+
+<script src="/pc-auth.js"></script>
+<script src="/pc-nav.js"></script>
+<script src="/pc-activity.js"></script>
+<script src="/pc-catalog.js"></script>
+<script>
+var SUPA_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
+var EDGE_URL = SUPA_URL + '/functions/v1/parse-signin-sheet';
+
+var roster = [];
+var rows = [];          // each: { sale_id, photo_url, venue, stand, event_date, tip_amount, staff_count, submitted_by, _status, _label, _names }
+var VENUE_LABELS = {};
+
+function apiHeaders() { return pcAuth.headers(); }
+function edgeHeaders() { var h = pcAuth.headers(); h['Content-Type'] = 'application/json'; return h; }
+
+function chunk(arr, n) { var out = []; for (var i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n)); return out; }
+
+function venueLabel(code) { return VENUE_LABELS[code] || code; }
+
+function fmtDate(d) { if (!d) return ''; var p = d.split('-'); return p[1] + '/' + p[2] + '/' + p[0]; }
+
+function setStatus(txt) { document.getElementById('status-line').textContent = txt; }
+
+// ── Scan: find sales with a sign-in photo but no name rows ──────────────────
+async function scan() {
+  document.getElementById('scan-btn').disabled = true;
+  document.getElementById('all-btn').disabled = true;
+  document.getElementById('tally').style.display = 'none';
+  document.getElementById('rows').innerHTML = '';
+  setStatus('Scanning for unparsed sign-in sheets…');
+
+  try {
+    if (!roster.length) await loadRoster();
+
+    // 1) Every sign-in photo (first one per sale).
+    var pRes = await fetch(
+      SUPA_URL + '/rest/v1/sale_photos?photo_type=eq.signin&select=sale_id,photo_url,sort_order&order=sale_id.asc,sort_order.asc&limit=5000',
+      { headers: apiHeaders() }
+    );
+    var photos = await pRes.json();
+    if (!Array.isArray(photos)) photos = [];
+    var firstPhoto = {};
+    photos.forEach(function(p) { if (!firstPhoto[p.sale_id]) firstPhoto[p.sale_id] = p.photo_url; });
+    var saleIds = Object.keys(firstPhoto);
+
+    if (!saleIds.length) { rows = []; render(); setStatus('No sign-in sheets found.'); finishScan(); return; }
+
+    // 2) Which of those sales already have name rows.
+    var withNames = {};
+    var idChunks = chunk(saleIds, 50);
+    for (var i = 0; i < idChunks.length; i++) {
+      var aRes = await fetch(
+        SUPA_URL + '/rest/v1/sale_staff_assignments?sale_id=in.(' + idChunks[i].join(',') + ')&select=sale_id&limit=10000',
+        { headers: apiHeaders() }
+      );
+      var a = await aRes.json();
+      if (Array.isArray(a)) a.forEach(function(x) { withNames[x.sale_id] = true; });
+    }
+    var deadIds = saleIds.filter(function(id) { return !withNames[id]; });
+
+    if (!deadIds.length) { rows = []; render(); setStatus('All sign-in sheets have parsed names. Nothing to re-parse.'); finishScan(); return; }
+
+    // 3) Sale details for the unparsed ones.
+    var details = [];
+    var dChunks = chunk(deadIds, 50);
+    for (var j = 0; j < dChunks.length; j++) {
+      var sRes = await fetch(
+        SUPA_URL + '/rest/v1/sales?id=in.(' + dChunks[j].join(',') + ')&select=id,venue,stand,event_date,tip_amount,staff_count,submitted_by&limit=10000',
+        { headers: apiHeaders() }
+      );
+      var s = await sRes.json();
+      if (Array.isArray(s)) details = details.concat(s);
+    }
+
+    rows = details.map(function(d) {
+      return {
+        sale_id: d.id, photo_url: firstPhoto[d.id], venue: d.venue, stand: d.stand,
+        event_date: d.event_date, tip_amount: d.tip_amount, staff_count: d.staff_count,
+        submitted_by: d.submitted_by, _status: 'pending', _label: null, _names: null
+      };
+    });
+    rows.sort(function(a, b) {
+      if (a.event_date !== b.event_date) return a.event_date < b.event_date ? 1 : -1; // newest first
+      return (a.venue || '').localeCompare(b.venue || '');
+    });
+
+    render();
+    setStatus(rows.length + ' sale' + (rows.length !== 1 ? 's' : '') + ' with a sign-in sheet but no names.');
+  } catch (e) {
+    setStatus('Scan failed: ' + (e.message || String(e)));
+  }
+  finishScan();
+}
+
+function finishScan() {
+  document.getElementById('scan-btn').disabled = false;
+  document.getElementById('all-btn').disabled = rows.length === 0;
+  if (rows.length) { document.getElementById('tally').style.display = 'flex'; updateTally(); }
+}
+
+async function loadRoster() {
+  var res = await fetch(
+    SUPA_URL + '/rest/v1/employees?is_active=eq.true&select=id,first_name,last_name&limit=2000',
+    { headers: apiHeaders() }
+  );
+  var r = await res.json();
+  roster = Array.isArray(r) ? r : [];
+}
+
+// ── Render ──────────────────────────────────────────────────────────────────
+function render() {
+  var el = document.getElementById('rows');
+  if (!rows.length) { el.innerHTML = '<div class="empty">Nothing to re-parse right now.</div>'; return; }
+  el.innerHTML = rows.map(rowHtml).join('');
+}
+
+function rowHtml(r) {
+  return '<div class="row ' + r._status + '" id="row-' + r.sale_id + '">' +
+           '<div class="thumb" onclick="openPhoto(\'' + (r.photo_url || '').replace(/'/g, "\\'") + '\')">' +
+             (r.photo_url ? '<img src="' + r.photo_url + '" alt="sign-in sheet">' : '') +
+           '</div>' +
+           '<div class="row-main">' +
+             '<div class="row-head"><span class="row-stand">' + r.stand + '</span>' +
+             '<span class="row-venue">' + venueLabel(r.venue) + ' &middot; ' + fmtDate(r.event_date) + '</span></div>' +
+             '<div class="row-meta">by ' + (r.submitted_by || 'unknown') +
+               (r.staff_count != null ? ' &middot; ' + r.staff_count + ' staff' : '') +
+               (r.tip_amount != null ? ' &middot; tips $' + Math.round(r.tip_amount) : '') + '</div>' +
+             '<div class="row-status">' + statusPill(r) + '</div>' +
+             namesHtml(r) +
+           '</div>' +
+           '<div class="row-action">' +
+             '<button class="reparse-btn" id="btn-' + r.sale_id + '" onclick="reparse(\'' + r.sale_id + '\')"' +
+               (r._status === 'running' ? ' disabled' : '') + '>' +
+               (r._status === 'done' ? 'Re-parse again' : 'Re-parse') +
+             '</button>' +
+           '</div>' +
+         '</div>';
+}
+
+function statusPill(r) {
+  if (r._status === 'running') return '<span class="pill pill-running"><span class="spinner"></span> Reading…</span>';
+  if (r._status === 'done') return '<span class="pill pill-done">&#10003; ' + (r._label || 'names read') + '</span>';
+  if (r._status === 'fail') return '<span class="pill pill-fail">&#9888; ' + (r._label || 'no names') + '</span>';
+  return '<span class="pill pill-pending">No names yet</span>';
+}
+
+function namesHtml(r) {
+  if (!r._names || !r._names.length) return '';
+  return '<div class="names">' + r._names.map(function(n) {
+    return '<span class="name-chip"><span class="c-' + n.confidence + '">' + n.text + '</span> &middot; ' + n.confidence + '</span>';
+  }).join('') + '</div>';
+}
+
+function updateRow(r) {
+  var el = document.getElementById('row-' + r.sale_id);
+  if (el) el.outerHTML = rowHtml(r);
+}
+
+function updateTally() {
+  var pending = rows.filter(function(r) { return r._status === 'pending'; }).length;
+  var done = rows.filter(function(r) { return r._status === 'done'; }).length;
+  var fail = rows.filter(function(r) { return r._status === 'fail'; }).length;
+  document.getElementById('t-pending').textContent = pending + ' pending';
+  document.getElementById('t-done').textContent = done + ' done';
+  document.getElementById('t-fail').textContent = fail + ' failed';
+}
+
+// ── Re-parse one ────────────────────────────────────────────────────────────
+async function reparse(saleId) {
+  var r = null;
+  for (var i = 0; i < rows.length; i++) { if (rows[i].sale_id === saleId) { r = rows[i]; break; } }
+  if (!r) return;
+
+  r._status = 'running'; r._names = null; r._label = null;
+  updateRow(r);
+
+  try {
+    var res = await fetch(EDGE_URL, {
+      method: 'POST', headers: edgeHeaders(),
+      body: JSON.stringify({
+        photo_url: r.photo_url,
+        sale_id: r.sale_id,
+        venue: r.venue,
+        tip_amount: r.tip_amount != null ? r.tip_amount : 0,
+        staff_count: r.staff_count != null ? r.staff_count : 0,
+        roster: roster,
+        expected_names: []
+      })
+    });
+    var data = await res.json();
+    var total = data && data.summary ? (data.summary.total || 0) : 0;
+
+    if (res.ok && total > 0) {
+      r._status = 'done';
+      r._label = data.summary.status_label || (total + ' names read');
+      r._names = (data.matches || []).map(function(m) {
+        return { text: m.raw_text || 'Unreadable', confidence: m.confidence || 'low' };
+      });
+    } else {
+      r._status = 'fail';
+      r._label = (data && data.summary && data.summary.status_label) ||
+                 (data && data.error) || 'No names read';
+      r._names = null;
+    }
+  } catch (e) {
+    r._status = 'fail';
+    r._label = 'Error: ' + (e.message || String(e));
+  }
+
+  updateRow(r);
+  updateTally();
+}
+
+// ── Re-parse all (sequential, gentle pacing) ────────────────────────────────
+async function reparseAll() {
+  var allBtn = document.getElementById('all-btn');
+  var scanBtn = document.getElementById('scan-btn');
+  allBtn.disabled = true; scanBtn.disabled = true;
+
+  // Only run rows that haven't succeeded yet.
+  var queue = rows.filter(function(r) { return r._status === 'pending' || r._status === 'fail'; });
+  for (var i = 0; i < queue.length; i++) {
+    setStatus('Re-parsing ' + (i + 1) + ' of ' + queue.length + '…');
+    await reparse(queue[i].sale_id);
+    await new Promise(function(resolve) { setTimeout(resolve, 800); });
+  }
+
+  var done = rows.filter(function(r) { return r._status === 'done'; }).length;
+  var fail = rows.filter(function(r) { return r._status === 'fail'; }).length;
+  setStatus('Finished. ' + done + ' read, ' + fail + ' still need attention.');
+  allBtn.disabled = false; scanBtn.disabled = false;
+}
+
+// ── Lightbox ────────────────────────────────────────────────────────────────
+function openPhoto(url) {
+  if (!url) return;
+  document.getElementById('lightbox-img').src = url;
+  document.getElementById('lightbox').classList.add('open');
+}
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('open');
+  document.getElementById('lightbox-img').src = '';
+}
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
+
+// ── Init ────────────────────────────────────────────────────────────────────
+pcAuth.require({
+  pageSlug: 'reparse-signin',
+  onReady: function(user) {
+    pcActivity.init('reparse-signin');
+    if (typeof pcCatalog !== 'undefined' && pcCatalog && pcCatalog.ready) {
+      pcCatalog.ready().then(function() {
+        try {
+          pcCatalog.getAllVenues().forEach(function(v) { VENUE_LABELS[v.code] = v.full_name; });
+        } catch (e) {}
+        scan();
+      }).catch(function() { scan(); });
+    } else {
+      scan();
+    }
+  }
+});
+</script>
+</body>
+</html>
