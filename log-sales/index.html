@@ -247,6 +247,41 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
 .recap-stand-meta .v-up { color: #27500A; font-weight: 600; }
 .recap-stand-meta .v-down { color: #A32D2D; font-weight: 600; }
 
+/* ============================================================
+ * EVENT BOARD — added Jun 20, 2026
+ * Replaces the recap in the right column. Live worklist of the
+ * selected date+venue's planned stands (staffing_requests headcount>0).
+ * Tapping a row drives the LEFT FORM (v1) — no inline photo code yet.
+ * ============================================================ */
+.board-label { font-size: 10px; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 2px; }
+.board-sub { font-size: 12px; color: #999; margin-bottom: 12px; min-height: 16px; }
+.board-progress { font-size: 12px; font-weight: 600; color: #1a1a1a; }
+.board-progress .bp-done { color: #1D9E75; }
+.board-row { display: flex; align-items: center; gap: 10px; padding: 11px 13px; border: 1px solid #eee; border-radius: 11px; margin-bottom: 7px; cursor: pointer; transition: all 0.12s; background: #fff; }
+.board-row:hover { border-color: #bbb; background: #fafafa; }
+.board-row.is-open { border-style: dashed; border-color: #d8d8d8; }
+.board-row.is-progress { border-color: #F0C896; background: #FFFBF4; }
+.board-row.is-done { border-color: #C3E0A8; background: #F6FBF0; }
+.board-row.is-selected { border-color: #1a1a1a; box-shadow: 0 0 0 2px rgba(26,26,26,0.08); }
+.board-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.board-dot.d-open { background: #ccc; }
+.board-dot.d-progress { background: #EF9F27; }
+.board-dot.d-done { background: #1D9E75; }
+.board-rmid { flex: 1; min-width: 0; }
+.board-rname { font-size: 14px; font-weight: 600; color: #1a1a1a; }
+.board-rmeta { font-size: 11px; color: #888; margin-top: 2px; }
+.board-checks { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; }
+.board-chk { font-size: 10px; font-weight: 600; padding: 1px 7px; border-radius: 20px; white-space: nowrap; }
+.board-chk.ok { background: #EAF3DE; color: #27500A; }
+.board-chk.no { background: #f3f3f3; color: #aaa; }
+.board-chk.bonus { background: #E6F1FB; color: #0C447C; }
+.board-ramt { font-size: 13px; font-weight: 700; color: #1a1a1a; text-align: right; flex-shrink: 0; }
+.board-ramt.pending { color: #ccc; font-weight: 500; }
+.board-rcta { font-size: 10px; color: #185FA5; margin-top: 2px; text-align: right; }
+.board-empty { text-align: center; padding: 24px 0; font-size: 13px; color: #ccc; }
+.board-lastsaved { font-size: 11px; color: #7A5C00; background: #FFFBEA; border: 1px solid #F5C400; border-radius: 7px; padding: 6px 10px; margin-bottom: 10px; display: none; }
+.board-lastsaved.show { display: block; }
+
 .photo-pill { font-size: 10px; background: #EAF3DE; color: #27500A; padding: 1px 6px; border-radius: 6px; margin-left: 4px; font-weight: 600; }
 .empty-state { text-align: center; padding: 24px 0; font-size: 14px; color: #ccc; }
 .loading-state { text-align: center; padding: 16px; font-size: 13px; color: #ccc; }
@@ -463,10 +498,12 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
         </div>
         <div class="scoreboard-event" id="scoreboard-event"></div>
         <div id="scoreboard-venues"><div class="loading-state">Loading...</div></div>
-        <div id="recap-section" style="display:none;">
+        <div id="board-section" style="display:none;">
           <div class="recap-section">
-            <div class="recap-label">Recap — forecast vs actual</div>
-            <div id="recap-blocks"></div>
+            <div class="board-label">Event board</div>
+            <div class="board-sub" id="board-sub"></div>
+            <div class="board-lastsaved" id="board-lastsaved"></div>
+            <div id="board-rows"></div>
           </div>
         </div>
       </div>
@@ -1016,6 +1053,7 @@ async function handleDateChange() {
     venueSel.innerHTML = '<option value="">No events on this date</option>';
     noteEl.textContent = ''; noteEl.className = 'field-note';
   }
+  loadBoard();
 }
 
 function handleVenueChange() {
@@ -1043,6 +1081,7 @@ function handleVenueChange() {
   // Load notes card for new date+venue combination
   var date = document.getElementById('evt-date').value;
   loadNotesForEvent(date, venueCode);
+  loadBoard();
 }
 
 async function handleStandChange() {
@@ -1985,21 +2024,8 @@ async function loadScoreboard() {
 
     document.getElementById('scoreboard-venues').innerHTML = html;
 
-    var recapHtml = '';
-    venueEntries.forEach(function(entry) {
-      recapHtml += '<div class="recap-block" id="rb-' + entry[0] + '"></div>';
-    });
-    document.getElementById('recap-blocks').innerHTML = recapHtml;
-    document.getElementById('recap-section').style.display = 'block';
-
-    venueEntries.forEach(function(entry) {
-      var venue = entry[0];
-      var stands = entry[1];
-      var eventName = stands[0] ? stands[0].event_name : null;
-      fetchEventForecast(sb.date, venue).then(function(forecast) {
-        renderRecapBlock(venue, sb.date, eventName, stands, forecast);
-      });
-    });
+    // Recap removed Jun 20, 2026 — replaced by the Event Board (right column),
+    // which follows the LEFT FORM's date+venue rather than the scoreboard date.
 
   } catch(e) {
     document.getElementById('scoreboard-venues').innerHTML = '<div class="empty-state">Could not load.</div>';
@@ -2013,14 +2039,18 @@ pcAuth.require({
     // Header user-name and sign-out are now owned by pc-nav.js. The legacy
     // #header-right population is gone — pc-nav reads pcAuth and renders the
     // user name into its own injected header bar.
-    document.getElementById('evt-date').value = todayLocal();
+    // Default date set to most-recent-event-date in initPage() (Jun 20, 2026)
+    // instead of todayLocal(), so the form + board land on the event being worked.
 
     // Load catalog → populate VENUE_LABELS + STANDS → kick off form + scoreboard.
     // Fallback path used only if catalog fails to load.
     // Use getActiveStandsForVenue (NOT getAllStandsForVenue): this is a creation
     // page; new sales should not be loggable against retired stands.
     var initPage = function() {
-      handleDateChange();
+      fetchLatestPlannedDate().then(function(latest) {
+        document.getElementById('evt-date').value = latest || todayLocal();
+        handleDateChange();
+      });
       loadScoreboard();
       setInterval(loadScoreboard, 60000);
     };
@@ -2053,6 +2083,221 @@ pcAuth.require({
     }
   }
 });
+
+// ============================================================
+// EVENT BOARD (Jun 20, 2026) — right-column live worklist.
+// Follows the LEFT FORM's date+venue. Rows = planned stands
+// (staffing_requests headcount>0). Tap a row -> drives the left
+// form (select stand + load existing values for edit/overwrite).
+// ============================================================
+
+// Most-recent date that has a planned event (any venue), clamped to today.
+async function fetchLatestPlannedDate() {
+  var today = todayLocal();
+  try {
+    var url = SUPA_URL + '/rest/v1/events?cancelled_at=is.null&event_date=lte.' + today +
+              '&select=event_date&order=event_date.desc&limit=1';
+    var res = await fetch(url, { headers: apiHeaders() });
+    if (!res.ok) return null;
+    var rows = await res.json();
+    return (Array.isArray(rows) && rows.length) ? rows[0].event_date : null;
+  } catch(e) { return null; }
+}
+
+// Returns the set of stand names planned for date+venue (headcount>0), in
+// catalog-ish order via STANDS[venue] when available.
+async function fetchPlannedStands(date, venue) {
+  if (!date || !venue) return [];
+  try {
+    var evRes = await fetch(
+      SUPA_URL + '/rest/v1/events?event_date=eq.' + encodeURIComponent(date) +
+      '&venue=eq.' + encodeURIComponent(venue) + '&cancelled_at=is.null&select=id&limit=1',
+      { headers: apiHeaders() }
+    );
+    var evRows = await evRes.json();
+    if (!Array.isArray(evRows) || !evRows.length) return [];
+    var eventId = evRows[0].id;
+    var srRes = await fetch(
+      SUPA_URL + '/rest/v1/staffing_requests?event_id=eq.' + eventId +
+      '&venue=eq.' + encodeURIComponent(venue) + '&headcount=gt.0&select=stand,headcount&limit=2000',
+      { headers: apiHeaders() }
+    );
+    var srRows = await srRes.json();
+    if (!Array.isArray(srRows)) return [];
+    // Exclude non-revenue support rows — they never carry sales/sign-in, so
+    // they'd sit "pending" forever and skew the done count. Same list as
+    // EXCLUDED_STANDS / Popfax's NON_SALES_STANDS.
+    var head = {};
+    srRows.forEach(function(r) {
+      if (!r.stand) return;
+      if (EXCLUDED_STANDS.indexOf(r.stand) !== -1) return;
+      head[r.stand] = (head[r.stand] || 0) + (parseInt(r.headcount) || 0);
+    });
+    var names = Object.keys(head);
+    // Sort by catalog order if we have it, else alpha.
+    var order = STANDS[venue] || [];
+    names.sort(function(a, b) {
+      var ia = order.indexOf(a), ib = order.indexOf(b);
+      if (ia === -1 && ib === -1) return a < b ? -1 : a > b ? 1 : 0;
+      if (ia === -1) return 1;
+      if (ib === -1) return -1;
+      return ia - ib;
+    });
+    return names.map(function(n) { return { stand: n, planned: head[n] }; });
+  } catch(e) { return []; }
+}
+
+// Sales rows for date+venue, keyed by stand. Plus sign-in presence
+// (signin photo OR >=1 sale_staff_assignments row) keyed by sale id.
+async function fetchLoggedForBoard(date, venue) {
+  var out = { byStand: {}, signinBySale: {} };
+  if (!date || !venue) return out;
+  try {
+    var sRes = await fetch(
+      SUPA_URL + '/rest/v1/sales?event_date=eq.' + encodeURIComponent(date) +
+      '&venue=eq.' + encodeURIComponent(venue) +
+      '&select=id,stand,amount,tip_amount,staff_count,submitted_by,submitted_at&limit=2000',
+      { headers: apiHeaders() }
+    );
+    var sRows = await sRes.json();
+    if (!Array.isArray(sRows)) sRows = [];
+    var saleIds = [];
+    sRows.forEach(function(r) { out.byStand[r.stand] = r; if (r.id) saleIds.push(r.id); });
+
+    if (saleIds.length) {
+      // sign-in photos
+      try {
+        var spRes = await fetch(
+          SUPA_URL + '/rest/v1/sale_photos?sale_id=in.(' + saleIds.join(',') + ')&photo_type=eq.signin&select=sale_id&limit=5000',
+          { headers: apiHeaders() }
+        );
+        var spRows = await spRes.json();
+        if (Array.isArray(spRows)) spRows.forEach(function(r) { out.signinBySale[r.sale_id] = true; });
+      } catch(e) {}
+      // parsed names
+      try {
+        var ssaRes = await fetch(
+          SUPA_URL + '/rest/v1/sale_staff_assignments?sale_id=in.(' + saleIds.join(',') + ')&select=sale_id&limit=20000',
+          { headers: apiHeaders() }
+        );
+        var ssaRows = await ssaRes.json();
+        if (Array.isArray(ssaRows)) ssaRows.forEach(function(r) { out.signinBySale[r.sale_id] = true; });
+      } catch(e) {}
+    }
+  } catch(e) {}
+  return out;
+}
+
+function boardStateFor(saleRow, hasSignin) {
+  if (!saleRow) return { state: 'open', sales: false, staff: false, tips: false, signin: false };
+  var sales = saleRow.amount != null;
+  var staff = saleRow.staff_count != null;
+  var tips = saleRow.tip_amount != null;
+  var signin = !!hasSignin;
+  var done = sales && staff && tips && signin;
+  return { state: done ? 'done' : 'progress', sales: sales, staff: staff, tips: tips, signin: signin };
+}
+
+async function loadBoard() {
+  var section = document.getElementById('board-section');
+  var rowsEl = document.getElementById('board-rows');
+  var subEl = document.getElementById('board-sub');
+  if (!section || !rowsEl) return;
+
+  var date = document.getElementById('evt-date').value;
+  var venue = document.getElementById('venue-sel').value;
+
+  if (!date || !venue) {
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = 'block';
+  rowsEl.innerHTML = '<div class="loading-state">Loading board...</div>';
+  subEl.textContent = (VENUE_LABELS[venue] || venue);
+
+  var planned = await fetchPlannedStands(date, venue);
+  if (!planned.length) {
+    rowsEl.innerHTML = '<div class="board-empty">No plan for this venue on this date.</div>';
+    subEl.textContent = (VENUE_LABELS[venue] || venue);
+    return;
+  }
+  var logged = await fetchLoggedForBoard(date, venue);
+
+  var doneCount = 0;
+  var html = '';
+  planned.forEach(function(p) {
+    var saleRow = logged.byStand[p.stand] || null;
+    var hasSignin = saleRow ? !!logged.signinBySale[saleRow.id] : false;
+    var st = boardStateFor(saleRow, hasSignin);
+    if (st.state === 'done') doneCount++;
+    var selected = (document.getElementById('stand-sel').value === p.stand);
+
+    var amtTxt = (saleRow && saleRow.amount != null)
+      ? '$' + Math.round(parseFloat(saleRow.amount) || 0).toLocaleString()
+      : 'pending';
+    var amtCls = (saleRow && saleRow.amount != null) ? 'board-ramt' : 'board-ramt pending';
+
+    var meta = p.planned + ' planned';
+    if (st.state !== 'open') {
+      var chk = '<div class="board-checks">';
+      chk += '<span class="board-chk ' + (st.sales ? 'ok' : 'no') + '">sales ' + (st.sales ? '\u2713' : '\u2014') + '</span>';
+      chk += '<span class="board-chk ' + (st.staff ? 'ok' : 'no') + '">staff ' + (st.staff ? '\u2713' : '\u2014') + '</span>';
+      chk += '<span class="board-chk ' + (st.tips ? 'ok' : 'no') + '">tips ' + (st.tips ? '\u2713' : '\u2014') + '</span>';
+      chk += '<span class="board-chk ' + (st.signin ? 'ok' : 'no') + '">sign-in ' + (st.signin ? '\u2713' : '\u2014') + '</span>';
+      chk += '</div>';
+      meta = chk;
+    }
+
+    var dotCls = st.state === 'done' ? 'd-done' : st.state === 'progress' ? 'd-progress' : 'd-open';
+    var rowCls = 'board-row is-' + st.state + (selected ? ' is-selected' : '');
+    var cta = st.state === 'open' ? '<div class="board-rcta">tap to log</div>' : '<div class="board-rcta">tap to edit</div>';
+
+    var saleIdAttr = (saleRow && saleRow.id) ? saleRow.id : '';
+    html += '<div class="' + rowCls + '" onclick="boardRowClick(\'' + p.stand.replace(/'/g, "\\'") + '\',\'' + saleIdAttr + '\')">';
+    html += '<div class="board-dot ' + dotCls + '"></div>';
+    html += '<div class="board-rmid">';
+    html += '<div class="board-rname">' + p.stand + '</div>';
+    if (st.state === 'open') html += '<div class="board-rmeta">' + meta + '</div>';
+    else html += meta;
+    html += '</div>';
+    html += '<div style="text-align:right;flex-shrink:0;"><div class="' + amtCls + '">' + amtTxt + '</div>' + cta + '</div>';
+    html += '</div>';
+  });
+
+  subEl.innerHTML = (VENUE_LABELS[venue] || venue) +
+    ' \u00b7 <span class="board-progress"><span class="bp-done">' + doneCount + '</span> of ' + planned.length + ' done</span>';
+  rowsEl.innerHTML = html;
+}
+
+// Tap a board row -> drive the LEFT FORM: select the stand, run the existing
+// stand-change logic (which checks for an existing sale and surfaces the
+// edit/overwrite path), and scroll the form into view.
+function boardRowClick(stand, saleId) {
+  // Logged stand -> open the existing edit modal directly on its sale.
+  // Open stand -> drive the left form to create a new sale.
+  if (saleId) { openEditModal(saleId); return; }
+  boardSelectStand(stand);
+}
+
+function boardSelectStand(stand) {
+  var standSel = document.getElementById('stand-sel');
+  if (!standSel) return;
+  // Ensure the option exists (planned stand should be in the catalog list).
+  var found = false;
+  for (var i = 0; i < standSel.options.length; i++) {
+    if (standSel.options[i].value === stand || standSel.options[i].text === stand) { standSel.selectedIndex = i; found = true; break; }
+  }
+  if (!found) {
+    var o = document.createElement('option'); o.textContent = stand; standSel.appendChild(o);
+    standSel.value = stand;
+  }
+  handleStandChange();
+  // Re-highlight the selected row on the board.
+  loadBoard();
+  // Scroll the form into view on narrow screens.
+  var formCard = document.getElementById('form-card');
+  if (formCard && window.innerWidth < 860) formCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 </script>
 
 <!-- Edit submission modal — opens from scoreboard stand rows ("edit" link) and
