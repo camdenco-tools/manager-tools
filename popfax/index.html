@@ -612,6 +612,15 @@ function escapeHtml(s) {
   if (s == null) return '';
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
+function stripSender(name) {
+  return name ? String(name) : 'unknown';
+}
+function fmtSentStamp(ts) {
+  if (!ts) return '';
+  var d = new Date(ts);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
 function chipList(names, missing) {
   return '<div class="name-chips">' + names.map(function(n){
     return '<span class="name-chip' + (missing ? ' missing-chip' : '') + '">' + escapeHtml(n) + '</span>';
@@ -696,7 +705,7 @@ async function loadData() {
       SB_URL + '/rest/v1/position_assignment_log?event_id=in.' + idIn +
         '&action=in.(placed,notified_staffing)&select=event_id,action,details,actor_at&limit=20000',
       SB_URL + '/rest/v1/staff_list_email_log?event_date=gte.' + start + '&event_date=lte.' + endBound +
-        '&select=event_date,venue,sent_at&limit=5000',
+        '&select=event_date,venue,sent_at,sender_name,resend_id&order=sent_at.asc&limit=5000',
       SB_URL + '/rest/v1/prep_wholesale_needs?need_date=gte.' + start + '&need_date=lte.' + endBound +
         '&deleted_at=is.null&select=venue_code,need_date&limit=5000',
       SB_URL + '/rest/v1/prep_claims?is_active=eq.true&select=venue_code,week_start&limit=5000'
@@ -756,7 +765,14 @@ async function loadData() {
     var palByEvent = {};
     palRows.forEach(function(r) { (palByEvent[r.event_id] = palByEvent[r.event_id] || []).push(r); });
     var emailKeySet = {};
-    emailLog.forEach(function(r) { if (r.event_date && r.venue) emailKeySet[r.event_date + '||' + r.venue] = 1; });
+    var emailSendsByKey = {};
+    emailLog.forEach(function(r) {
+      if (r.event_date && r.venue) {
+        var k = r.event_date + '||' + r.venue;
+        emailKeySet[k] = 1;
+        (emailSendsByKey[k] = emailSendsByKey[k] || []).push(r);
+      }
+    });
     var prepNeedsKeySet = {};
     prepNeeds.forEach(function(r) { if (r.venue_code && r.need_date) prepNeedsKeySet[r.venue_code + '||' + r.need_date] = 1; });
     var claimsByVenue = {};
@@ -768,7 +784,7 @@ async function loadData() {
       salesByEvent: salesByEvent, srByEvent: srByEvent, paByEvent: paByEvent,
       hbSet: hbSet, empShirt: empShirt, photoBySale: photoBySale, ssaCountBySale: ssaCountBySale,
       nameToEmpId: nameToEmpId, overrideRate: overrideRate,
-      availByEvent: availByEvent, palByEvent: palByEvent, emailKeySet: emailKeySet,
+      availByEvent: availByEvent, palByEvent: palByEvent, emailKeySet: emailKeySet, emailSendsByKey: emailSendsByKey,
       prepNeedsKeySet: prepNeedsKeySet, claimsByVenue: claimsByVenue, nameToHomeVenue: nameToHomeVenue,
       ratesReady: ratesReady
     };
@@ -901,8 +917,14 @@ function buildPlanning(ev, ctx, plannedHeadcount) {
   else { renotifyState = 'green'; renotifyDetail = 'Notified \u2014 ' + notifyCount + ' sends'; }
 
   // ---- Client emailed the staff list (matched on date + venue) ----
-  var emailed = !!ctx.emailKeySet[ev._iso + '||' + ev.venue];
+  // Now sender-aware: distinguishes the automated 3 PM send from a manual
+  // one, and keeps the full send history so a manual-after-auto shows both.
+  var emailSends = ctx.emailSendsByKey[ev._iso + '||' + ev.venue] || [];
+  var emailed = emailSends.length > 0;
   var emailState = emailed ? 'green' : 'red';
+  var emailAuto = emailSends.some(function(s) {
+    return (s.sender_name || '').toLowerCase().indexOf('automated') !== -1;
+  });
 
   // ---- Off-pool placements (timing-aware; never worse than amber) ----
   // Off-pool = a 'placed' log row whose source isn't 'signup'. It only
@@ -968,7 +990,7 @@ function buildPlanning(ev, ctx, plannedHeadcount) {
     poolDepth: { state: poolState, detail: poolDetail },
     lateHome: { state: lateHomeState, names: lateHome },
     renotify: { state: renotifyState, detail: renotifyDetail },
-    email: { state: emailState, emailed: emailed },
+    email: { state: emailState, emailed: emailed, auto: emailAuto, sends: emailSends },
     offpool: { state: offState, detail: offDetail, names: offNames },
     prep: { state: prepState, detail: prepDetail }
   };
@@ -1231,7 +1253,26 @@ function renderPlanning(ev) {
   html += row(p.lead.state, 'Signups came in ahead of time', escapeHtml(p.lead.detail));
   html += row(p.poolDepth.state, 'Signup pool covered the need', escapeHtml(p.poolDepth.detail));
   html += row(p.renotify.state, 'Staffing notified', escapeHtml(p.renotify.detail));
-  html += row(p.email.state, 'Staff list emailed to client', p.email.emailed ? 'Sent' : 'No record');
+  var emailDetail;
+  if (!p.email.emailed) {
+    emailDetail = 'No record';
+  } else if (p.email.sends.length === 1) {
+    emailDetail = p.email.auto ? 'Auto-sent' : 'Sent by ' + escapeHtml(stripSender(p.email.sends[0].sender_name));
+  } else {
+    emailDetail = p.email.sends.length + ' sends' +
+      ' <button class="expand-toggle inline-expand" data-reveal="emails-' + ev.id + '">show \u25BE</button>';
+  }
+  html += row(p.email.state, 'Staff list emailed to client', emailDetail);
+  if (p.email.sends.length > 1) {
+    var rows = p.email.sends.map(function(s) {
+      var who = (s.sender_name || '').toLowerCase().indexOf('automated') !== -1
+        ? 'Auto (3 PM)' : escapeHtml(stripSender(s.sender_name));
+      return '<div style="font-size:11px;padding:2px 0;">' +
+        escapeHtml(fmtSentStamp(s.sent_at)) + ' \u2014 <strong>' + who + '</strong></div>';
+    }).join('');
+    html += '<div class="reveal-box" id="emails-' + ev.id + '" style="display:none;">' +
+      '<div class="reveal-label">Send history:</div>' + rows + '</div>';
+  }
 
   var offExtra = p.offpool.names.length
     ? ' <button class="expand-toggle inline-expand" data-reveal="offp-' + ev.id + '">show \u25BE</button>'
