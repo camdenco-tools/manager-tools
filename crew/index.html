@@ -5837,9 +5837,19 @@ body {
     var empty = { placements: [], released: 0, syncedReleased: 0 };
     if (!name) return Promise.resolve(empty);
 
-    // Step 1 — all active placements recorded under this name.
+    // Match BOTH name variants. The "- U" minor suffix rides on last_name, but
+    // placements were recorded both with and without it depending on when each
+    // row was written, so a single exact match catches one half and silently
+    // leaves the other on the schedule (the Caiden / Dave Matthews miss).
+    var baseName = name.replace(/\s*-\s*U\s*$/i, '').trim();
+    var pNameVariants = [baseName, baseName + ' - U'];
+    var pNameInList = '(' + pNameVariants.map(function(n) {
+      return '"' + n + '"';
+    }).join(',') + ')';
+
+    // Step 1 — all active placements recorded under either of this person's names.
     var placementsUrl = SUPABASE_URL + '/rest/v1/position_assignments' +
-      '?staff_name=eq.' + encodeURIComponent(name) +
+      '?staff_name=in.' + encodeURIComponent(pNameInList) +
       '&removed_at=is.null' +
       '&select=id,event_id,venue,stand,role,staff_name,source,seven_shifts_synced' +
       '&limit=10000';
@@ -5913,6 +5923,100 @@ body {
             released: toRelease.length,
             syncedReleased: syncedCount
           };
+        });
+      });
+    });
+  }
+
+  // Targeted PATCH of a single availability row. Same header pattern as
+  // patchPosition. Used by removeUpcomingSignups to soft-remove signups.
+  function patchAvailability(availId, body) {
+    var url = SUPABASE_URL + '/rest/v1/availability?id=eq.' + encodeURIComponent(availId);
+    var headers = pcAuth.headers();
+    headers['Content-Type'] = 'application/json';
+    headers['Prefer'] = 'return=minimal';
+    return authFetch(url, { method: 'PATCH', headers: headers, body: JSON.stringify(body) });
+  }
+
+  // Soft-remove this person's signups on every not-yet-started, non-cancelled
+  // event — the availability-list cousin of releaseUpcomingPlacements. Matches
+  // BOTH name variants (base and "base - U"), since the "- U" minor suffix
+  // rides on last_name and signups exist under both forms. Same not-yet-started
+  // boundary as the placement release: past / in-progress signups stay (they
+  // feed the reliability record). Sets removed_at/removed_by — the same
+  // soft-delete the manager's manual ✕ uses, so the WordPress signup flow and
+  // the Event Workspace Available panel both stop showing them.
+  //
+  //   removeUpcomingSignups(emp, { commit:false }) -> returns the list
+  //   removeUpcomingSignups(emp, { commit:true  }) -> performs the writes
+  function removeUpcomingSignups(emp, opts) {
+    opts = opts || {};
+    var commit = opts.commit === true;
+    var name = emp ? fullName(emp) : '';
+    var empty = { signups: [], removed: 0 };
+    if (!name) return Promise.resolve(empty);
+
+    var baseName = name.replace(/\s*-\s*U\s*$/i, '').trim();
+    var nameVariants = [baseName, baseName + ' - U'];
+    var nameInList = '(' + nameVariants.map(function(n) {
+      return '"' + n + '"';
+    }).join(',') + ')';
+
+    // Step 1 — active (non-removed) signups under either name variant.
+    var signupsUrl = SUPABASE_URL + '/rest/v1/availability' +
+      '?staff_name=in.' + encodeURIComponent(nameInList) +
+      '&removed_at=is.null' +
+      '&select=id,staff_name,event_id' +
+      '&limit=10000';
+
+    return authFetch(signupsUrl, { headers: pcAuth.headers() }).then(function(signups) {
+      signups = signups || [];
+      if (signups.length === 0) return empty;
+
+      // Step 2 — resolve their events (date + start clock + cancelled flag).
+      var eventIds = [];
+      signups.forEach(function(s) {
+        if (s.event_id && eventIds.indexOf(s.event_id) === -1) eventIds.push(s.event_id);
+      });
+      if (eventIds.length === 0) return empty;
+      var inList = '(' + eventIds.map(function(id) { return '"' + id + '"'; }).join(',') + ')';
+      var eventsUrl = SUPABASE_URL + '/rest/v1/events' +
+        '?id=in.' + inList +
+        '&select=id,event_name,event_date,venue,gates_open,show_time,cancelled_at' +
+        '&limit=10000';
+
+      return authFetch(eventsUrl, { headers: pcAuth.headers() }).then(function(events) {
+        var evById = {};
+        (events || []).forEach(function(e) { evById[e.id] = e; });
+
+        // Step 3 — keep only not-yet-started, non-cancelled events.
+        var now = new Date();
+        var toRemove = [];
+        signups.forEach(function(s) {
+          var ev = evById[s.event_id];
+          if (!ev) return;                       // unknown event — never touch
+          if (ev.cancelled_at) return;           // cancelled — already irrelevant
+          if (hasEventStarted(ev, now)) return;  // started/past — preserve history
+          s._event = ev;
+          toRemove.push(s);
+        });
+
+        // Preview path — list only, no writes.
+        if (!commit) {
+          return { signups: toRemove, removed: 0 };
+        }
+
+        // Commit path — soft-remove each (set removed_at/removed_by).
+        var actor = (pcAuth.getUser && pcAuth.getUser()) || null;
+        var actorName = actor ? (actor.display_name || actor.email || 'Unknown') : 'Unknown';
+        var nowIso = new Date().toISOString();
+
+        var ops = toRemove.map(function(s) {
+          return patchAvailability(s.id, { removed_at: nowIso, removed_by: actorName });
+        });
+
+        return Promise.all(ops).then(function() {
+          return { signups: toRemove, removed: toRemove.length };
         });
       });
     });
@@ -6166,24 +6270,40 @@ body {
         cand.stage_updated_at = now;
         cand.stage_updated_by = actorName;
       }
-      // Deactivation committed — now release their not-yet-started placements.
-      // commit:true re-fetches fresh (same fn as the preview, so no drift).
-      // Best-effort: if it fails, the person is still deactivated; we warn so
-      // the manager can clear the slots by hand in the Event Workspace.
-      return releaseUpcomingPlacements(emp, { commit: true }).catch(function(err) {
-        if (err && err.authFailed) throw err; // let auth failures bubble
-        console.warn('Auto-release after deactivate failed (non-blocking):', err);
-        return { released: 0, syncedReleased: 0, failed: true };
+      // Deactivation committed — now release their not-yet-started placements
+      // AND clear their not-yet-started signups so they drop off the Available
+      // list. Both re-fetch fresh (same fns as their previews, so no drift) and
+      // both are best-effort: a failure leaves the person deactivated and warns
+      // so the manager can clean up by hand.
+      return Promise.all([
+        releaseUpcomingPlacements(emp, { commit: true }).catch(function(err) {
+          if (err && err.authFailed) throw err; // let auth failures bubble
+          console.warn('Auto-release after deactivate failed (non-blocking):', err);
+          return { released: 0, syncedReleased: 0, failed: true };
+        }),
+        removeUpcomingSignups(emp, { commit: true }).catch(function(err) {
+          if (err && err.authFailed) throw err;
+          console.warn('Signup cleanup after deactivate failed (non-blocking):', err);
+          return { removed: 0, failed: true };
+        })
+      ]).then(function(results) {
+        return { rel: results[0], sig: results[1] };
       });
-    }).then(function(rel) {
+    }).then(function(combined) {
+      var rel = (combined && combined.rel) || { released: 0 };
+      var sig = (combined && combined.sig) || { removed: 0 };
       closeDeactivateModal();
-      if (rel && rel.failed) {
-        showToast('Deactivated, but couldn\u2019t auto-release placements \u2014 clear them in Event Workspace', 'error');
-      } else if (rel && rel.released > 0) {
-        showToast('Deactivated \u00b7 released ' + rel.released + ' placement' +
-          (rel.released === 1 ? '' : 's'), 'success');
+      if (rel.failed || sig.failed) {
+        showToast('Deactivated, but some cleanup failed \u2014 check Event Workspace / availability', 'error');
       } else {
-        showToast('Employee deactivated', 'success');
+        var parts = [];
+        if (rel.released > 0) parts.push('released ' + rel.released + ' placement' + (rel.released === 1 ? '' : 's'));
+        if (sig.removed > 0) parts.push('cleared ' + sig.removed + ' future signup' + (sig.removed === 1 ? '' : 's'));
+        if (parts.length > 0) {
+          showToast('Deactivated \u00b7 ' + parts.join(', '), 'success');
+        } else {
+          showToast('Employee deactivated', 'success');
+        }
       }
       // Re-render everything that reflects the new status.
       renderStatusTabs();
