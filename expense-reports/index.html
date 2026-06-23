@@ -2776,11 +2776,28 @@
     }
   }
 
+  // Show the "Auto insurance on file" card only when the current draft
+  // actually has a Mileage Reimbursement line. Gas/tolls/supplies don't
+  // need insurance, so the card shouldn't imply it's required for them.
+  function draftHasMileageLine() {
+    if (!draftState || !draftState.lines) return false;
+    return draftState.lines.some(function (l) {
+      var c = categoryById(l.category_id);
+      return c && c.name === 'Mileage Reimbursement';
+    });
+  }
+  function updateInsuranceCardVisibility() {
+    var card = document.getElementById('insuranceStatusCard');
+    if (!card) return;
+    card.hidden = !draftHasMileageLine();
+  }
+
   function refreshMyInsurance() {
     return fetchMyInsurance()
       .then(function (rows) {
         pageState.insurance.mine = deriveInsuranceStatus(rows);
         renderMyInsurance();
+        updateInsuranceCardVisibility();
         // Mileage gate state may have changed → re-evaluate submit warnings
         // and re-render any expanded mileage line (so the inline gate updates)
         if (draftState.fetched) {
@@ -3894,6 +3911,7 @@
     updateDraftTotals();
     refreshSubmitWarnings();
     updateSubmitButtonState();
+    updateInsuranceCardVisibility();
 
     // Wire per-line field listeners (delegation handles most, but we
     // wire the photo / category / date listeners directly here too).
