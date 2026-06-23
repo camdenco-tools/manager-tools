@@ -5396,12 +5396,11 @@
   function isValidUSAddress(addr) {
     if (!addr) return false;
     var collapsed = addr.replace(/\s+/g, ' ').trim();
-    // Must contain a 2-letter state code (caps) followed by a 5-digit ZIP
-    var stateZipRegex = /\b[A-Z]{2}\b\s+\d{5}(-\d{4})?\b/i;
-    if (!stateZipRegex.test(collapsed)) return false;
-    // Must contain at least one digit (street number)
-    if (!/\d/.test(collapsed)) return false;
-    // Total length sanity — under 8 chars can't be a real address
+    // Must contain a 5-digit ZIP somewhere (we're mailing checks)
+    if (!/\b\d{5}(-\d{4})?\b/.test(collapsed)) return false;
+    // Must also have a street number — a digit that isn't part of the ZIP
+    if (!/\d/.test(collapsed.replace(/\b\d{5}(-\d{4})?\b/, ''))) return false;
+    // Total length sanity
     if (collapsed.length < 12) return false;
     return true;
   }
