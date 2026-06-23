@@ -68,7 +68,7 @@
   .csr-warn[hidden] { display: none; }
 
   /* Stat cards */
-  .csr-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 22px; }
+  .csr-stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 22px; }
   .csr-card {
     background: #fff; border: 0.5px solid #e0dfd8; border-radius: 10px;
     padding: 16px 18px;
@@ -198,6 +198,11 @@
         <div class="csr-card-sub" id="statCsrSub">Estimated commission, no statement yet</div>
       </div>
       <div class="csr-card">
+        <div class="csr-card-label">Tips awaiting (logged)</div>
+        <div class="csr-card-value" id="statTips">—</div>
+        <div class="csr-card-sub" id="statTipsSub">Tips fronted, not yet recovered</div>
+      </div>
+      <div class="csr-card">
         <div class="csr-card-label">AR open</div>
         <div class="csr-card-value" id="statAr">—</div>
         <div class="csr-card-sub">Statemented &amp; invoiced · <a href="/accounts-receivable/">see Receivables</a></div>
@@ -210,7 +215,7 @@
       <div class="csr-card">
         <div class="csr-card-label">Combined expected</div>
         <div class="csr-card-value" id="statCombined">—</div>
-        <div class="csr-card-sub">Awaiting + AR open + Chase</div>
+        <div class="csr-card-sub">Awaiting + tips + AR open + Chase</div>
       </div>
     </div>
 
@@ -441,7 +446,7 @@
   // headroom. If it ever truncates, move aggregation server-side.
   // =====================================================================
   function fetchSales() {
-    var url = SB_REST + 'sales?select=venue,stand,amount,event_date,event_name' +
+    var url = SB_REST + 'sales?select=venue,stand,amount,tip_amount,event_date,event_name' +
       '&event_date=lte.' + todayIso();
     if (state.dateFloorActive && state.fyStartIso) {
       url += '&event_date=gte.' + state.fyStartIso;
@@ -527,9 +532,11 @@
       var stand = resolveStand(v, s.stand);
       if (SKIP_SET[stand]) return;                 // expected non-revenue pseudo-stands
       var amt = parseFloat(s.amount) || 0;
+      var tip = parseFloat(s.tip_amount) || 0;
       var k = v + '||' + s.event_date + '||' + stand;
-      if (!agg[k]) agg[k] = { venue: v, date: s.event_date, stand: stand, gross: 0, eventName: s.event_name || '' };
+      if (!agg[k]) agg[k] = { venue: v, date: s.event_date, stand: stand, gross: 0, tips: 0, eventName: s.event_name || '' };
       agg[k].gross += amt;
+      agg[k].tips += tip;
     });
 
     var mainRows = [], redRows = [], deRows = [];
@@ -562,21 +569,21 @@
       // Sales logged, stand not in the catalog -> can't coverage-check, fail loud.
       if (!standObj) {
         console.warn('[CSR] stand not in catalog: "' + g.stand + '" (venue ' + g.venue + ', date ' + g.date + ')');
-        redRows.push({ venue: g.venue, date: g.date, eventName: eventName, stand: g.stand, gross: g.gross, reason: 'not_in_catalog' });
+        redRows.push({ venue: g.venue, date: g.date, eventName: eventName, stand: g.stand, gross: g.gross, tips: g.tips, reason: 'not_in_catalog' });
         return;
       }
 
       // Sales logged, no deal configured -> red, full sales.
       var comm = pcCommission.calcCommission(g.venue, g.stand, g.gross);
       if (comm.dealType === null) {
-        redRows.push({ venue: g.venue, date: g.date, eventName: eventName, stand: g.stand, gross: g.gross, reason: 'no_deal' });
+        redRows.push({ venue: g.venue, date: g.date, eventName: eventName, stand: g.stand, gross: g.gross, tips: g.tips, reason: 'no_deal' });
         return;
       }
 
       // Sales + deal, uncovered -> the real receivable.
       var row = {
         venue: g.venue, date: g.date, eventName: eventName, stand: g.stand,
-        dealType: comm.dealType, commission: comm.commission
+        dealType: comm.dealType, commission: comm.commission, tips: g.tips
       };
       // DE settles monthly as a lump — track it in its own bucket, out of
       // the main per-stand awaiting total.
@@ -620,11 +627,12 @@
     var de   = (state.deRows || []).filter(function (r) { return venuePass(r.venue); });
     var arOpen = state.arOpen.filter(function (r) { return venuePass(r.venue_code); });
 
-    var csrTotal = 0, redTotal = 0, arTotal = 0, deTotal = 0;
-    main.forEach(function (r) { csrTotal += r.commission; });
-    red.forEach(function (r) { redTotal += r.gross; });
-    de.forEach(function (r) { deTotal += r.commission; });
+    var csrTotal = 0, redTotal = 0, arTotal = 0, deTotal = 0, tipsTotal = 0;
+    main.forEach(function (r) { csrTotal += r.commission; tipsTotal += (r.tips || 0); });
+    red.forEach(function (r) { redTotal += r.gross; tipsTotal += (r.tips || 0); });
+    de.forEach(function (r) { deTotal += r.commission; tipsTotal += (r.tips || 0); });
     arOpen.forEach(function (r) { arTotal += (parseFloat(r.net_amount_due) || 0); });
+    tipsTotal = Math.round(tipsTotal * 100) / 100;
 
     // Stat cards
     document.getElementById('statCsr').textContent = fmtMoney(csrTotal);
@@ -641,7 +649,17 @@
            deEvCount + ' event' + (deEvCount === 1 ? '' : 's') + ' · monthly settlement')
         : 'Monthly settlement · nothing pending';
     }
-    document.getElementById('statCombined').textContent = fmtMoney(csrTotal + arTotal + deTotal);
+    var tipsEl = document.getElementById('statTips');
+    if (tipsEl) tipsEl.textContent = fmtMoney(tipsTotal);
+    var tipsSubEl = document.getElementById('statTipsSub');
+    if (tipsSubEl) {
+      var tipStandCount = 0;
+      main.concat(red).concat(de).forEach(function (r) { if ((r.tips || 0) > 0.005) tipStandCount++; });
+      tipsSubEl.textContent = tipStandCount > 0
+        ? (tipStandCount + ' stand' + (tipStandCount === 1 ? '' : 's') + ' · fronted, not yet recovered')
+        : 'Tips fronted, not yet recovered';
+    }
+    document.getElementById('statCombined').textContent = fmtMoney(csrTotal + arTotal + deTotal + tipsTotal);
 
     // Distinct events feeding the estimate
     var evSet = {};
