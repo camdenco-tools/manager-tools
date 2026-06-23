@@ -2637,17 +2637,24 @@
     });
   }
 
+  // Auto-fill targets this tips item by name. More than one tips-category item
+  // can exist (e.g. "Gratuity"); pinning by name keeps a sort_order change from
+  // silently swapping which line gets auto-filled.
+  var TIPS_ITEM_NAME = 'Tips Payout';
   function findTipsItem() {
-    var items = formCache.items || [];
-    var found = null;
-    for (var i = 0; i < items.length; i++) {
-      if (items[i].income_category === 'tips') {
-        if (!found) found = items[i];
-        else console.warn('[AR tips] multiple active tips items; using "' + found.name + '"');
-      }
+    var tipsItems = (formCache.items || []).filter(function (it) {
+      return it.income_category === 'tips';
+    });
+    if (tipsItems.length === 0) {
+      console.warn('[AR tips] no ar_items row with income_category=tips; auto-fill disabled.');
+      return null;
     }
-    if (!found) console.warn('[AR tips] no ar_items row with income_category=tips; auto-fill disabled.');
-    return found;
+    var want = TIPS_ITEM_NAME.toLowerCase();
+    for (var i = 0; i < tipsItems.length; i++) {
+      if ((tipsItems[i].name || '').toLowerCase() === want) return tipsItems[i];
+    }
+    console.warn('[AR tips] "' + TIPS_ITEM_NAME + '" not found; falling back to "' + tipsItems[0].name + '".');
+    return tipsItems[0];  // lowest sort_order tips item
   }
 
   function coverageTipsBreakdown() {
