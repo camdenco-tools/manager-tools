@@ -905,6 +905,25 @@
   .ar-coverage-tag.is-locked { background: #e6f1fb; color: #0C447C; }
   .ar-coverage-tag.is-orphan { background: #fceaea; color: #791F1F; }
 
+  /* Tips auto-fill summary strip inside the coverage box */
+  .ar-coverage-tips {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed #e0dfd8;
+    font-size: 11px;
+    color: #555;
+  }
+  .ar-coverage-tips strong { color: #1a1a1a; font-weight: 600; }
+  .ar-coverage-tips .ar-coverage-tips-bd { color: #888; }
+  .ar-coverage-tips .ar-coverage-tips-delta { color: #854F0B; font-weight: 600; }
+  .ar-coverage-tips .ar-coverage-tips-warn { color: #791F1F; }
+  .ar-coverage-tips-refresh {
+    background: transparent; border: 0; color: #0C447C;
+    font-family: inherit; font-size: 11px; cursor: pointer; padding: 0 2px;
+    text-decoration: underline; text-underline-offset: 2px;
+  }
+  .ar-coverage-tips-refresh:hover { color: #042C53; }
+
   /* Lines section */
   .ar-lines-head {
     margin-bottom: 8px;
@@ -2479,6 +2498,8 @@
       coverage_checked: {},   // stand_id -> true: stands THIS statement covers
       coverage_event_id: '',  // event the picker last loaded for (stale-guard)
       _coverage_original: {}, // edit-mode snapshot of covered stand_ids (Session 2b diff)
+      coverage_tips_by_stand: {}, // stand_name -> logged tip total (primary submission)
+      _tips_suppressed: false,    // true once the user removes the auto tips line
       _dirty: false           // any user input has happened — used for close confirm
     };
   }
@@ -2592,15 +2613,209 @@
     );
   }
 
+  /** Logged tips for the linked event, keyed by stand (primary submission). */
+  function fetchEventTipsByStand(venueCode, eventDate) {
+    if (!venueCode || !eventDate) return Promise.resolve({});
+    return AR.authFetch(
+      SB_REST + 'sales?select=stand,tip_amount,submitted_at,id' +
+      '&venue=eq.' + encodeURIComponent(venueCode) +
+      '&event_date=eq.' + encodeURIComponent(eventDate) +
+      '&order=stand.asc,submitted_at.asc' +
+      '&limit=10000',
+      { headers: pcAuth.headers() }
+    ).then(function (rows) {
+      // First row per stand = primary submission (mirrors Tips Report).
+      // Duplicate submissions are ignored here, not summed.
+      var byStand = {}, seen = {};
+      (rows || []).forEach(function (r) {
+        var st = r.stand;
+        if (!st || seen[st]) return;
+        seen[st] = true;
+        byStand[st] = parseFloat(r.tip_amount) || 0;
+      });
+      return byStand;
+    });
+  }
+
+  function findTipsItem() {
+    var items = formCache.items || [];
+    var found = null;
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].income_category === 'tips') {
+        if (!found) found = items[i];
+        else console.warn('[AR tips] multiple active tips items; using "' + found.name + '"');
+      }
+    }
+    if (!found) console.warn('[AR tips] no ar_items row with income_category=tips; auto-fill disabled.');
+    return found;
+  }
+
+  function coverageTipsBreakdown() {
+    var out = [];
+    if (!formState) return out;
+    var byStand = formState.coverage_tips_by_stand || {};
+    (formState.coverage_planned || []).forEach(function (p) {
+      if (!p.stand_id) return;
+      if (p.status === 'locked') return;
+      if (!formState.coverage_checked[p.stand_id]) return;
+      var amt = byStand[p.name];
+      if (typeof amt === 'number' && Math.abs(amt) > 0.005) out.push({ name: p.name, amount: amt });
+    });
+    return out;
+  }
+
+  function computeCoverageTipsTotal() {
+    var total = 0;
+    coverageTipsBreakdown().forEach(function (b) { total += b.amount; });
+    return Math.round(total * 100) / 100;
+  }
+
+  function isBlankLine(line) {
+    if (!line) return false;
+    var amt = evalMath(line.amount);
+    return !line.item_id && (isNaN(amt) || Math.abs(amt) < 0.005);
+  }
+
+  function hasManagedTipsLine() {
+    if (!formState) return false;
+    for (var i = 0; i < formState.lines.length; i++) {
+      if (formState.lines[i]._auto_tips) return true;
+    }
+    return false;
+  }
+
+  /** Create / update / remove the single auto-managed Tips Payout line. */
+  function syncTipsLine() {
+    if (!formState) return;
+    if (formState._tips_suppressed) { renderCoverageTips(); return; }
+    var tipsItem = findTipsItem();
+    if (!tipsItem) { renderCoverageTips(); return; }
+
+    var total = computeCoverageTipsTotal();
+    var idx = -1;
+    for (var i = 0; i < formState.lines.length; i++) {
+      if (formState.lines[i]._auto_tips) { idx = i; break; }
+    }
+
+    // Locked line (user-edited or pre-existing saved line): keep amount, refresh hint only.
+    if (idx !== -1 && formState.lines[idx]._tips_locked) {
+      renderLines(); renderCoverageTips(); return;
+    }
+
+    if (total > 0.005) {
+      if (idx === -1) {
+        var line = newLine();
+        line.item_id = tipsItem.id;
+        line.amount = String(total.toFixed(2));
+        line._auto_tips = true;
+        var insertAt = formState.lines.length;
+        if (insertAt > 0 && isBlankLine(formState.lines[insertAt - 1])) insertAt -= 1;
+        formState.lines.splice(insertAt, 0, line);
+      } else {
+        formState.lines[idx].item_id = tipsItem.id;
+        formState.lines[idx].amount = String(total.toFixed(2));
+      }
+    } else if (idx !== -1) {
+      formState.lines.splice(idx, 1);
+    }
+    renderLines();
+    renderCoverageTips();
+  }
+
+  function renderCoverageTips() {
+    var el = document.getElementById('arfCoverageTips');
+    if (!el) return;
+    if (!formState || !formState.event_id) { el.hidden = true; el.innerHTML = ''; return; }
+
+    var tipsItem = findTipsItem();
+    if (!tipsItem) {
+      el.hidden = false;
+      el.innerHTML = '<span class="ar-coverage-tips-warn">No \u201ctips\u201d item in the catalog \u2014 tips can\u2019t auto-fill.</span>';
+      return;
+    }
+
+    var breakdown = coverageTipsBreakdown();
+    var expected = computeCoverageTipsTotal();
+
+    if (formState._tips_suppressed) {
+      el.hidden = false;
+      el.innerHTML = 'Tips line removed. ' +
+        '<button type="button" class="ar-coverage-tips-refresh" id="arfTipsRefresh">Re-add from logged tips (' +
+        esc(fmtMoney(expected)) + ')</button>';
+      wireTipsRefresh();
+      return;
+    }
+
+    if (expected < 0.005 && !hasManagedTipsLine()) { el.hidden = true; el.innerHTML = ''; return; }
+
+    var entered = null, locked = false;
+    for (var i = 0; i < formState.lines.length; i++) {
+      if (formState.lines[i]._auto_tips) {
+        var n = evalMath(formState.lines[i].amount);
+        entered = isNaN(n) ? null : Math.abs(n);
+        locked = !!formState.lines[i]._tips_locked;
+        break;
+      }
+    }
+
+    var html = 'Logged tips for the checked stands: <strong>' + esc(fmtMoney(expected)) + '</strong>';
+    if (breakdown.length > 1) {
+      html += ' <span class="ar-coverage-tips-bd">(' + breakdown.map(function (b) {
+        return esc(b.name) + ' ' + esc(fmtMoney(b.amount));
+      }).join(' \u00b7 ') + ')</span>';
+    }
+    if (entered != null && Math.abs(entered - expected) > 0.005) {
+      var diff = Math.round((entered - expected) * 100) / 100;
+      var sign = diff > 0 ? '+' : '\u2212';
+      html += ' \u00b7 entered <strong>' + esc(fmtMoney(entered)) + '</strong> ' +
+        '<span class="ar-coverage-tips-delta">(' + sign + esc(fmtMoney(Math.abs(diff))) + ')</span>';
+    }
+    if (locked) {
+      html += ' <button type="button" class="ar-coverage-tips-refresh" id="arfTipsRefresh">Refresh from logged tips</button>';
+    }
+
+    el.hidden = false;
+    el.innerHTML = html;
+    wireTipsRefresh();
+  }
+
+  function wireTipsRefresh() {
+    var btn = document.getElementById('arfTipsRefresh');
+    if (!btn || btn._wired) return;
+    btn._wired = true;
+    btn.addEventListener('click', refreshTipsFromLogged);
+  }
+
+  function refreshTipsFromLogged() {
+    if (!formState) return;
+    formState._tips_suppressed = false;
+    for (var i = 0; i < formState.lines.length; i++) {
+      if (formState.lines[i]._auto_tips) { formState.lines[i]._tips_locked = false; break; }
+    }
+    formState._dirty = true;
+    syncTipsLine();
+  }
+
   /** Hide the picker and clear its state. */
   function clearCoveragePicker() {
     if (formState) {
       formState.coverage_planned = [];
       formState.coverage_checked = {};
       formState.coverage_event_id = '';
+      formState.coverage_tips_by_stand = {};
+      formState._tips_suppressed = false;
+      // Drop an unlocked auto tips line when coverage goes away.
+      for (var i = formState.lines.length - 1; i >= 0; i--) {
+        if (formState.lines[i]._auto_tips && !formState.lines[i]._tips_locked) {
+          formState.lines.splice(i, 1);
+        }
+      }
     }
     var wrap = document.getElementById('arfCoverageWrap');
     if (wrap) wrap.hidden = true;
+    var tipsEl = document.getElementById('arfCoverageTips');
+    if (tipsEl) { tipsEl.hidden = true; tipsEl.innerHTML = ''; }
+    renderLines();
   }
 
   /** Build + render the picker for the currently-linked event. */
@@ -2617,16 +2832,26 @@
     var venue   = formState.venue_code;
     formState.coverage_event_id = eventId;
 
+    // Resolve the event's date for the tips lookup (prefer the linked event's
+    // own date over the editable invoice date).
+    var eventDate = formState.period_start;
+    var evList = formCache.events[venue] || [];
+    for (var ei = 0; ei < evList.length; ei++) {
+      if (evList[ei].id === eventId) { eventDate = evList[ei].event_date; break; }
+    }
+
     Promise.all([
       pcCatalog.ready(),
       fetchPlannedOpenStands(eventId),
-      fetchEventCoverage(eventId)
+      fetchEventCoverage(eventId),
+      fetchEventTipsByStand(venue, eventDate)
     ]).then(function (results) {
       // Stale-load guard: the event may have changed while fetching.
       if (!formState || formState.coverage_event_id !== eventId) return;
 
       var names = results[1] || [];
       var coverageRows = results[2] || [];
+      formState.coverage_tips_by_stand = results[3] || {};
 
       // stand_id -> { invoice_id, invoice_number, is_self }
       var coveredBy = {};
@@ -2673,6 +2898,7 @@
       formState._coverage_original = origSnap;  // baseline for 2b diff
 
       renderCoveragePicker();
+      syncTipsLine();
     }).catch(function (e) {
       if (e && e.authFailed) { handleAuthFailure(); return; }
       console.error('[AR coverage] load failed:', e);
@@ -2910,6 +3136,7 @@
             '</div>' +
             '<div class="ar-coverage-hint">Tick the planned-open stands this statement accounts for. Stands on another statement are locked.</div>' +
             '<div class="ar-coverage-list" id="arfCoverageList"></div>' +
+            '<div class="ar-coverage-tips" id="arfCoverageTips" hidden></div>' +
           '</div>' +
 
           '<div class="ar-lines-head">' +
@@ -3368,10 +3595,13 @@
         if (isNaN(idx)) return;
 
         if (action === 'remove-line') {
+          var removedLine = formState.lines[idx];
+          if (removedLine && removedLine._auto_tips) formState._tips_suppressed = true;
           formState.lines.splice(idx, 1);
           // Always keep at least one line in the form.
           if (formState.lines.length === 0) formState.lines.push(newLine());
           renderLines();
+          renderCoverageTips();
         } else if (action === 'add-note') {
           openNoteEditor(idx, '');
         } else if (action === 'edit-note') {
@@ -3433,7 +3663,10 @@
 
         if (t.classList.contains('ar-line-qty')) line.qty = t.value;
         else if (t.classList.contains('ar-line-price')) line.unit_price = t.value;
-        else if (t.classList.contains('ar-line-amount')) line.amount = t.value;
+        else if (t.classList.contains('ar-line-amount')) {
+          line.amount = t.value;
+          if (line._auto_tips) { line._tips_locked = true; renderCoverageTips(); }
+        }
       });
 
       linesHost.addEventListener('focusout', function (ev) {
@@ -3505,6 +3738,7 @@
         else { delete formState.coverage_checked[sid]; }
         formState._dirty = true;
         renderCoveragePicker();
+        syncTipsLine();
       });
     }
   }
@@ -3657,6 +3891,20 @@
 
     // Always keep at least one line visible.
     if (state.lines.length === 0) state.lines.push(newLine());
+
+    // Flag a pre-existing tips line as the (locked) managed tips line so
+    // coverage auto-fill respects it and never spawns a duplicate.
+    (function () {
+      var tipsItem = findTipsItem();
+      if (!tipsItem) return;
+      for (var ti = 0; ti < state.lines.length; ti++) {
+        if (state.lines[ti].item_id === tipsItem.id) {
+          state.lines[ti]._auto_tips = true;
+          state.lines[ti]._tips_locked = true;
+          break;
+        }
+      }
+    })();
 
     // Resolve the dirty flag: dirty IF the saved net differs from line sum.
     var savedNet = Number(state.net_amount_due);
