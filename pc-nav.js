@@ -46,6 +46,7 @@
       { label: 'Purchases & transfers',          href: '/purchases/',              slug: 'purchases' },
       { label: 'Day-of-show sheet',              href: '/day-of-show-sheet/',      slug: 'day-of-show-sheet' },
       { label: 'Log sales',                      href: '/log-sales/',              slug: 'log-sales' },
+      { label: 'Stand sheet',                    href: '/stand-sheet/',            slug: 'stand-sheet' },
       { label: 'Sales history',                  href: '/sales-history/',          slug: 'sales-history' },
       { label: 'Tips report',                    href: '/tips-report/',            slug: 'tips-report' },
       { label: 'Cash deposit receipts',          href: '/cash-deposits/',          slug: 'cash-deposits' },
