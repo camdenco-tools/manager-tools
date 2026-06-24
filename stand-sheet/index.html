@@ -192,7 +192,7 @@
     var EVENTS = [];             // [{id,venue,event_name,event_date}]
     var EV_BY_VENUE = {};        // venue -> [events]
     var sel = { venue:null, event:null, stand:null };
-    var sheet = { rows:[], prices:{}, costs:{}, finalized:false, dirty:false, started:false };
+    var sheet = { rows:[], prices:{}, costs:{}, menus:{}, finalized:false, dirty:false, started:false };
     var venueSheetState = {};    // stand_id -> {started:bool, finalized:bool}
 
     // ---- tiny helpers ------------------------------------------------
@@ -296,7 +296,12 @@
     }
 
     function fillEvents(preselectId){
-      var list=(EV_BY_VENUE[sel.venue]||[]);
+      var list=(EV_BY_VENUE[sel.venue]||[]).slice();
+      // order the dropdown so the event nearest today sits closest to the picker (top)
+      var _t=Date.now();
+      list.sort(function(a,b){
+        return Math.abs(new Date(a.event_date).getTime()-_t) - Math.abs(new Date(b.event_date).getTime()-_t);
+      });
       var es=$('eventSel'); es.innerHTML='';
       list.forEach(function(e){
         var o=el('option'); o.value=e.id;
@@ -351,6 +356,15 @@
     function renderStands(){
       var stands=[];
       try{ stands=pcCatalog.getActiveStandsForVenue(sel.venue)||[]; }catch(e){}
+      // inventory sheets are for revenue-bearing stands; drop labor-only concepts
+      // (still present in `stands` until the stand-catalog cleanup migration runs)
+      var EX_TYPE={support:1,client:1,nonevent:1};
+      var EX_NAME={'support staff':1,'client staffing needs':1};
+      stands=stands.filter(function(s){
+        if(EX_TYPE[s.stand_type]) return false;
+        if(EX_NAME[normName(s.stand_name)]) return false;
+        return true;
+      });
       var staffed=(venueSheetState.__staffed)||{};
       // staffed stands first, then by sort_order (catalog already sorts)
       stands.sort(function(a,b){
@@ -403,24 +417,22 @@
 
       var ev=sel.event, st=sel.stand, vc=sel.venue;
       var profUrl=REST+'stand_items?stand_id=eq.'+enc(st.id)+'&carries=eq.true&deleted_at=is.null'
-        +'&select=item_id,sort_order,inventory_items(id,name,menu_name,chargeable,cost_per_unit,unit_label,count_unit,active)'
+        +'&select=chargeable_item_id,sort_order,chargeable_items(id,name,unit_label,active)'
         +'&order=sort_order.asc&limit=2000';
       var cntUrl=REST+'stand_inventory_counts?event_id=eq.'+enc(ev.id)+'&stand_id=eq.'+enc(st.id)
         +'&deleted_at=is.null&select=*&limit=2000';
-      var onhUrl=REST+'stand_item_onhand_v?stand_id=eq.'+enc(st.id)+'&select=item_id,on_hand_qty&limit=2000';
-      var priceUrl=REST+'venue_item_prices?venue_code=eq.'+enc(vc)+'&is_active=eq.true'
-        +'&select=item_id,unit_price&limit=5000';
-      var costUrl=REST+'venue_item_costs?venue_code=eq.'+enc(vc)+'&deleted_at=is.null'
-        +'&select=item_id,cost_per_unit&limit=5000';
+      var onhUrl=REST+'stand_item_onhand_v?stand_id=eq.'+enc(st.id)+'&select=chargeable_item_id,on_hand_qty&limit=2000';
+      // per-venue overlay: price + menu alias + source SKU cost (cost = source_factor x source cost_per_unit)
+      var ovUrl=REST+'venue_chargeable_items?venue_code=eq.'+enc(vc)+'&is_active=eq.true&deleted_at=is.null'
+        +'&select=chargeable_item_id,unit_price,menu_name,source_factor,inventory_items(cost_per_unit)&limit=5000';
 
       Promise.all([
         authFetch(profUrl,{headers:pcAuth.headers()}),
         authFetch(cntUrl,{headers:pcAuth.headers()}),
         authFetch(onhUrl,{headers:pcAuth.headers()}),
-        authFetch(priceUrl,{headers:pcAuth.headers()}),
-        authFetch(costUrl,{headers:pcAuth.headers()})
+        authFetch(ovUrl,{headers:pcAuth.headers()})
       ]).then(function(res){
-        buildSheet(res[0]||[], res[1]||[], res[2]||[], res[3]||[], res[4]||[]);
+        buildSheet(res[0]||[], res[1]||[], res[2]||[], res[3]||[]);
       }).catch(function(e){
         if(e && e.authFailed){ handleAuthFailure(); return; }
         $('sheetBody').innerHTML='<div class="empty"><div class="big">Couldn\u2019t load this sheet</div>'
@@ -428,12 +440,19 @@
       });
     }
 
-    function buildSheet(prof, counts, onhand, prices, costs){
-      sheet.prices={}; prices.forEach(function(p){ sheet.prices[p.item_id]=p.unit_price; });
-      sheet.costs={};  costs.forEach(function(c){ sheet.costs[c.item_id]=c.cost_per_unit; });
+    function buildSheet(prof, counts, onhand, overlay){
+      // overlay keyed by chargeable_item_id: price, menu alias, derived cost
+      sheet.prices={}; sheet.costs={}; sheet.menus={};
+      overlay.forEach(function(o){
+        var cid=o.chargeable_item_id;
+        if(o.unit_price!=null) sheet.prices[cid]=o.unit_price;
+        if(o.menu_name) sheet.menus[cid]=o.menu_name;
+        var srcCost = (o.inventory_items && o.inventory_items.cost_per_unit!=null) ? num(o.inventory_items.cost_per_unit) : null;
+        if(srcCost!=null) sheet.costs[cid]=srcCost*num(o.source_factor||1);
+      });
 
-      var onMap={}; onhand.forEach(function(o){ onMap[o.item_id]=o.on_hand_qty; });
-      var cntMap={}; counts.forEach(function(c){ cntMap[c.item_id]=c; });
+      var onMap={}; onhand.forEach(function(o){ onMap[o.chargeable_item_id]=o.on_hand_qty; });
+      var cntMap={}; counts.forEach(function(c){ cntMap[c.chargeable_item_id]=c; });
 
       // empty profile -> directive empty state
       if(!prof.length){
@@ -451,18 +470,17 @@
       sheet.finalized = counts.length>0 && counts.every(function(c){return c.finalized;});
 
       sheet.rows = prof.map(function(p){
-        var it=p.inventory_items||{};
-        var ex=cntMap[p.item_id];
-        var beginning = ex ? ex.beginning_qty : (onMap.hasOwnProperty(p.item_id)? onMap[p.item_id] : 0);
+        var ci=p.chargeable_items||{};
+        var cid=p.chargeable_item_id;
+        var ex=cntMap[cid];
+        var beginning = ex ? ex.beginning_qty : (onMap.hasOwnProperty(cid)? onMap[cid] : 0);
         return {
           id: ex? ex.id : null,
-          item_id: p.item_id,
-          name: it.name||'(item)',
-          menu_name: it.menu_name||'',
-          chargeable: !!it.chargeable,
-          active: it.active!==false,
-          unit: it.count_unit||it.unit_label||'each',
-          gcost: num(it.cost_per_unit),
+          cid: cid,
+          name: ci.name||'(item)',
+          menu_name: sheet.menus[cid]||'',
+          active: ci.active!==false,
+          unit: ci.unit_label||'each',
           beginning: num(beginning),
           received: ex? ex.received_qty : 0,
           tin: ex? ex.transfer_in_qty : 0,
@@ -489,8 +507,8 @@
       m.appendChild(el('span','mut',venueLabel(sel.venue)));
     }
 
-    function priceOf(r){ return sheet.prices.hasOwnProperty(r.item_id)? num(sheet.prices[r.item_id]) : null; }
-    function costOf(r){ return sheet.costs.hasOwnProperty(r.item_id)? num(sheet.costs[r.item_id]) : r.gcost; }
+    function priceOf(r){ return sheet.prices.hasOwnProperty(r.cid)? num(sheet.prices[r.cid]) : null; }
+    function costOf(r){ return sheet.costs.hasOwnProperty(r.cid)? num(sheet.costs[r.cid]) : null; }
     function soldOf(r){
       if(!hasNum(r.ending)) return null;
       return num(r.beginning)+num(r.received)+num(r.tin)-num(r.tout)-num(r.spoil)-num(r.ending);
@@ -523,7 +541,6 @@
       var disp = r.menu_name || r.name;
       var nm=el('span','it-nm',disp);
       nmWrap.appendChild(nm);
-      nmWrap.appendChild(r.chargeable? tagEl2('pill-charge','Chargeable') : tagEl2('pill-na','Non-charge'));
       if(!r.active) nmWrap.appendChild(tagEl2('pill-na','Inactive'));
       td.appendChild(nmWrap);
       var subtxt = (r.menu_name && r.menu_name!==r.name ? r.name+' · ' : '') + r.unit;
@@ -573,31 +590,31 @@
       else { soldTd.textContent=fmtQty(sold); soldTd.className='calc sold'+(sold<0?' ':''); soldTd.style.color=(sold<0?'var(--red)':''); }
 
       var price=priceOf(r);
-      if(r.chargeable && price!=null && sold!=null){ saleTd.textContent=money(sold*price); saleTd.className='money'; }
-      else { saleTd.textContent= r.chargeable? (price==null?'no price':'—') : '—'; saleTd.className='money dim'; }
+      if(price!=null && sold!=null){ saleTd.textContent=money(sold*price); saleTd.className='money'; }
+      else { saleTd.textContent=(price==null?'no price':'—'); saleTd.className='money dim'; }
 
       var c=costOf(r);
-      if(hasNum(r.ending)){ costTd.textContent=money(num(r.ending)*c); costTd.className='money'; }
+      if(c!=null && hasNum(r.ending)){ costTd.textContent=money(num(r.ending)*c); costTd.className='money'; }
       else { costTd.textContent='—'; costTd.className='money dim'; }
     }
 
     function renderFoot(){
       var tf=document.querySelector('table.sheet tfoot'); if(!tf) return;
-      var saleTot=0, costTot=0, charge=0, missing=0;
+      var saleTot=0, costTot=0, missing=0;
       sheet.rows.forEach(function(r){
-        var sold=soldOf(r), price=priceOf(r);
-        if(r.chargeable){ charge++; if(!hasNum(r.ending)) missing++; }
-        if(r.chargeable && price!=null && sold!=null) saleTot+=sold*price;
-        if(hasNum(r.ending)) costTot+=num(r.ending)*costOf(r);
+        var sold=soldOf(r), price=priceOf(r), c=costOf(r);
+        if(!hasNum(r.ending)) missing++;
+        if(price!=null && sold!=null) saleTot+=sold*price;
+        if(c!=null && hasNum(r.ending)) costTot+=num(r.ending)*c;
       });
       tf.innerHTML='';
       var tr=el('tr');
-      var l=el('td','l lbl', sheet.rows.length+' items · '+charge+' chargeable'); l.colSpan=7; tr.appendChild(l);
+      var l=el('td','l lbl', sheet.rows.length+' items'); l.colSpan=7; tr.appendChild(l);
       tr.appendChild(el('td','lbl','Totals'));
       tr.appendChild(el('td','money',money(saleTot)));
       tr.appendChild(el('td','money',money(costTot)));
       tf.appendChild(tr);
-      tf._missing=missing; tf._charge=charge;
+      tf._missing=missing;
     }
 
     function renderActions(){
@@ -645,7 +662,7 @@
         var p={
           event_id: sel.event.id,
           stand_id: sel.stand.id,
-          item_id: r.item_id,
+          chargeable_item_id: r.cid,
           beginning_qty: num(r.beginning),     // frozen at materialize; re-sent unchanged
           received_qty: num(r.received),
           transfer_in_qty: num(r.tin),
@@ -675,16 +692,16 @@
       }
       var payload=buildPayload(finalize);
       var hint=$('sheetLoadHint'); hint.innerHTML='<span class="spin"></span> '+(finalize?'Finalizing…':'Saving…');
-      var url=REST+'stand_inventory_counts?on_conflict=event_id,stand_id,item_id';
+      var url=REST+'stand_inventory_counts?on_conflict=event_id,stand_id,chargeable_item_id';
       authFetch(url,{
         method:'POST',
         headers: mergeHeaders({'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=representation'}),
         body: JSON.stringify(payload)
       }).then(function(saved){
         // map returned ids/flags back
-        var byItem={}; (saved||[]).forEach(function(s){ byItem[s.item_id]=s; });
+        var byItem={}; (saved||[]).forEach(function(s){ byItem[s.chargeable_item_id]=s; });
         sheet.rows.forEach(function(r){
-          var s=byItem[r.item_id]; if(!s) return;
+          var s=byItem[r.cid]; if(!s) return;
           r.id=s.id; r.counted_at=s.counted_at; r.counted_by=s.counted_by; r.finalized=!!s.finalized;
           if(s.beginning_qty!=null) r.beginning=s.beginning_qty;
         });
