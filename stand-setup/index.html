@@ -150,6 +150,56 @@ body { background: var(--bg); font-family: var(--font); color: var(--primary); m
 .add-role-select { padding: 8px 10px; border: 1.5px solid var(--border); border-radius: 8px; font-size: 13px; font-family: var(--font); color: var(--primary); background: var(--card); outline: none; min-width: 180px; }
 .add-role-select:focus { border-color: var(--primary); }
 .add-role-empty { font-size: 12px; color: var(--label); font-style: italic; }
+
+/* ============================================================
+ * STANDS facet extras — Add stand button + per-stand category line
+ * ============================================================ */
+.stands-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.add-stand-btn { padding: 9px 16px; background: var(--primary); color: white; border: none; border-radius: 9px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: var(--font); }
+.add-stand-btn:hover { opacity: 0.88; }
+.stand-cat-line { font-size: 11px; color: var(--label); margin-top: 3px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.stand-cat-line b { color: #555; font-weight: 600; }
+.stand-cat-editlink { color: #185FA5; cursor: pointer; text-decoration: none; font-weight: 600; }
+.stand-cat-editlink:hover { text-decoration: underline; }
+.stand-cat-none { color: var(--amber-dark); font-style: italic; }
+
+/* ============================================================
+ * CATEGORIES facet — the role allowlist editor (per category)
+ * Editing here affects EVERY stand in that category (shared catalog).
+ * ============================================================ */
+.cat-editor-note { background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 10px; padding: 10px 14px; font-size: 12px; color: #3730a3; margin-bottom: 14px; line-height: 1.5; }
+.cat-editor-note strong { color: #3730a3; }
+.cat-edit-block { border: 1px solid #eee; border-radius: 12px; overflow: hidden; margin-bottom: 12px; }
+.cat-edit-head { padding: 10px 14px; background: #f8f8f6; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.cat-edit-title { font-size: 13px; font-weight: 700; color: #444; }
+.cat-edit-affects { font-size: 11px; color: var(--label); font-weight: 500; }
+.cat-edit-affects b { color: #555; }
+.cat-role-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 2px; padding: 8px; }
+.cat-role-cell { display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+.cat-role-cell:hover { background: #fafaf8; }
+.cat-role-cell input { width: 16px; height: 16px; cursor: pointer; accent-color: #27500A; flex-shrink: 0; }
+.cat-role-cell.busy { opacity: 0.5; pointer-events: none; }
+.cat-role-name { font-size: 13px; color: var(--primary); }
+
+/* ============================================================
+ * MODAL (Add stand)
+ * ============================================================ */
+.modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
+.modal-backdrop.show { display: flex; }
+.modal { background: white; border-radius: 14px; max-width: 440px; width: 100%; box-shadow: 0 8px 32px rgba(0,0,0,0.18); overflow: hidden; }
+.modal-head { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.modal-head h3 { font-size: 16px; font-weight: 700; }
+.modal-close { background: none; border: none; cursor: pointer; font-size: 20px; color: var(--label); padding: 2px 6px; line-height: 1; }
+.modal-body { padding: 18px 20px; }
+.modal-field { margin-bottom: 14px; }
+.modal-field label { display: block; font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 5px; }
+.modal-field input, .modal-field select { width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 10px; font-size: 14px; color: var(--primary); background: #fafafa; font-family: var(--font); -webkit-appearance: none; appearance: none; }
+.modal-field input:focus, .modal-field select:focus { outline: none; border-color: var(--primary); background: white; }
+.modal-foot { padding: 14px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; align-items: center; }
+.modal-err { font-size: 12px; color: var(--red); margin-right: auto; display: none; }
+.modal-err.show { display: block; }
+.btn-cancel { background: white; border: 1px solid var(--border); color: var(--label); font-family: var(--font); font-size: 13px; font-weight: 600; padding: 9px 16px; border-radius: 9px; cursor: pointer; }
+.btn-cancel:hover { background: #f6f6f3; color: var(--primary); }
 </style>
 </head>
 <body>
@@ -191,6 +241,7 @@ body { background: var(--bg); font-family: var(--font); color: var(--primary); m
       <div class="rail-group-label">This venue</div>
       <button class="rail-item" id="facet-stands" onclick="selectFacet('stands')">Stands<span></span></button>
       <button class="rail-item rail-link" id="facet-roles" onclick="selectFacet('roles')">Roles<span></span></button>
+      <button class="rail-item rail-link" id="facet-categories" onclick="selectFacet('categories')">Stand roles<span></span></button>
       <div class="rail-group-label">This stand</div>
       <button class="rail-item active" id="facet-items" onclick="selectFacet('items')">Items<span></span></button>
       <button class="rail-item" id="facet-details" disabled>Details<span class="soon-tag">Soon</span></button>
@@ -205,6 +256,45 @@ body { background: var(--bg); font-family: var(--font); color: var(--primary); m
   </div>
 </div>
 
+<!-- Add stand modal — admin-only. Opened from the Stands facet toolbar. -->
+<div class="modal-backdrop" id="add-stand-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>Add a stand</h3>
+      <button class="modal-close" onclick="closeAddStand()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-field">
+        <label>Venue</label>
+        <input type="text" id="add-stand-venue" disabled>
+      </div>
+      <div class="modal-field">
+        <label>Stand name</label>
+        <input type="text" id="add-stand-name" placeholder="e.g. SC2" autocomplete="off">
+      </div>
+      <div class="modal-field">
+        <label>Stand type</label>
+        <select id="add-stand-type">
+          <option value="revenue">Revenue</option>
+          <option value="hawking">Hawking</option>
+          <option value="support">Support</option>
+          <option value="client">Client</option>
+          <option value="nonevent">Non-event</option>
+          <option value="mobilecart">Mobile cart</option>
+        </select>
+      </div>
+      <div class="modal-field">
+        <label>Category (decides which roles it can hold)</label>
+        <select id="add-stand-category"></select>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <span class="modal-err" id="add-stand-err"></span>
+      <button class="btn-cancel" onclick="closeAddStand()">Cancel</button>
+      <button class="save-btn" id="add-stand-save" style="padding:9px 18px;" onclick="saveNewStand()">Add stand</button>
+    </div>
+  </div>
+</div>
 <script src="/pc-auth.js"></script>
 <script src="/pc-nav.js"></script>
 <script src="/pc-activity.js"></script>
@@ -226,6 +316,9 @@ var ACTIVE_FACET='items';
 var STAND_BUSY=false;      // guards stand-toggle double-clicks
 var ROLE_BUSY=false;       // guards role add/retire double-clicks
 var FUTURE_USAGE={};       // { standName: { rows, events } } for the venue, future events only
+var CAT_ROLES=[];          // stand_category_roles rows (incl. is_active=false): {id, category_id, role_id, is_active}
+var STAND_CATEGORIES=[];   // stand_categories rows: {id, display_name, has_revenue, is_active, sort_order}
+var CAT_BUSY=false;        // guards allowlist toggle double-clicks
 
 function apiHeaders(){ return Object.assign({}, pcAuth.headers(), {'Content-Type':'application/json'}); }
 function sbList(path){ return fetch(SB_URL+'/rest/v1/'+path,{headers:apiHeaders()}).then(function(r){ if(!r.ok){ return r.text().then(function(t){ throw new Error('HTTP '+r.status+' '+path+(t?' -- '+t.slice(0,180):'')); }); } return r.json(); }); }
@@ -280,7 +373,7 @@ function onStandChange(){
 
 function selectFacet(name){
   ACTIVE_FACET=name;
-  var ids=['stands','roles','items','details','sheets','menu'];
+  var ids=['stands','roles','categories','items','details','sheets','menu'];
   for(var i=0;i<ids.length;i++){ var el=document.getElementById('facet-'+ids[i]); if(el) el.classList.toggle('active', ids[i]===name); }
   renderFacet();
 }
@@ -297,13 +390,28 @@ function showEmpty(msg){
 function loadBaseData(){
   return Promise.all([
     sbList('inventory_items?select=id,name,chargeable,menu_name,cos_category_id,active,status&order=name.asc&limit=10000'),
-    sbList('cos_categories?select=id,name,sort_order&order=sort_order.asc&limit=1000')
+    sbList('cos_categories?select=id,name,sort_order&order=sort_order.asc&limit=1000'),
+    sbList('stand_categories?select=id,display_name,has_revenue,is_active,sort_order&order=sort_order.asc&limit=1000'),
+    sbList('stand_category_roles?select=id,category_id,role_id,is_active&limit=10000')
   ]).then(function(res){
     ALL_ITEMS=res[0]||[];
     ALL_CATS=res[1]||[];
+    STAND_CATEGORIES=res[2]||[];
+    CAT_ROLES=res[3]||[];
     ITEMS_BY_ID={};
     for(var i=0;i<ALL_ITEMS.length;i++){ ITEMS_BY_ID[ALL_ITEMS[i].id]=ALL_ITEMS[i]; }
   });
+}
+
+// Reload just the allowlist after a toggle (keeps the editor in sync without
+// a full base reload).
+function loadCatRoles(){
+  return sbList('stand_category_roles?select=id,category_id,role_id,is_active&limit=10000').then(function(rows){ CAT_ROLES=rows||[]; return CAT_ROLES; });
+}
+
+function categoryLabel(catId){
+  for(var i=0;i<STAND_CATEGORIES.length;i++){ if(STAND_CATEGORIES[i].id===catId) return STAND_CATEGORIES[i].display_name; }
+  return catId || null;
 }
 
 function loadVenueProfiles(venueCode){
@@ -366,6 +474,7 @@ function loadFutureUsage(venueCode){
 function renderFacet(){
   if(ACTIVE_FACET==='stands'){ renderStandsFacet(); return; }
   if(ACTIVE_FACET==='roles'){ renderRolesFacet(); return; }
+  if(ACTIVE_FACET==='categories'){ renderCategoriesFacet(); return; }
   if(ACTIVE_FACET==='items'){ renderItemsFacetEntry(); return; }
   showEmpty('That section is coming soon.');
 }
@@ -388,6 +497,10 @@ function renderStandsFacet(){
     'A turned-off stand disappears from event planning and schedules but keeps its history.</div>';
 
   html+='<div class="facet-controls"><span class="count-pill">'+activeCount+' of '+stands.length+' active</span></div>';
+
+  if(IS_ADMIN){
+    html+='<div class="stands-toolbar"><button class="add-stand-btn" onclick="openAddStand()">+ Add stand</button></div>';
+  }
 
   if(stands.length===0){
     html+='<div class="facet-empty">No stands found for this venue.</div>';
@@ -421,9 +534,21 @@ function renderStandToggleRow(s){
   }
 
   var disabledAttr=IS_ADMIN?'':' disabled';
+
+  // Category line — shows which category this stand belongs to (and therefore
+  // which role allowlist governs it) with a jump to the Stand roles editor.
+  var catLine;
+  if(s.category_id){
+    catLine='<div class="stand-cat-line">category: <b>'+esc(categoryLabel(s.category_id))+'</b>'+
+      '<a class="stand-cat-editlink" onclick="gotoCategoryEditor(\''+jsEsc(s.category_id)+'\')">edit roles</a></div>';
+  } else {
+    catLine='<div class="stand-cat-line stand-cat-none">no category set \u2014 this stand can\'t be staffed until one is assigned</div>';
+  }
+
   return '<div class="stand-toggle-row'+(on?'':' off')+'" data-stand-id="'+esc(s.id)+'">'+
     '<div class="stand-toggle-main">'+
       '<div class="stand-toggle-name">'+esc(s.stand_name)+typePill+offTag+usagePill+'</div>'+
+      catLine+
     '</div>'+
     '<label class="switch" id="switch-'+esc(s.id)+'">'+
       '<input type="checkbox"'+(on?' checked':'')+disabledAttr+
@@ -483,6 +608,214 @@ function refreshStandPicker(){
   standSel.innerHTML=html;
   if(stillPresent){ standSel.value=prev; }
   else { CURRENT_STAND=null; } // selected stand was just turned off
+}
+
+// Jump from a stand's "edit roles" link to the Categories facet, pre-scrolled
+// to that category. Sets a target so renderCategoriesFacet can highlight it.
+var _catScrollTarget=null;
+function gotoCategoryEditor(catId){
+  _catScrollTarget=catId;
+  selectFacet('categories');
+  // After render, scroll the target category block into view.
+  setTimeout(function(){
+    var el=document.getElementById('cat-block-'+catId);
+    if(el){ el.scrollIntoView({behavior:'smooth', block:'center'}); }
+  }, 60);
+}
+
+// ---------------------------------------------------------------------
+// CATEGORIES facet — the role allowlist editor.
+// Editing here changes stand_category_roles, which governs EVERY stand in
+// that category at EVERY venue. The "+ Add role" picker on the Schedule
+// Assistant Plan tab reads this same table, so changes are live there on
+// the next page load. Toggle = insert-or-reactivate on the (category_id,
+// role_id) natural key; untick sets is_active=false. Never a DELETE.
+// ---------------------------------------------------------------------
+function renderCategoriesFacet(){
+  var panel=document.getElementById('facet-content');
+  document.getElementById('facet-empty').style.display='none';
+  panel.style.display='block';
+
+  var allRoles=pcRoles.getRoles(); // active canonical roles, sorted by sort_order
+
+  var html='<div class="facet-head"><div class="facet-title">Stand roles</div></div>';
+  html+='<div class="facet-stand">Which roles each <b>stand category</b> can be staffed with.</div>';
+  html+='<div class="cat-editor-note"><strong>These lists are shared.</strong> '+
+    'Every stand belongs to a category, and a category\'s roles apply to <strong>all</strong> stands in it, across every venue. '+
+    'Ticking a role here makes it selectable on those stands in event planning. '+
+    (IS_ADMIN?'':'<br>You have view-only access \u2014 ask an admin to change these.')+
+    '</div>';
+
+  // active categories only, in sort order
+  var cats=STAND_CATEGORIES.filter(function(c){ return c.is_active!==false; });
+  for(var i=0;i<cats.length;i++){
+    var cat=cats[i];
+    html+='<div class="cat-edit-block" id="cat-block-'+esc(cat.id)+'">';
+    html+='<div class="cat-edit-head">'+
+      '<span class="cat-edit-title">'+esc(cat.display_name)+'</span>'+
+      '<span class="cat-edit-affects">applies to all <b>'+esc(cat.display_name)+'</b> stands</span>'+
+    '</div>';
+    html+='<div class="cat-role-grid">';
+    for(var r=0;r<allRoles.length;r++){
+      var role=allRoles[r];
+      var on=isRoleInCategory(cat.id, role.id);
+      var dis=IS_ADMIN?'':' disabled';
+      html+='<label class="cat-role-cell" id="catrole-'+esc(cat.id)+'-'+esc(role.id)+'">'+
+        '<input type="checkbox"'+(on?' checked':'')+dis+
+          ' onchange="onCatRoleToggle(\''+jsEsc(cat.id)+'\',\''+jsEsc(role.id)+'\',this.checked)">'+
+        '<span class="cat-role-name">'+esc(role.name)+'</span>'+
+      '</label>';
+    }
+    html+='</div></div>';
+  }
+  panel.innerHTML=html;
+}
+
+// Is a (category, role) pair currently active in the allowlist?
+function isRoleInCategory(catId, roleId){
+  for(var i=0;i<CAT_ROLES.length;i++){
+    var cr=CAT_ROLES[i];
+    if(cr.category_id===catId && cr.role_id===roleId && cr.is_active!==false) return true;
+  }
+  return false;
+}
+// Find the row (active OR inactive) for a pair, for insert-vs-reactivate.
+function catRoleRow(catId, roleId){
+  for(var i=0;i<CAT_ROLES.length;i++){
+    if(CAT_ROLES[i].category_id===catId && CAT_ROLES[i].role_id===roleId) return CAT_ROLES[i];
+  }
+  return null;
+}
+
+// Toggle a role in a category's allowlist. Tick: reactivate existing row or
+// INSERT a new one. Untick: PATCH is_active=false. Never DELETE (preserves
+// history + matches the no-DELETE convention). Re-renders only after the
+// write so the checkbox reflects true DB state.
+function onCatRoleToggle(catId, roleId, makeOn){
+  if(!IS_ADMIN){ return; }
+  if(CAT_BUSY){ return; }
+  CAT_BUSY=true;
+  var cell=document.getElementById('catrole-'+catId+'-'+roleId);
+  if(cell) cell.classList.add('busy');
+
+  var existing=catRoleRow(catId, roleId);
+  var p;
+  var headers=apiHeaders(); headers['Prefer']='return=minimal';
+
+  if(makeOn){
+    if(existing){
+      // reactivate
+      p=fetch(SB_URL+'/rest/v1/stand_category_roles?id=eq.'+encodeURIComponent(existing.id),{
+        method:'PATCH', headers:headers, body:JSON.stringify({ is_active:true })
+      });
+    } else {
+      // insert new
+      p=fetch(SB_URL+'/rest/v1/stand_category_roles',{
+        method:'POST', headers:headers, body:JSON.stringify({ category_id:catId, role_id:roleId, is_active:true })
+      });
+    }
+  } else {
+    if(existing){
+      p=fetch(SB_URL+'/rest/v1/stand_category_roles?id=eq.'+encodeURIComponent(existing.id),{
+        method:'PATCH', headers:headers, body:JSON.stringify({ is_active:false })
+      });
+    } else {
+      // nothing to turn off — no-op
+      p=Promise.resolve({ ok:true, text:function(){ return Promise.resolve(''); } });
+    }
+  }
+
+  Promise.resolve(p).then(function(res){
+    if(res && res.ok===false){ return res.text().then(function(t){ throw new Error('HTTP '+res.status+' -- '+t.slice(0,180)); }); }
+    return loadCatRoles();
+  }).then(function(){
+    CAT_BUSY=false;
+    // refresh pcRoles cache too so any same-page reader (and the principle of
+    // keeping caches coherent) stays in sync.
+    if(typeof pcRoles!=='undefined' && pcRoles.refresh){ try { pcRoles.refresh(); } catch(e){} }
+    renderCategoriesFacet();
+  }).catch(function(e){
+    CAT_BUSY=false;
+    console.error('[stand-setup] category-role toggle failed:',e);
+    renderCategoriesFacet();
+    alert('Could not update the role list. '+((e&&e.message)||'See console.'));
+  });
+}
+
+// ---------------------------------------------------------------------
+// ADD STAND modal
+// ---------------------------------------------------------------------
+function openAddStand(){
+  if(!IS_ADMIN || !CURRENT_VENUE) return;
+  document.getElementById('add-stand-venue').value=pcCatalog.getVenueLabel(CURRENT_VENUE);
+  document.getElementById('add-stand-name').value='';
+  document.getElementById('add-stand-type').value='revenue';
+  // populate category dropdown from active stand_categories
+  var sel=document.getElementById('add-stand-category');
+  var cats=STAND_CATEGORIES.filter(function(c){ return c.is_active!==false; });
+  var opts='';
+  for(var i=0;i<cats.length;i++){ opts+='<option value="'+esc(cats[i].id)+'">'+esc(cats[i].display_name)+'</option>'; }
+  sel.innerHTML=opts;
+  var err=document.getElementById('add-stand-err'); err.classList.remove('show'); err.textContent='';
+  var btn=document.getElementById('add-stand-save'); btn.disabled=false; btn.textContent='Add stand';
+  document.getElementById('add-stand-modal').classList.add('show');
+  setTimeout(function(){ document.getElementById('add-stand-name').focus(); }, 50);
+}
+
+function closeAddStand(){
+  document.getElementById('add-stand-modal').classList.remove('show');
+}
+
+function saveNewStand(){
+  if(!IS_ADMIN) return;
+  var err=document.getElementById('add-stand-err');
+  err.classList.remove('show'); err.textContent='';
+  var name=(document.getElementById('add-stand-name').value||'').trim();
+  var type=document.getElementById('add-stand-type').value;
+  var catId=document.getElementById('add-stand-category').value;
+
+  if(!name){ err.textContent='Enter a stand name.'; err.classList.add('show'); return; }
+  if(!catId){ err.textContent='Pick a category.'; err.classList.add('show'); return; }
+
+  // Duplicate guard (case-insensitive) against existing stands at this venue,
+  // active or retired — a name collision with a retired stand should reactivate,
+  // not create a second row. We warn and stop rather than silently dupe.
+  var existing=pcCatalog.getAllStandsForVenue(CURRENT_VENUE);
+  for(var i=0;i<existing.length;i++){
+    if((existing[i].stand_name||'').toLowerCase()===name.toLowerCase()){
+      err.textContent='A stand named "'+name+'" already exists here'+(existing[i].is_active?'.':' (it\'s turned off \u2014 turn it back on instead).');
+      err.classList.add('show');
+      return;
+    }
+  }
+
+  var btn=document.getElementById('add-stand-save');
+  btn.disabled=true; btn.textContent='Adding...';
+
+  var headers=apiHeaders(); headers['Prefer']='return=minimal';
+  var body={
+    venue_code: CURRENT_VENUE,
+    stand_name: name,
+    stand_type: type,
+    category_id: catId,
+    is_active: true,
+    sort_order: 0,
+    added_by: CURRENT_USER,
+    added_date: todayIso()
+  };
+  fetch(SB_URL+'/rest/v1/stands',{ method:'POST', headers:headers, body:JSON.stringify(body) })
+    .then(function(res){ if(!res.ok){ return res.text().then(function(t){ throw new Error('HTTP '+res.status+' -- '+t.slice(0,180)); }); } return pcCatalog.refresh(); })
+    .then(function(){
+      closeAddStand();
+      refreshStandPicker();
+      renderStandsFacet();
+    })
+    .catch(function(e){
+      console.error('[stand-setup] add stand failed:',e);
+      btn.disabled=false; btn.textContent='Add stand';
+      err.textContent='Could not add stand. '+((e&&e.message)||'See console.');
+      err.classList.add('show');
+    });
 }
 
 // ---------------------------------------------------------------------
