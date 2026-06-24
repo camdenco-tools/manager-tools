@@ -8,10 +8,11 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
   --bg: #f0f0ec; --card: #ffffff; --primary: #1a1a1a;
-  --green: #1D9E75; --green-light: #e8f7f2; --label: #999;
+  --green: #1D9E75; --green-light: #e8f7f2; --green-dark: #0F6E56; --label: #999;
   --border: #e8e8e4; --shadow: 0 2px 12px rgba(0,0,0,0.06);
   --radius: 16px; --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --red: #c0392b;
+  --red: #c0392b; --red-light: #fdecea; --red-border: #f0c8c4;
+  --amber: #d97706; --amber-light: #fffbeb; --amber-border: #fcd34d; --amber-dark: #92400e;
 }
 body { background: var(--bg); font-family: var(--font); color: var(--primary); min-height: 100vh; }
 
@@ -29,6 +30,10 @@ body { background: var(--bg); font-family: var(--font); color: var(--primary); m
 .soon-tag { font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; background: #efeee9; color: #b3b3ac; padding: 2px 6px; border-radius: 10px; margin-left: 6px; vertical-align: middle; }
 
 .card { background: var(--card); border-radius: var(--radius); padding: 18px 20px; margin-bottom: 14px; box-shadow: var(--shadow); }
+
+/* Read-only banner — shown to non-admins. View-only; writes are admin-gated by RLS. */
+.viewonly-banner { background: var(--amber-light); border: 1px solid var(--amber-border); border-radius: 10px; padding: 10px 14px; font-size: 12px; color: var(--amber-dark); margin-bottom: 14px; line-height: 1.5; }
+.viewonly-banner strong { color: var(--amber-dark); }
 
 .picker-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
 .picker-field { flex: 1; min-width: 200px; }
@@ -84,6 +89,67 @@ body { background: var(--bg); font-family: var(--font); color: var(--primary); m
 .save-status.err { color: var(--red); }
 
 .loading { text-align: center; padding: 40px; font-size: 14px; color: #bbb; }
+
+/* ============================================================
+ * STANDS FACET (venue-level on/off) — Build A
+ * ------------------------------------------------------------
+ * A list of every stand at the selected venue (active + inactive),
+ * each with a toggle that flips stands.is_active. Inactive stands
+ * are reachable here (unlike the stand picker, which only lists
+ * active stands), so a turned-off stand like Hawking can be turned
+ * back on with a click. Writes PATCH the stands table directly then
+ * call pcCatalog.refresh() — the documented write pattern, since
+ * pc-catalog.js is a pure read layer.
+ * ============================================================ */
+.stand-toggle-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-top: 1px solid #f6f6f6; }
+.stand-toggle-row:first-child { border-top: none; }
+.stand-toggle-main { flex: 1; min-width: 0; }
+.stand-toggle-name { font-size: 14px; font-weight: 600; color: var(--primary); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.stand-toggle-row.off .stand-toggle-name { color: var(--label); }
+.stand-toggle-meta { font-size: 11px; color: var(--label); margin-top: 2px; }
+.stand-type-pill { font-size: 9px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; background: #f1f1ec; color: #888; padding: 2px 7px; border-radius: 6px; }
+.stand-type-pill.hawking { background: #fdf0e0; color: #92400e; }
+.stand-type-pill.support { background: #eef2ff; color: #3730a3; }
+.stand-type-pill.client  { background: #f3edff; color: #5b21b6; }
+.stand-usage-pill { font-size: 10px; font-weight: 700; letter-spacing: 0.02em; background: var(--amber-light); color: var(--amber-dark); border: 1px solid var(--amber-border); padding: 2px 8px; border-radius: 10px; white-space: nowrap; cursor: help; }
+.off-tag { font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; background: var(--bg); color: var(--label); padding: 2px 7px; border-radius: 5px; border: 1px solid var(--border); }
+
+/* iOS-style switch */
+.switch { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch .slider { position: absolute; cursor: pointer; inset: 0; background: #ccc; transition: 0.2s; border-radius: 24px; }
+.switch .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background: white; transition: 0.2s; border-radius: 50%; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+.switch input:checked + .slider { background: var(--green); }
+.switch input:checked + .slider:before { transform: translateX(20px); }
+.switch input:disabled + .slider { opacity: 0.45; cursor: not-allowed; }
+.switch.busy .slider { opacity: 0.5; }
+
+/* ============================================================
+ * ROLES FACET (folded-in Venue Roles editor) — Build A
+ * ------------------------------------------------------------
+ * The add/retire role editor from /manage-venue-roles/, surfaced
+ * inside Stand Setup at the venue level. Same data layer (pcRoles),
+ * same venue_roles write pattern (resolve venue uuid -> POST for add,
+ * PATCH is_active for retire/restore). Pay rate is display-only.
+ * ============================================================ */
+.role-row { display: flex; align-items: center; gap: 14px; padding: 13px 14px; border-top: 1px solid #f6f6f6; }
+.role-row:first-child { border-top: none; }
+.role-row.retired .role-name { color: var(--label); }
+.role-name { font-size: 14px; font-weight: 600; flex: 1; display: flex; align-items: center; gap: 8px; }
+.role-rate { font-size: 13px; font-weight: 700; color: var(--green-dark); min-width: 120px; text-align: right; }
+.role-rate.placeholder { color: var(--label); font-weight: 600; font-style: italic; font-size: 12px; }
+.role-rate.commission { color: var(--label); font-weight: 600; font-style: italic; font-size: 12px; }
+.role-action-btn { font-size: 11px; font-weight: 700; padding: 5px 12px; border-radius: 7px; border: 1px solid var(--border); background: var(--card); cursor: pointer; font-family: var(--font); white-space: nowrap; }
+.role-action-btn.retire { color: var(--red); border-color: #f0d2d2; }
+.role-action-btn.retire:hover { background: var(--red-light); border-color: var(--red); }
+.role-action-btn.restore { color: var(--green-dark); border-color: #c4e5d8; }
+.role-action-btn.restore:hover { background: var(--green-light); border-color: var(--green); }
+.role-action-btn:disabled { opacity: 0.5; cursor: default; }
+.add-role-bar { padding: 16px 14px 4px; margin-top: 6px; border-top: 1px solid #f0f0f0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.add-role-label { font-size: 12px; font-weight: 700; color: var(--label); letter-spacing: 0.04em; }
+.add-role-select { padding: 8px 10px; border: 1.5px solid var(--border); border-radius: 8px; font-size: 13px; font-family: var(--font); color: var(--primary); background: var(--card); outline: none; min-width: 180px; }
+.add-role-select:focus { border-color: var(--primary); }
+.add-role-empty { font-size: 12px; color: var(--label); font-style: italic; }
 </style>
 </head>
 <body>
@@ -95,11 +161,16 @@ body { background: var(--bg); font-family: var(--font); color: var(--primary); m
     <h1 class="page-title">Stand Setup</h1>
     <span class="page-title-badge">Admin</span>
   </div>
-  <div class="page-sub">Configure what each stand carries, then build sheets and menus from it.</div>
+  <div class="page-sub">Configure what each stand carries, turn stands on or off, and manage venue roles.</div>
 
   <div class="area-tabs">
     <button class="area-tab active" id="area-config">Stand config</button>
     <button class="area-tab" id="area-purchasing" disabled>Purchasing <span class="soon-tag">Soon</span></button>
+  </div>
+
+  <!-- View-only banner (non-admins). Hidden by default; revealed in boot. -->
+  <div class="viewonly-banner" id="viewonly-banner" style="display:none;">
+    <strong>View only.</strong> You can see how stands and roles are configured, but changing them is admin-only. Ask an admin to make changes here.
   </div>
 
   <div class="card">
@@ -117,16 +188,18 @@ body { background: var(--bg); font-family: var(--font); color: var(--primary); m
 
   <div class="workspace">
     <div class="facet-rail">
+      <div class="rail-group-label">This venue</div>
+      <button class="rail-item" id="facet-stands" onclick="selectFacet('stands')">Stands<span></span></button>
+      <button class="rail-item rail-link" id="facet-roles" onclick="selectFacet('roles')">Roles<span></span></button>
       <div class="rail-group-label">This stand</div>
       <button class="rail-item active" id="facet-items" onclick="selectFacet('items')">Items<span></span></button>
       <button class="rail-item" id="facet-details" disabled>Details<span class="soon-tag">Soon</span></button>
-      <button class="rail-item rail-link" id="facet-roles" onclick="goRoles()">Roles<span class="ext">&#8599;</span></button>
       <button class="rail-item" id="facet-sheets" disabled>Stand sheets<span class="soon-tag">Soon</span></button>
       <button class="rail-item" id="facet-menu" disabled>Menu<span class="soon-tag">Soon</span></button>
     </div>
 
     <div class="facet-panel" id="facet-panel">
-      <div class="facet-empty" id="facet-empty">Pick a venue and stand to begin.</div>
+      <div class="facet-empty" id="facet-empty">Pick a venue to begin.</div>
       <div id="facet-content" style="display:none;"></div>
     </div>
   </div>
@@ -136,10 +209,12 @@ body { background: var(--bg); font-family: var(--font); color: var(--primary); m
 <script src="/pc-nav.js"></script>
 <script src="/pc-activity.js"></script>
 <script src="/pc-catalog.js"></script>
+<script src="/pc-roles.js"></script>
 <script>
 var SB_URL='https://aoazlttdjowhlfcksoyl.supabase.co';
 
 var CURRENT_USER='admin';
+var IS_ADMIN=false;        // gates write controls; RLS enforces server-side too
 var ALL_ITEMS=[];          // every inventory_items row
 var ALL_CATS=[];           // cos_categories
 var ITEMS_BY_ID={};
@@ -148,10 +223,20 @@ var CURRENT_VENUE='';
 var CURRENT_STAND=null;    // { id, stand_name, venue_code, ... }
 var STAND_ITEM_ROWS=[];    // stand_items rows for current stand (incl. soft-deleted)
 var ACTIVE_FACET='items';
+var STAND_BUSY=false;      // guards stand-toggle double-clicks
+var ROLE_BUSY=false;       // guards role add/retire double-clicks
+var FUTURE_USAGE={};       // { standName: { rows, events } } for the venue, future events only
 
 function apiHeaders(){ return Object.assign({}, pcAuth.headers(), {'Content-Type':'application/json'}); }
 function sbList(path){ return fetch(SB_URL+'/rest/v1/'+path,{headers:apiHeaders()}).then(function(r){ if(!r.ok){ return r.text().then(function(t){ throw new Error('HTTP '+r.status+' '+path+(t?' -- '+t.slice(0,180):'')); }); } return r.json(); }); }
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+// for values dropped into single-quoted JS string literals in onclick handlers
+function jsEsc(s){ return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+
+function todayIso(){
+  var d=new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
 
 // ---------------------------------------------------------------------
 // Venue / stand pickers
@@ -168,36 +253,36 @@ function onVenueChange(){
   CURRENT_VENUE=document.getElementById('venue-select').value;
   CURRENT_STAND=null;
   var standSel=document.getElementById('stand-select');
-  showEmpty('Pick a stand to configure its items.');
-  if(!CURRENT_VENUE){ standSel.disabled=true; standSel.innerHTML='<option value="">Select a venue first</option>'; return; }
+  if(!CURRENT_VENUE){
+    standSel.disabled=true; standSel.innerHTML='<option value="">Select a venue first</option>';
+    FUTURE_USAGE={};
+    renderFacet();
+    return;
+  }
   var stands=pcCatalog.getActiveStandsForVenue(CURRENT_VENUE);
   var html='<option value="">Select a stand...</option>';
   for(var i=0;i<stands.length;i++){ html+='<option value="'+esc(stands[i].id)+'">'+esc(stands[i].stand_name)+'</option>'; }
   standSel.innerHTML=html;
   standSel.disabled=false;
-  // pre-load this venue's item profile set in the background
+  // pre-load this venue's item profile set + future-plan usage in the background
   loadVenueProfiles(CURRENT_VENUE);
+  loadFutureUsage(CURRENT_VENUE);
+  renderFacet();
 }
 
 function onStandChange(){
   var id=document.getElementById('stand-select').value;
-  if(!id){ CURRENT_STAND=null; showEmpty('Pick a stand to configure its items.'); return; }
+  if(!id){ CURRENT_STAND=null; if(ACTIVE_FACET==='items') showEmpty('Pick a stand to configure its items.'); return; }
   CURRENT_STAND=pcCatalog.getStandById(id);
   if(!CURRENT_STAND){ showEmpty('Stand not found in catalog.'); return; }
-  renderFacet();
+  if(ACTIVE_FACET==='items') renderFacet();
 }
 
 function selectFacet(name){
-  // Only 'items' is wired in v1; the rest are disabled in the rail.
   ACTIVE_FACET=name;
-  var ids=['items','details','roles','sheets','menu'];
+  var ids=['stands','roles','items','details','sheets','menu'];
   for(var i=0;i<ids.length;i++){ var el=document.getElementById('facet-'+ids[i]); if(el) el.classList.toggle('active', ids[i]===name); }
   renderFacet();
-}
-
-function goRoles(){
-  // Roles live on the existing manage-venue-roles page — link out rather than duplicate.
-  window.location.href='/manage-venue-roles/';
 }
 
 function showEmpty(msg){
@@ -235,18 +320,311 @@ function loadStandItems(standId){
   return sbList('stand_items?select=*&stand_id=eq.'+standId+'&limit=10000').then(function(rows){ STAND_ITEM_ROWS=rows||[]; return STAND_ITEM_ROWS; });
 }
 
+// Future-plan usage for the venue: per-stand count of staffing_requests rows
+// on events dated today-or-later (headcount > 0). Powers the "used on N future
+// plans" warning on the Stands facet so an admin sees the blast radius before
+// turning a stand off. NOTE: staffing_requests.stand is free text (no FK), so
+// this matches by stand NAME — same join the Schedule Assistant uses. This is
+// a warning only in Build A; the actual plan-cascade on disable is Build B.
+function loadFutureUsage(venueCode){
+  FUTURE_USAGE={};
+  // We can't filter by event_date directly on staffing_requests (it lives on
+  // events), so fetch this venue's future event ids first, then count rows.
+  var today=todayIso();
+  return sbList('events?select=id&venue=eq.'+encodeURIComponent(venueCode)+
+                '&event_date=gte.'+today+'&deleted_at=is.null&limit=10000')
+    .then(function(events){
+      var ids=(events||[]).map(function(e){ return e.id; });
+      if(ids.length===0){ FUTURE_USAGE={}; return; }
+      var inList='('+ids.map(function(id){ return '"'+id+'"'; }).join(',')+')';
+      return sbList('staffing_requests?select=stand,event_id,headcount&event_id=in.'+inList+
+                    '&headcount=gt.0&limit=10000')
+        .then(function(rows){
+          var usage={};
+          (rows||[]).forEach(function(r){
+            if(!usage[r.stand]) usage[r.stand]={ rows:0, events:{} };
+            usage[r.stand].rows++;
+            usage[r.stand].events[r.event_id]=true;
+          });
+          var out={};
+          Object.keys(usage).forEach(function(stand){
+            out[stand]={ rows:usage[stand].rows, events:Object.keys(usage[stand].events).length };
+          });
+          FUTURE_USAGE=out;
+        });
+    }).catch(function(e){
+      // Non-blocking: if the usage probe fails, the toggle still works; we
+      // just won't show the warning count.
+      console.warn('[stand-setup] future-usage load failed (non-blocking):',e);
+      FUTURE_USAGE={};
+    });
+}
+
 // ---------------------------------------------------------------------
-// Items facet
+// Facet router
 // ---------------------------------------------------------------------
 function renderFacet(){
+  if(ACTIVE_FACET==='stands'){ renderStandsFacet(); return; }
+  if(ACTIVE_FACET==='roles'){ renderRolesFacet(); return; }
+  if(ACTIVE_FACET==='items'){ renderItemsFacetEntry(); return; }
+  showEmpty('That section is coming soon.');
+}
+
+// ---------------------------------------------------------------------
+// STANDS facet (venue-level on/off)
+// ---------------------------------------------------------------------
+function renderStandsFacet(){
+  if(!CURRENT_VENUE){ showEmpty('Pick a venue to see its stands.'); return; }
+  var panel=document.getElementById('facet-content');
+  document.getElementById('facet-empty').style.display='none';
+  panel.style.display='block';
+
+  var stands=pcCatalog.getAllStandsForVenue(CURRENT_VENUE);
+  var activeCount=0;
+  for(var i=0;i<stands.length;i++){ if(stands[i].is_active) activeCount++; }
+
+  var html='<div class="facet-head"><div class="facet-title">Stands</div></div>';
+  html+='<div class="facet-stand">Turn stands on or off at <b>'+esc(pcCatalog.getVenueLabel(CURRENT_VENUE))+'</b>. '+
+    'A turned-off stand disappears from event planning and schedules but keeps its history.</div>';
+
+  html+='<div class="facet-controls"><span class="count-pill">'+activeCount+' of '+stands.length+' active</span></div>';
+
+  if(stands.length===0){
+    html+='<div class="facet-empty">No stands found for this venue.</div>';
+    panel.innerHTML=html;
+    return;
+  }
+
+  html+='<div class="cat-block">';
+  for(var j=0;j<stands.length;j++){
+    html+=renderStandToggleRow(stands[j]);
+  }
+  html+='</div>';
+  panel.innerHTML=html;
+}
+
+function renderStandToggleRow(s){
+  var on=s.is_active;
+  var typeCls=(s.stand_type==='hawking'||s.stand_type==='support'||s.stand_type==='client')?(' '+s.stand_type):'';
+  var typePill='<span class="stand-type-pill'+typeCls+'">'+esc(s.stand_type||'revenue')+'</span>';
+  var offTag=on?'':'<span class="off-tag">Off</span>';
+
+  // Future-plan usage warning (active stands only — turning ON has no blast radius).
+  var usage=FUTURE_USAGE[s.stand_name];
+  var usagePill='';
+  if(on && usage && usage.events>0){
+    var tip='Used on '+usage.events+' future event plan'+(usage.events===1?'':'s')+
+            ' ('+usage.rows+' role row'+(usage.rows===1?'':'s')+'). '+
+            'Turning this stand off will not change those plans yet — that comes later. '+
+            'For now it just hides the stand from new planning.';
+    usagePill='<span class="stand-usage-pill" title="'+esc(tip)+'">&#9888; on '+usage.events+' future plan'+(usage.events===1?'':'s')+'</span>';
+  }
+
+  var disabledAttr=IS_ADMIN?'':' disabled';
+  return '<div class="stand-toggle-row'+(on?'':' off')+'" data-stand-id="'+esc(s.id)+'">'+
+    '<div class="stand-toggle-main">'+
+      '<div class="stand-toggle-name">'+esc(s.stand_name)+typePill+offTag+usagePill+'</div>'+
+    '</div>'+
+    '<label class="switch" id="switch-'+esc(s.id)+'">'+
+      '<input type="checkbox"'+(on?' checked':'')+disabledAttr+
+        ' onchange="onStandToggle(\''+jsEsc(s.id)+'\',\''+jsEsc(s.stand_name)+'\',this.checked)">'+
+      '<span class="slider"></span>'+
+    '</label>'+
+  '</div>';
+}
+
+// Flip stands.is_active. Mirrors the SQL we ran by hand: ON sets is_active=true
+// and clears retired_date; OFF sets is_active=false and stamps retired_date.
+// PATCHes the stands table directly (pc-catalog is read-only), then refreshes
+// the catalog cache so every getter on the page sees the change.
+function onStandToggle(standId, standName, makeActive){
+  if(!IS_ADMIN){ return; } // belt-and-suspenders; RLS also blocks
+  if(STAND_BUSY){ return; }
+  STAND_BUSY=true;
+  var sw=document.getElementById('switch-'+standId);
+  if(sw) sw.classList.add('busy');
+
+  var body=makeActive
+    ? { is_active:true,  retired_date:null,        updated_at:new Date().toISOString() }
+    : { is_active:false, retired_date:todayIso(),  updated_at:new Date().toISOString() };
+
+  var headers=apiHeaders(); headers['Prefer']='return=minimal';
+  fetch(SB_URL+'/rest/v1/stands?id=eq.'+encodeURIComponent(standId),{
+    method:'PATCH', headers:headers, body:JSON.stringify(body)
+  }).then(function(res){
+    if(!res.ok){ return res.text().then(function(t){ throw new Error('HTTP '+res.status+' -- '+t.slice(0,180)); }); }
+    return pcCatalog.refresh();
+  }).then(function(){
+    STAND_BUSY=false;
+    // Rebuild the stand picker too — an on/off change affects what's selectable.
+    refreshStandPicker();
+    renderStandsFacet();
+  }).catch(function(e){
+    STAND_BUSY=false;
+    console.error('[stand-setup] stand toggle failed:',e);
+    // Re-render to snap the switch back to the true DB state.
+    renderStandsFacet();
+    alert('Could not update the stand. '+((e&&e.message)||'See console.'));
+  });
+}
+
+// Keep the top stand picker in sync after a toggle without forcing a venue reselect.
+function refreshStandPicker(){
+  var standSel=document.getElementById('stand-select');
+  if(!standSel || !CURRENT_VENUE) return;
+  var prev=standSel.value;
+  var stands=pcCatalog.getActiveStandsForVenue(CURRENT_VENUE);
+  var html='<option value="">Select a stand...</option>';
+  var stillPresent=false;
+  for(var i=0;i<stands.length;i++){
+    html+='<option value="'+esc(stands[i].id)+'">'+esc(stands[i].stand_name)+'</option>';
+    if(stands[i].id===prev) stillPresent=true;
+  }
+  standSel.innerHTML=html;
+  if(stillPresent){ standSel.value=prev; }
+  else { CURRENT_STAND=null; } // selected stand was just turned off
+}
+
+// ---------------------------------------------------------------------
+// ROLES facet (folded-in Venue Roles editor)
+// ---------------------------------------------------------------------
+function renderRolesFacet(){
+  if(!CURRENT_VENUE){ showEmpty('Pick a venue to manage its roles.'); return; }
+  var panel=document.getElementById('facet-content');
+  document.getElementById('facet-empty').style.display='none';
+  panel.style.display='block';
+
+  var rows=pcRoles.getRolesForVenue(CURRENT_VENUE, { includeRetired:true });
+  var activeCount=rows.filter(function(r){ return r.is_active; }).length;
+
+  var html='<div class="facet-head"><div class="facet-title">Roles</div></div>';
+  html+='<div class="facet-stand">Which roles exist at <b>'+esc(pcCatalog.getVenueLabel(CURRENT_VENUE))+'</b>. '+
+    'Pay rates are shown for reference only and are set elsewhere.</div>';
+  html+='<div class="facet-controls"><span class="count-pill">'+activeCount+' active role'+(activeCount===1?'':'s')+'</span></div>';
+
+  html+='<div class="cat-block">';
+  if(rows.length===0){
+    html+='<div class="item-row" style="cursor:default;"><span class="item-name" style="color:var(--label);font-style:italic;">No roles mapped to this venue yet. Add one below.</span></div>';
+  } else {
+    rows.forEach(function(r){ html+=renderRoleRow(r); });
+  }
+  html+='</div>';
+
+  html+=renderAddRoleBar(rows);
+  panel.innerHTML=html;
+}
+
+function renderRoleRow(r){
+  var retiredCls=r.is_active?'':' retired';
+  var rateHtml=renderRate(r);
+  var btn='';
+  if(IS_ADMIN){
+    if(r.is_active){
+      btn='<button class="role-action-btn retire"'+(ROLE_BUSY?' disabled':'')+
+        ' onclick="retireRole(\''+jsEsc(r.venue_role_id)+'\',\''+jsEsc(r.role_name)+'\')">Remove</button>';
+    } else {
+      btn='<button class="role-action-btn restore"'+(ROLE_BUSY?' disabled':'')+
+        ' onclick="restoreRole(\''+jsEsc(r.venue_role_id)+'\',\''+jsEsc(r.role_name)+'\')">Restore</button>';
+    }
+  }
+  var tag=r.is_active?'':'<span class="off-tag">Retired</span>';
+  return '<div class="role-row'+retiredCls+'">'+
+    '<span class="role-name">'+esc(r.role_name)+tag+'</span>'+
+    rateHtml+
+    btn+
+  '</div>';
+}
+
+// Pay rate is display-only (same three cases as the standalone Venue Roles page).
+function renderRate(r){
+  if(r.role_name==='Hawker'){ return '<span class="role-rate commission">Commission-based</span>'; }
+  if(r.pay_rate==null || r.pay_rate===0){ return '<span class="role-rate placeholder">Rate not set</span>'; }
+  return '<span class="role-rate">$'+Number(r.pay_rate).toFixed(2)+' / hr</span>';
+}
+
+function renderAddRoleBar(currentRows){
+  if(!IS_ADMIN) return ''; // non-admins can't add
+  var mapped={};
+  currentRows.forEach(function(r){ mapped[r.role_name]=true; });
+  var catalog=pcRoles.getRoles(); // active canonical roles, sorted
+  var available=catalog.filter(function(role){ return !mapped[role.name]; });
+
+  if(available.length===0){
+    return '<div class="add-role-bar"><span class="add-role-empty">Every catalog role is already mapped to this venue.</span></div>';
+  }
+  var opts='<option value="">Select a role&hellip;</option>'+
+    available.map(function(role){ return '<option value="'+jsEsc(role.id)+'">'+esc(role.name)+'</option>'; }).join('');
+  return '<div class="add-role-bar">'+
+    '<span class="add-role-label">Add a role</span>'+
+    '<select class="add-role-select" id="add-role-select"'+(ROLE_BUSY?' disabled':'')+'>'+opts+'</select>'+
+    '<button class="save-btn" id="add-role-btn" style="padding:8px 16px;font-size:12px;"'+(ROLE_BUSY?' disabled':'')+' onclick="addRole()">Add to venue</button>'+
+  '</div>';
+}
+
+// Add a role to the venue: resolve venue uuid, then INSERT a venue_roles row at
+// pay_rate 0 (placeholder; pay is owned elsewhere). Same flow as the standalone
+// Venue Roles page.
+function addRole(){
+  if(!IS_ADMIN || ROLE_BUSY) return;
+  var sel=document.getElementById('add-role-select');
+  if(!sel || !sel.value){ alert('Pick a role first.'); return; }
+  var roleId=sel.value;
+  ROLE_BUSY=true; renderRolesFacet();
+
+  fetch(SB_URL+'/rest/v1/venues?select=id&code=eq.'+encodeURIComponent(CURRENT_VENUE),{ headers:apiHeaders() })
+    .then(function(r){ if(!r.ok) return r.text().then(function(t){ throw new Error('venue lookup '+r.status+' -- '+t.slice(0,150)); }); return r.json(); })
+    .then(function(rows){
+      if(!rows || !rows.length) throw new Error('Could not resolve venue id for '+CURRENT_VENUE);
+      var venueId=rows[0].id;
+      var headers=apiHeaders(); headers['Prefer']='return=minimal';
+      return fetch(SB_URL+'/rest/v1/venue_roles',{
+        method:'POST', headers:headers,
+        body:JSON.stringify({ venue_id:venueId, role_id:roleId, pay_rate:0, is_active:true })
+      });
+    })
+    .then(function(res){ if(!res.ok) return res.text().then(function(t){ throw new Error('HTTP '+res.status+' -- '+t.slice(0,200)); }); return pcRoles.refresh(); })
+    .then(function(){ ROLE_BUSY=false; renderRolesFacet(); })
+    .catch(function(e){ ROLE_BUSY=false; renderRolesFacet(); console.error('addRole failed:',e); alert('Could not add role. '+((e&&e.message)||'See console.')); });
+}
+
+function retireRole(venueRoleId, roleName){
+  if(!IS_ADMIN || ROLE_BUSY) return;
+  ROLE_BUSY=true; renderRolesFacet();
+  patchVenueRole(venueRoleId,{ is_active:false })
+    .then(function(){ return pcRoles.refresh(); })
+    .then(function(){ ROLE_BUSY=false; renderRolesFacet(); })
+    .catch(function(e){ ROLE_BUSY=false; renderRolesFacet(); console.error('retireRole failed:',e); alert('Could not remove role. '+((e&&e.message)||'See console.')); });
+}
+
+function restoreRole(venueRoleId, roleName){
+  if(!IS_ADMIN || ROLE_BUSY) return;
+  ROLE_BUSY=true; renderRolesFacet();
+  patchVenueRole(venueRoleId,{ is_active:true })
+    .then(function(){ return pcRoles.refresh(); })
+    .then(function(){ ROLE_BUSY=false; renderRolesFacet(); })
+    .catch(function(e){ ROLE_BUSY=false; renderRolesFacet(); console.error('restoreRole failed:',e); alert('Could not restore role. '+((e&&e.message)||'See console.')); });
+}
+
+function patchVenueRole(venueRoleId, body){
+  var headers=apiHeaders(); headers['Prefer']='return=minimal';
+  return fetch(SB_URL+'/rest/v1/venue_roles?id=eq.'+encodeURIComponent(venueRoleId),{
+    method:'PATCH', headers:headers, body:JSON.stringify(body)
+  }).then(function(res){
+    if(!res.ok){ return res.text().then(function(t){ throw new Error('HTTP '+res.status+' -- '+t.slice(0,200)); }); }
+    return res;
+  });
+}
+
+// ---------------------------------------------------------------------
+// ITEMS facet (unchanged from prior version, just routed through renderFacet)
+// ---------------------------------------------------------------------
+function renderItemsFacetEntry(){
   if(!CURRENT_STAND){ showEmpty('Pick a stand to configure its items.'); return; }
-  if(ACTIVE_FACET!=='items'){ showEmpty('That section is coming soon.'); return; }
   var panel=document.getElementById('facet-content');
   document.getElementById('facet-empty').style.display='none';
   panel.style.display='block';
   panel.innerHTML='<div class="loading">Loading items...</div>';
 
-  // venue profiles may already be cached from onVenueChange; ensure both loaded
   Promise.all([
     loadVenueProfiles(CURRENT_VENUE),
     loadStandItems(CURRENT_STAND.id)
@@ -264,14 +642,12 @@ function currentRowFor(itemId){
 function renderItemsFacet(){
   var panel=document.getElementById('facet-content');
 
-  // candidate pool = venue-profiled items UNION any item that already has a stand_items row
   var candIds={};
   for(var k in VENUE_ITEM_IDS){ if(VENUE_ITEM_IDS.hasOwnProperty(k)) candIds[k]=true; }
   for(var i=0;i<STAND_ITEM_ROWS.length;i++){ candIds[STAND_ITEM_ROWS[i].item_id]=true; }
 
   var seedMode=(STAND_ITEM_ROWS.length===0);
 
-  // build display list of items, skipping pending/inactive (unless already on this stand)
   var items=[];
   for(var id in candIds){ if(!candIds.hasOwnProperty(id)) continue;
     var it=ITEMS_BY_ID[id]; if(!it) continue;
@@ -285,7 +661,6 @@ function renderItemsFacet(){
     return;
   }
 
-  // group by category
   var byCat={};
   for(var j=0;j<items.length;j++){ var c=items[j].cos_category_id||'uncat'; if(!byCat[c])byCat[c]=[]; byCat[c].push(items[j]); }
   var catOrder=[];
@@ -305,8 +680,13 @@ function renderItemsFacet(){
   if(seedMode){
     html+='<div class="seed-note">This stand has no item profile yet, so every '+esc(CURRENT_VENUE)+' item is pre-checked. Uncheck what this stand does not carry, then save.</div>';
   }
-  html+='<div class="facet-controls"><span class="count-pill" id="carry-count">'+carried+' of '+items.length+' carried</span><span class="spacer"></span><button class="mini-btn" onclick="bulkSet(true)">Select all</button><button class="mini-btn" onclick="bulkSet(false)">Clear all</button></div>';
+  html+='<div class="facet-controls"><span class="count-pill" id="carry-count">'+carried+' of '+items.length+' carried</span><span class="spacer"></span>';
+  if(IS_ADMIN){
+    html+='<button class="mini-btn" onclick="bulkSet(true)">Select all</button><button class="mini-btn" onclick="bulkSet(false)">Clear all</button>';
+  }
+  html+='</div>';
 
+  var roDisabled=IS_ADMIN?'':' disabled';
   for(var co=0;co<catOrder.length;co++){
     var catId=catOrder[co];
     var cat=null; for(var cc=0;cc<ALL_CATS.length;cc++){ if(ALL_CATS[cc].id===catId){cat=ALL_CATS[cc];break;} }
@@ -315,7 +695,7 @@ function renderItemsFacet(){
     html+='<div class="cat-block"><div class="cat-block-head"><span>'+esc(catName)+'</span><span>'+list.length+'</span></div>';
     for(var li=0;li<list.length;li++){ var it=list[li];
       html+='<label class="item-row">'+
-        '<input type="checkbox" data-item="'+esc(it.id)+'" '+(isChecked(it)?'checked':'')+' onchange="updateCount()">'+
+        '<input type="checkbox" data-item="'+esc(it.id)+'" '+(isChecked(it)?'checked':'')+roDisabled+' onchange="updateCount()">'+
         '<span class="item-main"><span class="item-name">'+esc(it.name)+'</span>'+
         (it.menu_name?'<span class="item-menu">Menu: '+esc(it.menu_name)+'</span>':'')+'</span>'+
         (it.chargeable===true?'<span class="chg-pill">Chargeable</span>':'')+
@@ -324,7 +704,9 @@ function renderItemsFacet(){
     html+='</div>';
   }
 
-  html+='<div class="save-bar"><button class="save-btn" id="save-items-btn" onclick="saveStandItems()">Save carried items</button><span class="save-status" id="save-status"></span></div>';
+  if(IS_ADMIN){
+    html+='<div class="save-bar"><button class="save-btn" id="save-items-btn" onclick="saveStandItems()">Save carried items</button><span class="save-status" id="save-status"></span></div>';
+  }
 
   panel.innerHTML=html;
 }
@@ -342,12 +724,14 @@ function updateCount(){
 }
 
 function bulkSet(val){
+  if(!IS_ADMIN) return;
   var checks=document.querySelectorAll('#facet-content input[type=checkbox][data-item]');
   for(var i=0;i<checks.length;i++){ checks[i].checked=val; }
   updateCount();
 }
 
 function saveStandItems(){
+  if(!IS_ADMIN) return;
   var btn=document.getElementById('save-items-btn');
   var statusEl=document.getElementById('save-status');
   statusEl.className='save-status'; statusEl.textContent='';
@@ -415,8 +799,10 @@ pcAuth.require({
   pageSlug: 'stand-setup',
   onReady: function(user){
     if(user){ CURRENT_USER = user.email || user.display_name || user.name || 'admin'; }
+    IS_ADMIN = (typeof pcAuth.isAdmin==='function') ? pcAuth.isAdmin() : false;
+    if(!IS_ADMIN){ document.getElementById('viewonly-banner').style.display='block'; }
     if(typeof pcActivity!=='undefined' && pcActivity.init) pcActivity.init('stand-setup');
-    pcCatalog.ready().then(function(){
+    Promise.all([ pcCatalog.ready(), pcRoles.ready() ]).then(function(){
       populateVenues();
       return loadBaseData();
     }).catch(function(err){
