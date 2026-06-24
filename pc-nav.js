@@ -53,6 +53,11 @@
       { label: 'Asset tracker',                  href: '/asset-tracker/',          slug: 'asset-tracker' },
       { label: 'COS & Labor',                    href: '/cos-labor/',              slug: 'cos-labor' }
     ],
+    setup: [
+      { label: 'Stand setup',                    href: '/stand-setup/',            slug: 'stand-setup' },
+      { label: 'Item catalog',                   href: '/item-catalog/',           slug: 'item-catalog' },
+      { label: 'Venue item profiles',            href: '/venue-item-profiles/',    slug: 'venue-item-profiles' }
+    ],
     dashboards: [
       { label: 'Staffing dashboard',           href: '/dashboard/',          slug: 'dashboard' },
       { label: 'Weather Impacts',               href: '/weather-impacts/',    slug: 'weather-impacts' },
@@ -70,8 +75,7 @@
       { label: 'Par levels',                     href: '/par-levels/',             slug: 'par-levels' },
       { label: 'Deal structure',                 href: '/deal-structure/',         slug: 'deal-structure' },
       { label: 'Commission tracker',             href: '/commission-tracker/',     slug: 'commission-tracker' },
-      { label: 'Item catalog',                   href: '/item-catalog/',           slug: 'item-catalog' },
-      { label: 'Venue item profiles',            href: '/venue-item-profiles/',    slug: 'venue-item-profiles' },
+      
       { label: 'Activity heartbeat',             href: '/activity-heartbeat/',     slug: 'activity-heartbeat' },
       { label: 'User access',                    href: '/user-access/',            slug: 'user-access' }
     ]
@@ -97,6 +101,7 @@
     '.pc-nav-lane{position:relative;display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-size:13px;font-weight:500;padding:4px 2px;user-select:none;text-decoration:none;}',
     '.pc-nav-lane.lane-people{color:#639922;}',
     '.pc-nav-lane.lane-operations{color:#185FA5;}',
+    '.pc-nav-lane.lane-setup{color:#0F6E56;}',
     '.pc-nav-lane.lane-dashboards{color:#BA7517;}',
     '.pc-nav-lane.lane-admin{color:#BA7517;}',
     '.pc-nav-lane-chevron{width:10px;height:10px;display:inline-block;transition:transform 0.15s ease;}',
@@ -196,6 +201,7 @@
       '<nav class="pc-nav-ribbon" id="pc-nav-ribbon" aria-label="Toolkit navigation">' +
         buildLaneHTML('people',      'People',     PC_NAV_CONFIG.people) +
         buildLaneHTML('operations',  'Operations', PC_NAV_CONFIG.operations) +
+        buildLaneHTML('setup',       'Setup',      PC_NAV_CONFIG.setup) +
         buildLaneHTML('dashboards',  'Dashboards', PC_NAV_CONFIG.dashboards) +
         buildLaneHTML('admin',       'Admin',      PC_NAV_CONFIG.admin) +
       '</nav>'
