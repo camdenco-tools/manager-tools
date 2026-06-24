@@ -270,18 +270,29 @@
       // venue dropdown from distinct event venues (always matches data)
       var venues = Object.keys(EV_BY_VENUE).sort();
       var vs=$('venueSel'); vs.innerHTML='';
+      var vph=el('option'); vph.value=''; vph.textContent='Select a venue…'; vs.appendChild(vph);
       venues.forEach(function(code){
         var o=el('option'); o.value=code; o.textContent=venueLabel(code); vs.appendChild(o);
       });
-      // default: venue of the most recent past event (else most recent overall)
-      var def = defaultEvent();
-      if(def){ vs.value=def.venue; }
-      vs.onchange=function(){ sel.venue=vs.value; fillEvents(null); };
+      vs.value='';  // no venue selected on open — user picks deliberately
+      vs.onchange=function(){
+        sel.venue=vs.value;
+        if(!sel.venue){ resetBelowVenue(); return; }
+        fillEvents(null);
+      };
       $('eventSel').onchange=function(){ onEventChosen($('eventSel').value); };
       $('app').style.opacity='1';
 
-      if(def){ sel.venue=def.venue; fillEvents(def.id); }
-      else { $('ev-hint').textContent='No active events found.'; }
+      resetBelowVenue();
+      $('ev-hint').textContent = venues.length ? 'Pick a venue to begin.' : 'No active events found.';
+    }
+
+    function resetBelowVenue(){
+      sel.event=null; sel.stand=null; sheet.dirty=false;
+      var es=$('eventSel'); es.innerHTML='';
+      var ph=el('option'); ph.value=''; ph.textContent='Select a venue first…'; es.appendChild(ph);
+      $('standCard').classList.add('hide');
+      $('sheetCard').classList.add('hide');
     }
 
     function venueLabel(code){
