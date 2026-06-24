@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stand sheet — Popcorn Chez Manager Toolkit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#1a1a1a; --muted:#6b6b66; --line:#e8e8e4; --line2:#f0f0ec;
+    --bg:#faf9f6; --card:#ffffff; --teal:#0F6E56; --teal-soft:#e6f1ed;
+    --amber:#9a6b00; --amber-soft:#fdf3df; --red:#9a2b2b; --red-soft:#fbecec;
+    --shadow:0 1px 2px rgba(0,0,0,.04),0 1px 8px rgba(0,0,0,.03);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"DM Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1180px;margin:0 auto;padding:26px 22px 96px;}
+
+  .page-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin:6px 0 20px;}
+  .page-head h1{font-size:21px;font-weight:600;letter-spacing:-0.02em;margin:0;}
+  .page-head .sub{color:var(--muted);font-size:13px;}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
+    box-shadow:var(--shadow);padding:18px;margin-bottom:18px;}
+  .card-head{display:flex;align-items:center;gap:10px;margin:0 0 14px;}
+  .step-no{width:22px;height:22px;border-radius:50%;background:var(--ink);color:#fff;
+    font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
+  .card-head h2{font-size:14px;font-weight:600;margin:0;letter-spacing:-0.01em;}
+  .card-head .hint{color:var(--muted);font-size:12px;margin-left:auto;}
+
+  .pickers{display:flex;gap:14px;flex-wrap:wrap;}
+  .field{display:flex;flex-direction:column;gap:5px;min-width:200px;flex:1 1 220px;}
+  .field label{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);}
+  select,input[type=text]{font-family:inherit;font-size:14px;color:var(--ink);background:#fff;
+    border:1px solid var(--line);border-radius:8px;padding:9px 11px;width:100%;}
+  select:focus,input:focus{outline:2px solid var(--teal);outline-offset:1px;border-color:var(--teal);}
+
+  .stand-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;}
+  .stand-btn{position:relative;text-align:left;cursor:pointer;background:#fff;border:1px solid var(--line);
+    border-radius:10px;padding:12px 13px;font-family:inherit;transition:border-color .12s,background .12s;}
+  .stand-btn:hover{border-color:#cfcfc8;}
+  .stand-btn.sel{border-color:var(--teal);background:var(--teal-soft);box-shadow:0 0 0 1px var(--teal) inset;}
+  .stand-btn:focus-visible{outline:2px solid var(--teal);outline-offset:2px;}
+  .stand-btn .nm{font-size:14px;font-weight:600;letter-spacing:-0.01em;}
+  .stand-btn .tags{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px;}
+  .tag{font-size:10px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;
+    padding:2px 7px;border-radius:20px;}
+  .tag-staffed{background:var(--teal-soft);color:var(--teal);}
+  .tag-draft{background:var(--amber-soft);color:var(--amber);}
+  .tag-final{background:#e9efe9;color:#2f6d3a;}
+  .tag-alc{background:#efeaf6;color:#5a3e8e;}
+
+  /* sheet */
+  .sheet-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px;}
+  .sheet-meta .ev{font-size:15px;font-weight:600;}
+  .sheet-meta .dot{color:var(--line);}
+  .sheet-meta .mut{color:var(--muted);font-size:13px;}
+
+  .banner{border-radius:9px;padding:11px 13px;font-size:13px;margin:12px 0;line-height:1.45;}
+  .banner-final{background:#eef4ef;border:1px solid #cfe2d3;color:#2f5d3a;}
+  .banner-warn{background:var(--amber-soft);border:1px solid #ecd9a6;color:var(--amber);}
+
+  .table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:6px;}
+  table.sheet{border-collapse:collapse;width:100%;min-width:880px;font-size:13px;}
+  table.sheet th{font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;
+    color:var(--muted);text-align:right;padding:8px 9px;border-bottom:1px solid var(--line);white-space:nowrap;}
+  table.sheet th.l{text-align:left;}
+  table.sheet td{padding:6px 9px;border-bottom:1px solid var(--line2);text-align:right;vertical-align:middle;}
+  table.sheet td.l{text-align:left;}
+  table.sheet tr:hover td{background:#fcfcfa;}
+  .it-nm{font-weight:600;letter-spacing:-0.01em;}
+  .it-sub{color:var(--muted);font-size:11px;margin-top:1px;}
+  .pill-charge{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.04em;
+    background:var(--teal-soft);color:var(--teal);padding:1px 6px;border-radius:20px;margin-left:6px;vertical-align:middle;}
+  .pill-na{display:inline-block;font-size:9px;font-weight:600;letter-spacing:.04em;
+    background:#f1f1ed;color:var(--muted);padding:1px 6px;border-radius:20px;margin-left:6px;vertical-align:middle;}
+  .cnt-in{width:74px;font-family:"DM Mono",ui-monospace,monospace;font-size:13px;text-align:right;
+    border:1px solid var(--line);border-radius:7px;padding:6px 7px;background:#fff;}
+  .cnt-in:focus{outline:2px solid var(--teal);outline-offset:1px;border-color:var(--teal);}
+  .cnt-in:disabled{background:#f6f6f3;color:var(--muted);}
+  .cnt-in.ending{border-color:#cfd8d2;background:#fbfdfc;font-weight:600;}
+  td.begin{font-family:"DM Mono",monospace;color:var(--muted);}
+  td.calc{font-family:"DM Mono",monospace;}
+  td.sold{font-weight:600;}
+  td.money{font-family:"DM Mono",monospace;}
+  td.dim{color:#b9b9b2;}
+
+  tfoot td{border-top:2px solid var(--line);padding-top:10px;font-weight:600;}
+  tfoot .lbl{color:var(--muted);font-weight:600;text-transform:uppercase;font-size:10px;letter-spacing:.04em;}
+
+  .actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px;}
+  .btn{font-family:inherit;font-size:13px;font-weight:600;border-radius:8px;padding:10px 16px;
+    cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--ink);transition:.12s;}
+  .btn:hover{border-color:#cfcfc8;}
+  .btn:focus-visible{outline:2px solid var(--teal);outline-offset:2px;}
+  .btn-primary{background:var(--teal);border-color:var(--teal);color:#fff;}
+  .btn-primary:hover{background:#0c5d49;}
+  .btn:disabled{opacity:.5;cursor:not-allowed;}
+  .btn-ghost{background:transparent;border-color:transparent;color:var(--muted);}
+  .save-note{font-size:12px;color:var(--muted);margin-left:auto;}
+  .dirty-dot{color:var(--amber);font-weight:700;}
+
+  .empty{text-align:center;padding:34px 18px;color:var(--muted);}
+  .empty .big{font-size:15px;font-weight:600;color:var(--ink);margin-bottom:6px;}
+  .empty a{color:var(--teal);font-weight:600;text-decoration:none;}
+  .empty a:hover{text-decoration:underline;}
+  .muted-row{color:var(--muted);font-style:normal;}
+
+  .hide{display:none !important;}
+  .spin{display:inline-block;width:15px;height:15px;border:2px solid var(--line);
+    border-top-color:var(--teal);border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px;}
+  @keyframes sp{to{transform:rotate(360deg);}}
+  @media (prefers-reduced-motion:reduce){.spin{animation:none;}}
+
+  /* toast */
+  #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);
+    background:var(--ink);color:#fff;font-size:13px;font-weight:500;padding:11px 18px;border-radius:9px;
+    box-shadow:0 6px 24px rgba(0,0,0,.18);opacity:0;pointer-events:none;transition:.2s;z-index:1200;max-width:90vw;}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+</style>
+</head>
+<body>
+  <!-- Header + ribbon + back-to-top injected by pc-nav.js -->
+  <!-- Activity tracking (page_load / heartbeat / page_unload) handled by pc-activity.js -->
+
+  <div class="wrap" id="app" style="opacity:0;">
+    <div class="page-head">
+      <h1>Stand sheet</h1>
+      <span class="sub">Count what an open stand held for an event — beginning rolls forward from the last finalized count.</span>
+    </div>
+
+    <!-- Step 1: pick event -->
+    <section class="card">
+      <div class="card-head">
+        <span class="step-no">1</span>
+        <h2>Pick the event</h2>
+        <span class="hint" id="ev-hint"></span>
+      </div>
+      <div class="pickers">
+        <div class="field">
+          <label for="venueSel">Venue</label>
+          <select id="venueSel"></select>
+        </div>
+        <div class="field" style="flex:2 1 320px;">
+          <label for="eventSel">Event</label>
+          <select id="eventSel"></select>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 2: pick stand -->
+    <section class="card hide" id="standCard">
+      <div class="card-head">
+        <span class="step-no">2</span>
+        <h2>Pick a stand</h2>
+        <span class="hint">One stand at a time. Stands with staff planned for this event are marked.</span>
+      </div>
+      <div class="stand-grid" id="standGrid"></div>
+    </section>
+
+    <!-- Step 3: the sheet -->
+    <section class="card hide" id="sheetCard">
+      <div class="card-head">
+        <span class="step-no">3</span>
+        <h2 id="sheetTitle">Count sheet</h2>
+        <span class="hint" id="sheetLoadHint"></span>
+      </div>
+      <div class="sheet-meta" id="sheetMeta"></div>
+      <div id="sheetBanner"></div>
+      <div id="sheetBody"></div>
+    </section>
+  </div>
+
+  <div id="toast"></div>
+
+  <script src="/pc-auth.js"></script>
+  <script src="/pc-nav.js"></script>
+  <script src="/pc-activity.js"></script>
+  <script src="/pc-catalog.js"></script>
+  <script>
+  (function(){
+    'use strict';
+
+    var SUPABASE_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
+    var REST = SUPABASE_URL + '/rest/v1/';
+
+    // ---- state -------------------------------------------------------
+    var ME = '';                 // display name
+    var EVENTS = [];             // [{id,venue,event_name,event_date}]
+    var EV_BY_VENUE = {};        // venue -> [events]
+    var sel = { venue:null, event:null, stand:null };
+    var sheet = { rows:[], prices:{}, costs:{}, finalized:false, dirty:false, started:false };
+    var venueSheetState = {};    // stand_id -> {started:bool, finalized:bool}
+
+    // ---- tiny helpers ------------------------------------------------
+    function $(id){ return document.getElementById(id); }
+    function el(tag, cls, txt){ var e=document.createElement(tag); if(cls)e.className=cls; if(txt!=null)e.textContent=txt; return e; }
+    function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+    function num(v){ if(v===''||v==null) return 0; var n=parseFloat(v); return isNaN(n)?0:n; }
+    function hasNum(v){ return !(v===''||v==null) && !isNaN(parseFloat(v)); }
+    function money(n){ return '$'+(Math.round(n*100)/100).toFixed(2); }
+    function fmtQty(n){ var r=Math.round(n*1000)/1000; return String(r); }
+    function todayLocal(){ var d=new Date(),m=d.getMonth()+1,day=d.getDate();
+      return d.getFullYear()+'-'+(m<10?'0':'')+m+'-'+(day<10?'0':'')+day; }
+    function fmtDate(iso){ if(!iso) return ''; var p=iso.split('-');
+      var dt=new Date(+p[0], +p[1]-1, +p[2]);
+      return dt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'}); }
+    function mergeHeaders(extra){ var h=pcAuth.headers()||{}, o={}, k;
+      for(k in h){ if(h.hasOwnProperty(k)) o[k]=h[k]; }
+      if(extra){ for(k in extra){ if(extra.hasOwnProperty(k)) o[k]=extra[k]; } }
+      return o; }
+    var toastT=null;
+    function showToast(msg){ var t=$('toast'); t.textContent=msg; t.classList.add('show');
+      if(toastT)clearTimeout(toastT); toastT=setTimeout(function(){t.classList.remove('show');},2600); }
+
+    // ---- auth-aware fetch (JWT-expiry pattern) -----------------------
+    function handleAuthFailure(){
+      try{ localStorage.removeItem('sb_access_token'); localStorage.removeItem('sb_refresh_token'); }catch(e){}
+      showToast('Session expired. Reloading to sign in again…');
+      setTimeout(function(){ window.location.reload(); }, 1800);
+    }
+    function checkAuthError(res, text){
+      if(res.status===401 || (text && text.indexOf('JWT expired')!==-1)){
+        var err=new Error('JWT expired'); err.authFailed=true; return err;
+      }
+      return null;
+    }
+    function authFetch(url, options){
+      return fetch(url, options).then(function(r){
+        if(!r.ok){
+          return r.text().then(function(t){
+            var ae=checkAuthError(r,t); if(ae) throw ae;
+            throw new Error(t || ('HTTP '+r.status));
+          });
+        }
+        return r.text().then(function(t){
+          if(!t) return [];
+          try{ return JSON.parse(t); }catch(e){ return []; }
+        });
+      });
+    }
+
+    // ---- boot --------------------------------------------------------
+    pcAuth.require({
+      pageSlug:'stand-sheet',
+      onReady:function(user){
+        pcActivity.init('stand-sheet');
+        ME = (user && (user.display_name || user.name)) || '';
+        pcCatalog.ready().then(loadEvents).then(boot).catch(function(e){
+          if(e && e.authFailed){ handleAuthFailure(); return; }
+          showToast('Could not load: '+(e.message||e));
+        });
+      }
+    });
+
+    function loadEvents(){
+      var url = REST+'events?deleted_at=is.null&cancelled_at=is.null'
+        + '&select=id,venue,event_name,event_date&order=event_date.desc&limit=400';
+      return authFetch(url, { headers: pcAuth.headers() }).then(function(rows){
+        EVENTS = rows || [];
+        EV_BY_VENUE = {};
+        EVENTS.forEach(function(e){ (EV_BY_VENUE[e.venue]=EV_BY_VENUE[e.venue]||[]).push(e); });
+      });
+    }
+
+    function boot(){
+      // venue dropdown from distinct event venues (always matches data)
+      var venues = Object.keys(EV_BY_VENUE).sort();
+      var vs=$('venueSel'); vs.innerHTML='';
+      venues.forEach(function(code){
+        var o=el('option'); o.value=code; o.textContent=venueLabel(code); vs.appendChild(o);
+      });
+      // default: venue of the most recent past event (else most recent overall)
+      var def = defaultEvent();
+      if(def){ vs.value=def.venue; }
+      vs.onchange=function(){ sel.venue=vs.value; fillEvents(null); };
+      $('eventSel').onchange=function(){ onEventChosen($('eventSel').value); };
+      $('app').style.opacity='1';
+
+      if(def){ sel.venue=def.venue; fillEvents(def.id); }
+      else { $('ev-hint').textContent='No active events found.'; }
+    }
+
+    function venueLabel(code){
+      try{ var v=pcCatalog.getActiveVenues().filter(function(x){return x.code===code;})[0];
+        if(v && v.full_name) return v.full_name+' ('+code+')'; }catch(e){}
+      return code;
+    }
+    function defaultEvent(){
+      var today=todayLocal(), i;
+      for(i=0;i<EVENTS.length;i++){ if(EVENTS[i].event_date<=today) return EVENTS[i]; } // desc -> most recent past
+      return EVENTS.length ? EVENTS[EVENTS.length-1] : null;                              // else soonest upcoming
+    }
+
+    function fillEvents(preselectId){
+      var list=(EV_BY_VENUE[sel.venue]||[]);
+      var es=$('eventSel'); es.innerHTML='';
+      list.forEach(function(e){
+        var o=el('option'); o.value=e.id;
+        o.textContent=fmtDate(e.event_date)+' — '+e.event_name; es.appendChild(o);
+      });
+      $('ev-hint').textContent=list.length+' event'+(list.length===1?'':'s');
+      if(list.length){
+        es.value = preselectId && list.some(function(e){return e.id===preselectId;}) ? preselectId : list[0].value;
+        onEventChosen(es.value);
+      } else {
+        sel.event=null; $('standCard').classList.add('hide'); $('sheetCard').classList.add('hide');
+      }
+    }
+
+    function onEventChosen(eventId){
+      if(sheet.dirty && !confirm('Discard unsaved counts on the current stand?')) {
+        // revert selection
+        if(sel.event) $('eventSel').value=sel.event.id; return;
+      }
+      sel.event = EVENTS.filter(function(e){return e.id===eventId;})[0] || null;
+      sel.stand = null; sheet.dirty=false;
+      $('sheetCard').classList.add('hide');
+      if(!sel.event){ $('standCard').classList.add('hide'); return; }
+      loadStandStates().then(renderStands).catch(function(e){
+        if(e && e.authFailed){ handleAuthFailure(); return; }
+        renderStands(); // still let them pick even if tag query failed
+      });
+    }
+
+    // which stands already have a sheet for this event + which are staffed
+    function loadStandStates(){
+      venueSheetState={};
+      var ev=sel.event;
+      var cUrl=REST+'stand_inventory_counts?event_id=eq.'+enc(ev.id)+'&deleted_at=is.null'
+        +'&select=stand_id,finalized&limit=5000';
+      var sUrl=REST+'staffing_requests?event_id=eq.'+enc(ev.id)+'&select=stand&limit=2000';
+      return Promise.all([
+        authFetch(cUrl,{headers:pcAuth.headers()}),
+        authFetch(sUrl,{headers:pcAuth.headers()})
+      ]).then(function(res){
+        (res[0]||[]).forEach(function(r){
+          var st=venueSheetState[r.stand_id]=venueSheetState[r.stand_id]||{started:true,finalized:true};
+          st.started=true; if(!r.finalized) st.finalized=false;
+        });
+        var staffed={}; (res[1]||[]).forEach(function(r){ if(r.stand) staffed[normName(r.stand)]=true; });
+        venueSheetState.__staffed = staffed;
+      });
+    }
+    function normName(s){ return (s==null?'':String(s)).trim().toLowerCase(); }
+    function enc(s){ return encodeURIComponent(s); }
+
+    function renderStands(){
+      var stands=[];
+      try{ stands=pcCatalog.getActiveStandsForVenue(sel.venue)||[]; }catch(e){}
+      var staffed=(venueSheetState.__staffed)||{};
+      // staffed stands first, then by sort_order (catalog already sorts)
+      stands.sort(function(a,b){
+        var sa=staffed[normName(a.stand_name)]?0:1, sb=staffed[normName(b.stand_name)]?0:1;
+        if(sa!==sb) return sa-sb;
+        return (a.sort_order||0)-(b.sort_order||0);
+      });
+      var grid=$('standGrid'); grid.innerHTML='';
+      if(!stands.length){
+        grid.appendChild(emptyBlock('No active stands at this venue.',
+          'Add stands in Stand Setup, then come back.','/stand-setup/','Open Stand Setup'));
+      }
+      stands.forEach(function(s){
+        var b=el('button','stand-btn'); b.type='button'; b.setAttribute('data-id',s.id);
+        var nm=el('div','nm', s.stand_name); b.appendChild(nm);
+        var tags=el('div','tags');
+        var stState=venueSheetState[s.id];
+        if(stState && stState.finalized) tags.appendChild(tagEl('tag-final','Finalized'));
+        else if(stState && stState.started) tags.appendChild(tagEl('tag-draft','Draft'));
+        if(staffed[normName(s.stand_name)]) tags.appendChild(tagEl('tag-staffed','Staffed'));
+        if(s.sells_alcohol) tags.appendChild(tagEl('tag-alc','Alcohol'));
+        if(tags.childNodes.length) b.appendChild(tags);
+        b.onclick=function(){ pickStand(s); };
+        if(sel.stand && sel.stand.id===s.id) b.classList.add('sel');
+        grid.appendChild(b);
+      });
+      $('standCard').classList.remove('hide');
+    }
+    function tagEl(cls,txt){ return el('span','tag '+cls,txt); }
+
+    function pickStand(s){
+      if(sheet.dirty && !confirm('Discard unsaved counts on the current stand?')) return;
+      sel.stand=s; sheet.dirty=false;
+      // highlight
+      var btns=document.querySelectorAll('.stand-btn');
+      Array.prototype.forEach.call(btns,function(b){
+        b.classList.toggle('sel', b.getAttribute('data-id')===s.id);
+      });
+      openSheet();
+    }
+
+    // ---- load / build the sheet for sel.event x sel.stand ------------
+    function openSheet(){
+      var card=$('sheetCard'); card.classList.remove('hide');
+      $('sheetTitle').textContent='Count sheet — '+sel.stand.stand_name;
+      $('sheetMeta').innerHTML=''; $('sheetBanner').innerHTML='';
+      $('sheetBody').innerHTML='<div class="empty"><span class="spin"></span> Loading sheet…</div>';
+      $('sheetLoadHint').textContent='';
+      card.scrollIntoView({behavior:'smooth',block:'start'});
+
+      var ev=sel.event, st=sel.stand, vc=sel.venue;
+      var profUrl=REST+'stand_items?stand_id=eq.'+enc(st.id)+'&carries=eq.true&deleted_at=is.null'
+        +'&select=item_id,sort_order,inventory_items(id,name,menu_name,chargeable,cost_per_unit,unit_label,count_unit,active)'
+        +'&order=sort_order.asc&limit=2000';
+      var cntUrl=REST+'stand_inventory_counts?event_id=eq.'+enc(ev.id)+'&stand_id=eq.'+enc(st.id)
+        +'&deleted_at=is.null&select=*&limit=2000';
+      var onhUrl=REST+'stand_item_onhand_v?stand_id=eq.'+enc(st.id)+'&select=item_id,on_hand_qty&limit=2000';
+      var priceUrl=REST+'venue_item_prices?venue_code=eq.'+enc(vc)+'&is_active=eq.true'
+        +'&select=item_id,unit_price&limit=5000';
+      var costUrl=REST+'venue_item_costs?venue_code=eq.'+enc(vc)+'&deleted_at=is.null'
+        +'&select=item_id,cost_per_unit&limit=5000';
+
+      Promise.all([
+        authFetch(profUrl,{headers:pcAuth.headers()}),
+        authFetch(cntUrl,{headers:pcAuth.headers()}),
+        authFetch(onhUrl,{headers:pcAuth.headers()}),
+        authFetch(priceUrl,{headers:pcAuth.headers()}),
+        authFetch(costUrl,{headers:pcAuth.headers()})
+      ]).then(function(res){
+        buildSheet(res[0]||[], res[1]||[], res[2]||[], res[3]||[], res[4]||[]);
+      }).catch(function(e){
+        if(e && e.authFailed){ handleAuthFailure(); return; }
+        $('sheetBody').innerHTML='<div class="empty"><div class="big">Couldn\u2019t load this sheet</div>'
+          +esc(e.message||String(e))+'</div>';
+      });
+    }
+
+    function buildSheet(prof, counts, onhand, prices, costs){
+      sheet.prices={}; prices.forEach(function(p){ sheet.prices[p.item_id]=p.unit_price; });
+      sheet.costs={};  costs.forEach(function(c){ sheet.costs[c.item_id]=c.cost_per_unit; });
+
+      var onMap={}; onhand.forEach(function(o){ onMap[o.item_id]=o.on_hand_qty; });
+      var cntMap={}; counts.forEach(function(c){ cntMap[c.item_id]=c; });
+
+      // empty profile -> directive empty state
+      if(!prof.length){
+        sheet.rows=[]; sheet.started=false; sheet.finalized=false;
+        $('sheetMeta').innerHTML=''; renderSheetMeta();
+        $('sheetBody').innerHTML='';
+        $('sheetBody').appendChild(emptyBlock(
+          'This stand has no items profiled yet.',
+          'Choose what '+sel.stand.stand_name+' carries in Stand Setup, then open the sheet again.',
+          '/stand-setup/','Open Stand Setup'));
+        return;
+      }
+
+      sheet.started = counts.length>0;
+      sheet.finalized = counts.length>0 && counts.every(function(c){return c.finalized;});
+
+      sheet.rows = prof.map(function(p){
+        var it=p.inventory_items||{};
+        var ex=cntMap[p.item_id];
+        var beginning = ex ? ex.beginning_qty : (onMap.hasOwnProperty(p.item_id)? onMap[p.item_id] : 0);
+        return {
+          id: ex? ex.id : null,
+          item_id: p.item_id,
+          name: it.name||'(item)',
+          menu_name: it.menu_name||'',
+          chargeable: !!it.chargeable,
+          active: it.active!==false,
+          unit: it.count_unit||it.unit_label||'each',
+          gcost: num(it.cost_per_unit),
+          beginning: num(beginning),
+          received: ex? ex.received_qty : 0,
+          tin: ex? ex.transfer_in_qty : 0,
+          tout: ex? ex.transfer_out_qty : 0,
+          spoil: ex? ex.spoilage_qty : 0,
+          ending: (ex && ex.ending_qty!=null) ? ex.ending_qty : '',
+          counted_at: ex? ex.counted_at : null,
+          counted_by: ex? ex.counted_by : null,
+          finalized: ex? !!ex.finalized : false
+        };
+      });
+
+      renderSheetMeta();
+      renderSheetTable();
+    }
+
+    function renderSheetMeta(){
+      var ev=sel.event;
+      var m=$('sheetMeta'); m.innerHTML='';
+      m.appendChild(el('span','ev',ev.event_name));
+      m.appendChild(el('span','dot','•'));
+      m.appendChild(el('span','mut',fmtDate(ev.event_date)));
+      m.appendChild(el('span','dot','•'));
+      m.appendChild(el('span','mut',venueLabel(sel.venue)));
+    }
+
+    function priceOf(r){ return sheet.prices.hasOwnProperty(r.item_id)? num(sheet.prices[r.item_id]) : null; }
+    function costOf(r){ return sheet.costs.hasOwnProperty(r.item_id)? num(sheet.costs[r.item_id]) : r.gcost; }
+    function soldOf(r){
+      if(!hasNum(r.ending)) return null;
+      return num(r.beginning)+num(r.received)+num(r.tin)-num(r.tout)-num(r.spoil)-num(r.ending);
+    }
+
+    function renderSheetTable(){
+      var ro=sheet.finalized;
+      var html=[];
+      html.push('<div class="table-scroll"><table class="sheet"><thead><tr>');
+      html.push('<th class="l">Item</th>');
+      html.push('<th>Begin</th><th>Received</th><th>Transfer in</th><th>Transfer out</th>');
+      html.push('<th>Spoilage</th><th>Ending</th><th>Units sold</th><th>Sale $</th><th>Ending @ cost</th>');
+      html.push('</tr></thead><tbody>');
+      html.push('</tbody><tfoot></tfoot></table></div>');
+      var body=$('sheetBody'); body.innerHTML=html.join('');
+
+      var tb=body.querySelector('tbody');
+      sheet.rows.forEach(function(r,i){ tb.appendChild(rowEl(r,i,ro)); });
+
+      renderFoot();
+      renderActions();
+      renderFinalBanner();
+    }
+
+    function rowEl(r,i,ro){
+      var tr=el('tr');
+      // item cell
+      var td=el('td','l');
+      var nmWrap=el('div');
+      var disp = r.menu_name || r.name;
+      var nm=el('span','it-nm',disp);
+      nmWrap.appendChild(nm);
+      nmWrap.appendChild(r.chargeable? tagEl2('pill-charge','Chargeable') : tagEl2('pill-na','Non-charge'));
+      if(!r.active) nmWrap.appendChild(tagEl2('pill-na','Inactive'));
+      td.appendChild(nmWrap);
+      var subtxt = (r.menu_name && r.menu_name!==r.name ? r.name+' · ' : '') + r.unit;
+      td.appendChild(el('div','it-sub',subtxt));
+      tr.appendChild(td);
+
+      tr.appendChild(beginCell(r));
+      tr.appendChild(inputCell(r,'received',i,ro));
+      tr.appendChild(inputCell(r,'tin',i,ro));
+      tr.appendChild(inputCell(r,'tout',i,ro));
+      tr.appendChild(inputCell(r,'spoil',i,ro));
+      tr.appendChild(inputCell(r,'ending',i,ro));
+
+      var soldTd=el('td','calc sold'); soldTd.setAttribute('data-sold',i); tr.appendChild(soldTd);
+      var saleTd=el('td','money'); saleTd.setAttribute('data-sale',i); tr.appendChild(saleTd);
+      var costTd=el('td','money'); costTd.setAttribute('data-cost',i); tr.appendChild(costTd);
+
+      paintComputed(tr,r);
+      return tr;
+    }
+    function tagEl2(cls,txt){ var s=el('span',cls,txt); return s; }
+    function beginCell(r){ var td=el('td','begin',fmtQty(num(r.beginning))); return td; }
+
+    function inputCell(r,field,i,ro){
+      var td=el('td');
+      var inp=el('input','cnt-in'+(field==='ending'?' ending':''));
+      inp.type='text'; inp.inputMode='decimal'; inp.value=(r[field]===0?'0':(r[field]==null?'':r[field]));
+      if(field==='ending') inp.placeholder='—';
+      inp.disabled=ro;
+      inp.oninput=function(){
+        r[field]= inp.value;
+        sheet.dirty=true;
+        var tr=inp.closest('tr');
+        paintComputed(tr,r);
+        renderFoot(); markDirty();
+      };
+      td.appendChild(inp);
+      return td;
+    }
+
+    function paintComputed(tr,r){
+      var sold=soldOf(r);
+      var soldTd=tr.querySelector('[data-sold]');
+      var saleTd=tr.querySelector('[data-sale]');
+      var costTd=tr.querySelector('[data-cost]');
+      if(sold==null){ soldTd.textContent='—'; soldTd.className='calc sold dim'; }
+      else { soldTd.textContent=fmtQty(sold); soldTd.className='calc sold'+(sold<0?' ':''); soldTd.style.color=(sold<0?'var(--red)':''); }
+
+      var price=priceOf(r);
+      if(r.chargeable && price!=null && sold!=null){ saleTd.textContent=money(sold*price); saleTd.className='money'; }
+      else { saleTd.textContent= r.chargeable? (price==null?'no price':'—') : '—'; saleTd.className='money dim'; }
+
+      var c=costOf(r);
+      if(hasNum(r.ending)){ costTd.textContent=money(num(r.ending)*c); costTd.className='money'; }
+      else { costTd.textContent='—'; costTd.className='money dim'; }
+    }
+
+    function renderFoot(){
+      var tf=document.querySelector('table.sheet tfoot'); if(!tf) return;
+      var saleTot=0, costTot=0, charge=0, missing=0;
+      sheet.rows.forEach(function(r){
+        var sold=soldOf(r), price=priceOf(r);
+        if(r.chargeable){ charge++; if(!hasNum(r.ending)) missing++; }
+        if(r.chargeable && price!=null && sold!=null) saleTot+=sold*price;
+        if(hasNum(r.ending)) costTot+=num(r.ending)*costOf(r);
+      });
+      tf.innerHTML='';
+      var tr=el('tr');
+      var l=el('td','l lbl', sheet.rows.length+' items · '+charge+' chargeable'); l.colSpan=7; tr.appendChild(l);
+      tr.appendChild(el('td','lbl','Totals'));
+      tr.appendChild(el('td','money',money(saleTot)));
+      tr.appendChild(el('td','money',money(costTot)));
+      tf.appendChild(tr);
+      tf._missing=missing; tf._charge=charge;
+    }
+
+    function renderActions(){
+      var body=$('sheetBody');
+      var old=body.querySelector('.actions'); if(old) old.parentNode.removeChild(old);
+      var bar=el('div','actions');
+      if(sheet.finalized){
+        var bEdit=el('button','btn','Unlock to edit'); bEdit.type='button';
+        bEdit.onclick=unlockSheet; bar.appendChild(bEdit);
+      } else {
+        var bSave=el('button','btn','Save draft'); bSave.type='button';
+        bSave.onclick=function(){ saveSheet(false); }; bar.appendChild(bSave);
+        var bFin=el('button','btn btn-primary','Finalize sheet'); bFin.type='button';
+        bFin.onclick=function(){ saveSheet(true); }; bar.appendChild(bFin);
+      }
+      var note=el('span','save-note'); note.id='saveNote';
+      note.textContent = sheet.started ? 'Sheet started.' : 'Not saved yet.';
+      bar.appendChild(note);
+      body.appendChild(bar);
+      markDirty();
+    }
+
+    function markDirty(){
+      var n=$('saveNote'); if(!n) return;
+      if(sheet.finalized){ n.innerHTML='Finalized — read-only.'; return; }
+      if(sheet.dirty){ n.innerHTML='<span class="dirty-dot">•</span> Unsaved changes'; }
+      else { n.textContent = sheet.started ? 'All changes saved.' : 'Not saved yet.'; }
+    }
+
+    function renderFinalBanner(){
+      var b=$('sheetBanner'); b.innerHTML='';
+      if(sheet.finalized){
+        b.innerHTML='<div class="banner banner-final">This sheet is finalized and locked. '
+          +'Its ending counts now feed beginning inventory for the next event at this stand. '
+          +'Use <strong>Unlock to edit</strong> to make a correction.</div>';
+      }
+    }
+
+    // ---- persistence (UPSERT on natural key) -------------------------
+    function buildPayload(finalize){
+      var nowIso=new Date().toISOString();
+      return sheet.rows.map(function(r){
+        var endingVal = hasNum(r.ending)? num(r.ending) : null;
+        var anyCount = num(r.received)||num(r.tin)||num(r.tout)||num(r.spoil)||endingVal!=null;
+        var p={
+          event_id: sel.event.id,
+          stand_id: sel.stand.id,
+          item_id: r.item_id,
+          beginning_qty: num(r.beginning),     // frozen at materialize; re-sent unchanged
+          received_qty: num(r.received),
+          transfer_in_qty: num(r.tin),
+          transfer_out_qty: num(r.tout),
+          spoilage_qty: num(r.spoil),
+          ending_qty: endingVal,
+          finalized: !!finalize,
+          updated_at: nowIso,
+          updated_by: ME
+        };
+        // uniform keys across every row — PostgREST bulk upsert requires it
+        if(r.counted_at){ p.counted_by=r.counted_by||null; p.counted_at=r.counted_at; }
+        else if(anyCount){ p.counted_by=ME; p.counted_at=nowIso; }
+        else { p.counted_by=null; p.counted_at=null; }
+        if(finalize){ p.finalized_by=ME; p.finalized_at=nowIso; }
+        else { p.finalized_by=null; p.finalized_at=null; }
+        return p;
+      });
+    }
+
+    function saveSheet(finalize){
+      if(finalize){
+        var tf=document.querySelector('table.sheet tfoot');
+        var missing=tf?tf._missing:0;
+        if(missing>0 && !confirm(missing+' chargeable item'+(missing===1?'':'s')+' have no ending count. '
+          +'Units sold can\u2019t be computed for them. Finalize anyway?')) return;
+      }
+      var payload=buildPayload(finalize);
+      var hint=$('sheetLoadHint'); hint.innerHTML='<span class="spin"></span> '+(finalize?'Finalizing…':'Saving…');
+      var url=REST+'stand_inventory_counts?on_conflict=event_id,stand_id,item_id';
+      authFetch(url,{
+        method:'POST',
+        headers: mergeHeaders({'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=representation'}),
+        body: JSON.stringify(payload)
+      }).then(function(saved){
+        // map returned ids/flags back
+        var byItem={}; (saved||[]).forEach(function(s){ byItem[s.item_id]=s; });
+        sheet.rows.forEach(function(r){
+          var s=byItem[r.item_id]; if(!s) return;
+          r.id=s.id; r.counted_at=s.counted_at; r.counted_by=s.counted_by; r.finalized=!!s.finalized;
+          if(s.beginning_qty!=null) r.beginning=s.beginning_qty;
+        });
+        sheet.started=true; sheet.dirty=false; sheet.finalized=!!finalize;
+        venueSheetState[sel.stand.id]={started:true, finalized:!!finalize};
+        hint.textContent='';
+        renderSheetTable();           // re-render (lock/unlock inputs)
+        renderStands();               // refresh stand tags
+        showToast(finalize?'Sheet finalized — on-hand advanced.':'Draft saved.');
+      }).catch(function(e){
+        hint.textContent='';
+        if(e && e.authFailed){ handleAuthFailure(); return; }
+        showToast('Save failed: '+(e.message||e));
+      });
+    }
+
+    function unlockSheet(){
+      if(!confirm('Unlock this finalized sheet to make a correction? '
+        +'It stays finalized until you re-finalize.')) return;
+      // flip finalized=false on all rows so inputs open; persist immediately
+      sheet.finalized=false;
+      saveSheet(false);
+    }
+
+    // ---- shared empty-state block -----------------------------------
+    function emptyBlock(big, sub, href, cta){
+      var d=el('div','empty');
+      d.appendChild(el('div','big',big));
+      d.appendChild(el('div',null,sub));
+      if(href){ var a=el('a',null,cta||'Open'); a.href=href; a.style.display='inline-block'; a.style.marginTop='12px'; d.appendChild(a); }
+      return d;
+    }
+
+    // warn before leaving with unsaved counts
+    window.addEventListener('beforeunload', function(e){
+      if(sheet.dirty){ e.preventDefault(); e.returnValue=''; }
+    });
+
+  })();
+  </script>
+</body>
+</html>
