@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Popcorn Chez — Stand Setup</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #f0f0ec; --card: #ffffff; --primary: #1a1a1a;
+  --green: #1D9E75; --green-light: #e8f7f2; --label: #999;
+  --border: #e8e8e4; --shadow: 0 2px 12px rgba(0,0,0,0.06);
+  --radius: 16px; --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --red: #c0392b;
+}
+body { background: var(--bg); font-family: var(--font); color: var(--primary); min-height: 100vh; }
+
+.page-title-row { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+.page-title { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; color: var(--primary); }
+.page-title-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: var(--primary); color: white; padding: 3px 8px; border-radius: 20px; }
+.page-sub { font-size: 13px; color: var(--label); margin-bottom: 20px; }
+
+.main-content { max-width: 1100px; margin: 0 auto; padding: 24px 32px 80px; }
+
+.area-tabs { display: flex; gap: 4px; margin-bottom: 18px; background: var(--bg); border-radius: 12px; padding: 4px; max-width: 420px; }
+.area-tab { flex: 1; padding: 9px; border: none; border-radius: 9px; font-size: 13px; font-weight: 600; cursor: pointer; background: transparent; color: #888; font-family: var(--font); }
+.area-tab.active { background: white; color: var(--primary); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+.area-tab[disabled] { cursor: not-allowed; color: #c4c4c0; }
+.soon-tag { font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; background: #efeee9; color: #b3b3ac; padding: 2px 6px; border-radius: 10px; margin-left: 6px; vertical-align: middle; }
+
+.card { background: var(--card); border-radius: var(--radius); padding: 18px 20px; margin-bottom: 14px; box-shadow: var(--shadow); }
+
+.picker-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+.picker-field { flex: 1; min-width: 200px; }
+.picker-field label { display: block; font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 5px; }
+.picker-field select { width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 10px; font-size: 14px; color: var(--primary); background: #fafafa; font-family: var(--font); -webkit-appearance: none; appearance: none; }
+.picker-field select:focus { outline: none; border-color: var(--primary); background: white; }
+.picker-field select:disabled { color: #bbb; background: #f4f4f1; }
+
+.workspace { display: block; }
+@media (min-width: 880px) {
+  .workspace { display: grid; grid-template-columns: 220px 1fr; gap: 18px; align-items: start; }
+}
+
+.facet-rail { background: var(--card); border-radius: var(--radius); padding: 10px; box-shadow: var(--shadow); }
+.rail-group-label { font-size: 10px; font-weight: 700; color: #bbb; text-transform: uppercase; letter-spacing: 0.06em; padding: 8px 10px 4px; }
+.rail-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border-radius: 10px; font-size: 14px; color: var(--primary); cursor: pointer; border: none; background: none; width: 100%; text-align: left; font-family: var(--font); }
+.rail-item:hover { background: #f6f6f3; }
+.rail-item.active { background: #EAF3DE; color: #27500A; font-weight: 600; }
+.rail-item[disabled] { color: #c4c4c0; cursor: not-allowed; }
+.rail-item[disabled]:hover { background: none; }
+.rail-link { color: #185FA5; }
+.rail-item .ext { font-size: 12px; color: #B5D4F4; }
+
+.facet-panel { background: var(--card); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); min-height: 220px; }
+.facet-empty { text-align: center; padding: 50px 20px; color: #c4c4c0; font-size: 14px; }
+.facet-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+.facet-title { font-size: 16px; font-weight: 700; color: var(--primary); }
+.facet-stand { font-size: 12px; color: var(--label); margin-bottom: 16px; }
+.facet-stand b { color: #555; font-weight: 600; }
+
+.seed-note { background: #FAEEDA; border: 1px solid #EF9F27; border-radius: 10px; padding: 10px 12px; font-size: 12px; color: #633806; margin-bottom: 14px; line-height: 1.5; }
+
+.facet-controls { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+.count-pill { font-size: 12px; color: #555; background: #f1f1ec; border-radius: 8px; padding: 5px 10px; font-weight: 600; }
+.mini-btn { font-size: 12px; padding: 6px 11px; border: 1px solid #ddd; border-radius: 8px; background: white; color: var(--primary); cursor: pointer; font-family: var(--font); }
+.spacer { flex: 1; }
+
+.cat-block { border: 1px solid #eee; border-radius: 12px; overflow: hidden; margin-bottom: 10px; }
+.cat-block-head { padding: 8px 14px; background: #f8f8f6; font-size: 12px; font-weight: 700; color: #555; display: flex; justify-content: space-between; }
+.item-row { display: flex; align-items: center; gap: 11px; padding: 9px 14px; border-top: 1px solid #f6f6f6; cursor: pointer; }
+.item-row:hover { background: #fafaf8; }
+.item-row input { width: 17px; height: 17px; cursor: pointer; accent-color: #27500A; flex-shrink: 0; }
+.item-main { flex: 1; min-width: 0; }
+.item-name { font-size: 13px; color: var(--primary); }
+.item-menu { font-size: 11px; color: #999; margin-top: 1px; }
+.chg-pill { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; background: #EAF3DE; color: #27500A; padding: 2px 7px; border-radius: 6px; flex-shrink: 0; }
+
+.save-bar { display: flex; gap: 10px; align-items: center; margin-top: 16px; padding-top: 14px; border-top: 1px solid #f0f0f0; }
+.save-btn { padding: 11px 22px; background: var(--primary); color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: var(--font); }
+.save-btn:disabled { opacity: 0.55; cursor: default; }
+.save-status { font-size: 13px; }
+.save-status.ok { color: #27500A; }
+.save-status.err { color: var(--red); }
+
+.loading { text-align: center; padding: 40px; font-size: 14px; color: #bbb; }
+</style>
+</head>
+<body>
+
+<!-- Header injected by /pc-nav.js -->
+
+<div class="main-content">
+  <div class="page-title-row">
+    <h1 class="page-title">Stand Setup</h1>
+    <span class="page-title-badge">Admin</span>
+  </div>
+  <div class="page-sub">Configure what each stand carries, then build sheets and menus from it.</div>
+
+  <div class="area-tabs">
+    <button class="area-tab active" id="area-config">Stand config</button>
+    <button class="area-tab" id="area-purchasing" disabled>Purchasing <span class="soon-tag">Soon</span></button>
+  </div>
+
+  <div class="card">
+    <div class="picker-row">
+      <div class="picker-field">
+        <label>Venue</label>
+        <select id="venue-select" onchange="onVenueChange()"><option value="">Select a venue...</option></select>
+      </div>
+      <div class="picker-field">
+        <label>Stand</label>
+        <select id="stand-select" onchange="onStandChange()" disabled><option value="">Select a venue first</option></select>
+      </div>
+    </div>
+  </div>
+
+  <div class="workspace">
+    <div class="facet-rail">
+      <div class="rail-group-label">This stand</div>
+      <button class="rail-item active" id="facet-items" onclick="selectFacet('items')">Items<span></span></button>
+      <button class="rail-item" id="facet-details" disabled>Details<span class="soon-tag">Soon</span></button>
+      <button class="rail-item rail-link" id="facet-roles" onclick="goRoles()">Roles<span class="ext">&#8599;</span></button>
+      <button class="rail-item" id="facet-sheets" disabled>Stand sheets<span class="soon-tag">Soon</span></button>
+      <button class="rail-item" id="facet-menu" disabled>Menu<span class="soon-tag">Soon</span></button>
+    </div>
+
+    <div class="facet-panel" id="facet-panel">
+      <div class="facet-empty" id="facet-empty">Pick a venue and stand to begin.</div>
+      <div id="facet-content" style="display:none;"></div>
+    </div>
+  </div>
+</div>
+
+<script src="/pc-auth.js"></script>
+<script src="/pc-nav.js"></script>
+<script src="/pc-activity.js"></script>
+<script src="/pc-catalog.js"></script>
+<script>
+var SB_URL='https://aoazlttdjowhlfcksoyl.supabase.co';
+
+var CURRENT_USER='admin';
+var ALL_ITEMS=[];          // every inventory_items row
+var ALL_CATS=[];           // cos_categories
+var ITEMS_BY_ID={};
+var VENUE_ITEM_IDS={};     // set of item_ids profiled to the current venue
+var CURRENT_VENUE='';
+var CURRENT_STAND=null;    // { id, stand_name, venue_code, ... }
+var STAND_ITEM_ROWS=[];    // stand_items rows for current stand (incl. soft-deleted)
+var ACTIVE_FACET='items';
+
+function apiHeaders(){ return Object.assign({}, pcAuth.headers(), {'Content-Type':'application/json'}); }
+function sbList(path){ return fetch(SB_URL+'/rest/v1/'+path,{headers:apiHeaders()}).then(function(r){ if(!r.ok){ return r.text().then(function(t){ throw new Error('HTTP '+r.status+' '+path+(t?' -- '+t.slice(0,180):'')); }); } return r.json(); }); }
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ---------------------------------------------------------------------
+// Venue / stand pickers
+// ---------------------------------------------------------------------
+function populateVenues(){
+  var sel=document.getElementById('venue-select');
+  var venues=pcCatalog.getActiveVenues();
+  var html='<option value="">Select a venue...</option>';
+  for(var i=0;i<venues.length;i++){ html+='<option value="'+esc(venues[i].code)+'">'+esc(venues[i].full_name)+'</option>'; }
+  sel.innerHTML=html;
+}
+
+function onVenueChange(){
+  CURRENT_VENUE=document.getElementById('venue-select').value;
+  CURRENT_STAND=null;
+  var standSel=document.getElementById('stand-select');
+  showEmpty('Pick a stand to configure its items.');
+  if(!CURRENT_VENUE){ standSel.disabled=true; standSel.innerHTML='<option value="">Select a venue first</option>'; return; }
+  var stands=pcCatalog.getActiveStandsForVenue(CURRENT_VENUE);
+  var html='<option value="">Select a stand...</option>';
+  for(var i=0;i<stands.length;i++){ html+='<option value="'+esc(stands[i].id)+'">'+esc(stands[i].stand_name)+'</option>'; }
+  standSel.innerHTML=html;
+  standSel.disabled=false;
+  // pre-load this venue's item profile set in the background
+  loadVenueProfiles(CURRENT_VENUE);
+}
+
+function onStandChange(){
+  var id=document.getElementById('stand-select').value;
+  if(!id){ CURRENT_STAND=null; showEmpty('Pick a stand to configure its items.'); return; }
+  CURRENT_STAND=pcCatalog.getStandById(id);
+  if(!CURRENT_STAND){ showEmpty('Stand not found in catalog.'); return; }
+  renderFacet();
+}
+
+function selectFacet(name){
+  // Only 'items' is wired in v1; the rest are disabled in the rail.
+  ACTIVE_FACET=name;
+  var ids=['items','details','roles','sheets','menu'];
+  for(var i=0;i<ids.length;i++){ var el=document.getElementById('facet-'+ids[i]); if(el) el.classList.toggle('active', ids[i]===name); }
+  renderFacet();
+}
+
+function goRoles(){
+  // Roles live on the existing manage-venue-roles page — link out rather than duplicate.
+  window.location.href='/manage-venue-roles/';
+}
+
+function showEmpty(msg){
+  document.getElementById('facet-empty').textContent=msg;
+  document.getElementById('facet-empty').style.display='block';
+  document.getElementById('facet-content').style.display='none';
+}
+
+// ---------------------------------------------------------------------
+// Data loads
+// ---------------------------------------------------------------------
+function loadBaseData(){
+  return Promise.all([
+    sbList('inventory_items?select=id,name,chargeable,menu_name,cos_category_id,active,status&order=name.asc&limit=10000'),
+    sbList('cos_categories?select=id,name,sort_order&order=sort_order.asc&limit=1000')
+  ]).then(function(res){
+    ALL_ITEMS=res[0]||[];
+    ALL_CATS=res[1]||[];
+    ITEMS_BY_ID={};
+    for(var i=0;i<ALL_ITEMS.length;i++){ ITEMS_BY_ID[ALL_ITEMS[i].id]=ALL_ITEMS[i]; }
+  });
+}
+
+function loadVenueProfiles(venueCode){
+  return sbList('inventory_venue_profiles?select=item_id&venue=eq.'+encodeURIComponent(venueCode)+'&limit=10000').then(function(rows){
+    var set={};
+    for(var i=0;i<rows.length;i++){ set[rows[i].item_id]=true; }
+    VENUE_ITEM_IDS=set;
+    return set;
+  });
+}
+
+function loadStandItems(standId){
+  // include soft-deleted rows so we can revive instead of duplicate
+  return sbList('stand_items?select=*&stand_id=eq.'+standId+'&limit=10000').then(function(rows){ STAND_ITEM_ROWS=rows||[]; return STAND_ITEM_ROWS; });
+}
+
+// ---------------------------------------------------------------------
+// Items facet
+// ---------------------------------------------------------------------
+function renderFacet(){
+  if(!CURRENT_STAND){ showEmpty('Pick a stand to configure its items.'); return; }
+  if(ACTIVE_FACET!=='items'){ showEmpty('That section is coming soon.'); return; }
+  var panel=document.getElementById('facet-content');
+  document.getElementById('facet-empty').style.display='none';
+  panel.style.display='block';
+  panel.innerHTML='<div class="loading">Loading items...</div>';
+
+  // venue profiles may already be cached from onVenueChange; ensure both loaded
+  Promise.all([
+    loadVenueProfiles(CURRENT_VENUE),
+    loadStandItems(CURRENT_STAND.id)
+  ]).then(function(){ renderItemsFacet(); }).catch(function(e){
+    console.error('[stand-setup] facet load error:',e);
+    panel.innerHTML='<div class="facet-empty">Could not load items. '+esc((e&&e.message)||'')+'</div>';
+  });
+}
+
+function currentRowFor(itemId){
+  for(var i=0;i<STAND_ITEM_ROWS.length;i++){ if(STAND_ITEM_ROWS[i].item_id===itemId) return STAND_ITEM_ROWS[i]; }
+  return null;
+}
+
+function renderItemsFacet(){
+  var panel=document.getElementById('facet-content');
+
+  // candidate pool = venue-profiled items UNION any item that already has a stand_items row
+  var candIds={};
+  for(var k in VENUE_ITEM_IDS){ if(VENUE_ITEM_IDS.hasOwnProperty(k)) candIds[k]=true; }
+  for(var i=0;i<STAND_ITEM_ROWS.length;i++){ candIds[STAND_ITEM_ROWS[i].item_id]=true; }
+
+  var seedMode=(STAND_ITEM_ROWS.length===0);
+
+  // build display list of items, skipping pending/inactive (unless already on this stand)
+  var items=[];
+  for(var id in candIds){ if(!candIds.hasOwnProperty(id)) continue;
+    var it=ITEMS_BY_ID[id]; if(!it) continue;
+    var hasRow=!!currentRowFor(id);
+    if(!hasRow && (it.status==='pending' || it.active===false)) continue;
+    items.push(it);
+  }
+
+  if(items.length===0){
+    panel.innerHTML=facetHeadHtml(0,0)+'<div class="facet-empty">No items are profiled to '+esc(CURRENT_VENUE)+' yet. Add venue profiles on the Item Catalog first.</div>';
+    return;
+  }
+
+  // group by category
+  var byCat={};
+  for(var j=0;j<items.length;j++){ var c=items[j].cos_category_id||'uncat'; if(!byCat[c])byCat[c]=[]; byCat[c].push(items[j]); }
+  var catOrder=[];
+  for(var ci=0;ci<ALL_CATS.length;ci++){ if(byCat[ALL_CATS[ci].id]) catOrder.push(ALL_CATS[ci].id); }
+  if(byCat['uncat']) catOrder.push('uncat');
+
+  function isChecked(it){
+    if(seedMode) return true;
+    var row=currentRowFor(it.id);
+    return !!(row && !row.deleted_at && row.carries!==false);
+  }
+
+  var carried=0;
+  for(var x=0;x<items.length;x++){ if(isChecked(items[x])) carried++; }
+
+  var html=facetHeadHtml(carried, items.length);
+  if(seedMode){
+    html+='<div class="seed-note">This stand has no item profile yet, so every '+esc(CURRENT_VENUE)+' item is pre-checked. Uncheck what this stand does not carry, then save.</div>';
+  }
+  html+='<div class="facet-controls"><span class="count-pill" id="carry-count">'+carried+' of '+items.length+' carried</span><span class="spacer"></span><button class="mini-btn" onclick="bulkSet(true)">Select all</button><button class="mini-btn" onclick="bulkSet(false)">Clear all</button></div>';
+
+  for(var co=0;co<catOrder.length;co++){
+    var catId=catOrder[co];
+    var cat=null; for(var cc=0;cc<ALL_CATS.length;cc++){ if(ALL_CATS[cc].id===catId){cat=ALL_CATS[cc];break;} }
+    var catName=cat?cat.name:'Uncategorized';
+    var list=byCat[catId];
+    html+='<div class="cat-block"><div class="cat-block-head"><span>'+esc(catName)+'</span><span>'+list.length+'</span></div>';
+    for(var li=0;li<list.length;li++){ var it=list[li];
+      html+='<label class="item-row">'+
+        '<input type="checkbox" data-item="'+esc(it.id)+'" '+(isChecked(it)?'checked':'')+' onchange="updateCount()">'+
+        '<span class="item-main"><span class="item-name">'+esc(it.name)+'</span>'+
+        (it.menu_name?'<span class="item-menu">Menu: '+esc(it.menu_name)+'</span>':'')+'</span>'+
+        (it.chargeable===true?'<span class="chg-pill">Chargeable</span>':'')+
+      '</label>';
+    }
+    html+='</div>';
+  }
+
+  html+='<div class="save-bar"><button class="save-btn" id="save-items-btn" onclick="saveStandItems()">Save carried items</button><span class="save-status" id="save-status"></span></div>';
+
+  panel.innerHTML=html;
+}
+
+function facetHeadHtml(carried,total){
+  return '<div class="facet-head"><div class="facet-title">Items carried</div></div>'+
+         '<div class="facet-stand"><b>'+esc(CURRENT_STAND.stand_name)+'</b> &middot; '+esc(pcCatalog.getVenueLabel(CURRENT_VENUE))+'</div>';
+}
+
+function updateCount(){
+  var checks=document.querySelectorAll('#facet-content input[type=checkbox][data-item]');
+  var c=0; for(var i=0;i<checks.length;i++){ if(checks[i].checked) c++; }
+  var pill=document.getElementById('carry-count');
+  if(pill) pill.textContent=c+' of '+checks.length+' carried';
+}
+
+function bulkSet(val){
+  var checks=document.querySelectorAll('#facet-content input[type=checkbox][data-item]');
+  for(var i=0;i<checks.length;i++){ checks[i].checked=val; }
+  updateCount();
+}
+
+function saveStandItems(){
+  var btn=document.getElementById('save-items-btn');
+  var statusEl=document.getElementById('save-status');
+  statusEl.className='save-status'; statusEl.textContent='';
+  var checks=document.querySelectorAll('#facet-content input[type=checkbox][data-item]');
+
+  var toInsert=[], toTurnOn=[], toTurnOff=[];
+  for(var i=0;i<checks.length;i++){
+    var itemId=checks[i].getAttribute('data-item');
+    var checked=checks[i].checked;
+    var row=currentRowFor(itemId);
+    if(checked){
+      if(!row){ toInsert.push(itemId); }
+      else if(row.deleted_at || row.carries===false){ toTurnOn.push(itemId); }
+    } else {
+      if(row && !row.deleted_at){ toTurnOff.push(itemId); }
+    }
+  }
+
+  if(toInsert.length===0 && toTurnOn.length===0 && toTurnOff.length===0){
+    statusEl.className='save-status ok'; statusEl.textContent='No changes to save.'; return;
+  }
+
+  btn.disabled=true; btn.textContent='Saving...';
+  var now=new Date().toISOString();
+  var ops=[];
+
+  if(toInsert.length){
+    var rows=[];
+    for(var a=0;a<toInsert.length;a++){ rows.push({ id:crypto.randomUUID(), stand_id:CURRENT_STAND.id, item_id:toInsert[a], carries:true, sort_order:0, updated_by:CURRENT_USER, updated_at:now }); }
+    var ih=apiHeaders(); ih['Prefer']='return=minimal';
+    ops.push(fetch(SB_URL+'/rest/v1/stand_items',{method:'POST',headers:ih,body:JSON.stringify(rows)}).then(checkOk('insert')));
+  }
+  if(toTurnOn.length){
+    var oh=apiHeaders(); oh['Prefer']='return=minimal';
+    var onUrl=SB_URL+'/rest/v1/stand_items?stand_id=eq.'+CURRENT_STAND.id+'&item_id=in.('+toTurnOn.join(',')+')';
+    ops.push(fetch(onUrl,{method:'PATCH',headers:oh,body:JSON.stringify({deleted_at:null,deleted_by:null,carries:true,updated_by:CURRENT_USER,updated_at:now})}).then(checkOk('revive')));
+  }
+  if(toTurnOff.length){
+    var fh=apiHeaders(); fh['Prefer']='return=minimal';
+    var offUrl=SB_URL+'/rest/v1/stand_items?stand_id=eq.'+CURRENT_STAND.id+'&item_id=in.('+toTurnOff.join(',')+')&deleted_at=is.null';
+    ops.push(fetch(offUrl,{method:'PATCH',headers:fh,body:JSON.stringify({deleted_at:now,deleted_by:CURRENT_USER,carries:false,updated_by:CURRENT_USER,updated_at:now})}).then(checkOk('remove')));
+  }
+
+  Promise.all(ops).then(function(){
+    return loadStandItems(CURRENT_STAND.id);
+  }).then(function(){
+    renderItemsFacet();
+    var s=document.getElementById('save-status');
+    if(s){ s.className='save-status ok'; s.textContent='Saved \u2713 ('+(toInsert.length+toTurnOn.length)+' added, '+toTurnOff.length+' removed)'; }
+  }).catch(function(e){
+    console.error('[stand-setup] save error:',e);
+    var b=document.getElementById('save-items-btn'); if(b){ b.disabled=false; b.textContent='Save carried items'; }
+    var s=document.getElementById('save-status'); if(s){ s.className='save-status err'; s.textContent=(e&&e.message)?e.message:'Save failed.'; }
+  });
+}
+
+function checkOk(label){
+  return function(res){ if(!res.ok){ return res.text().then(function(t){ throw new Error(label+' failed ('+res.status+'): '+t.slice(0,160)); }); } return true; };
+}
+
+// ---------------------------------------------------------------------
+// Boot
+// ---------------------------------------------------------------------
+pcAuth.require({
+  pageSlug: 'stand-setup',
+  onReady: function(user){
+    if(user){ CURRENT_USER = user.email || user.display_name || user.name || 'admin'; }
+    if(typeof pcActivity!=='undefined' && pcActivity.init) pcActivity.init('stand-setup');
+    pcCatalog.ready().then(function(){
+      populateVenues();
+      return loadBaseData();
+    }).catch(function(err){
+      console.error('[stand-setup] init failed:',err);
+      showEmpty('Could not load the catalog. Please refresh.');
+    });
+  }
+});
+</script>
+</body>
+</html>
