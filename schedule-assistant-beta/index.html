@@ -831,6 +831,16 @@ body {
   font-size: 11px; font-weight: 700; color: var(--slate);
   background: var(--slate-light); padding: 3px 8px; border-radius: 4px;
 }
+/* Farm & Fry Truck flag on the event head — large emoji marking a trucked
+   event. Sits where the scratchpad pill used to be (just before the spacer),
+   a prominent at-a-glance "the truck is here" signal. */
+.truck-flag {
+  font-size: 26px;
+  line-height: 1;
+  margin: 0 6px;
+  cursor: help;
+  user-select: none;
+}
 /* JMAC ribbon badges. JMAC = external/agency staffing. */
 .jmac-tag {
   display: inline-flex; align-items: center; gap: 4px;
@@ -2547,6 +2557,12 @@ const HAWKING_STAND = 'Hawking';
 const CLIENT_STAND = 'Client Staffing Needs';
 const NONEVENT_STAND = 'Non-Event Labor';
 
+// Food-truck stand. The Farm & Fry Truck is a normal revenue stand (profiled at
+// every venue, category_id=concession). "Opening" it on an event IS the truck
+// booking — the truck calendar reads staffing_requests where stand = this name
+// and headcount > 0. Name must match the canonical stand name EXACTLY.
+const TRUCK_STAND = 'Farm & Fry Truck';
+
 // Stands hidden from the Position Board grid AND coverage counts entirely.
 // Non-Event Labor is the adhoc day-labor flow — never an event position.
 // Client Staffing Needs was formerly here, but as of this change client
@@ -2962,6 +2978,14 @@ const state = {
   parLevels: [],
   parIndex: {},
 
+  // Food-truck crew template (food_trucks + food_truck_crew_template).
+  // truckTemplate is the canonical role/count spine the one-click "Open stand"
+  // auto-fill pours into the Farm & Fry Truck card on the Plan tab (e.g. Lead 1,
+  // Cashier 2, Cook 2). truckIcon is the emoji shown on trucked event cards.
+  // Single truck today; loaded non-blocking at boot.
+  truckTemplate: [],   // [{ role, default_count, sort_order }, ...]
+  truckIcon: '🚚',
+
   // Approved email recipients (loaded from approved_email_recipients table).
   // Used by the per-event "Email staff list" modal. Each row:
   //   { id, label, email, venue, is_active }
@@ -3179,6 +3203,33 @@ function formatShirtTally(tally) {
 }
 
 // ---------- Data loaders ----------
+
+// Load the food-truck crew template (food_trucks + food_truck_crew_template).
+// Non-blocking and self-healing: always resolves, even on failure, leaving the
+// fallbacks (icon '🚚', empty template) in place so nothing breaks if the
+// tables are unreachable. Single truck today, matched by the canonical
+// TRUCK_STAND name. Called from startApp alongside the catalog warmups.
+function loadFoodTruckTemplate() {
+  var truckUrl = SUPABASE_URL + '/rest/v1/food_trucks' +
+    '?select=id,name,icon,is_active&name=eq.' + encodeURIComponent(TRUCK_STAND) +
+    '&deleted_at=is.null&is_active=eq.true&limit=1';
+  return authFetch(truckUrl, { headers: apiHeaders() }).then(function (trucks) {
+    var truck = (trucks && trucks[0]) || null;
+    if (!truck) return null;
+    if (truck.icon) state.truckIcon = truck.icon;
+    var tmplUrl = SUPABASE_URL + '/rest/v1/food_truck_crew_template' +
+      '?select=role,default_count,sort_order&truck_id=eq.' + encodeURIComponent(truck.id) +
+      '&deleted_at=is.null&order=sort_order.asc&limit=50';
+    return authFetch(tmplUrl, { headers: apiHeaders() }).then(function (rows) {
+      state.truckTemplate = rows || [];
+      return null;
+    });
+  }).catch(function (err) {
+    console.warn('[truck] template load failed; auto-fill falls back to plain Open stand:', err);
+    return null;
+  });
+}
+
 function loadAll() {
   const range = getDateRange(state.filters.range);
   const eventsUrl = SUPABASE_URL + '/rest/v1/events?event_type=neq.adhoc'
@@ -3590,6 +3641,19 @@ function ghostPlacementsFor(eventId) {
     liveKeys.add(r.stand + '||' + r.role);
   });
   return positions.filter(p => !liveKeys.has(p.stand + '||' + p.role));
+}
+
+// True when the Farm & Fry Truck stand is booked on this event — a live
+// staffing_requests row with stand = TRUCK_STAND and headcount > 0. Same
+// predicate the truck calendar uses, so the card icon and the calendar agree.
+function eventHasTruck(eventId) {
+  for (var i = 0; i < state.staffingRequests.length; i++) {
+    var r = state.staffingRequests[i];
+    if (r.event_id === eventId && r.stand === TRUCK_STAND && (r.headcount || 0) > 0) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function eventTotalNeeded(eventId) {
@@ -4070,9 +4134,13 @@ function renderEventRow(ev) {
     }
   }
   if (locked) html += '<span class="lock-tag">🔒 Locked</span>';
-  if (ev.manager_notes && ev.manager_notes.trim()) {
-    html += '<span class="lock-tag" title="' + escapeAttr(ev.manager_notes.trim()) +
-      '" style="background:var(--amber-light);color:var(--amber-dark);">📝 Scratchpad</span>';
+  // Scratchpad pill removed Jun 24, 2026 — weak signal, and this slot is now
+  // home to the truck icon. The Scratchpad editor itself stays on the Staff tab.
+  // Farm & Fry Truck icon: shown when the truck stand is booked on this event
+  // (same condition the truck calendar uses). Large, in the spot the pill held.
+  if (eventHasTruck(ev.id)) {
+    html += '<span class="truck-flag" title="Farm &amp; Fry Truck booked for this event">' +
+      escapeHtml(state.truckIcon || '🚚') + '</span>';
   }
   html += '<span class="event-spacer"></span>';
 
@@ -4392,8 +4460,12 @@ function validatePlanEdits(edits) {
     anyActive = true;
     const totalStaff = Object.values(s.roles).reduce((acc, r) => acc + (r.count || 0), 0);
     if (totalStaff === 0) emptyActiveStands.push(standName);
-    // Forecast required on staffed revenue stands (Support Staff / Hawking exempt).
-    const isRevenue = standName !== SUPPORT_STAND && standName !== HAWKING_STAND && standName !== CLIENT_STAND;
+    // Forecast required on staffed revenue stands (Support Staff / Hawking /
+    // Client / Farm & Fry Truck exempt). The truck's sales ride the host
+    // building's stand, so it carries no forecast of its own — exempting it is
+    // what lets the one-click Open → Submit succeed without a forecast entry.
+    const isRevenue = standName !== SUPPORT_STAND && standName !== HAWKING_STAND &&
+                      standName !== CLIENT_STAND && standName !== TRUCK_STAND;
     if (isRevenue && totalStaff > 0 && !(s.forecast > 0)) noForecastStands.push(standName);
   });
   if (!anyActive) return { ok: false, msg: 'No active stands. Add staff to at least one stand before submitting.' };
@@ -4448,6 +4520,22 @@ function openPlanStand(eventId, stand) {
   if (!edits || !edits.stands[stand]) return;
   if (edits.stands[stand].isActive) return;
   edits.stands[stand].isActive = true;
+  // Farm & Fry Truck one-click: pour the saved crew template (e.g. Lead 1,
+  // Cashier 2, Cook 2) into the card's role counts. This only seeds edit state
+  // — counts stay fully editable and the existing Submit path persists them.
+  // Template roles are canonical (Lead/Cashier/Cook) and match the concession
+  // allowlist keys buildPlanEdits already created; if a template role is
+  // somehow absent (off-allowlist), add it so the count still lands.
+  if (stand === TRUCK_STAND && state.truckTemplate && state.truckTemplate.length) {
+    var standEdit = edits.stands[stand];
+    state.truckTemplate.forEach(function (t) {
+      if (!t || !t.role) return;
+      if (!standEdit.roles[t.role]) {
+        standEdit.roles[t.role] = { count: 0, prevCount: null };
+      }
+      standEdit.roles[t.role].count = t.default_count || 0;
+    });
+  }
   markPlanDirty(eventId);
   render();
 }
@@ -9058,7 +9146,8 @@ function startApp(user) {
   // in surgically without changing the load sequence each time.
   Promise.all([
     pcCatalog.ready(),
-    pcRoles.ready()
+    pcRoles.ready(),
+    loadFoodTruckTemplate()
   ]).then(() => {
     console.log('[catalog] pc-catalog and pc-roles ready');
     loadAll();
