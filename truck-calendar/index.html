@@ -115,6 +115,54 @@
   .toast.show { transform: translateY(0); opacity: 1; }
   .toast.red { background: var(--red); }
 
+  /* ---- Crew template editor (admin-only) ---- */
+  .tmpl-edit-btn {
+    font-size: 12px; font-weight: 700; font-family: var(--font);
+    background: var(--bg); color: var(--primary); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 11px; cursor: pointer; transition: background 0.15s;
+  }
+  .tmpl-edit-btn:hover { background: var(--border); }
+  .tmpl-modal-backdrop {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+    z-index: 1000; align-items: center; justify-content: center; padding: 20px;
+  }
+  .tmpl-modal-backdrop.show { display: flex; }
+  .tmpl-modal-box {
+    background: var(--card); border-radius: 14px; width: 100%; max-width: 440px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.2); display: flex; flex-direction: column;
+    max-height: 86vh; overflow: hidden;
+  }
+  .tmpl-modal-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 18px; border-bottom: 1px solid var(--border);
+  }
+  .tmpl-modal-head h3 { font-size: 15px; font-weight: 800; margin: 0; }
+  .tmpl-modal-close {
+    background: none; border: none; font-size: 22px; line-height: 1; color: var(--label);
+    cursor: pointer; padding: 0 4px;
+  }
+  .tmpl-modal-sub { padding: 12px 18px; font-size: 12px; color: #666; line-height: 1.5; border-bottom: 1px solid var(--border); }
+  .tmpl-modal-body { padding: 14px 18px; overflow-y: auto; }
+  .tmpl-loading, .tmpl-empty { font-size: 13px; color: var(--label); padding: 14px 2px; font-style: italic; }
+  .tmpl-icon-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .tmpl-icon-label { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--label); }
+  .tmpl-icon-input { width: 56px; font-size: 20px; text-align: center; padding: 4px 6px; border: 1px solid var(--border); border-radius: 8px; font-family: var(--font); }
+  .tmpl-icon-hint { font-size: 11px; color: var(--label); }
+  .tmpl-roles-head { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--label); margin-bottom: 8px; }
+  .tmpl-role-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid #f0f0ec; }
+  .tmpl-role-name { flex: 1; font-size: 13px; font-weight: 600; }
+  .tmpl-count-input { width: 64px; font-size: 14px; font-weight: 700; text-align: center; padding: 5px 6px; border: 1px solid var(--border); border-radius: 8px; font-family: var(--font); }
+  .tmpl-remove-btn { background: none; border: 1px solid var(--red-border); color: var(--red); border-radius: 7px; width: 28px; height: 28px; font-size: 16px; line-height: 1; cursor: pointer; }
+  .tmpl-remove-btn:hover { background: var(--red-light); }
+  .tmpl-add-row { display: flex; gap: 8px; margin-top: 12px; }
+  .tmpl-add-select { flex: 1; font-size: 13px; padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; font-family: var(--font); background: var(--card); }
+  .tmpl-add-btn { font-size: 12px; font-weight: 700; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 0 14px; cursor: pointer; font-family: var(--font); }
+  .tmpl-add-btn:hover { background: var(--border); }
+  .tmpl-modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--border); }
+  .tmpl-cancel-btn { font-size: 13px; font-weight: 700; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 8px 16px; cursor: pointer; font-family: var(--font); }
+  .tmpl-save-btn { font-size: 13px; font-weight: 700; background: var(--green-dark); color: #fff; border: none; border-radius: 8px; padding: 8px 18px; cursor: pointer; font-family: var(--font); }
+  .tmpl-save-btn:disabled { background: #9bbdb1; cursor: default; }
+
   @media (max-width: 900px) {
     .page-title-bar { padding: 16px 16px 8px; gap: 8px; }
     .main { padding: 8px 12px 60px; }
@@ -130,6 +178,7 @@
     <span class="truck-glyph" aria-hidden="true">&#128666;</span>
     <h1>Truck Calendar</h1>
     <span class="page-title-badge">Farm &amp; Fry</span>
+    <button class="tmpl-edit-btn" id="tmpl-edit-btn" onclick="openTemplateModal()" style="display:none;" title="Edit the crew template used by the Event Workspace one-click">&#9881; Crew template</button>
   </div>
   <div class="month-nav">
     <button class="month-btn" onclick="changeMonth(-1)" title="Previous month">&#8249;</button>
@@ -173,12 +222,30 @@
   </div>
 </div>
 
+<div class="tmpl-modal-backdrop" id="tmpl-modal">
+  <div class="tmpl-modal-box">
+    <div class="tmpl-modal-head">
+      <h3>Farm &amp; Fry Truck &mdash; Crew template</h3>
+      <button class="tmpl-modal-close" onclick="closeTemplateModal()" title="Close">&times;</button>
+    </div>
+    <div class="tmpl-modal-sub">
+      These defaults pre-fill when a manager clicks <strong>Open stand</strong> on the Farm &amp; Fry Truck in the Event Workspace. Managers can still edit the numbers per event. Changes here apply to future auto-fills only.
+    </div>
+    <div class="tmpl-modal-body" id="tmpl-modal-body"></div>
+    <div class="tmpl-modal-foot">
+      <button class="tmpl-cancel-btn" onclick="closeTemplateModal()">Cancel</button>
+      <button class="tmpl-save-btn" id="tmpl-save-btn" onclick="saveTemplateModal()">Save</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script src="/pc-auth.js"></script>
 <script src="/pc-nav.js"></script>
 <script src="/pc-activity.js"></script>
 <script src="/pc-catalog.js"></script>
+<script src="/pc-roles.js"></script>
 <script>
 var SB_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
 
@@ -463,6 +530,263 @@ function openInScheduleAssistant(eventId) {
   window.location.href = url;
 }
 
+// =====================================================================
+// CREW TEMPLATE EDITOR (admin-only) — added Jun 24, 2026
+// ---------------------------------------------------------------------
+// Edits the food_truck_crew_template rows that drive the Event Workspace
+// one-click auto-fill (and food_trucks.icon shown on event cards). Single
+// truck today (Farm & Fry Truck). Soft-delete only — removing a role sets
+// deleted_at; never hard-deleted. Writes are admin-gated at the DB by RLS;
+// the button is hidden for non-admins as a convenience. Soft-deletes run
+// BEFORE inserts so the partial unique index on (truck_id, role) WHERE
+// deleted_at IS NULL never sees two live rows for one role.
+//
+// The truck's role spine is the `concession` stand-category allowlist —
+// uniform across all 12 venues (probe-confirmed 2026-06-24), referenced as
+// a constant. If a future truck uses another category, store category_id on
+// food_trucks and resolve per-truck instead.
+// =====================================================================
+var TRUCK_CATEGORY = 'concession';
+
+var truckRow = null;          // food_trucks row { id, name, icon, is_active }
+var truckTemplateRows = [];   // live food_truck_crew_template rows from the DB
+var _workTemplate = [];       // working copy edited in the modal
+
+function actorName() {
+  return (loggedInUser && (loggedInUser.display_name || loggedInUser.email)) || 'unknown';
+}
+
+function apiHeadersJson() {
+  var h = apiHeaders();
+  var out = {};
+  for (var k in h) { if (h.hasOwnProperty(k)) out[k] = h[k]; }
+  out['Content-Type'] = 'application/json';
+  out['Prefer'] = 'return=representation';
+  return out;
+}
+
+// Write-capable sibling of authFetch (GET-only). Same 401 handling.
+function authSend(url, method, body) {
+  return fetch(url, {
+    method: method,
+    headers: apiHeadersJson(),
+    body: body == null ? undefined : JSON.stringify(body)
+  }).then(function (r) {
+    if (r.status === 401) { var e = new Error('Unauthorized'); e.authFailed = true; throw e; }
+    if (!r.ok) {
+      return r.text().then(function (t) { throw new Error(t || ('HTTP ' + r.status)); });
+    }
+    return r.text().then(function (t) { if (!t) return []; try { return JSON.parse(t); } catch (e) { return []; } });
+  });
+}
+
+function loadTruckForModal() {
+  var tUrl = SB_URL + '/rest/v1/food_trucks' +
+    '?select=id,name,icon,is_active&name=eq.' + encodeURIComponent(TRUCK_STAND_NAME) +
+    '&deleted_at=is.null&limit=1';
+  return authFetch(tUrl).then(function (rows) {
+    truckRow = (rows && rows[0]) || null;
+    if (!truckRow) { truckTemplateRows = []; return; }
+    var cUrl = SB_URL + '/rest/v1/food_truck_crew_template' +
+      '?select=id,role,default_count,sort_order&truck_id=eq.' + encodeURIComponent(truckRow.id) +
+      '&deleted_at=is.null&order=sort_order.asc&limit=50';
+    return authFetch(cUrl).then(function (crows) { truckTemplateRows = crows || []; });
+  });
+}
+
+function openTemplateModal() {
+  var box = document.getElementById('tmpl-modal');
+  var bodyEl = document.getElementById('tmpl-modal-body');
+  box.classList.add('show');
+  bodyEl.innerHTML = '<div class="tmpl-loading">Loading template&hellip;</div>';
+  loadTruckForModal().then(function () {
+    if (!truckRow) {
+      bodyEl.innerHTML = '<div class="tmpl-loading">No Farm &amp; Fry Truck row found.</div>';
+      return;
+    }
+    _workTemplate = truckTemplateRows.map(function (r) {
+      return { id: r.id, role: r.role, default_count: r.default_count || 0,
+               sort_order: r.sort_order || 100, _deleted: false, _isNew: false };
+    });
+    renderTemplateModal();
+  }).catch(function (err) {
+    if (err && err.authFailed) { handleAuthFailure(); return; }
+    bodyEl.innerHTML = '<div class="tmpl-loading">Could not load: ' + esc(err.message || '') + '</div>';
+  });
+}
+
+function closeTemplateModal() {
+  document.getElementById('tmpl-modal').classList.remove('show');
+}
+
+// Concession allowlist roles not already live in the working copy.
+function templateAddableRoles() {
+  var have = {};
+  _workTemplate.forEach(function (w) { if (!w._deleted) have[w.role] = true; });
+  var roles = [];
+  try {
+    if (typeof pcRoles !== 'undefined' && pcRoles.getRolesForCategory) {
+      roles = (pcRoles.getRolesForCategory(TRUCK_CATEGORY) || [])
+        .map(function (a) { return a.role_name; })
+        .filter(Boolean);
+    }
+  } catch (e) { /* allowlist unavailable — picker just shows nothing to add */ }
+  return roles.filter(function (rn) { return !have[rn]; });
+}
+
+function renderTemplateModal() {
+  var bodyEl = document.getElementById('tmpl-modal-body');
+  var html = '';
+
+  // Icon row
+  html += '<div class="tmpl-icon-row">';
+  html += '<label class="tmpl-icon-label">Card icon</label>';
+  html += '<input class="tmpl-icon-input" id="tmpl-icon-input" type="text" maxlength="8" value="' +
+    esc(truckRow.icon || '') + '">';
+  html += '<span class="tmpl-icon-hint">emoji shown on trucked event cards</span>';
+  html += '</div>';
+
+  // Role rows
+  html += '<div class="tmpl-roles-head">Crew template</div>';
+  var live = _workTemplate.filter(function (w) { return !w._deleted; });
+  if (live.length === 0) {
+    html += '<div class="tmpl-empty">No roles in the template. Add one below.</div>';
+  } else {
+    live.forEach(function (w) {
+      html += '<div class="tmpl-role-row">';
+      html += '<span class="tmpl-role-name">' + esc(w.role) + '</span>';
+      html += '<input class="tmpl-count-input" type="number" min="0" step="1" ' +
+        'data-tmpl-role="' + esc(w.role) + '" value="' + (w.default_count || 0) + '">';
+      html += '<button class="tmpl-remove-btn" data-tmpl-remove="' + esc(w.role) + '" title="Remove role">&times;</button>';
+      html += '</div>';
+    });
+  }
+
+  // Add-role picker
+  var addable = templateAddableRoles();
+  if (addable.length > 0) {
+    html += '<div class="tmpl-add-row">';
+    html += '<select class="tmpl-add-select" id="tmpl-add-select">';
+    html += '<option value="">+ Add role&hellip;</option>';
+    addable.forEach(function (rn) {
+      html += '<option value="' + esc(rn) + '">' + esc(rn) + '</option>';
+    });
+    html += '</select>';
+    html += '<button class="tmpl-add-btn" id="tmpl-add-btn">Add</button>';
+    html += '</div>';
+  }
+
+  bodyEl.innerHTML = html;
+
+  // Wire count inputs
+  bodyEl.querySelectorAll('[data-tmpl-role]').forEach(function (inp) {
+    inp.addEventListener('change', function () {
+      var role = inp.getAttribute('data-tmpl-role');
+      var val = parseInt(inp.value, 10);
+      if (isNaN(val) || val < 0) val = 0;
+      _workTemplate.forEach(function (w) { if (w.role === role && !w._deleted) w.default_count = val; });
+    });
+  });
+  // Wire remove buttons
+  bodyEl.querySelectorAll('[data-tmpl-remove]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var role = btn.getAttribute('data-tmpl-remove');
+      _workTemplate.forEach(function (w) {
+        if (w.role === role && !w._deleted) {
+          if (w._isNew) { w._drop = true; } else { w._deleted = true; }
+        }
+      });
+      _workTemplate = _workTemplate.filter(function (w) { return !w._drop; });
+      renderTemplateModal();
+    });
+  });
+  // Wire add
+  var addBtn = document.getElementById('tmpl-add-btn');
+  if (addBtn) {
+    addBtn.addEventListener('click', function () {
+      var sel = document.getElementById('tmpl-add-select');
+      var role = sel ? sel.value : '';
+      if (!role) return;
+      var maxSort = 0;
+      _workTemplate.forEach(function (w) { if (!w._deleted && w.sort_order > maxSort) maxSort = w.sort_order; });
+      _workTemplate.push({ id: null, role: role, default_count: 0, sort_order: maxSort + 10,
+                           _deleted: false, _isNew: true });
+      renderTemplateModal();
+    });
+  }
+}
+
+function saveTemplateModal() {
+  if (!truckRow) { closeTemplateModal(); return; }
+  var saveBtn = document.getElementById('tmpl-save-btn');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
+  var now = new Date().toISOString();
+  var who = actorName();
+
+  var liveById = {};
+  truckTemplateRows.forEach(function (r) { liveById[r.id] = r; });
+
+  // No-op short-circuit.
+  var changed = false;
+  var iconInputPre = document.getElementById('tmpl-icon-input');
+  if (iconInputPre) { var ni = (iconInputPre.value || '').trim(); if (ni && ni !== (truckRow.icon || '')) changed = true; }
+  _workTemplate.forEach(function (w) {
+    if (w._isNew && !w._deleted) changed = true;
+    else if (!w._isNew && w._deleted && w.id) changed = true;
+    else if (!w._isNew && !w._deleted && w.id) {
+      var o = liveById[w.id];
+      if (o && (o.default_count || 0) !== (w.default_count || 0)) changed = true;
+    }
+  });
+  if (!changed) { if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; } closeTemplateModal(); showToast('No changes to save'); return; }
+
+  // Phase 1 — soft-deletes first (avoids a transient 2-live-rows unique clash).
+  var deleteOps = [];
+  _workTemplate.forEach(function (w) {
+    if (!w._isNew && w._deleted && w.id) {
+      deleteOps.push(authSend(SB_URL + '/rest/v1/food_truck_crew_template?id=eq.' + encodeURIComponent(w.id),
+        'PATCH', { deleted_at: now, deleted_by: who }));
+    }
+  });
+
+  // Phase 2 — inserts, count updates, icon.
+  function phase2() {
+    var ops = [];
+    var iconInput = document.getElementById('tmpl-icon-input');
+    if (iconInput) {
+      var newIcon = (iconInput.value || '').trim();
+      if (newIcon && newIcon !== (truckRow.icon || '')) {
+        ops.push(authSend(SB_URL + '/rest/v1/food_trucks?id=eq.' + encodeURIComponent(truckRow.id),
+          'PATCH', { icon: newIcon, updated_at: now, updated_by: who }));
+      }
+    }
+    _workTemplate.forEach(function (w) {
+      if (w._isNew && !w._deleted) {
+        ops.push(authSend(SB_URL + '/rest/v1/food_truck_crew_template', 'POST', {
+          truck_id: truckRow.id, role: w.role, default_count: w.default_count || 0,
+          sort_order: w.sort_order || 100, created_by: who
+        }));
+      } else if (!w._isNew && !w._deleted && w.id) {
+        var orig = liveById[w.id];
+        if (orig && (orig.default_count || 0) !== (w.default_count || 0)) {
+          ops.push(authSend(SB_URL + '/rest/v1/food_truck_crew_template?id=eq.' + encodeURIComponent(w.id),
+            'PATCH', { default_count: w.default_count || 0, updated_at: now, updated_by: who }));
+        }
+      }
+    });
+    return Promise.all(ops);
+  }
+
+  Promise.all(deleteOps).then(phase2).then(function () {
+    closeTemplateModal();
+    showToast('Crew template saved');
+  }).catch(function (err) {
+    if (err && err.authFailed) { handleAuthFailure(); return; }
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
+    showToast('Save failed: ' + (err.message || ''), 'red');
+  });
+}
+
 // ---------- boot ----------
 // Login required, NO pageSlug — every authenticated manager gets in, so this
 // page never needs a User Access entry. (Same pattern as the landing page.)
@@ -473,13 +797,24 @@ pcAuth.require({
     var n = new Date();
     cY = n.getFullYear();
     cM = n.getMonth();
+    // Reveal the admin-only crew-template editor button. RLS also enforces admin
+    // on the writes, so this is just a visibility convenience.
+    if (typeof pcAuth.isAdmin === 'function' && pcAuth.isAdmin()) {
+      var _tb = document.getElementById('tmpl-edit-btn');
+      if (_tb) _tb.style.display = '';
+    }
     // pc-catalog isn't strictly required for v1 (we match the stand by name and
     // colors are inline), but we warm it so future enhancements — venue full
     // names in tooltips, an idle-gap list — can read from it without a reload.
-    var startPromise = (typeof pcCatalog !== 'undefined' && pcCatalog.ready)
+    // pc-roles is warmed too so the template editor's add-role picker can read
+    // the concession allowlist without a separate load.
+    var catReady = (typeof pcCatalog !== 'undefined' && pcCatalog.ready)
       ? pcCatalog.ready().catch(function () { /* non-blocking */ })
       : Promise.resolve();
-    startPromise.then(function () { loadMonth(); });
+    var rolesReady = (typeof pcRoles !== 'undefined' && pcRoles.ready)
+      ? pcRoles.ready().catch(function () { /* non-blocking */ })
+      : Promise.resolve();
+    Promise.all([catReady, rolesReady]).then(function () { loadMonth(); });
   }
 });
 </script>
