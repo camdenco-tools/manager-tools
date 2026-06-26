@@ -2728,11 +2728,22 @@ body {
     };
   }
 
-  // --- Name matcher: forgiving, case-insensitive, whitespace-collapsed ---
+  // Strip the legacy "- U" minor marker from a name. The suffix was hand-
+  // added onto employee records to flag minors; it was never part of the
+  // name and it pollutes string matching (signups/placements were recorded
+  // both with and without it). Normalize it away everywhere names are
+  // compared. The minor marker for DISPLAY is derived from is_minor, not
+  // from this suffix.
+  function stripMinorSuffix(name) {
+    return String(name == null ? '' : name).replace(/\s*-\s*U\s*$/i, '');
+  }
+
+  // --- Name matcher: forgiving, case-insensitive, whitespace-collapsed,
+  //     and "- U"-suffix-insensitive (see stripMinorSuffix). ---
   function namesMatch(a, b) {
     if (!a || !b) return false;
-    var na = String(a).toLowerCase().replace(/\s+/g, ' ').trim();
-    var nb = String(b).toLowerCase().replace(/\s+/g, ' ').trim();
+    var na = stripMinorSuffix(a).toLowerCase().replace(/\s+/g, ' ').trim();
+    var nb = stripMinorSuffix(b).toLowerCase().replace(/\s+/g, ' ').trim();
     return na === nb;
   }
 
@@ -4645,7 +4656,7 @@ body {
   // soft gap: nicknames, typos, and name changes won't match — same
   // limitation that exists on the Schedule Assistant.
   function signupsForEmployee(emp) {
-    var target = fullName(emp).trim().toLowerCase();
+    var target = stripMinorSuffix(fullName(emp)).trim().toLowerCase();
     if (!target) return [];
     var rows = state.signups || [];
     var out = [];
@@ -4653,7 +4664,7 @@ body {
       var r = rows[i];
       if (r.removed_at) continue; // soft-deleted — hide
       if (!r.staff_name) continue;
-      if (r.staff_name.trim().toLowerCase() === target) out.push(r);
+      if (stripMinorSuffix(r.staff_name).trim().toLowerCase() === target) out.push(r);
     }
     return out;
   }
