@@ -42,7 +42,6 @@
     operations: [
       { label: 'Submit event',                   href: '/submit-event/',           slug: 'submit-event' },
       { label: 'Schedule assistant',             href: '/schedule-assistant-beta/', slug: 'schedule-assistant-beta' },
-      { label: 'Prep & Production Planning',     href: '/prep-production-planning/', slugAny: ['prep-planning', 'prep-production'] },
       { label: 'Purchases & transfers',          href: '/purchases/',              slug: 'purchases' },
       { label: 'Day-of-show sheet',              href: '/day-of-show-sheet/',      slug: 'day-of-show-sheet' },
       { label: 'Log sales',                      href: '/log-sales/',              slug: 'log-sales' },
@@ -52,13 +51,17 @@
       { label: 'Cash deposit receipts',          href: '/cash-deposits/',          slug: 'cash-deposits' },
       { label: 'Ending inventory',               href: '/ending-inventory/',       slug: 'ending-inventory' },
       { label: 'Asset tracker',                  href: '/asset-tracker/',          slug: 'asset-tracker' },
-      { label: 'COS & Labor',                    href: '/cos-labor/',              slug: 'cos-labor' },
-      { label: 'Order guide',                    href: '/order-guide/',            slug: 'order-guide' }
+      { label: 'COS & Labor',                    href: '/cos-labor/',              slug: 'cos-labor' }
     ],
     setup: [
       { label: 'Stand setup',                    href: '/stand-setup/',            slug: 'stand-setup' },
       { label: 'Item catalog',                   href: '/item-catalog/',           slug: 'item-catalog' },
       { label: 'Venue item profiles',            href: '/venue-item-profiles/',    slug: 'venue-item-profiles' }
+    ],
+    prep: [
+      { label: 'Prep & Production Planning',     href: '/prep-production-planning/', slugAny: ['prep-planning', 'prep-production'] },
+      { label: 'Prep timing',                    href: '/prep-timing/',            slug: 'prep-timing' },
+      { label: 'Order guide',                    href: '/order-guide/',            slug: 'order-guide' }
     ],
     dashboards: [
       { label: 'Staffing dashboard',           href: '/dashboard/',          slug: 'dashboard' },
@@ -105,6 +108,7 @@
     '.pc-nav-lane.lane-people{color:#639922;}',
     '.pc-nav-lane.lane-operations{color:#185FA5;}',
     '.pc-nav-lane.lane-setup{color:#0F6E56;}',
+    '.pc-nav-lane.lane-prep{color:#534AB7;}',
     '.pc-nav-lane.lane-dashboards{color:#BA7517;}',
     '.pc-nav-lane.lane-admin{color:#BA7517;}',
     '.pc-nav-lane-chevron{width:10px;height:10px;display:inline-block;transition:transform 0.15s ease;}',
@@ -205,6 +209,7 @@
         buildLaneHTML('people',      'People',     PC_NAV_CONFIG.people) +
         buildLaneHTML('operations',  'Operations', PC_NAV_CONFIG.operations) +
         buildLaneHTML('setup',       'Setup',      PC_NAV_CONFIG.setup) +
+        buildLaneHTML('prep',        'Prep',       PC_NAV_CONFIG.prep) +
         buildLaneHTML('dashboards',  'Dashboards', PC_NAV_CONFIG.dashboards) +
         buildLaneHTML('admin',       'Admin',      PC_NAV_CONFIG.admin) +
       '</nav>'
