@@ -279,31 +279,56 @@
     var prev = $('pcWeekPrev'), next = $('pcWeekNext');
     if (prev) prev.disabled = (idx === 0);
     if (next) next.disabled = (idx === PC.weeks.length - 1);
-    PC.load();
+    // Changing the week never fetches on its own — only re-fetch if a scope is
+    // already chosen. With nothing selected we sit on the explainer.
+    if (PC.venueFilter) PC.load(); else PC.renderLanding();
   };
 
   PC.initVenueFilter = function () {
     var sel = $('pcVenueFilter'); if (!sel) return;
     function populate() {
       var venues = (typeof pcCatalog !== 'undefined' && pcCatalog.getActiveVenues) ? pcCatalog.getActiveVenues() : [];
-      sel.innerHTML = '<option value="">All venues</option>' + venues.map(function (v) { return '<option value="' + escAttr(v.code) + '">' + escAttr(v.code) + ' \u2014 ' + escAttr(v.full_name || v.code) + '</option>'; }).join('');
-      if (PC.venueFilter) sel.value = PC.venueFilter;
+      sel.innerHTML = '<option value="">Select a venue\u2026</option>' +
+        '<option value="__all__">All venues (pool everything)</option>' +
+        venues.map(function (v) { return '<option value="' + escAttr(v.code) + '">' + escAttr(v.code) + ' \u2014 ' + escAttr(v.full_name || v.code) + '</option>'; }).join('');
+      sel.value = PC.venueFilter || '';
     }
     if (typeof pcCatalog !== 'undefined' && pcCatalog.ready) pcCatalog.ready().then(populate); else populate();
-    if (!sel._wired) { sel.addEventListener('change', function () { PC.venueFilter = sel.value; PC.render(); }); sel._wired = true; }
+    // Selecting a scope is what triggers the fetch — picking nothing returns to
+    // the explainer and queries nothing.
+    if (!sel._wired) { sel.addEventListener('change', function () { PC.venueFilter = sel.value; if (PC.venueFilter) PC.load(); else PC.renderLanding(); }); sel._wired = true; }
   };
 
-  // ---- load the week's three feeds (same shape as Prep & Production) ----
+  // Explainer landing — no scope chosen, no database call made.
+  PC.renderLanding = function () {
+    setLoading(false);
+    var cnt = $('pcScopeCount'); if (cnt) cnt.textContent = '';
+    var body = $('pcBody'); if (!body) return;
+    body.innerHTML = '<div class="pc-card"><div class="pc-empty">' +
+      '<p class="pc-empty-title">Pick a venue to see what to order</p>' +
+      '<p class="pc-empty-text">Choose a building above and this rolls its forecasts and committed plans through the recipes into a buy list. Nothing loads until you pick &mdash; select <b>All venues</b> only when you want the pooled central order across every building.</p>' +
+      '</div></div>';
+  };
+
+  // ---- load the week's three feeds, scoped to the chosen venue ----
   PC.load = function () {
     var w = PC.weeks[PC.weekIndex]; if (!w) return;
+    if (!PC.venueFilter) { PC.renderLanding(); return; }
     setLoading(true);
     $('pcBody').innerHTML = '';
+    // Single venue → push the venue filter to the database so we only pull that
+    // building's rows. "All venues" (__all__) is the deliberate opt-in that
+    // pulls the whole week.
+    var single = (PC.venueFilter !== '__all__') ? PC.venueFilter : '';
+    var vEvents   = single ? '&events.venue=eq.' + encodeURIComponent(single) : '';
+    var vEventTop = single ? '&venue=eq.' + encodeURIComponent(single) : '';
+    var vWs       = single ? '&venue_code=eq.' + encodeURIComponent(single) : '';
     var planUrl = '/rest/v1/prep_plan_lines?select=planned_qty,item_id,event_id,stand_id,events!inner(event_date,venue,deleted_at),prep_items(name,unit,production_mode,sort_order)' +
-      '&events.event_date=gte.' + w.start + '&events.event_date=lte.' + w.end + '&events.deleted_at=is.null&deleted_at=is.null&limit=20000';
+      '&events.event_date=gte.' + w.start + '&events.event_date=lte.' + w.end + '&events.deleted_at=is.null' + vEvents + '&deleted_at=is.null&limit=20000';
     var evUrl = '/rest/v1/events?select=id,venue,event_date,staffing_requests(stand,venue,sales_forecast)' +
-      '&staffing_requests.sales_forecast=gt.0&event_date=gte.' + w.start + '&event_date=lte.' + w.end + '&deleted_at=is.null&order=event_date.asc&limit=1000';
+      '&staffing_requests.sales_forecast=gt.0&event_date=gte.' + w.start + '&event_date=lte.' + w.end + vEventTop + '&deleted_at=is.null&order=event_date.asc&limit=1000';
     var wsUrl = '/rest/v1/prep_wholesale_needs?select=need_date,venue_code,item_id,qty,prep_items(name,unit,production_mode,sort_order)' +
-      '&need_date=gte.' + w.start + '&need_date=lte.' + w.end + '&deleted_at=is.null&limit=2000';
+      '&need_date=gte.' + w.start + '&need_date=lte.' + w.end + vWs + '&deleted_at=is.null&limit=2000';
     Promise.all([PC.ensureProfiles(), PC.ensureRecipes()]).then(function () {
       return Promise.all([PC.authFetch(planUrl), PC.authFetch(evUrl), PC.authFetch(wsUrl)]);
     }).then(function (res) {
@@ -413,7 +438,8 @@
 
   PC.render = function () {
     var w = PC.weeks[PC.weekIndex], body = $('pcBody'); if (!body || !w) return;
-    var filter = PC.venueFilter || '';
+    if (!PC.venueFilter) { PC.renderLanding(); return; }
+    var filter = (PC.venueFilter === '__all__') ? '' : PC.venueFilter;
     var resolved = PC.resolveUnits(filter);
     var roll = PC.rollup(resolved.unitsByItem);
 
