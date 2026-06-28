@@ -52,7 +52,8 @@
       { label: 'Cash deposit receipts',          href: '/cash-deposits/',          slug: 'cash-deposits' },
       { label: 'Ending inventory',               href: '/ending-inventory/',       slug: 'ending-inventory' },
       { label: 'Asset tracker',                  href: '/asset-tracker/',          slug: 'asset-tracker' },
-      { label: 'COS & Labor',                    href: '/cos-labor/',              slug: 'cos-labor' }
+      { label: 'COS & Labor',                    href: '/cos-labor/',              slug: 'cos-labor' },
+      { label: 'Order guide',                    href: '/order-guide/',            slug: 'order-guide' }
     ],
     setup: [
       { label: 'Stand setup',                    href: '/stand-setup/',            slug: 'stand-setup' },
