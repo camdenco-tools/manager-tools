@@ -34,6 +34,7 @@
       { label: 'Interviews',                     href: '/interviews/',             slug: 'interviews' },
       { label: 'I-9 verification',               href: '/i9-verification/',        slug: 'i9-verification' },
       { label: 'Crew',                           href: '/crew/',                   slug: 'crew' },
+      { label: 'Referrals',                      href: '/referrals/',              slug: 'referrals' },
       { label: 'Certifications',                 href: '/certifications/',         slug: 'certifications' },
       { label: 'Handbook signatures',            href: '/handbook-signatures/',    slug: 'handbook-signatures' },
       { label: 'Schedule assistant',             href: '/schedule-assistant-beta/', slug: 'schedule-assistant-beta' },
