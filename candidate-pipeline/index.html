@@ -197,6 +197,10 @@ header { background: #fff; border-bottom: 1px solid #e8e8e4; padding: 0 32px; di
 var SUPABASE_URL='https://aoazlttdjowhlfcksoyl.supabase.co';
 var NJ_EMPLOYER_CODE='00283683';
 var ALCOHOL_ROLES=['Bartender','Bar Lead'];
+var REFERRAL_RUNNER_ROLE='Event Runner';
+var REFERRAL_BONUS_RUNNER=50;
+var REFERRAL_BONUS_DEFAULT=25;
+var REFERRAL_EVENTS_REQUIRED=5;
 var EMAIL_INFO=[{num:1,title:'Email 1',desc:'Thanks for applying',field:'email1_sent_at'},{num:2,title:'Email 2',desc:'Welcome / onboarding',field:'email2_sent_at'},{num:3,title:'Email 3',desc:'Final steps / apps',field:'email3_sent_at'}];
 var VENUE_STATE={FMP:'NJ',BWH:'NJ',ACCC:'NJ',Cure:'NJ',Mann:'PA',Subaru:'PA',Montage:'PA',Villanova:'PA',DE:'DE',SATB:'DE',Kirkwood:'DE'};
 var VENUE_LABELS={FMP:'Freedom Mortgage Pavilion',Mann:'Mann Music Center',BWH:'Boardwalk Hall',ACCC:'AC Convention Center',Cure:'Cure Insurance Arena',Subaru:'Subaru Park',DE:'DE Chase Field House',Montage:'Montage Mountain',SATB:'Sports at the Beach',Villanova:'Villanova',Kirkwood:'Kirkwood'};
@@ -221,6 +225,7 @@ var pcCandidates=[],pcPayRates=[],payRoleNames=[],pcBookings=[],pcSelected=null,
 var pcEvrByPunch={};
 var pcHomeByPunch={}; // home_venue by punch_id, stashed alongside the EVR fetch (home_venue lives on employees, not candidates)
 var pcHireState=null;
+var pcReferralByCand={};
 var pcEditingPhone=false;
 var pcEditingEmail=false;
 var pcEditingPunchId=false;
@@ -330,7 +335,7 @@ function getEmailAvailability(c){
   return{e1:e1,e2:e2,e3:e3};
 }
 
-function render(){var main=document.getElementById('pcpipe-main');if(pcLoading){main.innerHTML='<p class="page-sub">Loading...</p>';return;}var listEl=document.getElementById('pcpipe-list');var detailEl=document.getElementById('pcpipe-detail');if(!listEl){main.innerHTML=renderShell();listEl=document.getElementById('pcpipe-list');detailEl=document.getElementById('pcpipe-detail');}listEl.innerHTML=renderList();detailEl.innerHTML=pcSelected?renderCandidateCard(pcSelected):'<div class="empty-state" style="background:#f9f9f9;border-radius:10px;border:1px solid #eee;padding:60px 20px;">Select a candidate to view their record.</div>';updateStatCounts();updateFilterPills();if(pcEditingPhone){setTimeout(function(){var inp=document.getElementById('phone-edit-input');if(inp)inp.focus();},30);}if(pcEditingEmail){setTimeout(function(){var inp=document.getElementById('email-edit-input');if(inp)inp.focus();},30);}if(pcEditingPunchId){setTimeout(function(){var inp=document.getElementById('punch-edit-input');if(inp){inp.focus();inp.select();}},30);}if(pcEditingShirtSize){setTimeout(function(){var inp=document.getElementById('shirt-edit-input');if(inp)inp.focus();},30);}pcPipeLoadEvrForSelected();}
+function render(){var main=document.getElementById('pcpipe-main');if(pcLoading){main.innerHTML='<p class="page-sub">Loading...</p>';return;}var listEl=document.getElementById('pcpipe-list');var detailEl=document.getElementById('pcpipe-detail');if(!listEl){main.innerHTML=renderShell();listEl=document.getElementById('pcpipe-list');detailEl=document.getElementById('pcpipe-detail');}listEl.innerHTML=renderList();detailEl.innerHTML=pcSelected?renderCandidateCard(pcSelected):'<div class="empty-state" style="background:#f9f9f9;border-radius:10px;border:1px solid #eee;padding:60px 20px;">Select a candidate to view their record.</div>';updateStatCounts();updateFilterPills();if(pcEditingPhone){setTimeout(function(){var inp=document.getElementById('phone-edit-input');if(inp)inp.focus();},30);}if(pcEditingEmail){setTimeout(function(){var inp=document.getElementById('email-edit-input');if(inp)inp.focus();},30);}if(pcEditingPunchId){setTimeout(function(){var inp=document.getElementById('punch-edit-input');if(inp){inp.focus();inp.select();}},30);}if(pcEditingShirtSize){setTimeout(function(){var inp=document.getElementById('shirt-edit-input');if(inp)inp.focus();},30);}pcPipeLoadEvrForSelected();pcPipeLoadReferralForSelected();}
 
 function renderShell(){var html='<p class="page-sub">Manage applicants from application through onboarding.</p>';
 html+='<div class="stat-row" id="pcpipe-stats"></div>';
@@ -384,6 +389,7 @@ if(pcEditingPhone){html+='<div class="phone-edit-inline"><input type="tel" id="p
 html+='</div></div><div><div class="detail-label">Date of birth</div><div class="detail-value">'+(c.date_of_birth?formatDate(c.date_of_birth):'--')+'</div></div><div><div class="detail-label">Earliest start</div><div class="detail-value">'+(c.earliest_start_date?formatDate(c.earliest_start_date):'--')+'</div></div><div><div class="detail-label">Uniform shirt size</div><div class="detail-value">'+(pcEditingShirtSize?('<div class="phone-edit-inline"><select id="shirt-edit-input" style="width:120px;padding:6px 8px;">'+buildShirtSizeOptions(c.shirt_size||'')+'</select><button class="btn btn-sm btn-primary" onclick="pcPipeSaveShirtSize()" style="padding:4px 10px;">Save</button><button class="btn btn-sm" onclick="pcPipeCancelShirtSizeEdit()" style="padding:4px 10px;">Cancel</button></div><div id="shirt-edit-err" class="error-msg"></div>'):((c.shirt_size?c.shirt_size:'--')+'<button class="edit-phone-btn" onclick="pcPipeEditShirtSize()" title="Edit shirt size">'+pencilSvg+'</button>'))+'</div></div></div><div style="margin-top:10px;"><div class="detail-label" style="margin-bottom:4px;">Roles applied for</div><div class="tag-list">'+renderTags(c.roles)+'</div></div><div style="margin-top:10px;"><div class="detail-label" style="margin-bottom:4px;">Locations</div><div class="tag-list">'+renderTags(c.locations)+'</div></div>'+(c.referral_source?'<div style="margin-top:10px;"><div class="detail-label">Referred by</div><div class="detail-value">'+c.referral_source+'</div></div>':'')+'<div style="margin-top:10px;"><div class="detail-label" style="margin-bottom:4px;">Experience</div><div style="font-size:13px;color:#444;line-height:1.6;">'+(c.experience_notes||'--')+'</div></div>'+(c.resume_url?'<div style="margin-top:10px;"><div class="detail-label" style="margin-bottom:4px;">Resume</div><button class="btn btn-sm" onclick="pcPipeOpenFile(\''+c.id+'\',\'resume\')">View resume</button></div>':'')+'</div>';
 if(c.booking_code&&(stage==='contacted'||stage==='interview_scheduled')){html+='<div class="card-section"><div class="section-title">Booking code</div><div style="font-family:monospace;font-size:18px;font-weight:700;color:#2d7dd2;letter-spacing:0.15em;">'+c.booking_code+'</div><div style="font-size:12px;color:#888;margin-top:4px;">Scheduling link: camdenco.com/schedule-interview?code='+c.booking_code+'</div></div>';}
 html+='<div class="card-section"><div class="section-title">Internal notes</div><textarea class="notes-area" id="pipe-notes-field" placeholder="Add notes about this candidate...">'+(c.internal_notes||'')+'</textarea><button class="btn btn-sm" style="margin-top:6px;" onclick="pcPipeSaveNotes()">Save notes</button><div id="notes-saved-msg" style="font-size:12px;color:#1D9E75;display:none;margin-top:4px;">Saved</div></div>';
+html+=renderReferralSection(c);
 if(isHiredPlus){html+=renderHireDetails(c);html+=renderOnboardingChecklist(c);if(c.is_minor)html+=renderMinorChecklist(c);}
 if(!isRej&&!isAct&&stage!=='inactive')html+=renderPipelineActions(c,stage);
 if(isAct){html+='<div class="card-section"><div class="section-title">Employee status</div><p style="font-size:13px;color:#555;margin:0 0 10px;">This employee is currently active. Deactivating will remove them from the availability sign-up list immediately.</p><label style="font-size:13px;color:#555;display:block;margin-bottom:4px;">Reason (optional)</label><input type="text" id="deactivate-reason" placeholder="e.g. Resigned, terminated, seasonal end..." style="margin-bottom:10px;" /><button class="btn btn-danger btn-sm" onclick="pcPipeDeactivate()">Deactivate employee</button></div>';}
@@ -449,6 +455,132 @@ function renderMinorChecklist(c){var venues=c.assigned_venues||[];var states=get
 
 function renderMinorCheckItem(c,key,tsKey,label){var done=!!c[key];var ts=c[tsKey]?formatDate(c[tsKey]):'';return'<div class="checklist-row"><div style="display:flex;align-items:center;gap:8px;"><input type="checkbox" '+(done?'checked':'')+' onchange="pcPipeToggleChecklist(\''+key+'\',\''+tsKey+'\',this.checked)" style="width:16px;height:16px;accent-color:#d97706;cursor:pointer;" /><span class="checklist-label" style="'+(done?'text-decoration:line-through;color:#aaa;':'color:#78350f;')+'">'+label+'</span></div><span class="checklist-status" style="color:'+(done?'#d97706':'#aaa')+';">'+(done?(ts||'Done'):'Pending')+'</span></div>';}
 function renderTags(arr){if(!arr||arr.length===0)return'<span style="font-size:12px;color:#aaa;">None</span>';var h='';for(var i=0;i<arr.length;i++)h+='<span class="tag">'+arr[i]+'</span>';return h;}
+
+function renderReferralSection(c){
+  if(!c.referred_by_employee_id)return '';
+  var stage=c.pipeline_stage;
+  var isHired=stage==='hired'||stage==='onboarding'||stage==='active'||stage==='inactive';
+  var html='<div class="card-section"><div class="section-title">Referral</div>';
+  html+='<div class="detail-grid"><div><div class="detail-label">Referred by</div><div class="detail-value">'+(c.referred_by_name||'--')+'</div></div></div>';
+  if(!isHired){
+    html+='<div style="margin-top:10px;font-size:13px;color:#888;">A referral record is created after this candidate is hired, so the bonus can be tracked.</div></div>';
+    return html;
+  }
+  var ref=pcReferralByCand[c.id];
+  if(ref===null){
+    html+='<div style="margin-top:10px;font-size:13px;color:#888;">Checking referral record&hellip;</div></div>';
+    return html;
+  }
+  if(ref&&ref.id){
+    var amt=(ref.bonus_amount!=null)?' &middot; suggested bonus $'+Number(ref.bonus_amount).toFixed(2):'';
+    html+='<div style="margin-top:10px;background:#eaf6ec;border:1px solid #7dc98a;border-radius:6px;padding:10px 12px;font-size:13px;color:#1e6b2e;">Referral record created'+amt+' &middot; '+(ref.events_required||REFERRAL_EVENTS_REQUIRED)+' events required. Manage the payout on the Referrals page.</div></div>';
+    return html;
+  }
+  if(!pcAuth.isAdmin()){
+    html+='<div style="margin-top:10px;font-size:13px;color:#888;">Admin access required to create the referral record.</div></div>';
+    return html;
+  }
+  var sug=pcReferralSuggestion(c);
+  html+='<div style="margin-top:10px;font-size:13px;color:#444;">This hired candidate was referred by an employee. Create the referral record so the bonus can be tracked.</div>';
+  html+='<div style="margin-top:6px;font-size:12px;color:#888;">Suggested: '+(sug.position?sug.position:'(no position)')+' &middot; $'+sug.bonus.toFixed(2)+' &middot; '+REFERRAL_EVENTS_REQUIRED+' events. Editable on the Referrals page.</div>';
+  html+='<button class="btn btn-green btn-sm" style="margin-top:10px;" id="ref-create-btn" onclick="pcPipeCreateReferral()">Create referral record</button>';
+  html+='<div id="ref-create-err" class="error-msg" style="margin-top:6px;"></div>';
+  html+='</div>';
+  return html;
+}
+
+function pcReferralSuggestion(c){
+  var hiredRoles=(c.assigned_roles&&c.assigned_roles.length)?c.assigned_roles:[];
+  var appliedRoles=(c.roles&&c.roles.length)?c.roles:[];
+  var basis=hiredRoles.length?hiredRoles:appliedRoles;
+  var isRunner=false;
+  for(var i=0;i<basis.length;i++){if(basis[i]===REFERRAL_RUNNER_ROLE){isRunner=true;break;}}
+  return {position:basis.length?basis[0]:'',bonus:isRunner?REFERRAL_BONUS_RUNNER:REFERRAL_BONUS_DEFAULT,isRunner:isRunner};
+}
+
+function pcReferralCreatorLabel(){
+  var u=(typeof pcAuth!=='undefined'&&pcAuth.getUser)?pcAuth.getUser():null;
+  return (u&&(u.display_name||u.email))||'pipeline';
+}
+
+function pcPipeLoadReferralForSelected(){
+  var c=pcSelected;
+  if(!c||!c.referred_by_employee_id)return;
+  var stage=c.pipeline_stage;
+  var isHired=stage==='hired'||stage==='onboarding'||stage==='active'||stage==='inactive';
+  if(!isHired)return;
+  if(pcReferralByCand.hasOwnProperty(c.id))return;
+  pcReferralByCand[c.id]=null;
+  sbFetch('/rest/v1/referrals?referred_candidate_id=eq.'+c.id+'&deleted_at=is.null&select=id,bonus_amount,events_required,status&limit=1')
+    .then(function(r){return r.json();})
+    .then(function(rows){
+      pcReferralByCand[c.id]=(rows&&rows[0])?rows[0]:false;
+      if(pcSelected&&pcSelected.id===c.id)render();
+    })
+    .catch(function(err){
+      console.warn('Referral fetch failed (non-blocking):',err);
+      pcReferralByCand[c.id]=false;
+      if(pcSelected&&pcSelected.id===c.id)render();
+    });
+}
+
+function pcPipeCreateReferral(){
+  if(!pcSelected)return;
+  var c=pcSelected;
+  if(!c.referred_by_employee_id)return;
+  var errEl=document.getElementById('ref-create-err');
+  if(!pcAuth.isAdmin()){if(errEl)errEl.innerHTML='Admin access required to create referral records.';return;}
+  if(!c.punch_id){if(errEl)errEl.innerHTML='This candidate has no punch ID yet -- finish the hire first.';return;}
+  var btn=document.getElementById('ref-create-btn');
+  if(errEl)errEl.innerHTML='';
+  if(btn){btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Creating...';}
+  var sug=pcReferralSuggestion(c);
+  var creator=pcReferralCreatorLabel();
+  sbFetch('/rest/v1/employees?punch_id=eq.'+encodeURIComponent(c.punch_id)+'&select=id&limit=1')
+    .then(function(r){return r.json();})
+    .then(function(rows){
+      var empId=rows&&rows[0]&&rows[0].id;
+      if(!empId)throw new Error('Could not find the hired employee record for this candidate.');
+      var now=new Date().toISOString();
+      var body={
+        referrer_employee_id:c.referred_by_employee_id,
+        referrer_name:c.referred_by_name||'Unknown',
+        referred_candidate_id:c.id,
+        referred_employee_id:empId,
+        referred_name:c.first_name+' '+c.last_name,
+        referred_position:sug.position||null,
+        events_required:REFERRAL_EVENTS_REQUIRED,
+        bonus_amount:sug.bonus,
+        status:'pending',
+        created_by:creator,
+        created_at:now,
+        updated_at:now
+      };
+      return sbFetch('/rest/v1/referrals',{method:'POST',prefer:'return=representation',body:body});
+    })
+    .then(function(r){if(!r)return null;return r.json();})
+    .then(function(rows){
+      var row=(rows&&rows[0])?rows[0]:null;
+      if(row)pcReferralByCand[c.id]=row;
+      render();
+    })
+    .catch(function(err){
+      console.error('Create referral failed:',err);
+      if(err&&err.status===409){
+        delete pcReferralByCand[c.id];
+        pcPipeLoadReferralForSelected();
+        return;
+      }
+      var e=document.getElementById('ref-create-err');
+      var msg='Could not create the referral record. ';
+      if(err&&err.status===403)msg+='Permission denied (admin only).';
+      else if(err&&err.message)msg+=err.message;
+      else msg+='Please try again.';
+      if(e)e.innerHTML=msg;
+      var b=document.getElementById('ref-create-btn');
+      if(b){b.disabled=false;b.innerHTML='Create referral record';}
+    });
+}
 
 function pcPipeSelect(id){for(var i=0;i<pcCandidates.length;i++){if(pcCandidates[i].id===id){pcSelected=pcCandidates[i];break;}}pcEditingPhone=false;pcEditingEmail=false;pcEditingPunchId=false;pcEditingShirtSize=false;render();var rp=document.getElementById('pcpipe-detail');if(rp)rp.scrollIntoView({behavior:'smooth',block:'start'});}
 function pcPipeFilter(f){pcFilter=f;render();}
