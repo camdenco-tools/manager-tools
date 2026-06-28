@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prep Timing — Popcorn Chez</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --pc-ink:#1a1a1a; --pc-muted:#6b6b66; --pc-faint:#9a9a94;
+    --pc-line:#e8e8e4; --pc-line-soft:#f0f0ec; --pc-bg:#fafaf8; --pc-card:#ffffff;
+    --pc-ops:#185FA5; --pc-ops-soft:#eaf1f8;
+    --pc-amber:#BA7517; --pc-amber-soft:#fbf2e6;
+    --pc-red:#b3261e; --pc-green:#639922;
+    --radius:10px;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"DM Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; color:var(--pc-ink); background:var(--pc-bg); -webkit-font-smoothing:antialiased; }
+  .pc-page { max-width:1100px; margin:0 auto; padding:26px 22px 90px; }
+
+  .pc-page-head { display:flex; align-items:flex-end; justify-content:space-between; gap:18px; flex-wrap:wrap; margin-bottom:20px; }
+  .pc-page-title { font-size:22px; font-weight:600; letter-spacing:-0.01em; margin:0 0 4px; }
+  .pc-page-sub { font-size:13px; color:var(--pc-muted); margin:0; max-width:620px; line-height:1.5; }
+
+  .pc-toolbar { display:flex; align-items:center; gap:14px; flex-wrap:wrap; background:var(--pc-card); border:1px solid var(--pc-line); border-radius:var(--radius); padding:14px 16px; margin-bottom:18px; }
+  .pc-toolbar-label { font-size:11px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; color:var(--pc-faint); }
+  .pc-tb-btn { appearance:none; border:1px solid var(--pc-line); background:#fff; border-radius:7px; width:30px; height:32px; font-size:16px; line-height:1; cursor:pointer; color:var(--pc-ink); }
+  .pc-tb-sel { padding:7px 12px; border:1px solid var(--pc-line); border-radius:7px; font-family:inherit; font-size:13px; background:#fff; cursor:pointer; }
+
+  .pc-card { background:var(--pc-card); border:1px solid var(--pc-line); border-radius:var(--radius); padding:18px 22px; }
+  .pc-section-h { display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin:0 0 12px; }
+  .pc-section-t { font-size:15px; font-weight:600; }
+  .pc-section-c { font-size:12px; color:var(--pc-faint); }
+
+  .pc-empty { text-align:center; padding:54px 24px; color:var(--pc-faint); }
+  .pc-empty-title { font-size:14px; font-weight:600; color:var(--pc-muted); margin:0 0 4px; }
+  .pc-empty-text { font-size:13px; margin:0 auto; max-width:430px; line-height:1.5; }
+
+  .pc-denied { max-width:520px; margin:60px auto; text-align:center; background:var(--pc-card); border:1px solid var(--pc-line); border-radius:var(--radius); padding:40px 32px; }
+  .pc-denied h2 { font-size:17px; margin:0 0 8px; } .pc-denied p { font-size:13px; color:var(--pc-muted); line-height:1.5; margin:0; }
+
+  .pc-loading { display:none; align-items:center; gap:10px; font-size:13px; color:var(--pc-muted); padding:40px 0; justify-content:center; }
+  .pc-loading.is-on { display:flex; }
+  .pc-spinner { width:16px; height:16px; border:2px solid var(--pc-line); border-top-color:var(--pc-ops); border-radius:50%; animation:pc-spin 0.7s linear infinite; }
+  @keyframes pc-spin { to { transform:rotate(360deg); } }
+
+  .pc-toast { position:fixed; bottom:22px; left:50%; transform:translateX(-50%) translateY(14px); background:var(--pc-ink); color:#fff; font-size:13px; font-weight:500; padding:11px 18px; border-radius:22px; box-shadow:0 6px 20px rgba(0,0,0,0.18); opacity:0; pointer-events:none; transition:opacity 0.18s ease, transform 0.18s ease; z-index:960; max-width:90vw; }
+  .pc-toast.is-on { opacity:1; transform:translateX(-50%) translateY(0); }
+  .pc-toast.is-error { background:var(--pc-red); }
+
+  #pcMain { display:none; }
+  body.pc-ready #pcMain { display:block; }
+
+  .pc-scope-note { font-size:12px; color:var(--pc-muted); background:var(--pc-ops-soft); border:1px solid #d4e3f2; border-radius:8px; padding:9px 13px; margin-bottom:16px; line-height:1.5; }
+  .pc-scope-note b { color:var(--pc-ops); }
+
+  /* slider panel */
+  .pc-slider-card { margin-bottom:16px; }
+  .pc-sl-row { display:flex; align-items:center; gap:14px; padding:8px 0; }
+  .pc-sl-row + .pc-sl-row { border-top:1px solid var(--pc-line-soft); }
+  .pc-sl-name { font-size:13.5px; font-weight:500; min-width:130px; }
+  .pc-sl-range { flex:1; accent-color:var(--pc-amber); }
+  .pc-sl-val { font-size:15px; font-weight:700; min-width:54px; text-align:right; font-variant-numeric:tabular-nums; color:var(--pc-amber); }
+  .pc-sl-note { font-size:12px; color:var(--pc-faint); margin-top:8px; line-height:1.5; }
+
+  /* day grid */
+  .pc-dg-head, .pc-dg-row { display:grid; grid-template-columns:150px repeat(7, 1fr) 76px; gap:0; align-items:center; }
+  .pc-dg-head { border-bottom:1px solid var(--pc-line); padding-bottom:8px; margin-bottom:2px; }
+  .pc-dg-dh { text-align:center; font-size:10px; font-weight:600; letter-spacing:0.03em; text-transform:uppercase; color:var(--pc-faint); }
+  .pc-dg-dh b { display:block; font-size:13px; color:var(--pc-muted); font-weight:600; margin-top:2px; }
+  .pc-dg-dh.is-today b { background:var(--pc-ink); color:#fff; border-radius:6px; display:inline-block; padding:0 7px; }
+  .pc-dg-corner { font-size:10px; font-weight:600; letter-spacing:0.05em; text-transform:uppercase; color:var(--pc-faint); }
+  .pc-dg-tot { text-align:right; font-size:10px; font-weight:600; letter-spacing:0.03em; text-transform:uppercase; color:var(--pc-faint); }
+  .pc-dg-row { padding:9px 0; border-top:1px solid var(--pc-line-soft); }
+  .pc-dg-name { font-size:13.5px; font-weight:500; display:flex; align-items:center; gap:8px; }
+  .pc-dg-tag { font-size:9px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; color:var(--pc-amber); background:var(--pc-amber-soft); padding:2px 6px; border-radius:5px; }
+  .pc-dg-cell { text-align:center; font-size:13px; font-variant-numeric:tabular-nums; }
+  .pc-dg-cell.z { color:var(--pc-line); }
+  .pc-dg-rowtot { text-align:right; font-size:14px; font-weight:700; font-variant-numeric:tabular-nums; }
+  .pc-dg-foot { display:grid; grid-template-columns:150px repeat(7, 1fr) 76px; padding:11px 0 0; border-top:2px solid var(--pc-line); margin-top:2px; }
+  .pc-dg-foot .lbl { font-size:13px; font-weight:600; }
+  .pc-dg-foot .pc-dg-cell { font-weight:700; }
+  .pc-dg-foot .pc-dg-rowtot { font-size:15px; }
+
+  .pc-bubbles { display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
+  .pc-bub { flex:1; min-width:150px; background:var(--pc-card); border:1px solid var(--pc-line); border-radius:var(--radius); padding:12px 15px; }
+  .pc-bub-lbl { font-size:10px; letter-spacing:0.05em; text-transform:uppercase; color:var(--pc-faint); }
+  .pc-bub-num { font-size:24px; font-weight:700; margin-top:4px; font-variant-numeric:tabular-nums; }
+  .pc-bub-sub { font-size:11px; color:var(--pc-muted); margin-top:2px; }
+
+  .pc-pending { margin-top:16px; }
+  .pc-pending .pc-card { padding:16px 18px; }
+  .pc-pending-h { font-size:13px; font-weight:600; margin:0 0 8px; }
+  .pc-pending-list { font-size:13px; color:var(--pc-muted); line-height:1.7; } .pc-pending-list b { color:var(--pc-ink); font-weight:500; }
+
+  @media (max-width: 820px) {
+    .pc-dg-head, .pc-dg-row, .pc-dg-foot { grid-template-columns:120px repeat(7, 1fr) 60px; }
+    .pc-dg-name { font-size:12.5px; }
+    .pc-dg-cell { font-size:12px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="pc-page">
+
+  <div id="pcDenied" class="pc-denied" style="display:none;">
+    <h2>No access to Prep Timing</h2>
+    <p>Ask an admin to enable Prep Timing on the User Access page.</p>
+  </div>
+
+  <main id="pcMain">
+
+    <div class="pc-page-head">
+      <div>
+        <h1 class="pc-page-title">Prep Timing</h1>
+        <p class="pc-page-sub">How many prep hours are due each day, so you know when to schedule people and for how long. Only the work that has to happen <em>ahead</em> shows here &mdash; popcorn popped live during the show isn't counted, because that staff is already on.</p>
+      </div>
+    </div>
+
+    <div class="pc-toolbar" id="pcToolbar">
+      <span class="pc-toolbar-label">Week</span>
+      <button id="pcWeekPrev" type="button" class="pc-tb-btn" aria-label="Previous week">&lsaquo;</button>
+      <select id="pcWeekSelect" class="pc-tb-sel" style="min-width:230px;"></select>
+      <button id="pcWeekNext" type="button" class="pc-tb-btn" aria-label="Next week">&rsaquo;</button>
+      <span class="pc-toolbar-label" style="margin-left:8px;">Venue</span>
+      <select id="pcVenueFilter" class="pc-tb-sel" style="min-width:170px;"></select>
+      <span id="pcScopeCount" style="font-size:12px;color:var(--pc-faint);margin-left:auto;"></span>
+    </div>
+
+    <div class="pc-loading" id="pcLoading"><span class="pc-spinner"></span> Loading&hellip;</div>
+
+    <div id="pcBody"></div>
+
+  </main>
+</div>
+
+<div class="pc-toast" id="pcToast"></div>
+
+<script src="/pc-auth.js"></script>
+<script src="/pc-nav.js"></script>
+<script src="/pc-activity.js"></script>
+<script src="/pc-catalog.js"></script>
+<script src="/pc-fiscal.js"></script>
+
+<script>
+(function () {
+  'use strict';
+
+  var SUPABASE_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
+  var PAGE_SLUG = 'prep-timing';
+  var ACTIVITY_SLUG = 'prep-timing';
+  var DEFAULT_PREP_AHEAD = 52;        // regular-stand popcorn, before any saved nudge
+  var DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+  var PC = window.PCPrepTiming = { user:null, isAdmin:false, weeks:[], weekIndex:-1, venueFilter:'' };
+  function $(id) { return document.getElementById(id); }
+
+  var toastTimer = null;
+  function toast(msg, isErr) { var el = $('pcToast'); el.textContent = msg; el.classList.toggle('is-error', !!isErr); el.classList.add('is-on'); clearTimeout(toastTimer); toastTimer = setTimeout(function () { el.classList.remove('is-on'); }, 3200); }
+  PC.toast = toast;
+
+  PC.authFetch = function (path, opts) {
+    opts = opts || {};
+    var url = path.charAt(0) === '/' ? (SUPABASE_URL + path) : path;
+    var headers = Object.assign({ 'Content-Type':'application/json' }, (typeof pcAuth !== 'undefined' && pcAuth.headers) ? pcAuth.headers() : {}, opts.headers || {});
+    return fetch(url, Object.assign({}, opts, { headers:headers })).then(function (res) {
+      if (!res.ok) { return res.text().then(function (b) { throw new Error('Request failed (' + res.status + '): ' + b.slice(0, 300)); }); }
+      if (res.status === 204) return null;
+      var ct = res.headers.get('content-type') || '';
+      return ct.indexOf('application/json') !== -1 ? res.json() : res.text();
+    });
+  };
+
+  function setLoading(on) { var el = $('pcLoading'); if (el) el.classList.toggle('is-on', !!on); }
+  function escAttr(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function fmtMD(d) { if (!d) return ''; var p = String(d).slice(0,10).split('-'); if (p.length !== 3) return d; return parseInt(p[1],10) + '/' + parseInt(p[2],10); }
+  function todayISO() { var n = new Date(); return n.getFullYear() + '-' + ('0' + (n.getMonth()+1)).slice(-2) + '-' + ('0' + n.getDate()).slice(-2); }
+  function r1(n) { return Math.round(n * 10) / 10; }
+  function ceil(n) { return Math.ceil(n - 1e-9); }
+  function num(n) { return Number(n).toLocaleString(); }
+  PC.dayIndex = function (a, b) { var x = String(a).slice(0,10).split('-'), y = String(b).slice(0,10).split('-'); return Math.round((Date.UTC(+y[0],+y[1]-1,+y[2]) - Date.UTC(+x[0],+x[1]-1,+x[2])) / 86400000); };
+  PC.addDays = function (iso, n) { var p = String(iso).slice(0,10).split('-'); var d = new Date(Date.UTC(+p[0],+p[1]-1,+p[2])); d.setUTCDate(d.getUTCDate()+n); return d.toISOString().slice(0,10); };
+  PC.dowName = function (iso) { var p = String(iso).slice(0,10).split('-'); return DOW[new Date(Date.UTC(+p[0],+p[1]-1,+p[2])).getUTCDay()]; };
+
+  // ---- profiles: carry + mix + price + item meta + STAND TYPE -------
+  PC._carry = {}; PC._standMix = {}; PC._prices = {}; PC._itemMeta = {};
+  PC.ensureProfiles = function () {
+    if (PC._profilesLoaded) return Promise.resolve();
+    var p1 = PC.authFetch('/rest/v1/prep_stand_item_mix?select=stand_id,item_id,mix_pct,carries,stands(venue_code,stand_name,stand_type)&carries=is.true&limit=5000');
+    var p2 = PC.authFetch('/rest/v1/venue_item_prices?select=venue_code,item_id,unit_price&limit=5000');
+    var p3 = PC.authFetch('/rest/v1/prep_items?select=id,name,unit,production_mode,sort_order&is_active=is.true&order=sort_order.asc&limit=200');
+    return Promise.all([p1, p2, p3]).then(function (r) {
+      PC._carry = {}; PC._standMix = {};
+      (r[0] || []).forEach(function (row) {
+        var s = row.stands; if (!s || s.venue_code == null || s.stand_name == null) return;
+        var key = s.venue_code + '|' + s.stand_name;
+        PC._carry[key] = true;
+        if (!PC._standMix[key]) PC._standMix[key] = { stand_id:row.stand_id, stand_type:(s.stand_type || 'revenue'), items:{} };
+        PC._standMix[key].items[row.item_id] = (row.mix_pct == null) ? null : Number(row.mix_pct);
+      });
+      PC._prices = {};
+      (r[1] || []).forEach(function (row) { if (!PC._prices[row.venue_code]) PC._prices[row.venue_code] = {}; PC._prices[row.venue_code][row.item_id] = Number(row.unit_price); });
+      PC._itemMeta = {};
+      (r[2] || []).forEach(function (it) { PC._itemMeta[it.id] = { name:it.name, unit:it.unit, production_mode:it.production_mode, sort_order:it.sort_order }; });
+      PC._profilesLoaded = true;
+    });
+  };
+
+  PC.suggestQty = function (forecast, mix, price) { if (mix == null || !(price > 0) || !(forecast > 0)) return null; return Math.ceil((forecast * mix / price) * 1.05); };
+
+  // ---- recipes + make rates + saved prep-ahead sliders ---------------
+  PC._ingredients = {}; PC._recipeByItem = {}; PC._recipeByMake = {};
+  PC._makeRateGlobal = {}; PC._makeRateVenue = {}; PC._prepAheadSaved = {};
+  PC.ensureRecipes = function () {
+    if (PC._recipesLoaded) return Promise.resolve();
+    var i = PC.authFetch('/rest/v1/prep_ingredients?select=id,name,kind,base_unit,batch_base_qty,batch_minutes,sort_order&deleted_at=is.null&limit=500');
+    var l = PC.authFetch('/rest/v1/prep_recipe_lines?select=prep_item_id,parent_ingredient_id,component_id,qty_per_unit&deleted_at=is.null&limit=2000');
+    var m = PC.authFetch('/rest/v1/prep_item_make_rates?select=prep_item_id,venue_code,units_per_hour&deleted_at=is.null&limit=500');
+    var pa = PC.authFetch('/rest/v1/prep_item_prep_ahead?select=prep_item_id,scope_code,prep_ahead_pct&deleted_at=is.null&limit=2000');
+    return Promise.all([i, l, m, pa]).then(function (res) {
+      PC._ingredients = {}; (res[0] || []).forEach(function (g) { PC._ingredients[g.id] = g; });
+      PC._recipeByItem = {}; PC._recipeByMake = {};
+      (res[1] || []).forEach(function (line) {
+        var entry = { component_id:line.component_id, qty:Number(line.qty_per_unit) };
+        if (line.prep_item_id) { (PC._recipeByItem[line.prep_item_id] = PC._recipeByItem[line.prep_item_id] || []).push(entry); }
+        else if (line.parent_ingredient_id) { (PC._recipeByMake[line.parent_ingredient_id] = PC._recipeByMake[line.parent_ingredient_id] || []).push(entry); }
+      });
+      PC._makeRateGlobal = {}; PC._makeRateVenue = {};
+      (res[2] || []).forEach(function (rt) { if (rt.venue_code == null) PC._makeRateGlobal[rt.prep_item_id] = Number(rt.units_per_hour); else PC._makeRateVenue[rt.prep_item_id + '|' + rt.venue_code] = Number(rt.units_per_hour); });
+      PC._prepAheadSaved = {};
+      (res[3] || []).forEach(function (r) { PC._prepAheadSaved[r.prep_item_id + '|' + r.scope_code] = Number(r.prep_ahead_pct); });
+      PC._recipesLoaded = true;
+    });
+  };
+
+  // Live slider edits (this session) override the saved value, which overrides the default.
+  PC._prepAheadLive = {};
+  PC.prepAheadPct = function (itemId) {
+    var key = itemId + '|' + (PC.venueFilter || '__all__');
+    if (PC._prepAheadLive[key] != null) return PC._prepAheadLive[key];
+    if (PC._prepAheadSaved[key] != null) return PC._prepAheadSaved[key];
+    return DEFAULT_PREP_AHEAD;
+  };
+
+  // ---- week picker (fiscal) — landing model: nothing fetches on open --
+  PC.initWeekPicker = function () {
+    var weeks = [];
+    if (typeof pcFiscal !== 'undefined' && pcFiscal.getPeriods) {
+      (pcFiscal.getPeriods() || []).forEach(function (p) { (pcFiscal.getWeekRanges(p) || []).forEach(function (w) { weeks.push({ start:w.start, end:w.end, label:w.label }); }); });
+    }
+    PC.weeks = weeks;
+    var sel = $('pcWeekSelect');
+    if (sel) {
+      sel.innerHTML = weeks.map(function (w, i) { return '<option value="' + i + '">' + escAttr(w.label) + ' (' + fmtMD(w.start) + '\u2013' + fmtMD(w.end) + ')</option>'; }).join('');
+      if (!sel._wired) { sel.addEventListener('change', function () { PC.setWeek(parseInt(sel.value,10)); }); sel._wired = true; }
+    }
+    var prev = $('pcWeekPrev'), next = $('pcWeekNext');
+    if (prev && !prev._wired) { prev.addEventListener('click', function () { PC.setWeek(PC.weekIndex - 1); }); prev._wired = true; }
+    if (next && !next._wired) { next.addEventListener('click', function () { PC.setWeek(PC.weekIndex + 1); }); next._wired = true; }
+    if (!weeks.length) { toast('No fiscal weeks available', true); return; }
+    var t = todayISO(), idx = -1, k;
+    for (k = 0; k < weeks.length; k++) { if (weeks[k].start <= t && t <= weeks[k].end) { idx = k; break; } }
+    if (idx === -1) { for (k = 0; k < weeks.length; k++) { if (weeks[k].start >= t) { idx = k; break; } } }
+    if (idx === -1) idx = weeks.length - 1;
+    PC.setWeek(idx);
+  };
+  PC.setWeek = function (idx) {
+    if (idx < 0 || idx >= PC.weeks.length) return;
+    PC.weekIndex = idx;
+    var sel = $('pcWeekSelect'); if (sel) sel.value = String(idx);
+    var prev = $('pcWeekPrev'), next = $('pcWeekNext');
+    if (prev) prev.disabled = (idx === 0);
+    if (next) next.disabled = (idx === PC.weeks.length - 1);
+    if (PC.venueFilter) PC.load(); else PC.renderLanding();
+  };
+
+  PC.initVenueFilter = function () {
+    var sel = $('pcVenueFilter'); if (!sel) return;
+    function populate() {
+      var venues = (typeof pcCatalog !== 'undefined' && pcCatalog.getActiveVenues) ? pcCatalog.getActiveVenues() : [];
+      sel.innerHTML = '<option value="">Select a venue\u2026</option><option value="__all__">All venues (pool everything)</option>' +
+        venues.map(function (v) { return '<option value="' + escAttr(v.code) + '">' + escAttr(v.code) + ' \u2014 ' + escAttr(v.full_name || v.code) + '</option>'; }).join('');
+      sel.value = PC.venueFilter || '';
+    }
+    if (typeof pcCatalog !== 'undefined' && pcCatalog.ready) pcCatalog.ready().then(populate); else populate();
+    if (!sel._wired) { sel.addEventListener('change', function () { PC.venueFilter = sel.value; if (PC.venueFilter) PC.load(); else PC.renderLanding(); }); sel._wired = true; }
+  };
+
+  PC.renderLanding = function () {
+    setLoading(false);
+    var cnt = $('pcScopeCount'); if (cnt) cnt.textContent = '';
+    var body = $('pcBody'); if (!body) return;
+    body.innerHTML = '<div class="pc-card"><div class="pc-empty"><p class="pc-empty-title">Pick a venue to see prep timing</p>' +
+      '<p class="pc-empty-text">Choose a building above and this lays out the prep hours due each day. Nothing loads until you pick &mdash; per-venue is the scheduling view; <b>All venues</b> pools the totals.</p></div></div>';
+  };
+
+  // ---- load week feeds scoped to the venue --------------------------
+  PC.load = function () {
+    var w = PC.weeks[PC.weekIndex]; if (!w) return;
+    if (!PC.venueFilter) { PC.renderLanding(); return; }
+    setLoading(true);
+    $('pcBody').innerHTML = '';
+    var single = (PC.venueFilter !== '__all__') ? PC.venueFilter : '';
+    var vEvents   = single ? '&events.venue=eq.' + encodeURIComponent(single) : '';
+    var vEventTop = single ? '&venue=eq.' + encodeURIComponent(single) : '';
+    var vWs       = single ? '&venue_code=eq.' + encodeURIComponent(single) : '';
+    var planUrl = '/rest/v1/prep_plan_lines?select=planned_qty,item_id,event_id,stand_id,events!inner(event_date,venue,deleted_at),stands(stand_type),prep_items(name,unit,production_mode,sort_order)' +
+      '&events.event_date=gte.' + w.start + '&events.event_date=lte.' + w.end + '&events.deleted_at=is.null' + vEvents + '&deleted_at=is.null&limit=20000';
+    var evUrl = '/rest/v1/events?select=id,venue,event_date,staffing_requests(stand,venue,sales_forecast)' +
+      '&staffing_requests.sales_forecast=gt.0&event_date=gte.' + w.start + '&event_date=lte.' + w.end + vEventTop + '&deleted_at=is.null&order=event_date.asc&limit=1000';
+    var wsUrl = '/rest/v1/prep_wholesale_needs?select=need_date,venue_code,item_id,qty,prep_items(name,unit,production_mode,sort_order)' +
+      '&need_date=gte.' + w.start + '&need_date=lte.' + w.end + vWs + '&deleted_at=is.null&limit=2000';
+    Promise.all([PC.ensureProfiles(), PC.ensureRecipes()]).then(function () {
+      return Promise.all([PC.authFetch(planUrl), PC.authFetch(evUrl), PC.authFetch(wsUrl)]);
+    }).then(function (res) {
+      PC._planLines = (res[0] || []).filter(function (l) { return l.events && l.prep_items; });
+      PC._events = res[1] || [];
+      PC._wholesale = (res[2] || []).filter(function (r) { return r.prep_items; });
+      setLoading(false);
+      PC.render();
+    }).catch(function (err) {
+      setLoading(false);
+      toast(err.message || 'Failed to load', true);
+      $('pcBody').innerHTML = '<div class="pc-card"><div class="pc-empty"><p class="pc-empty-title">Could not load the week</p><p class="pc-empty-text">' + escAttr(err.message || '') + '</p></div></div>';
+    });
+  };
+
+  // ---- resolve unit cells: planned-over-estimate at event x stand x item,
+  //      carrying stand_type + day + wholesale flag --------------------
+  PC.resolveCells = function (single) {
+    var w = PC.weeks[PC.weekIndex];
+    var cells = [], plannedTriples = {};
+    (PC._planLines || []).forEach(function (l) {
+      var venue = l.events.venue; if (single && venue !== single) return;
+      var q = Number(l.planned_qty) || 0; if (q <= 0) return;
+      plannedTriples[l.event_id + '|' + l.stand_id + '|' + l.item_id] = true;
+      cells.push({ item_id:l.item_id, day:PC.dayIndex(w.start, l.events.event_date), qty:q, standType:(l.stands ? (l.stands.stand_type || 'revenue') : 'revenue'), wholesale:false });
+    });
+    (PC._events || []).forEach(function (e) {
+      (e.staffing_requests || []).forEach(function (r) {
+        var f = Number(r.sales_forecast); if (!(f > 0)) return;
+        var venue = r.venue || e.venue; if (single && venue !== single) return;
+        var prof = PC._standMix[venue + '|' + (r.stand || '')]; if (!prof) return;
+        var prices = PC._prices[venue] || {};
+        var day = PC.dayIndex(w.start, e.event_date);
+        Object.keys(prof.items).forEach(function (itemId) {
+          var m = PC._itemMeta[itemId]; if (!m || m.unit === 'tub') return;
+          if (plannedTriples[e.id + '|' + prof.stand_id + '|' + itemId]) return;   // planned wins
+          var sug = PC.suggestQty(f, prof.items[itemId], prices[itemId]); if (sug == null) return;
+          cells.push({ item_id:itemId, day:day, qty:sug, standType:(prof.stand_type || 'revenue'), wholesale:false });
+        });
+      });
+    });
+    (PC._wholesale || []).forEach(function (r) {
+      var venue = r.venue_code; if (single && venue !== single) return;
+      var q = Number(r.qty) || 0; if (q <= 0) return;
+      cells.push({ item_id:r.item_id, day:PC.dayIndex(w.start, r.need_date), qty:q, standType:'wholesale', wholesale:true });
+    });
+    return cells;
+  };
+
+  // prep-ahead fraction for a cell: hawking & wholesale pinned at 100%,
+  // everything else rides the (saved/live/default) slider for this item.
+  PC.cellFraction = function (cell) {
+    if (cell.wholesale) return 1;
+    if (cell.standType === 'hawking') return 1;
+    return PC.prepAheadPct(cell.item_id) / 100;
+  };
+
+  // Roll cells into per-item-per-day prep LABOR (minutes). Two labor sources:
+  //   - items with a make-rate (popcorn): prep-ahead boxes / rate.
+  //   - make-units a sold item draws on (sugar water): always-ahead, batched.
+  PC.rollupDays = function (cells, single) {
+    var labor = {};        // itemKey -> { name, day[7], onsite }
+    var pendingUnits = {}; // item_id -> total units, no labor model yet
+    var pendingMeta = {};
+    var makeOzDay = {};    // make_unit id -> [7] base-unit qty (full, always ahead)
+    var prepBoxes = 0, liveBoxes = 0;
+
+    function rate(itemId) { return PC._makeRateVenue[itemId + '|' + single] || PC._makeRateGlobal[itemId]; }
+
+    cells.forEach(function (cell) {
+      var itemId = cell.item_id;
+      var lines = PC._recipeByItem[itemId];
+      // accumulate make-unit demand at FULL qty (sugar water is always prep-ahead)
+      if (lines) {
+        lines.forEach(function (ln) {
+          var comp = PC._ingredients[ln.component_id];
+          if (comp && comp.kind === 'make_unit') {
+            if (!makeOzDay[comp.id]) makeOzDay[comp.id] = [0,0,0,0,0,0,0];
+            if (cell.day >= 0 && cell.day <= 6) makeOzDay[comp.id][cell.day] += cell.qty * ln.qty;
+          }
+        });
+      }
+      // item make-rate labor on the prep-ahead fraction only
+      var rt = rate(itemId);
+      if (rt > 0) {
+        var frac = PC.cellFraction(cell);
+        var prep = cell.qty * frac;
+        prepBoxes += prep; liveBoxes += (cell.qty - prep);
+        var m = PC._itemMeta[itemId] || { name:'(item)', production_mode:null };
+        if (!labor[itemId]) labor[itemId] = { name:m.name, day:[0,0,0,0,0,0,0], onsite:(m.production_mode === 'on_site') };
+        if (cell.day >= 0 && cell.day <= 6) labor[itemId].day[cell.day] += (prep / rt) * 60;
+      } else if (!lines) {
+        // no recipe at all → pending (counts but nothing to time yet)
+        var mm = PC._itemMeta[itemId] || { name:'(item)', unit:'' };
+        pendingUnits[itemId] = (pendingUnits[itemId] || 0) + cell.qty;
+        pendingMeta[itemId] = mm;
+      }
+    });
+
+    // make-units → batches per day → labor per day
+    Object.keys(makeOzDay).forEach(function (mid) {
+      var mu = PC._ingredients[mid]; if (!mu || !(mu.batch_minutes > 0)) return;
+      var base = mu.batch_base_qty > 0 ? mu.batch_base_qty : 1;
+      var key = 'mk_' + mid;
+      labor[key] = { name:mu.name, day:[0,0,0,0,0,0,0], make:true };
+      for (var d = 0; d < 7; d++) {
+        var batches = ceil(makeOzDay[mid][d] / base);
+        labor[key].day[d] = batches * mu.batch_minutes;
+      }
+    });
+
+    return { labor:labor, pendingUnits:pendingUnits, pendingMeta:pendingMeta, prepBoxes:prepBoxes, liveBoxes:liveBoxes };
+  };
+
+  // ---- render: slider panel (static) + day grid (re-rendered on drag) ----
+  PC.render = function () {
+    var w = PC.weeks[PC.weekIndex], body = $('pcBody'); if (!body || !w) return;
+    if (!PC.venueFilter) { PC.renderLanding(); return; }
+    var single = (PC.venueFilter === '__all__') ? '' : PC.venueFilter;
+    var cells = PC.resolveCells(single);
+    PC._cells = cells; PC._single = single;
+
+    if (!cells.length) {
+      var cnt0 = $('pcScopeCount'); if (cnt0) cnt0.textContent = '';
+      body.innerHTML = '<div class="pc-card"><div class="pc-empty"><p class="pc-empty-title">Nothing planned or forecasted' + (single ? ' for ' + escAttr(single) : '') + ' this week</p><p class="pc-empty-text">Prep timing appears once events are forecasted on the Plan tab, or quantities committed on Prep &amp; Production Planning.</p></div></div>';
+      return;
+    }
+
+    // which items have a make-rate AND a tunable (non-hawking-only) fraction → get a slider
+    var rateItems = {};
+    cells.forEach(function (c) { if ((PC._makeRateVenue[c.item_id + '|' + single] || PC._makeRateGlobal[c.item_id]) > 0) rateItems[c.item_id] = true; });
+    var sliderIds = Object.keys(rateItems).sort(function (a, b) { return (PC._itemMeta[a].sort_order || 0) - (PC._itemMeta[b].sort_order || 0); });
+
+    var html = '';
+    if (single) html += '<div class="pc-scope-note">Showing <b>' + escAttr(single) + '</b> &mdash; the building you schedule. Hawking and client deliveries always count as 100% prepped ahead; the slider sets the rest.</div>';
+    else html += '<div class="pc-scope-note"><b>All venues</b> &mdash; hours summed across every building. Pick one venue to schedule its crew; this view is the company total.</div>';
+
+    // slider panel (built once; never re-rendered on drag)
+    if (sliderIds.length) {
+      html += '<div class="pc-card pc-slider-card"><div class="pc-section-h"><span class="pc-section-t">Popped ahead</span><span class="pc-section-c">regular stands &middot; saves per venue</span></div><div id="pcSliders">';
+      sliderIds.forEach(function (id) {
+        var pct = Math.round(PC.prepAheadPct(id));
+        html += '<div class="pc-sl-row"><span class="pc-sl-name">' + escAttr(PC._itemMeta[id].name) + '</span>' +
+          '<input type="range" class="pc-sl-range" min="0" max="100" step="1" value="' + pct + '" data-item="' + id + '">' +
+          '<span class="pc-sl-val" id="slv_' + id + '">' + pct + '%</span></div>';
+      });
+      html += '</div><div class="pc-sl-note">Drag to match how much gets popped before doors vs. live during the show. Hawking &amp; client/distro popcorn ignore this &mdash; they\u2019re always 100% ahead.</div></div>';
+    }
+
+    // bubbles + day grid live in a container we can re-render without touching sliders
+    html += '<div id="pcDayWrap"></div>';
+    body.innerHTML = html;
+
+    // wire sliders: drag updates the grid in place (no full re-render); release saves
+    body.querySelectorAll('.pc-sl-range').forEach(function (rng) {
+      rng.addEventListener('input', function () {
+        var id = rng.getAttribute('data-item');
+        var key = id + '|' + (PC.venueFilter || '__all__');
+        var v = parseInt(rng.value, 10);
+        PC._prepAheadLive[key] = v;
+        var lab = $('slv_' + id); if (lab) lab.textContent = v + '%';
+        PC.renderDayGrid();    // only redraws #pcDayWrap, leaves the slider intact
+      });
+      rng.addEventListener('change', function () { PC.savePrepAhead(rng.getAttribute('data-item'), parseInt(rng.value, 10)); });
+    });
+
+    PC.renderDayGrid();
+  };
+
+  PC.renderDayGrid = function () {
+    var w = PC.weeks[PC.weekIndex]; var wrap = $('pcDayWrap'); if (!wrap || !w) return;
+    var roll = PC.rollupDays(PC._cells, PC._single);
+    var labKeys = Object.keys(roll.labor).filter(function (k) {
+      var dd = roll.labor[k].day, s = 0; for (var d = 0; d < 7; d++) s += dd[d]; return s > 0;
+    }).sort(function (a, b) {
+      var an = roll.labor[a].make ? 1 : 0, bn = roll.labor[b].make ? 1 : 0;   // sold items first, make-units after
+      if (an !== bn) return an - bn;
+      return roll.labor[a].name < roll.labor[b].name ? -1 : 1;
+    });
+
+    var dayTot = [0,0,0,0,0,0,0], grand = 0;
+    labKeys.forEach(function (k) { for (var d = 0; d < 7; d++) { dayTot[d] += roll.labor[k].day[d]; grand += roll.labor[k].day[d]; } });
+
+    var cnt = $('pcScopeCount');
+    if (cnt) cnt.textContent = r1(grand / 60) + ' prep hr' + (PC._single ? ' \u00b7 ' + PC._single : ' \u00b7 all venues');
+
+    var html = '';
+
+    // bubbles
+    html += '<div class="pc-bubbles">';
+    html += '<div class="pc-bub"><div class="pc-bub-lbl">Prep hours this week</div><div class="pc-bub-num">' + r1(grand / 60) + '</div><div class="pc-bub-sub">due ahead of doors</div></div>';
+    html += '<div class="pc-bub"><div class="pc-bub-lbl">Popped ahead</div><div class="pc-bub-num">' + num(Math.round(roll.prepBoxes)) + '</div><div class="pc-bub-sub">boxes prepped early</div></div>';
+    if (roll.liveBoxes > 0) html += '<div class="pc-bub"><div class="pc-bub-lbl">Popped live</div><div class="pc-bub-num">' + num(Math.round(roll.liveBoxes)) + '</div><div class="pc-bub-sub">during show &middot; not scheduled here</div></div>';
+    html += '</div>';
+
+    if (!labKeys.length) {
+      html += '<div class="pc-card"><div class="pc-empty"><p class="pc-empty-title">No prep-ahead labor this week</p><p class="pc-empty-text">Everything forecasted is popped live or has no timing model yet.</p></div></div>';
+      wrap.innerHTML = html;
+      PC.renderPending(roll, wrap);
+      return;
+    }
+
+    // grid
+    html += '<div class="pc-card"><div class="pc-section-h"><span class="pc-section-t">Prep hours by day</span><span class="pc-section-c">when to schedule, and for how long</span></div>';
+    var today = todayISO();
+    html += '<div class="pc-dg-head"><span class="pc-dg-corner">Make</span>';
+    for (var d = 0; d < 7; d++) {
+      var ds = PC.addDays(w.start, d), isT = (ds === today);
+      html += '<span class="pc-dg-dh' + (isT ? ' is-today' : '') + '">' + PC.dowName(ds) + '<b>' + parseInt(ds.slice(8,10),10) + '</b></span>';
+    }
+    html += '<span class="pc-dg-tot">Week</span></div>';
+
+    labKeys.forEach(function (k) {
+      var it = roll.labor[k], rowTot = 0;
+      var cellsHtml = '';
+      for (var d = 0; d < 7; d++) {
+        var hrs = it.day[d] / 60; rowTot += it.day[d];
+        cellsHtml += '<span class="pc-dg-cell' + (hrs > 0 ? '' : ' z') + '">' + (hrs > 0 ? r1(hrs) : '\u00b7') + '</span>';
+      }
+      html += '<div class="pc-dg-row"><span class="pc-dg-name">' + escAttr(it.name) +
+        (it.make ? '<span class="pc-dg-tag">make</span>' : (it.onsite ? '<span class="pc-dg-tag">on-site</span>' : '')) + '</span>' +
+        cellsHtml + '<span class="pc-dg-rowtot">' + r1(rowTot / 60) + ' hr</span></div>';
+    });
+
+    html += '<div class="pc-dg-foot"><span class="lbl">Total</span>';
+    for (var dd = 0; dd < 7; dd++) html += '<span class="pc-dg-cell">' + (dayTot[dd] > 0 ? r1(dayTot[dd] / 60) : '\u00b7') + '</span>';
+    html += '<span class="pc-dg-rowtot">' + r1(grand / 60) + ' hr</span></div>';
+    html += '</div>';
+
+    wrap.innerHTML = html;
+    PC.renderPending(roll, wrap);
+  };
+
+  PC.renderPending = function (roll, wrap) {
+    var ids = Object.keys(roll.pendingUnits); if (!ids.length) return;
+    var txt = ids.sort(function (a, b) { return (roll.pendingMeta[a].sort_order || 0) - (roll.pendingMeta[b].sort_order || 0); }).map(function (id) {
+      return '<b>' + escAttr(roll.pendingMeta[id].name) + '</b> ' + num(Math.round(roll.pendingUnits[id])) + ' ' + escAttr(roll.pendingMeta[id].unit || '');
+    }).join(' \u00b7 ');
+    var div = document.createElement('div'); div.className = 'pc-pending';
+    div.innerHTML = '<div class="pc-card"><p class="pc-pending-h">No timing model yet</p><p class="pc-pending-list">These have counts this week but no prep-time rate, so they\u2019re not on the day grid: ' + txt + '. Add a make-rate and they appear.</p></div>';
+    wrap.appendChild(div);
+  };
+
+  PC.savePrepAhead = function (itemId, pct) {
+    var scope = PC.venueFilter || '__all__';
+    var who = (PC.user && (PC.user.display_name || PC.user.email)) || 'unknown';
+    var row = { prep_item_id:itemId, scope_code:scope, prep_ahead_pct:pct, updated_by:who, updated_at:new Date().toISOString() };
+    PC.authFetch('/rest/v1/prep_item_prep_ahead?on_conflict=prep_item_id,scope_code', {
+      method:'POST', headers:{ 'Prefer':'resolution=merge-duplicates,return=minimal' }, body:JSON.stringify([row])
+    }).then(function () {
+      PC._prepAheadSaved[itemId + '|' + scope] = pct;
+      delete PC._prepAheadLive[itemId + '|' + scope];
+      toast('Saved \u00b7 ' + pct + '% ahead for ' + (scope === '__all__' ? 'all venues' : scope));
+    }).catch(function (err) { toast(err.message || 'Save failed', true); });
+  };
+
+  // ---- boot ----
+  pcAuth.require({
+    pageSlug: PAGE_SLUG,
+    onReady: function (user) {
+      if (typeof pcActivity !== 'undefined' && pcActivity.init) pcActivity.init(ACTIVITY_SLUG);
+      PC.user = user || pcAuth.getUser();
+      PC.isAdmin = (typeof pcAuth.isAdmin === 'function') ? pcAuth.isAdmin() : false;
+      document.body.classList.add('pc-ready');
+      PC.initVenueFilter();
+      PC.initWeekPicker();
+    },
+    onDenied: function () { document.body.classList.add('pc-ready'); $('pcMain').style.display = 'none'; $('pcDenied').style.display = 'block'; }
+  });
+
+})();
+</script>
+</body>
+</html>
