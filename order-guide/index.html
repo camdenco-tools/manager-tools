@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Order Guide — Popcorn Chez</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --pc-ink:#1a1a1a; --pc-muted:#6b6b66; --pc-faint:#9a9a94;
+    --pc-line:#e8e8e4; --pc-line-soft:#f0f0ec; --pc-bg:#fafaf8; --pc-card:#ffffff;
+    --pc-ops:#185FA5; --pc-ops-soft:#eaf1f8;
+    --pc-amber:#BA7517; --pc-amber-soft:#fbf2e6;
+    --pc-red:#b3261e; --pc-red-soft:#fbeceb; --pc-green:#639922;
+    --radius:10px; --radius-sm:7px;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"DM Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; color:var(--pc-ink); background:var(--pc-bg); -webkit-font-smoothing:antialiased; }
+  .pc-page { max-width:1100px; margin:0 auto; padding:26px 22px 90px; }
+
+  .pc-page-head { display:flex; align-items:flex-end; justify-content:space-between; gap:18px; flex-wrap:wrap; margin-bottom:20px; }
+  .pc-page-title { font-size:22px; font-weight:600; letter-spacing:-0.01em; margin:0 0 4px; }
+  .pc-page-sub { font-size:13px; color:var(--pc-muted); margin:0; max-width:600px; line-height:1.5; }
+
+  .pc-toolbar { display:flex; align-items:center; gap:14px; flex-wrap:wrap; background:var(--pc-card); border:1px solid var(--pc-line); border-radius:var(--radius); padding:14px 16px; margin-bottom:18px; }
+  .pc-toolbar-label { font-size:11px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; color:var(--pc-faint); }
+  .pc-tb-btn { appearance:none; border:1px solid var(--pc-line); background:#fff; border-radius:7px; width:30px; height:32px; font-size:16px; line-height:1; cursor:pointer; color:var(--pc-ink); }
+  .pc-tb-sel { padding:7px 12px; border:1px solid var(--pc-line); border-radius:7px; font-family:inherit; font-size:13px; background:#fff; cursor:pointer; }
+
+  .pc-card { background:var(--pc-card); border:1px solid var(--pc-line); border-radius:var(--radius); padding:22px; }
+  .pc-section-h { display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin:0 0 12px; }
+  .pc-section-t { font-size:15px; font-weight:600; }
+  .pc-section-c { font-size:12px; color:var(--pc-faint); }
+
+  .pc-empty { text-align:center; padding:54px 24px; color:var(--pc-faint); }
+  .pc-empty-title { font-size:14px; font-weight:600; color:var(--pc-muted); margin:0 0 4px; }
+  .pc-empty-text { font-size:13px; margin:0 auto; max-width:420px; line-height:1.5; }
+
+  .pc-denied { max-width:520px; margin:60px auto; text-align:center; background:var(--pc-card); border:1px solid var(--pc-line); border-radius:var(--radius); padding:40px 32px; }
+  .pc-denied h2 { font-size:17px; margin:0 0 8px; } .pc-denied p { font-size:13px; color:var(--pc-muted); line-height:1.5; margin:0; }
+
+  .pc-loading { display:none; align-items:center; gap:10px; font-size:13px; color:var(--pc-muted); padding:40px 0; justify-content:center; }
+  .pc-loading.is-on { display:flex; }
+  .pc-spinner { width:16px; height:16px; border:2px solid var(--pc-line); border-top-color:var(--pc-ops); border-radius:50%; animation:pc-spin 0.7s linear infinite; }
+  @keyframes pc-spin { to { transform:rotate(360deg); } }
+
+  .pc-toast { position:fixed; bottom:22px; left:50%; transform:translateX(-50%) translateY(14px); background:var(--pc-ink); color:#fff; font-size:13px; font-weight:500; padding:11px 18px; border-radius:22px; box-shadow:0 6px 20px rgba(0,0,0,0.18); opacity:0; pointer-events:none; transition:opacity 0.18s ease, transform 0.18s ease; z-index:960; max-width:90vw; }
+  .pc-toast.is-on { opacity:1; transform:translateX(-50%) translateY(0); }
+  .pc-toast.is-error { background:var(--pc-red); }
+
+  #pcMain { display:none; }
+  body.pc-ready #pcMain { display:block; }
+
+  /* bubbles */
+  .pc-bubbles { display:flex; gap:12px; margin-bottom:18px; flex-wrap:wrap; }
+  .pc-bub { flex:1; min-width:160px; background:var(--pc-card); border:1px solid var(--pc-line); border-radius:var(--radius); padding:12px 15px; }
+  .pc-bub-lbl { font-size:10px; letter-spacing:0.05em; text-transform:uppercase; color:var(--pc-faint); }
+  .pc-bub-num { font-size:24px; font-weight:700; margin-top:4px; font-variant-numeric:tabular-nums; }
+  .pc-bub-sub { font-size:11px; color:var(--pc-muted); margin-top:2px; }
+
+  /* order table */
+  .pc-og-row { display:grid; grid-template-columns:1fr 150px 150px; gap:14px; align-items:center; padding:10px 4px; border-top:1px solid var(--pc-line-soft); }
+  .pc-og-row:first-of-type { border-top:none; }
+  .pc-og-head { font-size:10px; font-weight:600; letter-spacing:0.05em; text-transform:uppercase; color:var(--pc-faint); border-bottom:1px solid var(--pc-line); padding-bottom:8px; }
+  .pc-og-name { font-size:14px; font-weight:500; }
+  .pc-og-need { font-size:13px; color:var(--pc-muted); text-align:right; font-variant-numeric:tabular-nums; }
+  .pc-og-order { text-align:right; font-variant-numeric:tabular-nums; }
+  .pc-og-order b { font-size:16px; font-weight:700; }
+  .pc-og-order .u { font-size:11px; color:var(--pc-faint); }
+  .pc-og-order.none { color:var(--pc-faint); font-size:13px; }
+  .pc-og-head .r { text-align:right; }
+
+  /* timing / make */
+  .pc-mk-row { display:grid; grid-template-columns:1fr 120px 120px; gap:14px; align-items:center; padding:10px 4px; border-top:1px solid var(--pc-line-soft); }
+  .pc-mk-row:first-of-type { border-top:none; }
+  .pc-mk-head { font-size:10px; font-weight:600; letter-spacing:0.05em; text-transform:uppercase; color:var(--pc-faint); border-bottom:1px solid var(--pc-line); padding-bottom:8px; }
+  .pc-mk-name { font-size:14px; font-weight:500; display:flex; align-items:center; gap:9px; }
+  .pc-mk-tag { font-size:9px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--pc-amber); background:var(--pc-amber-soft); padding:2px 7px; border-radius:5px; }
+  .pc-mk-q { text-align:right; font-variant-numeric:tabular-nums; font-size:13px; }
+  .pc-mk-q b { font-size:15px; font-weight:700; }
+  .pc-mk-head .r { text-align:right; }
+  .pc-mk-foot { display:grid; grid-template-columns:1fr 120px 120px; gap:14px; padding:12px 4px 0; border-top:1px solid var(--pc-line); margin-top:4px; font-size:13px; }
+  .pc-mk-foot .lbl { font-weight:600; } .pc-mk-foot .r { text-align:right; font-weight:700; font-variant-numeric:tabular-nums; }
+
+  .pc-pending { margin-top:16px; }
+  .pc-pending .pc-card { padding:16px 18px; }
+  .pc-pending-h { font-size:13px; font-weight:600; margin:0 0 8px; }
+  .pc-pending-list { font-size:13px; color:var(--pc-muted); line-height:1.7; }
+  .pc-pending-list b { color:var(--pc-ink); font-weight:500; }
+
+  .pc-scope-note { font-size:12px; color:var(--pc-muted); background:var(--pc-ops-soft); border:1px solid #d4e3f2; border-radius:8px; padding:9px 13px; margin-bottom:16px; line-height:1.5; }
+  .pc-scope-note b { color:var(--pc-ops); }
+</style>
+</head>
+<body>
+
+<div class="pc-page">
+
+  <div id="pcDenied" class="pc-denied" style="display:none;">
+    <h2>No access to Order Guide</h2>
+    <p>Ask an admin to enable Order Guide on the User Access page.</p>
+  </div>
+
+  <main id="pcMain">
+
+    <div class="pc-page-head">
+      <div>
+        <h1 class="pc-page-title">Order Guide</h1>
+        <p class="pc-page-sub">What to buy this week, rolled up from each stand's forecast through its recipes. Gross need only &mdash; check your shelves and order the gap. Planned numbers win where committed; everything else runs on the sales-mix estimate.</p>
+      </div>
+    </div>
+
+    <div class="pc-toolbar" id="pcToolbar">
+      <span class="pc-toolbar-label">Week</span>
+      <button id="pcWeekPrev" type="button" class="pc-tb-btn" aria-label="Previous week">&lsaquo;</button>
+      <select id="pcWeekSelect" class="pc-tb-sel" style="min-width:230px;"></select>
+      <button id="pcWeekNext" type="button" class="pc-tb-btn" aria-label="Next week">&rsaquo;</button>
+      <span class="pc-toolbar-label" style="margin-left:8px;">Venue</span>
+      <select id="pcVenueFilter" class="pc-tb-sel" style="min-width:170px;"></select>
+      <span id="pcScopeCount" style="font-size:12px;color:var(--pc-faint);margin-left:auto;"></span>
+    </div>
+
+    <div class="pc-loading" id="pcLoading"><span class="pc-spinner"></span> Loading&hellip;</div>
+
+    <div id="pcBody"></div>
+
+  </main>
+</div>
+
+<div class="pc-toast" id="pcToast"></div>
+
+<script src="/pc-auth.js"></script>
+<script src="/pc-nav.js"></script>
+<script src="/pc-activity.js"></script>
+<script src="/pc-catalog.js"></script>
+<script src="/pc-fiscal.js"></script>
+
+<script>
+(function () {
+  'use strict';
+
+  var SUPABASE_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
+  var PAGE_SLUG = 'order-guide';
+  var ACTIVITY_SLUG = 'order-guide';
+
+  var VC = { FMP:'#c0392b', Mann:'#5a9e1a', Cure:'#2471a3', Subaru:'#7d3fbf', Villanova:'#1a237e', Montage:'#607d8b', DE:'#00796b', BWH:'#e67e22', ACCC:'#c0620a', SATB:'#888780', Kirkwood:'#b71c1c' };
+  function venueColor(c) { return VC[c] || '#9a9a94'; }
+
+  var PC = window.PCOrderGuide = { user:null, isAdmin:false, weeks:[], weekIndex:-1, venueFilter:'' };
+  function $(id) { return document.getElementById(id); }
+
+  var toastTimer = null;
+  function toast(msg, isErr) {
+    var el = $('pcToast'); el.textContent = msg; el.classList.toggle('is-error', !!isErr); el.classList.add('is-on');
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { el.classList.remove('is-on'); }, 3200);
+  }
+  PC.toast = toast;
+
+  PC.authFetch = function (path, opts) {
+    opts = opts || {};
+    var url = path.charAt(0) === '/' ? (SUPABASE_URL + path) : path;
+    var headers = Object.assign({ 'Content-Type':'application/json' },
+      (typeof pcAuth !== 'undefined' && pcAuth.headers) ? pcAuth.headers() : {}, opts.headers || {});
+    return fetch(url, Object.assign({}, opts, { headers:headers })).then(function (res) {
+      if (!res.ok) { return res.text().then(function (b) { throw new Error('Request failed (' + res.status + '): ' + b.slice(0, 300)); }); }
+      if (res.status === 204) return null;
+      var ct = res.headers.get('content-type') || '';
+      return ct.indexOf('application/json') !== -1 ? res.json() : res.text();
+    });
+  };
+
+  function setLoading(on) { var el = $('pcLoading'); if (el) el.classList.toggle('is-on', !!on); }
+
+  // ---- date / format helpers (verbatim from Prep & Production) ------
+  function escAttr(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function fmtMD(d) { if (!d) return ''; var p = String(d).slice(0,10).split('-'); if (p.length !== 3) return d; return parseInt(p[1],10) + '/' + parseInt(p[2],10); }
+  function todayISO() { var n = new Date(); return n.getFullYear() + '-' + ('0' + (n.getMonth()+1)).slice(-2) + '-' + ('0' + n.getDate()).slice(-2); }
+  function r1(n) { return Math.round(n * 10) / 10; }
+  function ceil(n) { return Math.ceil(n - 1e-9); }
+  function num(n) { return Number(n).toLocaleString(); }
+
+  // ---- profiles (carry + mix + prices + item meta) — same as Prep page ----
+  PC._carry = {}; PC._standMix = {}; PC._prices = {}; PC._itemMeta = {};
+  PC.ensureProfiles = function () {
+    if (PC._profilesLoaded) return Promise.resolve();
+    var p1 = PC.authFetch('/rest/v1/prep_stand_item_mix?select=stand_id,item_id,mix_pct,carries,stands(venue_code,stand_name)&carries=is.true&limit=5000');
+    var p2 = PC.authFetch('/rest/v1/venue_item_prices?select=venue_code,item_id,unit_price&limit=5000');
+    var p3 = PC.authFetch('/rest/v1/prep_items?select=id,name,unit,production_mode,sort_order&is_active=is.true&order=sort_order.asc&limit=200');
+    return Promise.all([p1, p2, p3]).then(function (r) {
+      PC._carry = {}; PC._standMix = {};
+      (r[0] || []).forEach(function (row) {
+        var s = row.stands; if (!s || s.venue_code == null || s.stand_name == null) return;
+        var key = s.venue_code + '|' + s.stand_name;
+        PC._carry[key] = true;
+        if (!PC._standMix[key]) PC._standMix[key] = { stand_id:row.stand_id, items:{} };
+        PC._standMix[key].items[row.item_id] = (row.mix_pct == null) ? null : Number(row.mix_pct);
+      });
+      PC._prices = {};
+      (r[1] || []).forEach(function (row) { if (!PC._prices[row.venue_code]) PC._prices[row.venue_code] = {}; PC._prices[row.venue_code][row.item_id] = Number(row.unit_price); });
+      PC._itemMeta = {};
+      (r[2] || []).forEach(function (it) { PC._itemMeta[it.id] = { name:it.name, unit:it.unit, production_mode:it.production_mode, sort_order:it.sort_order }; });
+      PC._profilesLoaded = true;
+    });
+  };
+
+  // Same suggestion math as Planning: ceil(forecast * mix / price * 1.05).
+  PC.suggestQty = function (forecast, mix, price) {
+    if (mix == null || !(price > 0) || !(forecast > 0)) return null;
+    return Math.ceil((forecast * mix / price) * 1.05);
+  };
+
+  // ---- recipes (flat fetch, joined in JS to dodge the dual-FK embed) ----
+  PC._ingredients = {};       // id -> ingredient meta
+  PC._recipeByItem = {};      // prep_item_id -> [ {component_id, qty} ]
+  PC._recipeByMake = {};      // make-unit ingredient id -> [ {component_id, qty} ]
+  PC._makeRateGlobal = {};    // prep_item_id -> units_per_hour
+  PC._makeRateVenue = {};     // prep_item_id|venue -> units_per_hour
+
+  PC.ensureRecipes = function () {
+    if (PC._recipesLoaded) return Promise.resolve();
+    var i = PC.authFetch('/rest/v1/prep_ingredients?select=id,name,kind,base_unit,order_unit,order_pack_qty,order_pack_label,batch_base_qty,batch_minutes,sort_order&deleted_at=is.null&limit=500');
+    var l = PC.authFetch('/rest/v1/prep_recipe_lines?select=prep_item_id,parent_ingredient_id,component_id,qty_per_unit&deleted_at=is.null&limit=2000');
+    var m = PC.authFetch('/rest/v1/prep_item_make_rates?select=prep_item_id,venue_code,units_per_hour&deleted_at=is.null&limit=500');
+    return Promise.all([i, l, m]).then(function (res) {
+      PC._ingredients = {};
+      (res[0] || []).forEach(function (g) { PC._ingredients[g.id] = g; });
+      PC._recipeByItem = {}; PC._recipeByMake = {};
+      (res[1] || []).forEach(function (line) {
+        var entry = { component_id:line.component_id, qty:Number(line.qty_per_unit) };
+        if (line.prep_item_id) { (PC._recipeByItem[line.prep_item_id] = PC._recipeByItem[line.prep_item_id] || []).push(entry); }
+        else if (line.parent_ingredient_id) { (PC._recipeByMake[line.parent_ingredient_id] = PC._recipeByMake[line.parent_ingredient_id] || []).push(entry); }
+      });
+      PC._makeRateGlobal = {}; PC._makeRateVenue = {};
+      (res[2] || []).forEach(function (rt) {
+        if (rt.venue_code == null) PC._makeRateGlobal[rt.prep_item_id] = Number(rt.units_per_hour);
+        else PC._makeRateVenue[rt.prep_item_id + '|' + rt.venue_code] = Number(rt.units_per_hour);
+      });
+      PC._recipesLoaded = true;
+    });
+  };
+
+  // ---- date math ----
+  PC.dayIndex = function (a, b) {
+    var x = String(a).slice(0,10).split('-'), y = String(b).slice(0,10).split('-');
+    return Math.round((Date.UTC(+y[0],+y[1]-1,+y[2]) - Date.UTC(+x[0],+x[1]-1,+x[2])) / 86400000);
+  };
+
+  // ---- week picker (fiscal) ----
+  PC.initWeekPicker = function () {
+    var weeks = [];
+    if (typeof pcFiscal !== 'undefined' && pcFiscal.getPeriods) {
+      (pcFiscal.getPeriods() || []).forEach(function (p) {
+        (pcFiscal.getWeekRanges(p) || []).forEach(function (w) { weeks.push({ start:w.start, end:w.end, label:w.label }); });
+      });
+    }
+    PC.weeks = weeks;
+    var sel = $('pcWeekSelect');
+    if (sel) {
+      sel.innerHTML = weeks.map(function (w, i) { return '<option value="' + i + '">' + escAttr(w.label) + ' (' + fmtMD(w.start) + '\u2013' + fmtMD(w.end) + ')</option>'; }).join('');
+      if (!sel._wired) { sel.addEventListener('change', function () { PC.setWeek(parseInt(sel.value,10)); }); sel._wired = true; }
+    }
+    var prev = $('pcWeekPrev'), next = $('pcWeekNext');
+    if (prev && !prev._wired) { prev.addEventListener('click', function () { PC.setWeek(PC.weekIndex - 1); }); prev._wired = true; }
+    if (next && !next._wired) { next.addEventListener('click', function () { PC.setWeek(PC.weekIndex + 1); }); next._wired = true; }
+    if (!weeks.length) { toast('No fiscal weeks available', true); return; }
+    var t = todayISO(), idx = -1, k;
+    for (k = 0; k < weeks.length; k++) { if (weeks[k].start <= t && t <= weeks[k].end) { idx = k; break; } }
+    if (idx === -1) { for (k = 0; k < weeks.length; k++) { if (weeks[k].start >= t) { idx = k; break; } } }
+    if (idx === -1) idx = weeks.length - 1;
+    PC.setWeek(idx);
+  };
+
+  PC.setWeek = function (idx) {
+    if (idx < 0 || idx >= PC.weeks.length) return;
+    PC.weekIndex = idx;
+    var sel = $('pcWeekSelect'); if (sel) sel.value = String(idx);
+    var prev = $('pcWeekPrev'), next = $('pcWeekNext');
+    if (prev) prev.disabled = (idx === 0);
+    if (next) next.disabled = (idx === PC.weeks.length - 1);
+    PC.load();
+  };
+
+  PC.initVenueFilter = function () {
+    var sel = $('pcVenueFilter'); if (!sel) return;
+    function populate() {
+      var venues = (typeof pcCatalog !== 'undefined' && pcCatalog.getActiveVenues) ? pcCatalog.getActiveVenues() : [];
+      sel.innerHTML = '<option value="">All venues</option>' + venues.map(function (v) { return '<option value="' + escAttr(v.code) + '">' + escAttr(v.code) + ' \u2014 ' + escAttr(v.full_name || v.code) + '</option>'; }).join('');
+      if (PC.venueFilter) sel.value = PC.venueFilter;
+    }
+    if (typeof pcCatalog !== 'undefined' && pcCatalog.ready) pcCatalog.ready().then(populate); else populate();
+    if (!sel._wired) { sel.addEventListener('change', function () { PC.venueFilter = sel.value; PC.render(); }); sel._wired = true; }
+  };
+
+  // ---- load the week's three feeds (same shape as Prep & Production) ----
+  PC.load = function () {
+    var w = PC.weeks[PC.weekIndex]; if (!w) return;
+    setLoading(true);
+    $('pcBody').innerHTML = '';
+    var planUrl = '/rest/v1/prep_plan_lines?select=planned_qty,item_id,event_id,stand_id,events!inner(event_date,venue,deleted_at),prep_items(name,unit,production_mode,sort_order)' +
+      '&events.event_date=gte.' + w.start + '&events.event_date=lte.' + w.end + '&events.deleted_at=is.null&deleted_at=is.null&limit=20000';
+    var evUrl = '/rest/v1/events?select=id,venue,event_date,staffing_requests(stand,venue,sales_forecast)' +
+      '&staffing_requests.sales_forecast=gt.0&event_date=gte.' + w.start + '&event_date=lte.' + w.end + '&deleted_at=is.null&order=event_date.asc&limit=1000';
+    var wsUrl = '/rest/v1/prep_wholesale_needs?select=need_date,venue_code,item_id,qty,prep_items(name,unit,production_mode,sort_order)' +
+      '&need_date=gte.' + w.start + '&need_date=lte.' + w.end + '&deleted_at=is.null&limit=2000';
+    Promise.all([PC.ensureProfiles(), PC.ensureRecipes()]).then(function () {
+      return Promise.all([PC.authFetch(planUrl), PC.authFetch(evUrl), PC.authFetch(wsUrl)]);
+    }).then(function (res) {
+      PC._planLines = (res[0] || []).filter(function (l) { return l.events && l.prep_items; });
+      PC._events = res[1] || [];
+      PC._wholesale = (res[2] || []).filter(function (r) { return r.prep_items; });
+      setLoading(false);
+      PC.render();
+    }).catch(function (err) {
+      setLoading(false);
+      toast(err.message || 'Failed to load', true);
+      $('pcBody').innerHTML = '<div class="pc-card"><div class="pc-empty"><p class="pc-empty-title">Could not load the week</p><p class="pc-empty-text">' + escAttr(err.message || '') + '</p></div></div>';
+    });
+  };
+
+  // Mix-based estimate per item x venue (mirrors Prep's computeEstimates).
+  PC.computeEstimates = function (filter) {
+    var byItemVenue = {}, meta = {};
+    (PC._events || []).forEach(function (e) {
+      (e.staffing_requests || []).forEach(function (r) {
+        var f = Number(r.sales_forecast); if (!(f > 0)) return;
+        var venue = r.venue || e.venue;
+        if (filter && venue !== filter) return;
+        var prof = PC._standMix[venue + '|' + (r.stand || '')]; if (!prof) return;
+        var prices = PC._prices[venue] || {};
+        Object.keys(prof.items).forEach(function (itemId) {
+          var m = PC._itemMeta[itemId]; if (!m || m.unit === 'tub') return;
+          var sug = PC.suggestQty(f, prof.items[itemId], prices[itemId]); if (sug == null) return;
+          if (!byItemVenue[itemId]) byItemVenue[itemId] = {};
+          byItemVenue[itemId][venue] = (byItemVenue[itemId][venue] || 0) + sug;
+          if (!meta[itemId]) meta[itemId] = m;
+        });
+      });
+    });
+    return { byItemVenue:byItemVenue, meta:meta };
+  };
+
+  // Planned per item x venue (plan lines + wholesale needs), honoring filter.
+  PC.computePlanned = function (filter) {
+    var byItemVenue = {}, meta = {};
+    (PC._planLines || []).forEach(function (l) {
+      var q = Number(l.planned_qty) || 0; if (q <= 0) return;
+      var venue = l.events.venue; if (filter && venue !== filter) return;
+      if (!byItemVenue[l.item_id]) byItemVenue[l.item_id] = {};
+      byItemVenue[l.item_id][venue] = (byItemVenue[l.item_id][venue] || 0) + q;
+      if (!meta[l.item_id]) meta[l.item_id] = l.prep_items;
+    });
+    (PC._wholesale || []).forEach(function (r) {
+      var q = Number(r.qty) || 0; if (q <= 0) return;
+      var venue = r.venue_code; if (filter && venue !== filter) return;
+      if (!byItemVenue[r.item_id]) byItemVenue[r.item_id] = {};
+      byItemVenue[r.item_id][venue] = (byItemVenue[r.item_id][venue] || 0) + q;
+      if (!meta[r.item_id]) meta[r.item_id] = r.prep_items;
+    });
+    return { byItemVenue:byItemVenue, meta:meta };
+  };
+
+  // Resolve planned-over-estimate per item x venue, then collapse to per-item
+  // totals for the selected scope (all venues = pooled; one venue = that venue).
+  PC.resolveUnits = function (filter) {
+    var planned = PC.computePlanned(filter);
+    var est = PC.computeEstimates(filter);
+    var ids = {}; Object.keys(planned.byItemVenue).forEach(function (id) { ids[id] = true; }); Object.keys(est.byItemVenue).forEach(function (id) { ids[id] = true; });
+    var unitsByItem = {}, meta = {};
+    Object.keys(ids).forEach(function (id) {
+      meta[id] = planned.meta[id] || est.meta[id] || PC._itemMeta[id] || { name:'(item)', unit:'', sort_order:0 };
+      var pv = planned.byItemVenue[id] || {}, ev = est.byItemVenue[id] || {};
+      var vset = {}; Object.keys(pv).forEach(function (v) { vset[v] = true; }); Object.keys(ev).forEach(function (v) { vset[v] = true; });
+      var total = 0;
+      Object.keys(vset).forEach(function (v) { total += (pv[v] > 0 ? pv[v] : (ev[v] || 0)); });
+      if (total > 0) unitsByItem[id] = total;
+    });
+    return { unitsByItem:unitsByItem, meta:meta };
+  };
+
+  // The transform: units per item -> raws (rounded to packs) + make-units (batches) + labor.
+  PC.rollup = function (unitsByItem) {
+    var rawNeed = {}, makeNeed = {}, itemLabor = {}, pending = [];
+    Object.keys(unitsByItem).forEach(function (itemId) {
+      var u = unitsByItem[itemId];
+      var lines = PC._recipeByItem[itemId];
+      if (!lines || !lines.length) { pending.push(itemId); return; }
+      lines.forEach(function (ln) {
+        var comp = PC._ingredients[ln.component_id]; if (!comp) return;
+        if (comp.kind === 'make_unit') makeNeed[comp.id] = (makeNeed[comp.id] || 0) + u * ln.qty;
+        else rawNeed[comp.id] = (rawNeed[comp.id] || 0) + u * ln.qty;
+      });
+      // item-level make rate (popcorn boxes/hr) -> labor minutes
+      var rate = PC._makeRateVenue[itemId + '|' + PC.venueFilter] || PC._makeRateGlobal[itemId];
+      if (rate > 0) itemLabor[itemId] = (u / rate) * 60;
+    });
+    // explode make-units into batches + their child raws + batch labor
+    var makeBatches = {}, makeLabor = {};
+    Object.keys(makeNeed).forEach(function (mid) {
+      var mu = PC._ingredients[mid]; if (!mu) return;
+      var base = mu.batch_base_qty > 0 ? mu.batch_base_qty : 1;
+      var batches = ceil(makeNeed[mid] / base);
+      makeBatches[mid] = batches;
+      if (mu.batch_minutes > 0) makeLabor[mid] = batches * mu.batch_minutes;
+      (PC._recipeByMake[mid] || []).forEach(function (ln) {
+        var comp = PC._ingredients[ln.component_id]; if (!comp) return;
+        rawNeed[comp.id] = (rawNeed[comp.id] || 0) + batches * ln.qty;
+      });
+    });
+    return { rawNeed:rawNeed, makeNeed:makeNeed, makeBatches:makeBatches, itemLabor:itemLabor, makeLabor:makeLabor, pending:pending };
+  };
+
+  PC.render = function () {
+    var w = PC.weeks[PC.weekIndex], body = $('pcBody'); if (!body || !w) return;
+    var filter = PC.venueFilter || '';
+    var resolved = PC.resolveUnits(filter);
+    var roll = PC.rollup(resolved.unitsByItem);
+
+    var nItems = Object.keys(resolved.unitsByItem).length;
+    var cnt = $('pcScopeCount');
+    if (cnt) cnt.textContent = nItems + ' item' + (nItems === 1 ? '' : 's') + (filter ? ' \u00b7 ' + filter : ' \u00b7 all venues');
+
+    if (!nItems) {
+      body.innerHTML = '<div class="pc-card"><div class="pc-empty"><p class="pc-empty-title">Nothing planned or forecasted' + (filter ? ' for ' + escAttr(filter) : '') + ' this week</p><p class="pc-empty-text">Order need appears once events are forecasted on the Plan tab, or quantities committed on Prep &amp; Production Planning.</p></div></div>';
+      return;
+    }
+
+    var rawIds = Object.keys(roll.rawNeed).filter(function (id) { return roll.rawNeed[id] > 0; })
+      .sort(function (a, b) { return (PC._ingredients[a].sort_order || 0) - (PC._ingredients[b].sort_order || 0); });
+    var makeIds = Object.keys(roll.makeBatches).sort(function (a, b) { return (PC._ingredients[a].sort_order || 0) - (PC._ingredients[b].sort_order || 0); });
+
+    // labor total (minutes -> hours)
+    var totalMin = 0;
+    Object.keys(roll.itemLabor).forEach(function (k) { totalMin += roll.itemLabor[k]; });
+    Object.keys(roll.makeLabor).forEach(function (k) { totalMin += roll.makeLabor[k]; });
+
+    var html = '';
+
+    // scope note
+    if (filter) {
+      html += '<div class="pc-scope-note">Showing <b>' + escAttr(filter) + '</b> only &mdash; each pack rounds up for this one building. Switch to <b>All venues</b> to pool the buy and round once.</div>';
+    } else {
+      html += '<div class="pc-scope-note"><b>All venues</b> &mdash; need is pooled and each pack rounds up once (central buy). Pick a single venue to see that building\u2019s own rounded order.</div>';
+    }
+
+    // bubbles
+    html += '<div class="pc-bubbles">';
+    html += '<div class="pc-bub"><div class="pc-bub-lbl">Items covered</div><div class="pc-bub-num">' + nItems + '</div><div class="pc-bub-sub">with a recipe' + (roll.pending.length ? ' \u00b7 ' + roll.pending.length + ' pending' : '') + '</div></div>';
+    html += '<div class="pc-bub"><div class="pc-bub-lbl">Lines to order</div><div class="pc-bub-num">' + rawIds.length + '</div><div class="pc-bub-sub">raw &amp; packaging</div></div>';
+    if (totalMin > 0) html += '<div class="pc-bub"><div class="pc-bub-lbl">Prep labor</div><div class="pc-bub-num">' + r1(totalMin / 60) + ' hr</div><div class="pc-bub-sub">' + (filter ? 'this building' : 'across venues') + '</div></div>';
+    html += '</div>';
+
+    // order guide
+    html += '<div class="pc-card" style="padding:18px 22px;margin-bottom:16px;">';
+    html += '<div class="pc-section-h"><span class="pc-section-t">Order &mdash; buy</span><span class="pc-section-c">gross need, rounded up to whole packs</span></div>';
+    html += '<div class="pc-og-row pc-og-head"><span>Ingredient</span><span class="r">Need</span><span class="r">Order</span></div>';
+    rawIds.forEach(function (id) {
+      var g = PC._ingredients[id];
+      var need = roll.rawNeed[id];
+      var needTxt = r1(need).toLocaleString() + ' ' + escAttr(g.base_unit || '');
+      var orderTxt;
+      if (g.order_pack_qty > 0) {
+        var packs = ceil(need / g.order_pack_qty);
+        orderTxt = '<span class="pc-og-order"><b>' + packs + '</b> <span class="u">' + escAttr(g.order_pack_label || g.order_unit || 'pack') + (packs === 1 ? '' : 's') + '</span></span>';
+      } else {
+        orderTxt = '<span class="pc-og-order none">' + r1(need).toLocaleString() + ' ' + escAttr(g.base_unit || '') + '</span>';
+      }
+      html += '<div class="pc-og-row"><span class="pc-og-name">' + escAttr(g.name) + '</span><span class="pc-og-need">' + needTxt + '</span>' + orderTxt + '</div>';
+    });
+    html += '</div>';
+
+    // make + timing
+    var hasMake = makeIds.length > 0, hasLabor = totalMin > 0;
+    if (hasMake || hasLabor) {
+      html += '<div class="pc-card" style="padding:18px 22px;">';
+      html += '<div class="pc-section-h"><span class="pc-section-t">Make &amp; prep time</span><span class="pc-section-c">on-site labor, before doors</span></div>';
+      html += '<div class="pc-mk-row pc-mk-head"><span>What to make</span><span class="r">Batches</span><span class="r">Time</span></div>';
+      // make-units (sugar water -> kegs)
+      makeIds.forEach(function (id) {
+        var mu = PC._ingredients[id];
+        var batches = roll.makeBatches[id];
+        var mins = roll.makeLabor[id] || 0;
+        var batchWord = (mu.base_unit === 'oz' && mu.batch_base_qty === 640) ? 'keg' : 'batch';
+        html += '<div class="pc-mk-row"><span class="pc-mk-name">' + escAttr(mu.name) + '<span class="pc-mk-tag">make</span></span>' +
+          '<span class="pc-mk-q"><b>' + batches + '</b> ' + batchWord + (batches === 1 ? '' : 's') + '</span>' +
+          '<span class="pc-mk-q">' + (mins > 0 ? r1(mins / 60) + ' hr' : '\u2014') + '</span></div>';
+      });
+      // item make rates (popcorn -> boxes/hr)
+      Object.keys(roll.itemLabor).sort(function (a, b) { return (resolved.meta[a].sort_order || 0) - (resolved.meta[b].sort_order || 0); }).forEach(function (id) {
+        var m = resolved.meta[id]; var u = resolved.unitsByItem[id]; var mins = roll.itemLabor[id];
+        html += '<div class="pc-mk-row"><span class="pc-mk-name">' + escAttr(m.name) +
+          (m.production_mode === 'on_site' ? '<span class="pc-mk-tag">on-site</span>' : '') + '</span>' +
+          '<span class="pc-mk-q">' + num(u) + ' <span style="font-size:11px;color:var(--pc-faint);">' + escAttr(m.unit || '') + '</span></span>' +
+          '<span class="pc-mk-q">' + r1(mins / 60) + ' hr</span></div>';
+      });
+      html += '<div class="pc-mk-foot"><span class="lbl">Total prep labor</span><span></span><span class="r">' + r1(totalMin / 60) + ' hr</span></div>';
+      html += '</div>';
+    }
+
+    // pending (counts but no recipe yet)
+    if (roll.pending.length) {
+      var pendTxt = roll.pending.sort(function (a, b) { return (resolved.meta[a].sort_order || 0) - (resolved.meta[b].sort_order || 0); }).map(function (id) {
+        return '<b>' + escAttr(resolved.meta[id].name) + '</b> ' + num(resolved.unitsByItem[id]) + ' ' + escAttr(resolved.meta[id].unit || '');
+      }).join(' \u00b7 ');
+      html += '<div class="pc-pending"><div class="pc-card"><p class="pc-pending-h">Not in the recipe engine yet</p>' +
+        '<p class="pc-pending-list">These have counts this week but no recipe, so they\u2019re not in the order guide above: ' + pendTxt + '. Add a recipe and they drop in automatically.</p></div></div>';
+    }
+
+    body.innerHTML = html;
+  };
+
+  // ---- boot ----
+  pcAuth.require({
+    pageSlug: PAGE_SLUG,
+    onReady: function (user) {
+      if (typeof pcActivity !== 'undefined' && pcActivity.init) pcActivity.init(ACTIVITY_SLUG);
+      PC.user = user || pcAuth.getUser();
+      PC.isAdmin = (typeof pcAuth.isAdmin === 'function') ? pcAuth.isAdmin() : false;
+      document.body.classList.add('pc-ready');
+      PC.initVenueFilter();
+      PC.initWeekPicker();
+    },
+    onDenied: function () { document.body.classList.add('pc-ready'); $('pcMain').style.display = 'none'; $('pcDenied').style.display = 'block'; }
+  });
+
+})();
+</script>
+</body>
+</html>
