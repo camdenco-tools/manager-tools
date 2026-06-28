@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Referrals - Popcorn Chez Manager Toolkit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #f6f6f3; color: #1a1a1a; font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+  .ref-wrap { max-width: 1080px; margin: 0 auto; padding: 26px 22px 80px; }
+  .ref-head { margin-bottom: 18px; }
+  .ref-head h1 { font-size: 24px; font-weight: 700; margin: 0 0 4px; }
+  .ref-head p { font-size: 14px; color: #6b6b66; margin: 0; line-height: 1.6; }
+
+  /* Summary tiles */
+  .ref-tiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin: 18px 0 22px; }
+  .ref-tile { background: #fff; border: 1px solid #e8e8e4; border-radius: 10px; padding: 14px 16px; }
+  .ref-tile .tile-num { font-size: 26px; font-weight: 700; line-height: 1; margin-bottom: 6px; }
+  .ref-tile .tile-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #8a8a84; }
+  .ref-tile.eligible .tile-num { color: #BA7517; }
+  .ref-tile.approved .tile-num { color: #185FA5; }
+  .ref-tile.paid .tile-num { color: #1D9E75; }
+
+  /* Filter row */
+  .ref-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; align-items: center; }
+  .ref-filter-btn { font-family: inherit; font-size: 13px; font-weight: 500; padding: 7px 14px; border: 1px solid #d6d6d0; border-radius: 20px; background: #fff; color: #555; cursor: pointer; }
+  .ref-filter-btn.active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+  .ref-count-note { margin-left: auto; font-size: 12px; color: #8a8a84; }
+
+  /* Cards */
+  .ref-card { background: #fff; border: 1px solid #e8e8e4; border-radius: 12px; padding: 18px 20px; margin-bottom: 14px; }
+  .ref-card.is-eligible { border-color: #e7c98f; box-shadow: 0 0 0 1px #f0d9a8 inset; }
+  .ref-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+  .ref-who { flex: 1 1 280px; }
+  .ref-who .ref-name { font-size: 17px; font-weight: 700; margin-bottom: 2px; }
+  .ref-who .ref-sub { font-size: 13px; color: #6b6b66; line-height: 1.6; }
+  .ref-who .ref-sub strong { color: #3a3a36; font-weight: 600; }
+
+  .ref-badge { display: inline-block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 4px 10px; border-radius: 20px; white-space: nowrap; }
+  .badge-pending { background: #f1f1ee; color: #6b6b66; }
+  .badge-eligible { background: #fbedd2; color: #8a5a12; }
+  .badge-approved { background: #e3eefb; color: #1c5fa5; }
+  .badge-paid { background: #e6f6ee; color: #167a4e; }
+  .badge-void { background: #fbe9e9; color: #a33a3a; }
+
+  /* Progress */
+  .ref-progress { margin: 14px 0 4px; }
+  .ref-progress-meta { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+  .ref-progress-meta .pm-label { font-size: 12px; font-weight: 600; color: #6b6b66; }
+  .ref-progress-meta .pm-count { font-size: 13px; font-weight: 700; }
+  .ref-bar { height: 8px; background: #ececea; border-radius: 6px; overflow: hidden; }
+  .ref-bar-fill { height: 100%; background: #c9c9c4; border-radius: 6px; transition: width 0.2s; }
+  .ref-bar-fill.full { background: #1D9E75; }
+  .ref-bar-fill.eligible { background: #BA7517; }
+
+  /* Money / meta line */
+  .ref-meta-line { font-size: 13px; color: #6b6b66; margin-top: 10px; line-height: 1.7; }
+  .ref-meta-line strong { color: #1a1a1a; font-weight: 700; }
+  .ref-stamp { font-size: 12px; color: #9a9a94; margin-top: 4px; }
+
+  /* Actions */
+  .ref-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .btn { font-family: inherit; font-size: 13px; font-weight: 600; padding: 8px 14px; border-radius: 8px; border: 1px solid transparent; cursor: pointer; }
+  .btn-green { background: #1D9E75; color: #fff; }
+  .btn-green:hover { background: #168760; }
+  .btn-blue { background: #185FA5; color: #fff; }
+  .btn-blue:hover { background: #134d86; }
+  .btn-ghost { background: #fff; color: #555; border-color: #d6d6d0; }
+  .btn-ghost:hover { background: #f6f6f3; }
+  .btn-danger-ghost { background: #fff; color: #a33a3a; border-color: #e3bcbc; }
+  .btn-danger-ghost:hover { background: #fdf3f3; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* Edit panel */
+  .ref-edit { margin-top: 14px; padding-top: 14px; border-top: 1px dashed #e2e2dd; display: none; }
+  .ref-edit.open { display: block; }
+  .ref-edit-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 10px; }
+  .ref-edit label { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: #8a8a84; margin-bottom: 4px; }
+  .ref-edit input, .ref-edit textarea { width: 100%; font-family: inherit; font-size: 14px; padding: 8px 10px; border: 1px solid #d6d6d0; border-radius: 6px; }
+  .ref-edit textarea { min-height: 52px; resize: vertical; }
+
+  .ref-empty { background: #fff; border: 1px dashed #d6d6d0; border-radius: 12px; padding: 40px 20px; text-align: center; color: #8a8a84; font-size: 14px; }
+  .ref-loading { text-align: center; padding: 50px 20px; color: #8a8a84; font-size: 14px; }
+  .ref-err { background: #fbe9e9; border: 1px solid #e3bcbc; color: #a33a3a; border-radius: 10px; padding: 14px 16px; font-size: 14px; line-height: 1.6; margin-bottom: 16px; }
+  .ref-access { background: #fff; border: 1px solid #e8e8e4; border-radius: 12px; padding: 40px 24px; text-align: center; color: #6b6b66; font-size: 15px; line-height: 1.7; }
+
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: refspin 0.7s linear infinite; vertical-align: -2px; margin-right: 6px; }
+  @keyframes refspin { to { transform: rotate(360deg); } }
+
+  @media (max-width: 760px) {
+    .ref-tiles { grid-template-columns: repeat(2, 1fr); }
+    .ref-edit-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<script src="/pc-auth.js"></script>
+<script src="/pc-nav.js"></script>
+
+<div class="ref-wrap">
+  <div class="ref-head">
+    <h1>Referrals</h1>
+    <p>Employee referral bonuses. Progress is counted from verified sign-in sheets &mdash; a referral becomes eligible once the referred hire has worked the required number of events.</p>
+  </div>
+  <div id="ref-root">
+    <div class="ref-loading"><span class="spinner"></span>Loading referrals&hellip;</div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var SB_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
+  var REST = SB_URL + '/rest/v1/';
+
+  var DEFAULT_EVENTS_REQUIRED = 5;
+
+  // In-memory state
+  var pcUser = null;
+  var pcIsAdmin = false;
+  var refRows = [];            // referrals rows
+  var workedByEmp = {};        // employee_id -> count of distinct events worked
+  var activeFilter = 'all';    // all | pending | eligible | approved | paid | void
+  var editingId = null;        // id of the referral whose edit panel is open
+
+  // ---- helpers ----------------------------------------------------------
+
+  function esc(s) {
+    if (s === null || s === undefined) { return ''; }
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function money(n) {
+    var v = Number(n);
+    if (isNaN(v)) { v = 0; }
+    return '$' + v.toFixed(2);
+  }
+
+  function fmtDate(iso) {
+    if (!iso) { return ''; }
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) { return ''; }
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  function actorLabel() {
+    if (!pcUser) { return 'manager'; }
+    return pcUser.display_name || pcUser.email || 'manager';
+  }
+
+  function writeHeaders() {
+    // pcAuth.headers() returns apikey + Authorization. Add JSON + return.
+    var h = pcAuth.headers();
+    var out = {};
+    for (var k in h) { if (h.hasOwnProperty(k)) { out[k] = h[k]; } }
+    out['Content-Type'] = 'application/json';
+    out['Prefer'] = 'return=representation';
+    return out;
+  }
+
+  // Derived status: a stored 'pending' row whose worked count has met the
+  // threshold is surfaced as "eligible" in the UI (still pending in the DB
+  // until a manager approves it).
+  function derivedStatus(row) {
+    if (row.status === 'pending') {
+      var emp = row.referred_employee_id;
+      var need = (row.events_required != null) ? row.events_required : DEFAULT_EVENTS_REQUIRED;
+      var have = (emp && workedByEmp[emp] != null) ? workedByEmp[emp] : 0;
+      if (have >= need) { return 'eligible'; }
+    }
+    return row.status;
+  }
+
+  // ---- data loading -----------------------------------------------------
+
+  function loadReferrals() {
+    return fetch(REST + 'referrals?deleted_at=is.null&select=*&order=created_at.desc&limit=500', {
+      headers: pcAuth.headers()
+    }).then(function (r) {
+      if (!r.ok) { return r.text().then(function (t) { throw new Error('Load failed (' + r.status + '): ' + t); }); }
+      return r.json();
+    }).then(function (rows) {
+      refRows = rows || [];
+      return refRows;
+    });
+  }
+
+  // Batch the worked-event count for all referred employees in one request.
+  // Verified attendance lives in sale_staff_assignments -> sales. We count
+  // DISTINCT (event_date|venue) per employee so multiple stands at one event
+  // count once.
+  function loadWorkedCounts() {
+    var ids = [];
+    var seen = {};
+    for (var i = 0; i < refRows.length; i++) {
+      var e = refRows[i].referred_employee_id;
+      if (e && !seen[e]) { seen[e] = true; ids.push(e); }
+    }
+    workedByEmp = {};
+    if (ids.length === 0) { return Promise.resolve(); }
+    var inList = '(' + ids.join(',') + ')';
+    var url = REST + 'sale_staff_assignments'
+      + '?employee_id=in.' + encodeURIComponent(inList)
+      + '&select=employee_id,sales(event_date,venue)'
+      + '&limit=5000';
+    return fetch(url, { headers: pcAuth.headers() }).then(function (r) {
+      if (!r.ok) { return []; }   // non-fatal: counts just show 0
+      return r.json();
+    }).then(function (rows) {
+      var buckets = {};   // emp -> { 'date|venue': true }
+      rows = rows || [];
+      for (var i = 0; i < rows.length; i++) {
+        var row = rows[i];
+        var emp = row.employee_id;
+        var s = row.sales;
+        if (!emp || !s) { continue; }
+        var key = (s.event_date || '') + '|' + (s.venue || '');
+        if (!buckets[emp]) { buckets[emp] = {}; }
+        buckets[emp][key] = true;
+      }
+      for (var k in buckets) {
+        if (buckets.hasOwnProperty(k)) {
+          var c = 0, b = buckets[k];
+          for (var kk in b) { if (b.hasOwnProperty(kk)) { c++; } }
+          workedByEmp[k] = c;
+        }
+      }
+    }).catch(function () { /* non-fatal */ });
+  }
+
+  // ---- mutations --------------------------------------------------------
+
+  function patchReferral(id, body, btn, restoreLabel) {
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Saving...'; }
+    return fetch(REST + 'referrals?id=eq.' + encodeURIComponent(id), {
+      method: 'PATCH',
+      headers: writeHeaders(),
+      body: JSON.stringify(body)
+    }).then(function (r) {
+      if (!r.ok) { return r.text().then(function (t) { throw new Error('(' + r.status + ') ' + t); }); }
+      return r.json();
+    }).then(function (rows) {
+      var updated = (rows && rows[0]) ? rows[0] : null;
+      if (updated) {
+        for (var i = 0; i < refRows.length; i++) {
+          if (refRows[i].id === id) { refRows[i] = updated; break; }
+        }
+      }
+      render();
+    }).catch(function (err) {
+      if (btn) { btn.disabled = false; btn.innerHTML = restoreLabel || 'Save'; }
+      alert('Could not save the change.\n\n' + (err && err.message ? err.message : 'Please try again.'));
+    });
+  }
+
+  window.refApprove = function (id, btnEl) {
+    var now = new Date().toISOString();
+    patchReferral(id, { status: 'approved', qualified_by: actorLabel(), qualified_at: now, updated_at: now }, btnEl, 'Approve');
+  };
+
+  window.refMarkPaid = function (id, btnEl) {
+    var now = new Date().toISOString();
+    patchReferral(id, { status: 'paid', paid_by: actorLabel(), paid_at: now, updated_at: now }, btnEl, 'Mark paid');
+  };
+
+  window.refReopen = function (id, btnEl) {
+    var now = new Date().toISOString();
+    patchReferral(id, { status: 'pending', qualified_by: null, qualified_at: null, paid_by: null, paid_at: null, updated_at: now }, btnEl, 'Reopen');
+  };
+
+  window.refVoid = function (id, btnEl) {
+    if (!window.confirm('Void this referral? It will no longer be counted toward any payout. You can reopen it later if needed.')) { return; }
+    var now = new Date().toISOString();
+    patchReferral(id, { status: 'void', updated_at: now }, btnEl, 'Void');
+  };
+
+  window.refToggleEdit = function (id) {
+    editingId = (editingId === id) ? null : id;
+    render();
+  };
+
+  window.refSaveEdit = function (id, btnEl) {
+    var bonusEl = document.getElementById('edit-bonus-' + id);
+    var eventsEl = document.getElementById('edit-events-' + id);
+    var posEl = document.getElementById('edit-pos-' + id);
+    var notesEl = document.getElementById('edit-notes-' + id);
+    var bonus = bonusEl ? parseFloat(bonusEl.value) : null;
+    var events = eventsEl ? parseInt(eventsEl.value, 10) : null;
+    if (bonus == null || isNaN(bonus) || bonus < 0) { alert('Enter a valid bonus amount (0 or more).'); return; }
+    if (events == null || isNaN(events) || events < 1) { alert('Enter a valid number of events required (1 or more).'); return; }
+    var body = {
+      bonus_amount: bonus,
+      events_required: events,
+      referred_position: (posEl && posEl.value.trim()) ? posEl.value.trim() : null,
+      notes: (notesEl && notesEl.value.trim()) ? notesEl.value.trim() : null,
+      updated_at: new Date().toISOString()
+    };
+    editingId = null;
+    patchReferral(id, body, btnEl, 'Save changes');
+  };
+
+  window.refSetFilter = function (f) {
+    activeFilter = f;
+    render();
+  };
+
+  // ---- rendering --------------------------------------------------------
+
+  function tile(num, label, cls) {
+    return '<div class="ref-tile ' + (cls || '') + '">'
+      + '<div class="tile-num">' + num + '</div>'
+      + '<div class="tile-label">' + label + '</div></div>';
+  }
+
+  function badge(status) {
+    var map = {
+      pending: ['badge-pending', 'Pending'],
+      eligible: ['badge-eligible', 'Eligible'],
+      approved: ['badge-approved', 'Approved'],
+      paid: ['badge-paid', 'Paid'],
+      void: ['badge-void', 'Void']
+    };
+    var m = map[status] || map.pending;
+    return '<span class="ref-badge ' + m[0] + '">' + m[1] + '</span>';
+  }
+
+  function filterBtn(key, label, n) {
+    var cls = 'ref-filter-btn' + (activeFilter === key ? ' active' : '');
+    var suffix = (n != null) ? ' (' + n + ')' : '';
+    return '<button class="' + cls + '" onclick="refSetFilter(\'' + key + '\')">' + label + suffix + '</button>';
+  }
+
+  function renderCard(row) {
+    var dStatus = derivedStatus(row);
+    var emp = row.referred_employee_id;
+    var need = (row.events_required != null) ? row.events_required : DEFAULT_EVENTS_REQUIRED;
+    var have = (emp && workedByEmp[emp] != null) ? workedByEmp[emp] : 0;
+    var pct = need > 0 ? Math.min(100, Math.round((have / need) * 100)) : 0;
+    var fillCls = (have >= need) ? (row.status === 'pending' ? 'eligible' : 'full') : '';
+    var cardCls = 'ref-card' + (dStatus === 'eligible' ? ' is-eligible' : '');
+
+    var html = '<div class="' + cardCls + '">';
+
+    // top: who + badge
+    html += '<div class="ref-card-top">';
+    html += '<div class="ref-who">';
+    html += '<div class="ref-name">' + esc(row.referred_name || 'Referred hire') + '</div>';
+    html += '<div class="ref-sub">Referred by <strong>' + esc(row.referrer_name || 'Unknown') + '</strong>';
+    if (row.referred_position) { html += ' &middot; ' + esc(row.referred_position); }
+    html += '</div>';
+    html += '</div>';
+    html += '<div>' + badge(dStatus) + '</div>';
+    html += '</div>';
+
+    // progress (hide for void)
+    if (row.status !== 'void') {
+      html += '<div class="ref-progress">';
+      html += '<div class="ref-progress-meta">';
+      html += '<span class="pm-label">Events worked (verified sign-ins)</span>';
+      html += '<span class="pm-count">' + have + ' / ' + need + '</span>';
+      html += '</div>';
+      html += '<div class="ref-bar"><div class="ref-bar-fill ' + fillCls + '" style="width:' + pct + '%;"></div></div>';
+      html += '</div>';
+      if (!emp) {
+        html += '<div class="ref-stamp">No linked employee record yet, so worked events can\'t be counted.</div>';
+      }
+    }
+
+    // money + stamps
+    html += '<div class="ref-meta-line">Bonus: <strong>' + money(row.bonus_amount) + '</strong></div>';
+    var stamps = [];
+    if (row.created_at) { stamps.push('Created ' + fmtDate(row.created_at) + (row.created_by ? ' by ' + esc(row.created_by) : '')); }
+    if (row.qualified_at) { stamps.push('Approved ' + fmtDate(row.qualified_at) + (row.qualified_by ? ' by ' + esc(row.qualified_by) : '')); }
+    if (row.paid_at) { stamps.push('Paid ' + fmtDate(row.paid_at) + (row.paid_by ? ' by ' + esc(row.paid_by) : '')); }
+    if (stamps.length) { html += '<div class="ref-stamp">' + stamps.join(' &middot; ') + '</div>'; }
+    if (row.notes) { html += '<div class="ref-stamp">Note: ' + esc(row.notes) + '</div>'; }
+
+    // actions (admin only)
+    if (pcIsAdmin) {
+      html += '<div class="ref-actions">';
+      if (row.status === 'pending') {
+        var approveLabel = (dStatus === 'eligible') ? 'Approve bonus' : 'Approve early';
+        html += '<button class="btn btn-green" onclick="refApprove(\'' + row.id + '\', this)">' + approveLabel + '</button>';
+      } else if (row.status === 'approved') {
+        html += '<button class="btn btn-blue" onclick="refMarkPaid(\'' + row.id + '\', this)">Mark paid</button>';
+        html += '<button class="btn btn-ghost" onclick="refReopen(\'' + row.id + '\', this)">Reopen</button>';
+      } else if (row.status === 'paid') {
+        html += '<button class="btn btn-ghost" onclick="refReopen(\'' + row.id + '\', this)">Reopen</button>';
+      } else if (row.status === 'void') {
+        html += '<button class="btn btn-ghost" onclick="refReopen(\'' + row.id + '\', this)">Reopen</button>';
+      }
+      html += '<button class="btn btn-ghost" onclick="refToggleEdit(\'' + row.id + '\')">Edit</button>';
+      if (row.status !== 'void') {
+        html += '<button class="btn btn-danger-ghost" onclick="refVoid(\'' + row.id + '\', this)">Void</button>';
+      }
+      html += '</div>';
+
+      // edit panel
+      var openCls = (editingId === row.id) ? ' open' : '';
+      html += '<div class="ref-edit' + openCls + '" id="edit-panel-' + row.id + '">';
+      html += '<div class="ref-edit-grid">';
+      html += '<div><label>Bonus amount ($)</label><input type="number" min="0" step="0.01" id="edit-bonus-' + row.id + '" value="' + esc(row.bonus_amount != null ? row.bonus_amount : 0) + '"></div>';
+      html += '<div><label>Events required</label><input type="number" min="1" step="1" id="edit-events-' + row.id + '" value="' + esc(need) + '"></div>';
+      html += '<div><label>Position</label><input type="text" id="edit-pos-' + row.id + '" value="' + esc(row.referred_position || '') + '"></div>';
+      html += '</div>';
+      html += '<div><label>Notes</label><textarea id="edit-notes-' + row.id + '">' + esc(row.notes || '') + '</textarea></div>';
+      html += '<div class="ref-actions">';
+      html += '<button class="btn btn-green" onclick="refSaveEdit(\'' + row.id + '\', this)">Save changes</button>';
+      html += '<button class="btn btn-ghost" onclick="refToggleEdit(\'' + row.id + '\')">Cancel</button>';
+      html += '</div>';
+      html += '</div>';
+    }
+
+    html += '</div>';
+    return html;
+  }
+
+  function render() {
+    var root = document.getElementById('ref-root');
+    if (!root) { return; }
+
+    if (!pcIsAdmin) {
+      root.innerHTML = '<div class="ref-access">Referral records are admin-only. '
+        + 'You\'re signed in, but this page needs admin access to view and manage payouts. '
+        + 'Ask an admin to grant access if you need it.</div>';
+      return;
+    }
+
+    // counts
+    var counts = { all: refRows.length, pending: 0, eligible: 0, approved: 0, paid: 0, void: 0 };
+    var outstanding = 0, paidTotal = 0;
+    for (var i = 0; i < refRows.length; i++) {
+      var d = derivedStatus(refRows[i]);
+      counts[d] = (counts[d] || 0) + 1;
+      var amt = Number(refRows[i].bonus_amount) || 0;
+      if (d === 'paid') { paidTotal += amt; }
+      else if (d === 'eligible' || d === 'approved') { outstanding += amt; }
+    }
+
+    var html = '';
+    html += '<div class="ref-tiles">';
+    html += tile(counts.pending, 'Pending', '');
+    html += tile(counts.eligible, 'Eligible', 'eligible');
+    html += tile(counts.approved, 'Approved', 'approved');
+    html += tile(money(outstanding), 'Outstanding', '');
+    html += tile(money(paidTotal), 'Paid out', 'paid');
+    html += '</div>';
+
+    // filters
+    html += '<div class="ref-filters">';
+    html += filterBtn('all', 'All', counts.all);
+    html += filterBtn('pending', 'Pending', counts.pending);
+    html += filterBtn('eligible', 'Eligible', counts.eligible);
+    html += filterBtn('approved', 'Approved', counts.approved);
+    html += filterBtn('paid', 'Paid', counts.paid);
+    html += filterBtn('void', 'Void', counts.void);
+    html += '</div>';
+
+    // list
+    var shown = [];
+    for (var j = 0; j < refRows.length; j++) {
+      var ds = derivedStatus(refRows[j]);
+      if (activeFilter === 'all' || activeFilter === ds) { shown.push(refRows[j]); }
+    }
+
+    if (shown.length === 0) {
+      if (refRows.length === 0) {
+        html += '<div class="ref-empty">No referrals yet. When a referred candidate is hired, create the referral record from the candidate\'s card in the Pipeline and it will show up here.</div>';
+      } else {
+        html += '<div class="ref-empty">No referrals in this view.</div>';
+      }
+    } else {
+      for (var k = 0; k < shown.length; k++) { html += renderCard(shown[k]); }
+    }
+
+    root.innerHTML = html;
+  }
+
+  function showError(msg) {
+    var root = document.getElementById('ref-root');
+    if (root) { root.innerHTML = '<div class="ref-err">' + esc(msg) + '</div>'; }
+  }
+
+  // ---- boot -------------------------------------------------------------
+
+  pcAuth.require({
+    pageSlug: 'referrals',
+    onReady: function (user) {
+      pcUser = user || pcAuth.getUser();
+      pcIsAdmin = pcAuth.isAdmin();
+      if (!pcIsAdmin) { render(); return; }
+      loadReferrals()
+        .then(loadWorkedCounts)
+        .then(render)
+        .catch(function (err) {
+          showError('Could not load referrals. ' + (err && err.message ? err.message : 'Please refresh and try again.'));
+        });
+    }
+  });
+
+})();
+</script>
+</body>
+</html>
