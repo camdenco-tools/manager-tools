@@ -307,7 +307,7 @@
 
   // ---- shared catalogs ----------------------------------------------
   PC.loadCatalogs = function () {
-    var pItems = PC.authFetch('/rest/v1/prep_items?select=id,name,unit,production_mode,sort_order&is_active=is.true&order=sort_order.asc&limit=200');
+    var pItems = PC.authFetch('/rest/v1/prep_items?select=id,name,unit,production_mode,sort_order,variant_group&is_active=is.true&order=sort_order.asc&limit=200');
     var pIngs = PC.fetchIngredients();
     var pCat = (typeof pcCatalog !== 'undefined' && pcCatalog.ready) ? pcCatalog.ready() : Promise.resolve();
     return Promise.all([pItems, pIngs, pCat]).then(function (r) {
@@ -493,16 +493,47 @@
   PC._recRows = [];         // working rows: { _id, component_id, qty, note }
   PC._recOrig = [];         // snapshot: { id, component_id, qty, note }
 
+  // Collapse sellable items sharing a variant_group into one builder entry.
+  // The group's recipe/rate is owned by the lowest-sort_order member; for
+  // recipes the lines fan out to every member on save (so e.g. Popcorn Boxes
+  // inherits Popcorn's recipe and resolves no matter which is referenced).
+  function titleGroup(slug) {
+    return String(slug || '').split('_').map(function (w) { return w ? (w.charAt(0).toUpperCase() + w.slice(1)) : ''; }).join(' ');
+  }
+  PC.sellableGroups = function () {
+    var groups = {}, out = [];
+    PC.items.forEach(function (it) {
+      if (it.variant_group) {
+        var slug = it.variant_group;
+        if (!groups[slug]) groups[slug] = [];
+        groups[slug].push(it);
+      } else {
+        out.push({ type:'item', id:it.id, label:it.name, unit:(it.unit || 'unit'), sort:(it.sort_order || 0) });
+      }
+    });
+    Object.keys(groups).forEach(function (slug) {
+      var mem = groups[slug].slice().sort(function (a, b) { return (a.sort_order || 0) - (b.sort_order || 0); });
+      var owner = mem[0];
+      out.push({ type:'group', slug:slug, label:titleGroup(slug), ownerId:owner.id, unit:(owner.unit || 'unit'),
+                 memberIds:mem.map(function (m) { return m.id; }), sort:(owner.sort_order || 0) });
+    });
+    out.sort(function (a, b) { return (a.sort || 0) - (b.sort || 0); });
+    return out;
+  };
+  function parentOption(e) {
+    return (e.type === 'group')
+      ? '<option value="group:' + escAttr(e.slug) + '">' + escAttr(e.label) + '</option>'
+      : '<option value="item:' + e.id + '">' + escAttr(e.label) + '</option>';
+  }
+
   PC.renderRecipeParents = function () {
     var sel = $('pcRecParent'); if (!sel) return;
     if (sel._built) { return; }
-    var items = PC.items.slice().sort(function (a, b) { return (a.sort_order || 0) - (b.sort_order || 0); });
+    var entries = PC.sellableGroups();
     var makes = PC.ings.filter(function (g) { return g.kind === 'make_unit'; });
     var h = '<option value="">Select an item\u2026</option>';
-    if (items.length) {
-      h += '<optgroup label="Sellable items">' + items.map(function (it) {
-        return '<option value="item:' + it.id + '">' + escAttr(it.name) + '</option>';
-      }).join('') + '</optgroup>';
+    if (entries.length) {
+      h += '<optgroup label="Sellable items">' + entries.map(parentOption).join('') + '</optgroup>';
     }
     if (makes.length) {
       h += '<optgroup label="Make-units">' + makes.map(function (g) {
@@ -517,16 +548,22 @@
   PC.onRecParent = function (val) {
     var body = $('pcRecBody'), uEl = $('pcRecParentUnit');
     if (!val) { PC._recParent = null; if (body) body.innerHTML = ''; if (uEl) uEl.textContent = ''; return; }
-    var parts = val.split(':'), kind = parts[0], id = parts[1];
-    if (kind === 'item') {
-      var it = null, i; for (i = 0; i < PC.items.length; i++) { if (PC.items[i].id === id) { it = PC.items[i]; break; } }
+    var ci = val.indexOf(':'), kind = val.slice(0, ci), id = val.slice(ci + 1);
+    if (kind === 'group') {
+      var entries = PC.sellableGroups(), g = null, i;
+      for (i = 0; i < entries.length; i++) { if (entries[i].type === 'group' && entries[i].slug === id) { g = entries[i]; break; } }
+      if (!g) return;
+      PC._recParent = { kind:'item', id:g.ownerId, name:g.label, unit:g.unit, memberIds:g.memberIds };
+      if (uEl) uEl.textContent = 'per ' + g.unit + (g.memberIds.length > 1 ? ' \u00b7 saves to all ' + g.memberIds.length : '');
+    } else if (kind === 'item') {
+      var it = null, j; for (j = 0; j < PC.items.length; j++) { if (PC.items[j].id === id) { it = PC.items[j]; break; } }
       if (!it) return;
-      PC._recParent = { kind:'item', id:id, name:it.name, unit:(it.unit || 'unit') };
+      PC._recParent = { kind:'item', id:id, name:it.name, unit:(it.unit || 'unit'), memberIds:[id] };
       if (uEl) uEl.textContent = 'per ' + PC._recParent.unit;
     } else {
-      var g = PC.ingById[id]; if (!g) return;
-      var bl = (g.batch_base_qty > 0) ? ('batch (' + fmtNum(g.batch_base_qty) + ' ' + (g.base_unit || '') + ')') : 'batch';
-      PC._recParent = { kind:'make', id:id, name:g.name, unit:(g.base_unit || 'unit'), batchLabel:bl };
+      var mu = PC.ingById[id]; if (!mu) return;
+      var bl = (mu.batch_base_qty > 0) ? ('batch (' + fmtNum(mu.batch_base_qty) + ' ' + (mu.base_unit || '') + ')') : 'batch';
+      PC._recParent = { kind:'make', id:id, name:mu.name, unit:(mu.base_unit || 'unit'), batchLabel:bl, memberIds:[id] };
       if (uEl) uEl.textContent = 'per ' + bl;
     }
     PC.loadRecipe();
@@ -683,6 +720,23 @@
     patches.forEach(function (p2) { calls.push(PC.authFetch('/rest/v1/prep_recipe_lines?id=eq.' + p2.id, { method:'PATCH', headers:{ 'Prefer':'return=minimal' }, body:JSON.stringify(p2.body) })); });
     if (removeIds.length) calls.push(PC.authFetch('/rest/v1/prep_recipe_lines?id=in.(' + removeIds.join(',') + ')', { method:'PATCH', headers:{ 'Prefer':'return=minimal' }, body:JSON.stringify({ deleted_at:now, deleted_by:who }) }));
 
+    // Fan the same recipe out to the other members of a variant group (e.g.
+    // Popcorn Boxes inherits Popcorn's recipe). The owner is edited by the diff
+    // above; each other member is replaced wholesale so it ends up identical.
+    // Delete-then-insert is sequenced per member (not Promise.all'd together)
+    // so the insert can never race the soft-delete and get wiped.
+    var members = (p.memberIds && p.memberIds.length > 1) ? p.memberIds : [];
+    members.forEach(function (mid) {
+      if (mid === p.id) return;
+      var del = PC.authFetch('/rest/v1/prep_recipe_lines?prep_item_id=eq.' + mid + '&deleted_at=is.null', { method:'PATCH', headers:{ 'Prefer':'return=minimal' }, body:JSON.stringify({ deleted_at:now, deleted_by:who }) });
+      if (clean.length) {
+        var memberRows = clean.map(function (r) { return { prep_item_id:mid, component_id:r.component_id, qty_per_unit:r.qty, note:(r.note || null), updated_by:who, updated_at:now }; });
+        calls.push(del.then(function () { return PC.authFetch('/rest/v1/prep_recipe_lines', { method:'POST', headers:{ 'Prefer':'return=minimal' }, body:JSON.stringify(memberRows) }); }));
+      } else {
+        calls.push(del);
+      }
+    });
+
     if (!calls.length) { toast('No changes to save'); return; }
     var btn = $('pcRecSave'); btn.disabled = true; btn.textContent = 'Saving\u2026';
     Promise.all(calls).then(function () {
@@ -705,20 +759,31 @@
   PC.renderRateItems = function () {
     var sel = $('pcRateItem'); if (!sel) return;
     if (sel._built) return;
-    var items = PC.items.slice().sort(function (a, b) { return (a.sort_order || 0) - (b.sort_order || 0); });
-    sel.innerHTML = '<option value="">Select an item\u2026</option>' + items.map(function (it) {
-      return '<option value="' + it.id + '">' + escAttr(it.name) + '</option>';
-    }).join('');
+    var entries = PC.sellableGroups();
+    sel.innerHTML = '<option value="">Select an item\u2026</option>' + entries.map(parentOption).join('');
     sel._built = true;
     if (!sel._wired) { sel.addEventListener('change', function () { PC.onRateItem(sel.value); }); sel._wired = true; }
   };
 
-  PC.onRateItem = function (id) {
+  // A prep-time rate is read from the item actually made (the on-site/made
+  // member), which is the group owner — so the rate writes to the owner only,
+  // no fan-out. (Tub-only members like water ice never get a rate read anyway.)
+  PC.onRateItem = function (val) {
     var body = $('pcRateBody');
-    if (!id) { PC._rateItem = null; if (body) body.innerHTML = ''; return; }
-    var it = null, i; for (i = 0; i < PC.items.length; i++) { if (PC.items[i].id === id) { it = PC.items[i]; break; } }
-    if (!it) return;
-    PC._rateItem = { id:id, name:it.name, unit:(it.unit || 'unit') };
+    if (!val) { PC._rateItem = null; if (body) body.innerHTML = ''; return; }
+    var ci = val.indexOf(':'), kind = val.slice(0, ci), id = val.slice(ci + 1);
+    var ownerId = null, label = '', unit = 'unit';
+    if (kind === 'group') {
+      var entries = PC.sellableGroups(), g = null, i;
+      for (i = 0; i < entries.length; i++) { if (entries[i].type === 'group' && entries[i].slug === id) { g = entries[i]; break; } }
+      if (!g) return;
+      ownerId = g.ownerId; label = g.label; unit = g.unit;
+    } else {
+      var it = null, j; for (j = 0; j < PC.items.length; j++) { if (PC.items[j].id === id) { it = PC.items[j]; break; } }
+      if (!it) return;
+      ownerId = it.id; label = it.name; unit = (it.unit || 'unit');
+    }
+    PC._rateItem = { id:ownerId, name:label, unit:unit };
     PC.loadRates();
   };
 
