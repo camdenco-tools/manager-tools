@@ -56,6 +56,7 @@
     ],
     setup: [
       { label: 'Stand setup',                    href: '/stand-setup/',            slug: 'stand-setup' },
+      { label: 'Production setup',               href: '/production-setup/',       slug: 'production-setup' },
       { label: 'Item catalog',                   href: '/item-catalog/',           slug: 'item-catalog' },
       { label: 'Venue item profiles',            href: '/venue-item-profiles/',    slug: 'venue-item-profiles' }
     ],
