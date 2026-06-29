@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Production Setup — Popcorn Chez</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --pc-ink:#1a1a1a; --pc-muted:#6b6b66; --pc-faint:#9a9a94;
+    --pc-line:#e8e8e4; --pc-line-soft:#f0f0ec; --pc-bg:#fafaf8; --pc-card:#ffffff;
+    --pc-ops:#185FA5; --pc-ops-soft:#eaf1f8;
+    --pc-amber:#BA7517; --pc-amber-soft:#fbf2e6;
+    --pc-red:#b3261e; --pc-red-soft:#fbeceb; --pc-green:#639922;
+    --pc-prep:#534AB7; --pc-prep-soft:#efeefb;
+    --radius:10px; --radius-sm:7px;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"DM Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; color:var(--pc-ink); background:var(--pc-bg); -webkit-font-smoothing:antialiased; }
+  .pc-page { max-width:1080px; margin:0 auto; padding:26px 22px 110px; }
+
+  .pc-page-head { display:flex; align-items:flex-end; justify-content:space-between; gap:18px; flex-wrap:wrap; margin-bottom:18px; }
+  .pc-page-title { font-size:22px; font-weight:600; letter-spacing:-0.01em; margin:0 0 4px; }
+  .pc-page-sub { font-size:13px; color:var(--pc-muted); margin:0; max-width:600px; line-height:1.5; }
+
+  /* segmented tabs */
+  .pc-tabs { display:inline-flex; background:var(--pc-card); border:1px solid var(--pc-line); border-radius:22px; padding:3px; gap:2px; }
+  .pc-tab { appearance:none; border:none; background:transparent; font-family:inherit; font-size:13px; font-weight:500; color:var(--pc-muted); padding:7px 18px; border-radius:20px; cursor:pointer; transition:background 0.14s ease, color 0.14s ease; white-space:nowrap; }
+  .pc-tab:hover { color:var(--pc-ink); }
+  .pc-tab.is-active { background:var(--pc-ink); color:#fff; }
+
+  .pc-view { display:none; } .pc-view.is-active { display:block; }
+
+  .pc-toolbar { display:flex; align-items:center; gap:14px; flex-wrap:wrap; background:var(--pc-card); border:1px solid var(--pc-line); border-radius:var(--radius); padding:14px 16px; margin-bottom:16px; }
+  .pc-toolbar-label { font-size:11px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; color:var(--pc-faint); }
+  .pc-tb-sel { padding:7px 12px; border:1px solid var(--pc-line); border-radius:7px; font-family:inherit; font-size:13px; background:#fff; cursor:pointer; }
+  .pc-tb-spacer { margin-left:auto; }
+
+  .pc-card { background:var(--pc-card); border:1px solid var(--pc-line); border-radius:var(--radius); padding:20px 22px; margin-bottom:16px; }
+  .pc-card.pad0 { padding:0; }
+  .pc-section-h { display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin:0 0 12px; }
+  .pc-section-t { font-size:15px; font-weight:600; }
+  .pc-section-c { font-size:12px; color:var(--pc-faint); }
+
+  .pc-explain { font-size:12.5px; color:var(--pc-muted); background:var(--pc-prep-soft); border:1px solid #ddd9f5; border-radius:8px; padding:9px 13px; margin-bottom:16px; line-height:1.5; }
+  .pc-explain b { color:var(--pc-prep); }
+
+  .pc-btn { appearance:none; border:1px solid var(--pc-line); background:#fff; border-radius:8px; padding:8px 15px; font-family:inherit; font-size:13px; font-weight:500; cursor:pointer; color:var(--pc-ink); }
+  .pc-btn-prep { border-color:var(--pc-prep); background:var(--pc-prep-soft); color:var(--pc-prep); font-weight:600; }
+  .pc-btn-primary { appearance:none; border:none; background:var(--pc-ink); color:#fff; border-radius:8px; padding:9px 18px; font-family:inherit; font-size:13px; font-weight:600; cursor:pointer; }
+  .pc-btn-primary:disabled { opacity:0.4; cursor:not-allowed; }
+  .pc-btn-ghost { appearance:none; border:1px solid var(--pc-line); background:#fff; border-radius:8px; padding:9px 16px; font-family:inherit; font-size:13px; font-weight:500; cursor:pointer; color:var(--pc-ink); }
+  .pc-btn-x { appearance:none; border:none; background:var(--pc-line-soft); color:var(--pc-muted); border-radius:6px; width:28px; height:28px; font-size:16px; line-height:1; cursor:pointer; flex-shrink:0; }
+  .pc-btn-x:hover { background:var(--pc-line); color:var(--pc-red); }
+
+  /* ingredient list */
+  .pc-ing-grp { margin-bottom:18px; }
+  .pc-ing-grp:last-child { margin-bottom:0; }
+  .pc-ing-grp-h { font-size:11px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; color:var(--pc-faint); padding:0 4px 8px; border-bottom:1px solid var(--pc-line); margin-bottom:2px; }
+  .pc-ing-row { display:grid; grid-template-columns:1fr 150px 220px 88px; gap:12px; align-items:center; padding:11px 4px; border-top:1px solid var(--pc-line-soft); }
+  .pc-ing-row:first-of-type { border-top:none; }
+  .pc-ing-nm { font-size:14px; font-weight:500; }
+  .pc-ing-base { font-size:12.5px; color:var(--pc-muted); }
+  .pc-ing-detail { font-size:12.5px; color:var(--pc-muted); font-variant-numeric:tabular-nums; }
+  .pc-ing-detail .none { color:var(--pc-faint); font-style:italic; }
+  .pc-ing-act { display:flex; gap:8px; justify-content:flex-end; }
+  .pc-ing-link { appearance:none; border:none; background:none; color:var(--pc-ops); font-family:inherit; font-size:12.5px; font-weight:600; cursor:pointer; padding:4px 2px; }
+  .pc-ing-link.danger { color:var(--pc-red); }
+  .pc-used { font-size:11px; color:var(--pc-amber); margin-left:8px; }
+
+  /* recipe + rate editors */
+  .pc-line-hdr { display:grid; grid-template-columns:1fr 120px 150px 36px; gap:12px; padding:6px 4px; font-size:10px; font-weight:600; letter-spacing:0.05em; text-transform:uppercase; color:var(--pc-faint); }
+  .pc-line-hdr .r { text-align:right; }
+  .pc-line { display:grid; grid-template-columns:1fr 120px 150px 36px; gap:12px; align-items:center; padding:7px 4px; border-top:1px solid var(--pc-line-soft); }
+  .pc-line:first-of-type { border-top:none; }
+  .pc-line-sel { width:100%; padding:8px 10px; border:1px solid var(--pc-line); border-radius:7px; font-family:inherit; font-size:13px; background:#fff; }
+  .pc-line-qty { width:100%; padding:8px 10px; border:1px solid var(--pc-line); border-radius:7px; font-family:inherit; font-size:13px; text-align:right; background:#fff; font-variant-numeric:tabular-nums; }
+  .pc-line-unit { font-size:12px; color:var(--pc-faint); }
+  .pc-add-line { margin-top:10px; }
+
+  .pc-rate-global { display:flex; align-items:center; gap:14px; padding:14px 4px; border-bottom:1px solid var(--pc-line); margin-bottom:6px; flex-wrap:wrap; }
+  .pc-rate-global .lbl { font-size:13.5px; font-weight:600; min-width:130px; }
+  .pc-rate-in { width:110px; padding:8px 10px; border:1px solid var(--pc-line); border-radius:7px; font-family:inherit; font-size:13px; text-align:right; background:#fff; font-variant-numeric:tabular-nums; }
+  .pc-rate-unit { font-size:12.5px; color:var(--pc-muted); }
+  .pc-ovr-h { font-size:11px; font-weight:600; letter-spacing:0.04em; text-transform:uppercase; color:var(--pc-faint); margin:2px 4px 8px; }
+  .pc-ovr { display:grid; grid-template-columns:1fr 130px 36px; gap:12px; align-items:center; padding:7px 4px; border-top:1px solid var(--pc-line-soft); }
+  .pc-ovr:first-of-type { border-top:none; }
+
+  .pc-editor-foot { display:flex; align-items:center; justify-content:flex-end; gap:12px; margin-top:18px; padding-top:14px; border-top:1px solid var(--pc-line); }
+  .pc-editor-note { font-size:12.5px; color:var(--pc-muted); margin-right:auto; }
+
+  /* empty / states */
+  .pc-empty { text-align:center; padding:48px 24px; color:var(--pc-faint); }
+  .pc-empty-title { font-size:14px; font-weight:600; color:var(--pc-muted); margin:0 0 4px; }
+  .pc-empty-text { font-size:13px; margin:0 auto; max-width:430px; line-height:1.5; }
+
+  .pc-viewonly { font-size:12.5px; color:var(--pc-amber); background:var(--pc-amber-soft); border:1px solid #ecd9b8; border-radius:8px; padding:9px 13px; margin-bottom:16px; line-height:1.5; }
+
+  .pc-denied { max-width:520px; margin:60px auto; text-align:center; background:var(--pc-card); border:1px solid var(--pc-line); border-radius:var(--radius); padding:40px 32px; }
+  .pc-denied h2 { font-size:17px; margin:0 0 8px; } .pc-denied p { font-size:13px; color:var(--pc-muted); line-height:1.5; margin:0; }
+
+  .pc-loading { display:none; align-items:center; gap:10px; font-size:13px; color:var(--pc-muted); padding:40px 0; justify-content:center; }
+  .pc-loading.is-on { display:flex; }
+  .pc-spinner { width:16px; height:16px; border:2px solid var(--pc-line); border-top-color:var(--pc-ops); border-radius:50%; animation:pc-spin 0.7s linear infinite; }
+  @keyframes pc-spin { to { transform:rotate(360deg); } }
+
+  .pc-toast { position:fixed; bottom:22px; left:50%; transform:translateX(-50%) translateY(14px); background:var(--pc-ink); color:#fff; font-size:13px; font-weight:500; padding:11px 18px; border-radius:22px; box-shadow:0 6px 20px rgba(0,0,0,0.18); opacity:0; pointer-events:none; transition:opacity 0.18s ease, transform 0.18s ease; z-index:960; max-width:90vw; }
+  .pc-toast.is-on { opacity:1; transform:translateX(-50%) translateY(0); }
+  .pc-toast.is-error { background:var(--pc-red); }
+
+  #pcMain { display:none; }
+  body.pc-ready #pcMain { display:block; }
+
+  /* ingredient modal */
+  .pc-modal-backdrop { position:fixed; inset:0; background:rgba(20,20,18,0.42); z-index:970; display:none; align-items:flex-start; justify-content:center; padding:48px 18px; overflow-y:auto; }
+  .pc-modal-backdrop.is-on { display:flex; }
+  .pc-modal { background:var(--pc-card); border-radius:14px; width:100%; max-width:540px; box-shadow:0 24px 60px rgba(0,0,0,0.22); overflow:hidden; margin:auto; }
+  .pc-modal-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:20px 22px; border-bottom:1px solid var(--pc-line); }
+  .pc-modal-title { font-size:16px; font-weight:600; }
+  .pc-modal-sub { font-size:12.5px; color:var(--pc-muted); margin-top:3px; line-height:1.45; }
+  .pc-modal-x { appearance:none; border:none; background:var(--pc-line-soft); border-radius:8px; width:30px; height:30px; font-size:18px; line-height:1; cursor:pointer; color:var(--pc-muted); flex-shrink:0; }
+  .pc-modal-body { padding:18px 22px; }
+  .pc-fld-row { display:flex; gap:14px; margin-bottom:14px; flex-wrap:wrap; }
+  .pc-fld-row > div { flex:1; min-width:140px; }
+  .pc-fld-label { display:block; font-size:11px; font-weight:600; letter-spacing:0.05em; text-transform:uppercase; color:var(--pc-faint); margin-bottom:5px; }
+  .pc-fld { width:100%; padding:9px 12px; border:1px solid var(--pc-line); border-radius:8px; font-family:inherit; font-size:13px; background:#fff; }
+  .pc-fld-hint { font-size:11.5px; color:var(--pc-faint); margin-top:5px; line-height:1.4; }
+  .pc-modal-foot { display:flex; align-items:center; justify-content:flex-end; gap:12px; padding:14px 22px; border-top:1px solid var(--pc-line); }
+  .pc-modal-foot .pc-del { margin-right:auto; color:var(--pc-red); border-color:var(--pc-red); }
+
+  @media (max-width: 760px) {
+    .pc-ing-row { grid-template-columns:1fr 120px; }
+    .pc-ing-detail, .pc-ing-base { display:none; }
+    .pc-line-hdr, .pc-line { grid-template-columns:1fr 90px 36px; }
+    .pc-line-unit { display:none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="pc-page">
+
+  <div id="pcDenied" class="pc-denied" style="display:none;">
+    <h2>No access to Production Setup</h2>
+    <p>Ask an admin to enable Production Setup on the User Access page.</p>
+  </div>
+
+  <main id="pcMain">
+
+    <div class="pc-page-head">
+      <div>
+        <h1 class="pc-page-title">Production Setup</h1>
+        <p class="pc-page-sub">The recipes, pack sizes, and prep-time rates behind the Order Guide and Prep Timing. Set them here once and both pages recompute &mdash; no SQL.</p>
+      </div>
+      <div class="pc-tabs" id="pcTabs" role="tablist" aria-label="Setup section"></div>
+    </div>
+
+    <div id="pcViewOnly" class="pc-viewonly" style="display:none;">You can view this setup but not change it. Editing is limited to admins.</div>
+
+    <!-- INGREDIENTS -->
+    <section id="pcViewIng" class="pc-view" role="tabpanel" aria-label="Ingredients">
+      <div class="pc-explain">An <b>ingredient</b> is anything a recipe is built from &mdash; raw inputs and packaging you buy (seed, oil, cups, boxes), plus <b>make-units</b> you batch on site (sugar water by the keg). Pack sizes live here so the Order Guide can round up to whole cases; batch size and minutes drive the make-unit timing.</div>
+      <div class="pc-toolbar">
+        <span class="pc-toolbar-label">Ingredient catalog</span>
+        <span id="pcIngCount" style="font-size:12px;color:var(--pc-faint);"></span>
+        <span class="pc-tb-spacer"></span>
+        <button id="pcAddIngBtn" type="button" class="pc-btn pc-btn-prep">+ Add ingredient</button>
+      </div>
+      <div class="pc-loading" id="pcIngLoading"><span class="pc-spinner"></span> Loading&hellip;</div>
+      <div id="pcIngBody"></div>
+    </section>
+
+    <!-- RECIPES -->
+    <section id="pcViewRec" class="pc-view" role="tabpanel" aria-label="Recipes">
+      <div class="pc-explain">A <b>recipe</b> lists what one sellable item &mdash; or one batch of a make-unit &mdash; consumes. Quantities are <b>per unit</b>: per cup, per box, per keg. Shared ingredients pool automatically across sizes on the Order Guide, so set each size honestly (a Souvenir cup uses more sugar water than a Large).</div>
+      <div class="pc-toolbar">
+        <span class="pc-toolbar-label">Build recipe for</span>
+        <select id="pcRecParent" class="pc-tb-sel" style="min-width:260px;"><option value="">Select an item&hellip;</option></select>
+        <span id="pcRecParentUnit" style="font-size:12px;color:var(--pc-faint);"></span>
+      </div>
+      <div class="pc-loading" id="pcRecLoading"><span class="pc-spinner"></span> Loading&hellip;</div>
+      <div id="pcRecBody"></div>
+    </section>
+
+    <!-- RATES -->
+    <section id="pcViewRate" class="pc-view" role="tabpanel" aria-label="Prep-time rates">
+      <div class="pc-explain">A <b>prep-time rate</b> is how fast an item gets made &mdash; "120 popcorn boxes an hour." It feeds Prep Timing's labor math: how many people, how early. Set the house rate once; add a <b>per-venue override</b> only where the equipment is slower or faster than standard.</div>
+      <div class="pc-toolbar">
+        <span class="pc-toolbar-label">Prep-time for</span>
+        <select id="pcRateItem" class="pc-tb-sel" style="min-width:260px;"><option value="">Select an item&hellip;</option></select>
+      </div>
+      <div class="pc-loading" id="pcRateLoading"><span class="pc-spinner"></span> Loading&hellip;</div>
+      <div id="pcRateBody"></div>
+    </section>
+
+  </main>
+</div>
+
+<!-- Ingredient add/edit modal -->
+<div class="pc-modal-backdrop" id="pcIngBackdrop">
+  <div class="pc-modal" role="dialog" aria-label="Ingredient">
+    <div class="pc-modal-head">
+      <div>
+        <div class="pc-modal-title" id="pcIngModalTitle">Add ingredient</div>
+        <div class="pc-modal-sub" id="pcIngModalSub">Raw inputs and packaging carry a pack size; make-units carry a batch size and minutes.</div>
+      </div>
+      <button class="pc-modal-x" id="pcIngClose" type="button" aria-label="Close">&times;</button>
+    </div>
+    <div class="pc-modal-body">
+      <div class="pc-fld-row">
+        <div style="flex:2;"><label class="pc-fld-label">Name</label><input type="text" id="pcIngName" class="pc-fld" placeholder="e.g. Popcorn seed"></div>
+        <div><label class="pc-fld-label">Kind</label><select id="pcIngKind" class="pc-fld"><option value="raw">Raw / packaging</option><option value="make_unit">Make-unit</option></select></div>
+      </div>
+      <div class="pc-fld-row">
+        <div><label class="pc-fld-label">Base unit</label><input type="text" id="pcIngBase" class="pc-fld" placeholder="oz, lb, ea&hellip;"><div class="pc-fld-hint">The unit recipes count in (oz, lb, ea, tsp).</div></div>
+        <div><label class="pc-fld-label">Sort order</label><input type="number" id="pcIngSort" class="pc-fld" step="1" placeholder="0"></div>
+      </div>
+      <div id="pcIngRawFields">
+        <div class="pc-fld-row">
+          <div><label class="pc-fld-label">Pack size</label><input type="number" id="pcIngPackQty" class="pc-fld" step="any" min="0" placeholder="e.g. 400"><div class="pc-fld-hint">Base units in one buy-pack (a 25-lb seed bag = 400 oz).</div></div>
+          <div><label class="pc-fld-label">Pack label</label><input type="text" id="pcIngPackLabel" class="pc-fld" placeholder="bag, case, jug&hellip;"></div>
+        </div>
+      </div>
+      <div id="pcIngMakeFields" style="display:none;">
+        <div class="pc-fld-row">
+          <div><label class="pc-fld-label">Batch size</label><input type="number" id="pcIngBatchQty" class="pc-fld" step="any" min="0" placeholder="e.g. 640"><div class="pc-fld-hint">Base units one batch yields (a keg = 640 oz).</div></div>
+          <div><label class="pc-fld-label">Minutes / batch</label><input type="number" id="pcIngBatchMin" class="pc-fld" step="any" min="0" placeholder="e.g. 7"></div>
+        </div>
+      </div>
+    </div>
+    <div class="pc-modal-foot">
+      <button class="pc-btn-ghost pc-del" id="pcIngDelete" type="button" style="display:none;">Retire</button>
+      <button class="pc-btn-ghost" id="pcIngCancel" type="button">Cancel</button>
+      <button class="pc-btn-primary" id="pcIngSave" type="button">Save ingredient</button>
+    </div>
+  </div>
+</div>
+
+<div class="pc-toast" id="pcToast"></div>
+
+<script src="/pc-auth.js"></script>
+<script src="/pc-nav.js"></script>
+<script src="/pc-activity.js"></script>
+<script src="/pc-catalog.js"></script>
+
+<script>
+(function () {
+  'use strict';
+
+  var SUPABASE_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
+  var PAGE_SLUG = 'production-setup';
+  var ACTIVITY_SLUG = 'production-setup';
+
+  var PC = window.PCProdSetup = { user:null, isAdmin:false, tab:null, items:[], ings:[], ingById:{} };
+  function $(id) { return document.getElementById(id); }
+
+  var toastTimer = null;
+  function toast(msg, isErr) { var el = $('pcToast'); el.textContent = msg; el.classList.toggle('is-error', !!isErr); el.classList.add('is-on'); clearTimeout(toastTimer); toastTimer = setTimeout(function () { el.classList.remove('is-on'); }, 3400); }
+  PC.toast = toast;
+
+  function escAttr(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function num(n) { return Number(n).toLocaleString(); }
+  function fmtNum(n) { if (n == null || n === '') return ''; var x = Number(n); return (Math.round(x * 1000) / 1000).toLocaleString(); }
+  PC.myName = function () { return (PC.user && (PC.user.display_name || PC.user.email)) || 'unknown'; };
+
+  PC.authFetch = function (path, opts) {
+    opts = opts || {};
+    var url = path.charAt(0) === '/' ? (SUPABASE_URL + path) : path;
+    var headers = Object.assign({ 'Content-Type':'application/json' }, (typeof pcAuth !== 'undefined' && pcAuth.headers) ? pcAuth.headers() : {}, opts.headers || {});
+    return fetch(url, Object.assign({}, opts, { headers:headers })).then(function (res) {
+      if (!res.ok) { return res.text().then(function (b) { throw new Error('Request failed (' + res.status + '): ' + b.slice(0, 300)); }); }
+      if (res.status === 204) return null;
+      var ct = res.headers.get('content-type') || '';
+      return ct.indexOf('application/json') !== -1 ? res.json() : res.text();
+    });
+  };
+
+  function setLoading(which, on) { var el = $('pc' + which + 'Loading'); if (el) el.classList.toggle('is-on', !!on); }
+
+  // ---- tabs ----------------------------------------------------------
+  PC.initTabs = function () {
+    var host = $('pcTabs');
+    var defs = [['ingredients','Ingredients'], ['recipes','Recipes'], ['rates','Prep-time']];
+    host.innerHTML = defs.map(function (d) {
+      return '<button class="pc-tab" type="button" role="tab" data-tab="' + d[0] + '">' + d[1] + '</button>';
+    }).join('');
+    host.querySelectorAll('.pc-tab').forEach(function (b) {
+      b.addEventListener('click', function () { PC.setTab(b.getAttribute('data-tab')); });
+    });
+  };
+
+  PC.setTab = function (tab) {
+    PC.tab = tab;
+    $('pcViewIng').classList.toggle('is-active', tab === 'ingredients');
+    $('pcViewRec').classList.toggle('is-active', tab === 'recipes');
+    $('pcViewRate').classList.toggle('is-active', tab === 'rates');
+    document.querySelectorAll('.pc-tab').forEach(function (b) {
+      b.classList.toggle('is-active', b.getAttribute('data-tab') === tab);
+      b.setAttribute('aria-selected', b.getAttribute('data-tab') === tab ? 'true' : 'false');
+    });
+    if (tab === 'ingredients') PC.renderIngredients();
+    if (tab === 'recipes') PC.renderRecipeParents();
+    if (tab === 'rates') PC.renderRateItems();
+  };
+
+  // ---- shared catalogs ----------------------------------------------
+  PC.loadCatalogs = function () {
+    var pItems = PC.authFetch('/rest/v1/prep_items?select=id,name,unit,production_mode,sort_order&is_active=is.true&order=sort_order.asc&limit=200');
+    var pIngs = PC.fetchIngredients();
+    var pCat = (typeof pcCatalog !== 'undefined' && pcCatalog.ready) ? pcCatalog.ready() : Promise.resolve();
+    return Promise.all([pItems, pIngs, pCat]).then(function (r) {
+      PC.items = r[0] || [];
+    });
+  };
+
+  PC.fetchIngredients = function () {
+    return PC.authFetch('/rest/v1/prep_ingredients?select=id,name,kind,base_unit,order_unit,order_pack_qty,order_pack_label,batch_base_qty,batch_minutes,sort_order&deleted_at=is.null&order=sort_order.asc&limit=500')
+      .then(function (rows) {
+        PC.ings = rows || [];
+        PC.ingById = {};
+        PC.ings.forEach(function (g) { PC.ingById[g.id] = g; });
+        return PC.ings;
+      });
+  };
+
+  function ingOptions(selectedId) {
+    var raw = PC.ings.filter(function (g) { return g.kind !== 'make_unit'; });
+    var make = PC.ings.filter(function (g) { return g.kind === 'make_unit'; });
+    function opt(g) { return '<option value="' + g.id + '"' + (g.id === selectedId ? ' selected' : '') + '>' + escAttr(g.name) + '</option>'; }
+    var h = '<option value="">Pick an ingredient&hellip;</option>';
+    if (raw.length) h += '<optgroup label="Raw &amp; packaging">' + raw.map(opt).join('') + '</optgroup>';
+    if (make.length) h += '<optgroup label="Make-units">' + make.map(opt).join('') + '</optgroup>';
+    return h;
+  }
+
+  // ===================================================================
+  // INGREDIENTS
+  // ===================================================================
+  PC.renderIngredients = function () {
+    var body = $('pcIngBody'); if (!body) return;
+    var cnt = $('pcIngCount'); if (cnt) cnt.textContent = PC.ings.length + ' ingredient' + (PC.ings.length === 1 ? '' : 's');
+    if (!PC.ings.length) {
+      body.innerHTML = '<div class="pc-card"><div class="pc-empty"><p class="pc-empty-title">No ingredients yet</p><p class="pc-empty-text">' + (PC.isAdmin ? 'Add the raws, packaging, and make-units your recipes are built from.' : 'An admin needs to add ingredients first.') + '</p></div></div>';
+      return;
+    }
+    var raw = PC.ings.filter(function (g) { return g.kind !== 'make_unit'; });
+    var make = PC.ings.filter(function (g) { return g.kind === 'make_unit'; });
+
+    function rawRow(g) {
+      var pack = (g.order_pack_qty > 0)
+        ? fmtNum(g.order_pack_qty) + ' ' + escAttr(g.base_unit || '') + ' / ' + escAttr(g.order_pack_label || 'pack')
+        : '<span class="none">no pack size</span>';
+      return ingRow(g, pack);
+    }
+    function makeRow(g) {
+      var det = (g.batch_base_qty > 0)
+        ? fmtNum(g.batch_base_qty) + ' ' + escAttr(g.base_unit || '') + ' / batch' + (g.batch_minutes > 0 ? ' &middot; ' + fmtNum(g.batch_minutes) + ' min' : '')
+        : '<span class="none">no batch set</span>';
+      return ingRow(g, det);
+    }
+    function ingRow(g, detail) {
+      var act = PC.isAdmin
+        ? '<button class="pc-ing-link" data-edit="' + g.id + '" type="button">Edit</button>'
+        : '';
+      return '<div class="pc-ing-row">' +
+        '<span class="pc-ing-nm">' + escAttr(g.name) + '</span>' +
+        '<span class="pc-ing-base">' + escAttr(g.base_unit || '') + '</span>' +
+        '<span class="pc-ing-detail">' + detail + '</span>' +
+        '<span class="pc-ing-act">' + act + '</span></div>';
+    }
+
+    var html = '<div class="pc-card">';
+    html += '<div class="pc-ing-grp"><div class="pc-ing-grp-h">Raw &amp; packaging</div>' +
+      (raw.length ? raw.map(rawRow).join('') : '<div class="pc-empty" style="padding:24px;"><p class="pc-empty-text">None yet.</p></div>') + '</div>';
+    html += '<div class="pc-ing-grp"><div class="pc-ing-grp-h">Make-units</div>' +
+      (make.length ? make.map(makeRow).join('') : '<div class="pc-empty" style="padding:24px;"><p class="pc-empty-text">None yet.</p></div>') + '</div>';
+    html += '</div>';
+    body.innerHTML = html;
+
+    body.querySelectorAll('[data-edit]').forEach(function (b) {
+      b.addEventListener('click', function () { PC.openIng(b.getAttribute('data-edit')); });
+    });
+  };
+
+  PC.initIngModal = function () {
+    function wire(id, fn) { var el = $(id); if (el && !el._wired) { el.addEventListener('click', fn); el._wired = true; } }
+    wire('pcAddIngBtn', function () { PC.openIng(null); });
+    wire('pcIngClose', PC.closeIng);
+    wire('pcIngCancel', PC.closeIng);
+    wire('pcIngSave', PC.saveIng);
+    wire('pcIngDelete', PC.retireIng);
+    var k = $('pcIngKind');
+    if (k && !k._wired) { k.addEventListener('change', PC.syncIngKind); k._wired = true; }
+    var bd = $('pcIngBackdrop');
+    if (bd && !bd._wired) { bd.addEventListener('click', function (e) { if (e.target === bd) PC.closeIng(); }); bd._wired = true; }
+  };
+
+  PC.syncIngKind = function () {
+    var make = $('pcIngKind').value === 'make_unit';
+    $('pcIngRawFields').style.display = make ? 'none' : 'block';
+    $('pcIngMakeFields').style.display = make ? 'block' : 'none';
+  };
+
+  PC.closeIng = function () { $('pcIngBackdrop').classList.remove('is-on'); };
+
+  PC.openIng = function (id) {
+    if (!PC.isAdmin) return;
+    PC._editIngId = id || null;
+    var g = id ? PC.ingById[id] : null;
+    $('pcIngModalTitle').textContent = g ? 'Edit ingredient' : 'Add ingredient';
+    $('pcIngName').value = g ? (g.name || '') : '';
+    $('pcIngKind').value = g ? (g.kind || 'raw') : 'raw';
+    $('pcIngBase').value = g ? (g.base_unit || '') : '';
+    $('pcIngSort').value = g ? (g.sort_order == null ? '' : g.sort_order) : '';
+    $('pcIngPackQty').value = (g && g.order_pack_qty != null) ? g.order_pack_qty : '';
+    $('pcIngPackLabel').value = (g && g.order_pack_label) ? g.order_pack_label : '';
+    $('pcIngBatchQty').value = (g && g.batch_base_qty != null) ? g.batch_base_qty : '';
+    $('pcIngBatchMin').value = (g && g.batch_minutes != null) ? g.batch_minutes : '';
+    $('pcIngDelete').style.display = g ? 'inline-block' : 'none';
+    PC.syncIngKind();
+    $('pcIngBackdrop').classList.add('is-on');
+    setTimeout(function () { $('pcIngName').focus(); }, 30);
+  };
+
+  PC.saveIng = function () {
+    var name = $('pcIngName').value.trim();
+    var kind = $('pcIngKind').value;
+    var base = $('pcIngBase').value.trim();
+    if (!name) { toast('Name is required', true); return; }
+    if (!base) { toast('Base unit is required', true); return; }
+    var sort = parseInt($('pcIngSort').value, 10); if (isNaN(sort)) sort = 0;
+    var row = {
+      name: name, kind: kind, base_unit: base, sort_order: sort,
+      updated_by: PC.myName(), updated_at: new Date().toISOString()
+    };
+    if (kind === 'make_unit') {
+      var bq = parseFloat($('pcIngBatchQty').value); row.batch_base_qty = (bq > 0) ? bq : null;
+      var bm = parseFloat($('pcIngBatchMin').value); row.batch_minutes = (bm >= 0 && $('pcIngBatchMin').value !== '') ? bm : null;
+      row.order_pack_qty = null; row.order_pack_label = null;
+    } else {
+      var pq = parseFloat($('pcIngPackQty').value); row.order_pack_qty = (pq > 0) ? pq : null;
+      row.order_pack_label = $('pcIngPackLabel').value.trim() || null;
+      row.batch_base_qty = null; row.batch_minutes = null;
+    }
+    var btn = $('pcIngSave'); btn.disabled = true; btn.textContent = 'Saving\u2026';
+    var call;
+    if (PC._editIngId) {
+      call = PC.authFetch('/rest/v1/prep_ingredients?id=eq.' + PC._editIngId, { method:'PATCH', headers:{ 'Prefer':'return=minimal' }, body:JSON.stringify(row) });
+    } else {
+      call = PC.authFetch('/rest/v1/prep_ingredients', { method:'POST', headers:{ 'Prefer':'return=minimal' }, body:JSON.stringify([row]) });
+    }
+    call.then(function () { return PC.fetchIngredients(); }).then(function () {
+      btn.disabled = false; btn.textContent = 'Save ingredient';
+      PC.closeIng();
+      PC.renderIngredients();
+      toast(PC._editIngId ? 'Ingredient updated' : 'Ingredient added');
+    }).catch(function (err) {
+      btn.disabled = false; btn.textContent = 'Save ingredient';
+      toast(err.message || 'Save failed', true);
+    });
+  };
+
+  PC.retireIng = function () {
+    if (!PC._editIngId) return;
+    // Block retiring an ingredient still used by a live recipe line.
+    var id = PC._editIngId;
+    PC.authFetch('/rest/v1/prep_recipe_lines?select=id&component_id=eq.' + id + '&deleted_at=is.null&limit=1')
+      .then(function (rows) {
+        if (rows && rows.length) {
+          toast('In use by a recipe \u2014 remove it from recipes first', true);
+          return null;
+        }
+        if (!window.confirm('Retire this ingredient? It will drop off the ingredient list. Recipes already using it are unaffected.')) return null;
+        var btn = $('pcIngDelete'); btn.disabled = true;
+        return PC.authFetch('/rest/v1/prep_ingredients?id=eq.' + id, {
+          method:'PATCH', headers:{ 'Prefer':'return=minimal' },
+          body:JSON.stringify({ deleted_at:new Date().toISOString(), deleted_by:PC.myName() })
+        }).then(function () { return PC.fetchIngredients(); }).then(function () {
+          btn.disabled = false;
+          PC.closeIng();
+          PC.renderIngredients();
+          toast('Ingredient retired');
+        });
+      }).catch(function (err) { toast(err.message || 'Retire failed', true); var b = $('pcIngDelete'); if (b) b.disabled = false; });
+  };
+
+  // ===================================================================
+  // RECIPES
+  // ===================================================================
+  PC._recParent = null;     // { kind:'item'|'make', id, name, unit, batchLabel }
+  PC._recRows = [];         // working rows: { _id, component_id, qty, note }
+  PC._recOrig = [];         // snapshot: { id, component_id, qty, note }
+
+  PC.renderRecipeParents = function () {
+    var sel = $('pcRecParent'); if (!sel) return;
+    if (sel._built) { return; }
+    var items = PC.items.slice().sort(function (a, b) { return (a.sort_order || 0) - (b.sort_order || 0); });
+    var makes = PC.ings.filter(function (g) { return g.kind === 'make_unit'; });
+    var h = '<option value="">Select an item\u2026</option>';
+    if (items.length) {
+      h += '<optgroup label="Sellable items">' + items.map(function (it) {
+        return '<option value="item:' + it.id + '">' + escAttr(it.name) + '</option>';
+      }).join('') + '</optgroup>';
+    }
+    if (makes.length) {
+      h += '<optgroup label="Make-units">' + makes.map(function (g) {
+        return '<option value="make:' + g.id + '">' + escAttr(g.name) + '</option>';
+      }).join('') + '</optgroup>';
+    }
+    sel.innerHTML = h;
+    sel._built = true;
+    if (!sel._wired) { sel.addEventListener('change', function () { PC.onRecParent(sel.value); }); sel._wired = true; }
+  };
+
+  PC.onRecParent = function (val) {
+    var body = $('pcRecBody'), uEl = $('pcRecParentUnit');
+    if (!val) { PC._recParent = null; if (body) body.innerHTML = ''; if (uEl) uEl.textContent = ''; return; }
+    var parts = val.split(':'), kind = parts[0], id = parts[1];
+    if (kind === 'item') {
+      var it = null, i; for (i = 0; i < PC.items.length; i++) { if (PC.items[i].id === id) { it = PC.items[i]; break; } }
+      if (!it) return;
+      PC._recParent = { kind:'item', id:id, name:it.name, unit:(it.unit || 'unit') };
+      if (uEl) uEl.textContent = 'per ' + PC._recParent.unit;
+    } else {
+      var g = PC.ingById[id]; if (!g) return;
+      var bl = (g.batch_base_qty > 0) ? ('batch (' + fmtNum(g.batch_base_qty) + ' ' + (g.base_unit || '') + ')') : 'batch';
+      PC._recParent = { kind:'make', id:id, name:g.name, unit:(g.base_unit || 'unit'), batchLabel:bl };
+      if (uEl) uEl.textContent = 'per ' + bl;
+    }
+    PC.loadRecipe();
+  };
+
+  PC.loadRecipe = function () {
+    var p = PC._recParent; if (!p) return;
+    setLoading('Rec', true);
+    $('pcRecBody').innerHTML = '';
+    var col = (p.kind === 'item') ? 'prep_item_id' : 'parent_ingredient_id';
+    PC.authFetch('/rest/v1/prep_recipe_lines?select=id,component_id,qty_per_unit,note&' + col + '=eq.' + p.id + '&deleted_at=is.null&limit=200')
+      .then(function (rows) {
+        rows = rows || [];
+        PC._recOrig = rows.map(function (r) { return { id:r.id, component_id:r.component_id, qty:Number(r.qty_per_unit), note:(r.note || '') }; });
+        PC._recRows = PC._recOrig.map(function (r) { return { _id:r.id, component_id:r.component_id, qty:r.qty, note:r.note }; });
+        if (!PC._recRows.length) PC._recRows.push({ _id:null, component_id:'', qty:'', note:'' });
+        setLoading('Rec', false);
+        PC.renderRecipeEditor();
+      }).catch(function (err) {
+        setLoading('Rec', false);
+        toast(err.message || 'Failed to load recipe', true);
+      });
+  };
+
+  PC.renderRecipeEditor = function () {
+    var p = PC._recParent, body = $('pcRecBody'); if (!p || !body) return;
+    var unitLabel = (p.kind === 'item') ? ('per ' + p.unit) : ('per ' + p.batchLabel);
+
+    var html = '<div class="pc-card">';
+    html += '<div class="pc-section-h"><span class="pc-section-t">' + escAttr(p.name) + '</span><span class="pc-section-c">' + escAttr(unitLabel) + '</span></div>';
+
+    if (PC.isAdmin) {
+      html += '<div class="pc-line-hdr"><span>Ingredient</span><span class="r">Qty</span><span>Note</span><span></span></div>';
+      html += '<div id="pcRecLines">' + PC._recRows.map(recLineHtml).join('') + '</div>';
+      html += '<div class="pc-add-line"><button class="pc-btn" id="pcRecAdd" type="button">+ Add ingredient</button></div>';
+      html += '<div class="pc-editor-foot"><span class="pc-editor-note" id="pcRecNote"></span>' +
+        '<button class="pc-btn-ghost" id="pcRecReset" type="button">Reset</button>' +
+        '<button class="pc-btn-primary" id="pcRecSave" type="button">Save recipe</button></div>';
+    } else {
+      // read-only
+      if (!PC._recRows.length || (PC._recRows.length === 1 && !PC._recRows[0].component_id)) {
+        html += '<div class="pc-empty" style="padding:30px;"><p class="pc-empty-text">No recipe set for this item yet.</p></div>';
+      } else {
+        html += '<div class="pc-line-hdr"><span>Ingredient</span><span class="r">Qty</span><span>Note</span><span></span></div>';
+        PC._recRows.forEach(function (r) {
+          var g = PC.ingById[r.component_id] || {};
+          html += '<div class="pc-line"><span>' + escAttr(g.name || '\u2014') + '</span>' +
+            '<span style="text-align:right;font-variant-numeric:tabular-nums;">' + fmtNum(r.qty) + '</span>' +
+            '<span class="pc-line-unit">' + escAttr(g.base_unit || '') + ' ' + unitLabel + (r.note ? ' \u00b7 ' + escAttr(r.note) : '') + '</span><span></span></div>';
+        });
+      }
+    }
+    html += '</div>';
+    body.innerHTML = html;
+
+    if (PC.isAdmin) {
+      wireRecLines();
+      $('pcRecAdd').addEventListener('click', function () {
+        PC._recRows.push({ _id:null, component_id:'', qty:'', note:'' });
+        $('pcRecLines').insertAdjacentHTML('beforeend', recLineHtml(PC._recRows[PC._recRows.length - 1], PC._recRows.length - 1));
+        wireRecLines();
+      });
+      $('pcRecSave').addEventListener('click', PC.saveRecipe);
+      $('pcRecReset').addEventListener('click', function () { PC.loadRecipe(); });
+    }
+  };
+
+  function recLineHtml(r, idx) {
+    var g = PC.ingById[r.component_id] || {};
+    var unitHint = g.base_unit ? (escAttr(g.base_unit)) : '';
+    return '<div class="pc-line" data-row="' + idx + '">' +
+      '<select class="pc-line-sel" data-row="' + idx + '">' + ingOptions(r.component_id) + '</select>' +
+      '<input type="number" class="pc-line-qty" data-row="' + idx + '" step="any" min="0" placeholder="0" value="' + (r.qty === '' ? '' : escAttr(r.qty)) + '">' +
+      '<input type="text" class="pc-line-note" data-row="' + idx + '" placeholder="' + escAttr(unitHint) + '" value="' + escAttr(r.note || '') + '">' +
+      '<button class="pc-btn-x" data-del="' + idx + '" type="button" aria-label="Remove">&times;</button></div>';
+  }
+
+  function readRecRowsFromDom() {
+    var rows = [];
+    $('pcRecLines').querySelectorAll('.pc-line[data-row]').forEach(function (lineEl) {
+      var idx = parseInt(lineEl.getAttribute('data-row'), 10);
+      var orig = PC._recRows[idx] || {};
+      var comp = lineEl.querySelector('.pc-line-sel').value;
+      var qtyRaw = lineEl.querySelector('.pc-line-qty').value;
+      var note = lineEl.querySelector('.pc-line-note').value.trim();
+      rows.push({ _id:(orig._id != null ? orig._id : null), component_id:comp, qty:(qtyRaw === '' ? '' : parseFloat(qtyRaw)), note:note });
+    });
+    return rows;
+  }
+
+  function wireRecLines() {
+    $('pcRecLines').querySelectorAll('[data-del]').forEach(function (b) {
+      if (b._wired) return; b._wired = true;
+      b.addEventListener('click', function () {
+        PC._recRows = readRecRowsFromDom();
+        var idx = parseInt(b.getAttribute('data-del'), 10);
+        PC._recRows.splice(idx, 1);
+        if (!PC._recRows.length) PC._recRows.push({ _id:null, component_id:'', qty:'', note:'' });
+        $('pcRecLines').innerHTML = PC._recRows.map(recLineHtml).join('');
+        wireRecLines();
+      });
+    });
+    // keep the component placeholder (unit hint) fresh when ingredient changes
+    $('pcRecLines').querySelectorAll('.pc-line-sel').forEach(function (s) {
+      if (s._wired) return; s._wired = true;
+      s.addEventListener('change', function () {
+        var lineEl = s.closest('.pc-line');
+        var g = PC.ingById[s.value] || {};
+        var note = lineEl.querySelector('.pc-line-note');
+        if (note) note.placeholder = g.base_unit || '';
+      });
+    });
+  }
+
+  PC.saveRecipe = function () {
+    var p = PC._recParent; if (!p) return;
+    var rows = readRecRowsFromDom();
+    // validate
+    var clean = [], seen = {};
+    var i;
+    for (i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      if (!r.component_id) continue;            // blank line ignored
+      if (!(r.qty > 0)) { toast('Each ingredient needs a quantity above 0', true); return; }
+      if (seen[r.component_id]) { toast('Same ingredient listed twice \u2014 combine into one line', true); return; }
+      seen[r.component_id] = true;
+      clean.push(r);
+    }
+
+    var who = PC.myName(), now = new Date().toISOString();
+    var parentCol = (p.kind === 'item') ? 'prep_item_id' : 'parent_ingredient_id';
+
+    var inserts = [], patches = [], keepIds = {};
+    var origById = {}; PC._recOrig.forEach(function (o) { origById[o.id] = o; });
+
+    clean.forEach(function (r) {
+      if (r._id && origById[r._id]) {
+        keepIds[r._id] = true;
+        var o = origById[r._id];
+        if (o.component_id !== r.component_id || Number(o.qty) !== Number(r.qty) || (o.note || '') !== (r.note || '')) {
+          patches.push({ id:r._id, body:{ component_id:r.component_id, qty_per_unit:r.qty, note:(r.note || null), updated_by:who, updated_at:now } });
+        }
+      } else {
+        var ins = { component_id:r.component_id, qty_per_unit:r.qty, note:(r.note || null), updated_by:who, updated_at:now };
+        ins[parentCol] = p.id;
+        inserts.push(ins);
+      }
+    });
+
+    var removeIds = PC._recOrig.filter(function (o) { return !keepIds[o.id]; }).map(function (o) { return o.id; });
+
+    var calls = [];
+    if (inserts.length) calls.push(PC.authFetch('/rest/v1/prep_recipe_lines', { method:'POST', headers:{ 'Prefer':'return=minimal' }, body:JSON.stringify(inserts) }));
+    patches.forEach(function (p2) { calls.push(PC.authFetch('/rest/v1/prep_recipe_lines?id=eq.' + p2.id, { method:'PATCH', headers:{ 'Prefer':'return=minimal' }, body:JSON.stringify(p2.body) })); });
+    if (removeIds.length) calls.push(PC.authFetch('/rest/v1/prep_recipe_lines?id=in.(' + removeIds.join(',') + ')', { method:'PATCH', headers:{ 'Prefer':'return=minimal' }, body:JSON.stringify({ deleted_at:now, deleted_by:who }) }));
+
+    if (!calls.length) { toast('No changes to save'); return; }
+    var btn = $('pcRecSave'); btn.disabled = true; btn.textContent = 'Saving\u2026';
+    Promise.all(calls).then(function () {
+      btn.disabled = false; btn.textContent = 'Save recipe';
+      PC.loadRecipe();
+      toast('Recipe saved');
+    }).catch(function (err) {
+      btn.disabled = false; btn.textContent = 'Save recipe';
+      toast(err.message || 'Save failed', true);
+    });
+  };
+
+  // ===================================================================
+  // PREP-TIME RATES
+  // ===================================================================
+  PC._rateItem = null;       // { id, name, unit }
+  PC._rateGlobal = null;     // { _id, units_per_hour } | null
+  PC._rateOvr = [];          // [ { _id, venue_code, units_per_hour } ]
+
+  PC.renderRateItems = function () {
+    var sel = $('pcRateItem'); if (!sel) return;
+    if (sel._built) return;
+    var items = PC.items.slice().sort(function (a, b) { return (a.sort_order || 0) - (b.sort_order || 0); });
+    sel.innerHTML = '<option value="">Select an item\u2026</option>' + items.map(function (it) {
+      return '<option value="' + it.id + '">' + escAttr(it.name) + '</option>';
+    }).join('');
+    sel._built = true;
+    if (!sel._wired) { sel.addEventListener('change', function () { PC.onRateItem(sel.value); }); sel._wired = true; }
+  };
+
+  PC.onRateItem = function (id) {
+    var body = $('pcRateBody');
+    if (!id) { PC._rateItem = null; if (body) body.innerHTML = ''; return; }
+    var it = null, i; for (i = 0; i < PC.items.length; i++) { if (PC.items[i].id === id) { it = PC.items[i]; break; } }
+    if (!it) return;
+    PC._rateItem = { id:id, name:it.name, unit:(it.unit || 'unit') };
+    PC.loadRates();
+  };
+
+  PC.loadRates = function () {
+    var it = PC._rateItem; if (!it) return;
+    setLoading('Rate', true);
+    $('pcRateBody').innerHTML = '';
+    PC.authFetch('/rest/v1/prep_item_make_rates?select=id,venue_code,units_per_hour&prep_item_id=eq.' + it.id + '&deleted_at=is.null&limit=200')
+      .then(function (rows) {
+        rows = rows || [];
+        PC._rateGlobal = null; PC._rateOvr = [];
+        rows.forEach(function (r) {
+          if (r.venue_code == null) PC._rateGlobal = { _id:r.id, units_per_hour:Number(r.units_per_hour) };
+          else PC._rateOvr.push({ _id:r.id, venue_code:r.venue_code, units_per_hour:Number(r.units_per_hour) });
+        });
+        setLoading('Rate', false);
+        PC.renderRateEditor();
+      }).catch(function (err) {
+        setLoading('Rate', false);
+        toast(err.message || 'Failed to load rates', true);
+      });
+  };
+
+  function venueOptions(selected) {
+    var venues = (typeof pcCatalog !== 'undefined' && pcCatalog.getActiveVenues) ? pcCatalog.getActiveVenues() : [];
+    return '<option value="">Pick venue\u2026</option>' + venues.map(function (v) {
+      return '<option value="' + escAttr(v.code) + '"' + (v.code === selected ? ' selected' : '') + '>' + escAttr(v.code) + ' \u2014 ' + escAttr(v.full_name || v.code) + '</option>';
+    }).join('');
+  }
+
+  PC.renderRateEditor = function () {
+    var it = PC._rateItem, body = $('pcRateBody'); if (!it || !body) return;
+    var unitHr = escAttr(it.unit) + '/hr';
+    var gVal = (PC._rateGlobal && PC._rateGlobal.units_per_hour != null) ? PC._rateGlobal.units_per_hour : '';
+
+    var html = '<div class="pc-card">';
+    html += '<div class="pc-section-h"><span class="pc-section-t">' + escAttr(it.name) + '</span><span class="pc-section-c">how fast it gets made</span></div>';
+
+    if (!PC.isAdmin) {
+      html += '<div class="pc-rate-global"><span class="lbl">House rate</span><span style="font-weight:700;font-variant-numeric:tabular-nums;">' + (gVal === '' ? '\u2014' : fmtNum(gVal)) + '</span><span class="pc-rate-unit">' + unitHr + '</span></div>';
+      if (PC._rateOvr.length) {
+        html += '<div class="pc-ovr-h">Per-venue overrides</div>';
+        PC._rateOvr.forEach(function (o) {
+          html += '<div class="pc-ovr"><span>' + escAttr(o.venue_code) + '</span><span style="text-align:right;font-variant-numeric:tabular-nums;">' + fmtNum(o.units_per_hour) + ' ' + unitHr + '</span><span></span></div>';
+        });
+      }
+      html += '</div>';
+      body.innerHTML = html;
+      return;
+    }
+
+    html += '<div class="pc-rate-global"><span class="lbl">House rate</span>' +
+      '<input type="number" class="pc-rate-in" id="pcRateGlobal" step="any" min="0" placeholder="0" value="' + (gVal === '' ? '' : escAttr(gVal)) + '">' +
+      '<span class="pc-rate-unit">' + unitHr + '</span></div>';
+    html += '<div class="pc-ovr-h">Per-venue overrides</div>';
+    html += '<div id="pcRateOvrs">' + PC._rateOvr.map(ovrHtml).join('') + '</div>';
+    html += '<div class="pc-add-line"><button class="pc-btn" id="pcRateAddOvr" type="button">+ Add override</button></div>';
+    html += '<div class="pc-editor-foot"><span class="pc-editor-note">Leave the house rate blank to remove it. Overrides only apply at their venue.</span>' +
+      '<button class="pc-btn-ghost" id="pcRateReset" type="button">Reset</button>' +
+      '<button class="pc-btn-primary" id="pcRateSave" type="button">Save rates</button></div>';
+    html += '</div>';
+    body.innerHTML = html;
+
+    wireOvrs();
+    $('pcRateAddOvr').addEventListener('click', function () {
+      PC._rateOvr = readOvrsFromDom();
+      PC._rateOvr.push({ _id:null, venue_code:'', units_per_hour:'' });
+      $('pcRateOvrs').innerHTML = PC._rateOvr.map(ovrHtml).join('');
+      wireOvrs();
+    });
+    $('pcRateSave').addEventListener('click', PC.saveRates);
+    $('pcRateReset').addEventListener('click', function () { PC.loadRates(); });
+
+    function ovrHtml(o, idx) {
+      return '<div class="pc-ovr" data-row="' + idx + '">' +
+        '<select class="pc-ovr-venue" data-row="' + idx + '">' + venueOptions(o.venue_code) + '</select>' +
+        '<input type="number" class="pc-ovr-rate" data-row="' + idx + '" step="any" min="0" placeholder="0" value="' + (o.units_per_hour === '' ? '' : escAttr(o.units_per_hour)) + '">' +
+        '<button class="pc-btn-x" data-del="' + idx + '" type="button" aria-label="Remove">&times;</button></div>';
+    }
+    function wireOvrs() {
+      $('pcRateOvrs').querySelectorAll('[data-del]').forEach(function (b) {
+        if (b._wired) return; b._wired = true;
+        b.addEventListener('click', function () {
+          PC._rateOvr = readOvrsFromDom();
+          PC._rateOvr.splice(parseInt(b.getAttribute('data-del'), 10), 1);
+          $('pcRateOvrs').innerHTML = PC._rateOvr.map(ovrHtml).join('');
+          wireOvrs();
+        });
+      });
+    }
+  };
+
+  function readOvrsFromDom() {
+    var rows = [];
+    var host = $('pcRateOvrs'); if (!host) return PC._rateOvr;
+    host.querySelectorAll('.pc-ovr[data-row]').forEach(function (el) {
+      var idx = parseInt(el.getAttribute('data-row'), 10);
+      var orig = PC._rateOvr[idx] || {};
+      var v = el.querySelector('.pc-ovr-venue').value;
+      var rRaw = el.querySelector('.pc-ovr-rate').value;
+      rows.push({ _id:(orig._id != null ? orig._id : null), venue_code:v, units_per_hour:(rRaw === '' ? '' : parseFloat(rRaw)) });
+    });
+    return rows;
+  }
+
+  PC.saveRates = function () {
+    var it = PC._rateItem; if (!it) return;
+    var who = PC.myName(), now = new Date().toISOString();
+    var gRaw = $('pcRateGlobal').value;
+    var gVal = (gRaw === '') ? null : parseFloat(gRaw);
+    if (gVal != null && !(gVal > 0)) { toast('House rate must be above 0 (or blank to remove)', true); return; }
+
+    var ovrs = readOvrsFromDom();
+    var clean = [], seenV = {};
+    var i;
+    for (i = 0; i < ovrs.length; i++) {
+      var o = ovrs[i];
+      if (!o.venue_code) continue;
+      if (!(o.units_per_hour > 0)) { toast('Each override needs a rate above 0', true); return; }
+      if (seenV[o.venue_code]) { toast('Two overrides for the same venue \u2014 keep one', true); return; }
+      seenV[o.venue_code] = true;
+      clean.push(o);
+    }
+
+    var calls = [];
+    // global row
+    if (gVal != null) {
+      if (PC._rateGlobal && PC._rateGlobal._id) {
+        if (Number(PC._rateGlobal.units_per_hour) !== gVal) calls.push(PC.authFetch('/rest/v1/prep_item_make_rates?id=eq.' + PC._rateGlobal._id, { method:'PATCH', headers:{ 'Prefer':'return=minimal' }, body:JSON.stringify({ units_per_hour:gVal, updated_by:who, updated_at:now }) }));
+      } else {
+        calls.push(PC.authFetch('/rest/v1/prep_item_make_rates', { method:'POST', headers:{ 'Prefer':'return=minimal' }, body:JSON.stringify([{ prep_item_id:it.id, venue_code:null, units_per_hour:gVal, updated_by:who, updated_at:now }]) }));
+      }
+    } else if (PC._rateGlobal && PC._rateGlobal._id) {
+      calls.push(PC.authFetch('/rest/v1/prep_item_make_rates?id=eq.' + PC._rateGlobal._id, { method:'PATCH', headers:{ 'Prefer':'return=minimal' }, body:JSON.stringify({ deleted_at:now, deleted_by:who }) }));
+    }
+
+    // overrides diff by id
+    var keep = {}, origById = {};
+    PC._rateOvr.forEach(function (o) { if (o._id) origById[o._id] = o; });
+    var inserts = [];
+    clean.forEach(function (o) {
+      if (o._id && origById[o._id]) {
+        keep[o._id] = true;
+        var prev = origById[o._id];
+        if (prev.venue_code !== o.venue_code || Number(prev.units_per_hour) !== Number(o.units_per_hour)) {
+          calls.push(PC.authFetch('/rest/v1/prep_item_make_rates?id=eq.' + o._id, { method:'PATCH', headers:{ 'Prefer':'return=minimal' }, body:JSON.stringify({ venue_code:o.venue_code, units_per_hour:o.units_per_hour, updated_by:who, updated_at:now }) }));
+        }
+      } else {
+        inserts.push({ prep_item_id:it.id, venue_code:o.venue_code, units_per_hour:o.units_per_hour, updated_by:who, updated_at:now });
+      }
+    });
+    if (inserts.length) calls.push(PC.authFetch('/rest/v1/prep_item_make_rates', { method:'POST', headers:{ 'Prefer':'return=minimal' }, body:JSON.stringify(inserts) }));
+    var removeIds = PC._rateOvr.filter(function (o) { return o._id && !keep[o._id]; }).map(function (o) { return o._id; });
+    if (removeIds.length) calls.push(PC.authFetch('/rest/v1/prep_item_make_rates?id=in.(' + removeIds.join(',') + ')', { method:'PATCH', headers:{ 'Prefer':'return=minimal' }, body:JSON.stringify({ deleted_at:now, deleted_by:who }) }));
+
+    if (!calls.length) { toast('No changes to save'); return; }
+    var btn = $('pcRateSave'); btn.disabled = true; btn.textContent = 'Saving\u2026';
+    Promise.all(calls).then(function () {
+      btn.disabled = false; btn.textContent = 'Save rates';
+      PC.loadRates();
+      toast('Rates saved');
+    }).catch(function (err) {
+      btn.disabled = false; btn.textContent = 'Save rates';
+      toast(err.message || 'Save failed', true);
+    });
+  };
+
+  // ---- boot ----------------------------------------------------------
+  pcAuth.require({
+    pageSlug: PAGE_SLUG,
+    onReady: function (user) {
+      if (typeof pcActivity !== 'undefined' && pcActivity.init) pcActivity.init(ACTIVITY_SLUG);
+      PC.user = user || pcAuth.getUser();
+      PC.isAdmin = (typeof pcAuth.isAdmin === 'function') ? pcAuth.isAdmin() : false;
+      document.body.classList.add('pc-ready');
+      if (!PC.isAdmin) $('pcViewOnly').style.display = 'block';
+      var addBtn = $('pcAddIngBtn'); if (addBtn && !PC.isAdmin) addBtn.style.display = 'none';
+      PC.initTabs();
+      PC.initIngModal();
+      PC.loadCatalogs().then(function () {
+        PC.setTab('ingredients');
+      }).catch(function (err) {
+        toast(err.message || 'Failed to load', true);
+      });
+    },
+    onDenied: function () { document.body.classList.add('pc-ready'); $('pcMain').style.display = 'none'; $('pcDenied').style.display = 'block'; }
+  });
+
+})();
+</script>
+</body>
+</html>
