@@ -1732,6 +1732,18 @@ async function vpAddNew() {
   var existing = findVendorByName(typed);
   if (existing) { vpPick(existing.id); return; }
 
+  // Phase 0 (AP): capture how this vendor gets paid at creation.
+  // Cancel/Escape defaults to 'invoiced' -- the safe direction (over-flag a bill
+  // rather than miss one). Only an explicit "paid at register" downgrades it.
+  var paidAtRegister = window.confirm(
+    'How do you pay "' + typed + '"?\n\n' +
+    'OK = Paid at the register -- card, cash, or check at pickup\n' +
+    '        (Restaurant Depot, Costco, gas, Wawa)\n\n' +
+    'Cancel = We get a bill and pay it later\n' +
+    '        (Sysco, KBC, Gold Medal, most delivery vendors)'
+  );
+  var paymentType = paidAtRegister ? 'point_of_sale' : 'invoiced';
+
   var dd = document.getElementById('vendor-dropdown');
   dd.innerHTML = '<div class="vp-empty">Adding vendor...</div>';
 
@@ -1744,7 +1756,7 @@ async function vpAddNew() {
     var res = await fetch(SUPA_URL + '/rest/v1/known_vendors', {
       method: 'POST',
       headers: Object.assign({}, hdrs, {'Content-Type': 'application/json', 'Prefer': 'return=minimal'}),
-      body: JSON.stringify({ id: newId, display_name: typed, created_by: userName })
+      body: JSON.stringify({ id: newId, display_name: typed, created_by: userName, payment_type: paymentType })
     });
     if (!res.ok) {
       // Most likely a UNIQUE collision — re-fetch and select the canonical row.
