@@ -869,7 +869,7 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: #1a1a1a
         </div>
 
         <div id="invoice-fields">
-          <div class="field"><label>Invoice / delivery date</label><input type="date" id="inv-date"></div>
+          <div class="field"><label>Invoice / delivery date</label><input type="date" id="inv-date" onchange="updateApBillHint()"></div>
           <div class="field"><label>Vendor</label>
             <div class="vp-wrap">
               <input type="text" id="vendor" placeholder="Start typing a vendor name..." autocomplete="off" oninput="onVendorInput()" onfocus="onVendorInput()" onkeydown="onVendorKeydown(event)">
@@ -879,6 +879,7 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: #1a1a1a
             <div class="vp-selected" id="vendor-selected" style="display:none;"></div>
             <div class="vp-unmatched" id="vendor-unmatched" style="display:none;"></div>
           </div>
+          <div class="field"><label>Invoice / ticket # <span style="font-weight:400;color:#bbb;">(optional)</span></label><input type="text" id="inv-number" placeholder="e.g. 5237, ticket 11086912" autocomplete="off"></div>
           <div class="field"><label>Amount ($)</label><input type="number" id="amount" placeholder="0.00" step="0.01" min="0" oninput="updateSplitStatus()"></div>
 
           <div class="split-toggle-row" onclick="toggleSplitMode(event)">
@@ -913,6 +914,16 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: #1a1a1a
             <div id="split-status" class="split-status under">Enter total amount above, then allocate to both venues</div>
           </div>
 
+          <!-- AP bill toggle -- appears only for invoiced-type vendors (Phase 1) -->
+          <div id="ap-bill-block" style="display:none;background:#E6F1FB;border:1px solid #B9D6F0;border-radius:10px;padding:12px;margin-bottom:13px;">
+            <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:0;">
+              <input type="checkbox" id="ap-bill-check" checked style="width:18px;height:18px;margin-top:2px;flex-shrink:0;accent-color:#0C447C;cursor:pointer;">
+              <span style="font-size:13px;color:#0C447C;line-height:1.45;">
+                <strong>This needs to be paid -- create a bill</strong>
+                <span id="ap-bill-hint" style="display:block;font-weight:400;font-size:11px;color:#356B9E;margin-top:2px;"></span>
+              </span>
+            </label>
+          </div>
           <div class="field"><label>Note <span style="font-weight:400;color:#bbb;">(optional)</span></label><textarea id="note" placeholder="e.g. partial delivery, price increase..."></textarea></div>
           <div class="field">
             <label>Receipt / invoice photos</label>
@@ -1602,7 +1613,7 @@ function normVendor(s) {
 async function loadKnownVendors() {
   try {
     var hdrs = apiHeaders();
-    var url = SUPA_URL + '/rest/v1/known_vendors?select=id,display_name&order=display_name.asc&limit=2000';
+    var url = SUPA_URL + '/rest/v1/known_vendors?select=id,display_name,payment_type,default_terms_days&order=display_name.asc&limit=2000';
     var res = await fetch(url, { headers: hdrs });
     if (!res.ok) { console.error('[purchases] known_vendors load failed', await res.text()); return; }
     knownVendors = await res.json();
@@ -1641,6 +1652,8 @@ function onVendorInput() {
   var q = input.value;
   document.getElementById('vendor-id').value = '';
   document.getElementById('vendor-selected').style.display = 'none';
+  var apbIn = document.getElementById('ap-bill-block');
+  if (apbIn) apbIn.style.display = 'none';
   vendorDropdownFocusedIdx = -1;
 
   if (!knownVendorsReady) {
@@ -1715,6 +1728,7 @@ function vpPick(vendorId) {
   var sel = document.getElementById('vendor-selected');
   sel.innerHTML = 'Vendor: ' + escHtml(vendor.display_name) + ' <button type="button" class="vp-clear" onclick="vpClear()">change</button>';
   sel.style.display = 'flex';
+  updateApBillBlock(vendor);
 }
 
 function vpClear() {
@@ -1722,6 +1736,8 @@ function vpClear() {
   document.getElementById('vendor-id').value = '';
   document.getElementById('vendor-selected').style.display = 'none';
   document.getElementById('vendor-unmatched').style.display = 'none';
+  var apb = document.getElementById('ap-bill-block');
+  if (apb) apb.style.display = 'none';
   document.getElementById('vendor').focus();
 }
 
@@ -1792,6 +1808,96 @@ function resolveVendorForSubmit() {
   var exact = findVendorByName(typed);
   if (exact) return { id: exact.id, name: exact.display_name };
   return { id: null, name: typed };  // free-text fallback (legacy)
+}
+
+// ── AP bill helpers (Phase 1) ──
+// Return the currently-selected known vendor object, or null.
+function currentSelectedVendor() {
+  var id = document.getElementById('vendor-id').value;
+  if (!id) return null;
+  for (var i = 0; i < knownVendors.length; i++) { if (knownVendors[i].id === id) return knownVendors[i]; }
+  return null;
+}
+
+// Add N days to a YYYY-MM-DD string, returning YYYY-MM-DD.
+function addDays(iso, n) {
+  var d = new Date(iso + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+// M/D/YYYY for display.
+function fmtDateDisplay(iso) {
+  if (!iso) return '';
+  var p = String(iso).slice(0,10).split('-');
+  if (p.length !== 3) return iso;
+  return parseInt(p[1],10) + '/' + parseInt(p[2],10) + '/' + p[0];
+}
+
+// Show the "create a bill" toggle only for invoiced-type vendors.
+function updateApBillBlock(vendor) {
+  var block = document.getElementById('ap-bill-block');
+  if (!block) return;
+  if (!vendor || vendor.payment_type !== 'invoiced') { block.style.display = 'none'; return; }
+  var check = document.getElementById('ap-bill-check');
+  if (check) check.checked = true;   // default on for invoiced vendors
+  block.style.display = 'block';
+  updateApBillHint();
+}
+
+// Fill the hint under the checkbox with the computed due date.
+function updateApBillHint() {
+  var hint = document.getElementById('ap-bill-hint');
+  if (!hint) return;
+  var vendor = currentSelectedVendor();
+  if (!vendor || vendor.payment_type !== 'invoiced') { hint.textContent = ''; return; }
+  var billDate = document.getElementById('inv-date').value || todayLocal();
+  var terms = (vendor.default_terms_days != null ? parseInt(vendor.default_terms_days) : 30);
+  if (isNaN(terms)) terms = 30;
+  var due = addDays(billDate, terms);
+  hint.textContent = 'Net ' + terms + ' -- due ' + fmtDateDisplay(due) + '. Uncheck if you paid this at the register.';
+}
+
+// Create a payable when an invoiced-vendor invoice is logged. The COS purchase
+// is the source of truth -- a bill-insert failure NEVER rolls back the purchase;
+// we return a warning suffix instead. Never called from transfer / expense / recon.
+async function maybeCreateApBill(opts) {
+  var vendor = null;
+  for (var i = 0; i < knownVendors.length; i++) { if (knownVendors[i].id === opts.vendorId) { vendor = knownVendors[i]; break; } }
+  if (!vendor || vendor.payment_type !== 'invoiced') return '';
+  var check = document.getElementById('ap-bill-check');
+  if (!check || !check.checked) return '';
+  var terms = (vendor.default_terms_days != null ? parseInt(vendor.default_terms_days) : 30);
+  if (isNaN(terms)) terms = 30;
+  var dueDate = addDays(opts.billDate, terms);
+  try {
+    var userName = 'unknown';
+    if (typeof pcAuth !== 'undefined') { var u = pcAuth.getUser(); if (u) userName = u.display_name; }
+    var hdrs = apiHeaders();
+    var billBody = {
+      vendor_id: opts.vendorId,
+      vendor_name: opts.vendorName,
+      invoice_number: opts.invoiceNumber || null,
+      bill_date: opts.billDate,
+      due_date: dueDate,
+      total_amount: opts.amount,
+      venue: opts.venue || null,
+      purchase_id: opts.purchaseId || null,
+      allocation_group_id: opts.allocationGroupId || null,
+      invoice_photo_url: opts.photoUrl || null,
+      created_by: userName
+    };
+    var res = await fetch(SUPA_URL + '/rest/v1/ap_bills', {
+      method: 'POST',
+      headers: Object.assign({}, hdrs, {'Content-Type': 'application/json', 'Prefer': 'return=minimal'}),
+      body: JSON.stringify(billBody)
+    });
+    if (!res.ok) { console.error('[purchases] ap_bill create failed', await res.text()); return '\n\n(!) Bill entry did not save -- tell the office so it gets tracked.'; }
+    return '\nBill created -- due ' + fmtDateDisplay(dueDate);
+  } catch(e) {
+    console.error('[purchases] ap_bill create exception', e);
+    return '\n\n(!) Bill entry did not save -- tell the office so it gets tracked.';
+  }
 }
 
 // Close vendor dropdown on outside click
@@ -1919,6 +2025,7 @@ async function submitInvoice(skipDupCheck) {
   var vendorId = vendorResolved.id;        // known_vendors id, or null for free-text fallback
   var amount = parseFloat(document.getElementById('amount').value);
   var note = document.getElementById('note').value.trim();
+  var invoiceNumber = document.getElementById('inv-number').value.trim();
   var isSplit = document.getElementById('split-toggle').checked;
   var errEl = document.getElementById('error-msg');
   errEl.style.display = 'none';
@@ -2021,22 +2128,23 @@ async function submitInvoice(skipDupCheck) {
       var res = await fetch(SUPA_URL + '/rest/v1/purchases', {
         method: 'POST',
         headers: Object.assign({}, hdrs, {'Content-Type': 'application/json', 'Prefer': 'return=minimal'}),
-        body: JSON.stringify({id: id, type: 'invoice', invoice_date: date, vendor: vendor, vendor_id: vendorId, venue: venue, amount: amount, note: fullNote || null, photo_url: photoUrl})
+        body: JSON.stringify({id: id, type: 'invoice', invoice_date: date, vendor: vendor, vendor_id: vendorId, venue: venue, amount: amount, note: fullNote || null, photo_url: photoUrl, invoice_number: invoiceNumber || null})
       });
       if (!res.ok) throw new Error(await res.text());
+      var billMsg = await maybeCreateApBill({ vendorId: vendorId, vendorName: vendor, invoiceNumber: invoiceNumber, billDate: date, amount: amount, venue: venue, purchaseId: id, allocationGroupId: null, photoUrl: photoUrl });
       document.getElementById('form-card').style.display = 'none';
       sc.className = 'success-card'; sc.style.display = 'block';
       document.getElementById('success-title').textContent = 'Purchase logged!';
       var fileCount = invoiceFiles.length;
-      document.getElementById('success-detail').textContent = vendor + ' -- ' + venue + '\n$' + fmtMoney(amount) + (fileCount ? '\n' + fileCount + ' page' + (fileCount > 1 ? 's' : '') + ' attached' : '');
+      document.getElementById('success-detail').textContent = vendor + ' -- ' + venue + '\n$' + fmtMoney(amount) + (fileCount ? '\n' + fileCount + ' page' + (fileCount > 1 ? 's' : '') + ' attached' : '') + billMsg;
     } else {
       var groupId = crypto.randomUUID();
       var id1 = id;
       var id2 = crypto.randomUUID();
       var splitNote = (fullNote ? fullNote + '\n' : '') + '[Split invoice: ' + splitVenue1 + ' $' + fmtMoney(splitAmount1) + ' / ' + splitVenue2 + ' $' + fmtMoney(splitAmount2) + ']';
       var payload = [
-        {id: id1, type: 'invoice', invoice_date: date, vendor: vendor, vendor_id: vendorId, venue: splitVenue1, amount: splitAmount1, note: splitNote, photo_url: photoUrl, allocation_group_id: groupId},
-        {id: id2, type: 'invoice', invoice_date: date, vendor: vendor, vendor_id: vendorId, venue: splitVenue2, amount: splitAmount2, note: splitNote, photo_url: photoUrl, allocation_group_id: groupId}
+        {id: id1, type: 'invoice', invoice_date: date, vendor: vendor, vendor_id: vendorId, venue: splitVenue1, amount: splitAmount1, note: splitNote, photo_url: photoUrl, allocation_group_id: groupId, invoice_number: invoiceNumber || null},
+        {id: id2, type: 'invoice', invoice_date: date, vendor: vendor, vendor_id: vendorId, venue: splitVenue2, amount: splitAmount2, note: splitNote, photo_url: photoUrl, allocation_group_id: groupId, invoice_number: invoiceNumber || null}
       ];
       var res2 = await fetch(SUPA_URL + '/rest/v1/purchases', {
         method: 'POST',
@@ -2044,11 +2152,12 @@ async function submitInvoice(skipDupCheck) {
         body: JSON.stringify(payload)
       });
       if (!res2.ok) { console.error('[purchases] split write failed', await res2.text()); throw new Error(); }
+      var billMsg2 = await maybeCreateApBill({ vendorId: vendorId, vendorName: vendor, invoiceNumber: invoiceNumber, billDate: date, amount: amount, venue: null, purchaseId: null, allocationGroupId: groupId, photoUrl: photoUrl });
       document.getElementById('form-card').style.display = 'none';
       sc.className = 'success-card'; sc.style.display = 'block';
       document.getElementById('success-title').textContent = 'Split purchase logged!';
       var fileCount2 = invoiceFiles.length;
-      document.getElementById('success-detail').textContent = vendor + '\n' + splitVenue1 + ': $' + fmtMoney(splitAmount1) + '\n' + splitVenue2 + ': $' + fmtMoney(splitAmount2) + '\nTotal: $' + fmtMoney(amount) + (fileCount2 ? '\n' + fileCount2 + ' page' + (fileCount2 > 1 ? 's' : '') + ' attached' : '');
+      document.getElementById('success-detail').textContent = vendor + '\n' + splitVenue1 + ': $' + fmtMoney(splitAmount1) + '\n' + splitVenue2 + ': $' + fmtMoney(splitAmount2) + '\nTotal: $' + fmtMoney(amount) + (fileCount2 ? '\n' + fileCount2 + ' page' + (fileCount2 > 1 ? 's' : '') + ' attached' : '') + billMsg2;
     }
     loadMonthlySummary();
   } catch(e) {
@@ -2301,6 +2410,9 @@ function resetForm() {
   document.getElementById('venue-sel').value = '';
   document.getElementById('amount').value = '';
   document.getElementById('note').value = '';
+  document.getElementById('inv-number').value = '';
+  var apbReset = document.getElementById('ap-bill-block');
+  if (apbReset) apbReset.style.display = 'none';
   document.getElementById('split-toggle').checked = false;
   document.getElementById('split-venue-1').value = '';
   document.getElementById('split-venue-2').value = '';
