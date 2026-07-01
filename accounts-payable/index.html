@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Accounts Payable · Popcorn Chez</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap">
+
+<script src="/pc-auth.js"></script>
+<script src="/pc-nav.js"></script>
+<script src="/pc-activity.js"></script>
+
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: #faf9f6; color: #1a1a1a;
+    font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 14px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page-title-row {
+    background: #faf9f6; border-bottom: 1px solid #e8e8e4;
+    padding: 18px 22px 16px;
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap;
+  }
+  .page-title { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; margin: 0; }
+  .page-title-meta { font-size: 12px; color: #888; font-weight: 500; }
+  .page-body { max-width: 1240px; margin: 0 auto; padding: 18px 22px 80px; }
+
+  .section-card {
+    background: #fff; border: 0.5px solid #e0dfd8;
+    border-radius: 10px; margin-bottom: 18px; overflow: hidden;
+  }
+  .section-card-head {
+    padding: 14px 18px; border-bottom: 1px solid #f0efe8;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; flex-wrap: wrap;
+  }
+  .section-card-title {
+    font-size: 13px; font-weight: 600; color: #1a1a1a; margin: 0;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .section-card-subtitle { font-size: 12px; color: #888; }
+  .section-card-body { padding: 16px 18px; }
+
+  .count-badge {
+    display: inline-block; background: #1a1a1a; color: #fff;
+    font-size: 11px; font-weight: 600; padding: 2px 8px;
+    border-radius: 10px; min-width: 18px; text-align: center;
+  }
+  .count-badge.is-muted { background: #b4b2a9; }
+  .count-badge.is-warning { background: #854F0B; }
+
+  /* ── Summary / aging hero ── */
+  .ap-summary { display: flex; gap: 22px; flex-wrap: wrap; margin-bottom: 6px; }
+  .ap-summary-metric { min-width: 170px; }
+  .ap-summary-metric .label {
+    font-size: 11px; font-weight: 500; letter-spacing: 0.06em;
+    text-transform: uppercase; color: #888; margin-bottom: 4px;
+  }
+  .ap-summary-metric .value {
+    font-size: 30px; font-weight: 700; letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
+  }
+  .ap-summary-metric .sub { font-size: 12px; color: #999; margin-top: 2px; }
+  .ap-summary-metric.is-overdue .value { color: #791F1F; }
+  .ap-summary-metric.is-overdue.is-zero .value { color: #27500A; }
+
+  .aging-strip { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+  .aging-chip {
+    flex: 1; min-width: 120px;
+    background: #fafaf6; border: 1px solid #e8e8e4; border-radius: 9px;
+    padding: 10px 12px; cursor: pointer; text-align: left;
+    font-family: inherit; transition: border-color 0.12s ease, background 0.12s ease;
+  }
+  .aging-chip:hover { border-color: #c9c8bf; }
+  .aging-chip.is-active { border-color: #1a1a1a; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+  .aging-chip .chip-label {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+    text-transform: uppercase; color: #666; display: block; margin-bottom: 3px;
+  }
+  .aging-chip .chip-amount { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .aging-chip .chip-count { font-size: 11px; color: #999; margin-top: 1px; }
+  .aging-chip.tone-current  { }
+  .aging-chip.tone-warn.has-bills  { background: #fef6ec; border-color: #f3d9a8; }
+  .aging-chip.tone-warn.has-bills.is-active { border-color: #854F0B; }
+  .aging-chip.tone-warn.has-bills .chip-amount { color: #854F0B; }
+  .aging-chip.tone-late.has-bills  { background: #fceaea; border-color: #f3a8a8; }
+  .aging-chip.tone-late.has-bills.is-active { border-color: #791F1F; }
+  .aging-chip.tone-late.has-bills .chip-amount { color: #791F1F; }
+
+  /* ── Filters ── */
+  .ap-filters { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 12px; align-items: end; }
+  @media (max-width: 720px) { .ap-filters { grid-template-columns: 1fr; } }
+  .ap-field label {
+    display: block; font-size: 11px; font-weight: 500;
+    letter-spacing: 0.04em; text-transform: uppercase; color: #666; margin-bottom: 5px;
+  }
+  .ap-field input, .ap-field select {
+    width: 100%; font-family: inherit; font-size: 13px;
+    padding: 8px 10px; border: 1px solid #e0dfd8; border-radius: 6px;
+    background: #fff; color: #1a1a1a;
+  }
+  .ap-field input:focus, .ap-field select:focus { outline: none; border-color: #1a1a1a; }
+
+  /* ── Bill list ── */
+  .bill-list { display: flex; flex-direction: column; }
+  .bill-row {
+    display: grid; grid-template-columns: 1fr 130px 150px auto;
+    gap: 14px; align-items: center;
+    padding: 13px 4px; border-bottom: 1px solid #f0efe8;
+  }
+  .bill-row:last-child { border-bottom: 0; }
+  .bill-vendor { min-width: 0; }
+  .bill-vendor .name {
+    font-size: 14px; font-weight: 600; color: #1a1a1a;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .bill-vendor .meta { font-size: 12px; color: #888; margin-top: 1px; }
+  .bill-vendor .meta .inv { color: #666; }
+  .bill-amount {
+    text-align: right; font-size: 15px; font-weight: 700;
+    font-variant-numeric: tabular-nums; color: #1a1a1a; white-space: nowrap;
+  }
+  .bill-amount .partial { display: block; font-size: 11px; font-weight: 400; color: #999; }
+  .bill-due { text-align: right; font-variant-numeric: tabular-nums; }
+  .bill-due .date { font-size: 13px; color: #555; }
+  .bill-due .rel { font-size: 11px; margin-top: 1px; }
+  .bill-due .rel.ok { color: #999; }
+  .bill-due .rel.soon { color: #854F0B; font-weight: 500; }
+  .bill-due .rel.late { color: #791F1F; font-weight: 600; }
+  .bill-actions { display: flex; gap: 8px; align-items: center; justify-content: flex-end; }
+
+  .btn-primary {
+    background: #1a1a1a; color: #fff; border: 0;
+    font-family: inherit; font-size: 13px; font-weight: 500;
+    padding: 8px 14px; border-radius: 6px; cursor: pointer;
+    transition: background 0.12s ease;
+  }
+  .btn-primary:hover { background: #2c2c2a; }
+  .btn-primary:disabled { background: #b4b2a9; cursor: not-allowed; }
+  .btn-success { background: #27500A; color: #fff; border: 0; font-family: inherit; font-size: 13px; font-weight: 500; padding: 8px 14px; border-radius: 6px; cursor: pointer; }
+  .btn-success:hover { background: #173404; }
+  .btn-success:disabled { background: #b4b2a9; cursor: not-allowed; }
+  .btn-secondary {
+    background: transparent; border: 1px solid #e0dfd8; color: #555;
+    font-family: inherit; font-size: 13px; font-weight: 500;
+    padding: 7px 12px; border-radius: 6px; cursor: pointer;
+  }
+  .btn-secondary:hover { background: #f1f0eb; color: #1a1a1a; }
+  .link-view { color: #2563eb; text-decoration: none; font-size: 12px; font-weight: 500; }
+  .link-view:hover { text-decoration: underline; }
+  .link-quiet {
+    background: transparent; border: 0; color: #999; cursor: pointer;
+    font-family: inherit; font-size: 12px; padding: 4px 6px; border-radius: 4px;
+  }
+  .link-quiet:hover { color: #791F1F; background: #fceaea; }
+
+  .ap-empty { padding: 26px 16px; text-align: center; color: #888; font-size: 13px; }
+  .ap-loading { padding: 26px 16px; text-align: center; color: #aaa; font-size: 13px; }
+
+  /* ── Paid rows ── */
+  .paid-row {
+    display: grid; grid-template-columns: 1fr 110px 120px auto;
+    gap: 14px; align-items: center;
+    padding: 11px 4px; border-bottom: 1px solid #f0efe8; font-size: 13px;
+  }
+  .paid-row:last-child { border-bottom: 0; }
+  .paid-vendor .name { font-weight: 600; }
+  .paid-vendor .meta { font-size: 11px; color: #888; }
+  .paid-amount { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .paid-method { font-size: 12px; color: #666; text-align: right; }
+  .paid-method .ref { display: block; font-size: 11px; color: #999; }
+  .paid-actions { text-align: right; }
+
+  /* ── Modal ── */
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.36); z-index: 1500;
+    display: none; align-items: flex-start; justify-content: center;
+    padding: 60px 16px; overflow-y: auto;
+  }
+  .modal-backdrop.is-open { display: flex; }
+  .modal-card {
+    background: #fff; border-radius: 14px; max-width: 500px; width: 100%;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.18); overflow: hidden;
+  }
+  .modal-head {
+    padding: 20px 24px 14px; border-bottom: 1px solid #f0efe8;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .modal-title { font-size: 17px; font-weight: 600; }
+  .modal-subtitle { font-size: 12px; color: #888; margin-top: 2px; }
+  .modal-close { background: transparent; border: 0; font-size: 22px; color: #888; cursor: pointer; line-height: 1; padding: 4px 8px; }
+  .modal-close:hover { color: #1a1a1a; }
+  .modal-body { padding: 20px 24px; }
+  .modal-footer {
+    padding: 14px 24px; border-top: 1px solid #f0efe8; background: #fafaf6;
+    display: flex; justify-content: flex-end; gap: 10px; align-items: center;
+  }
+  .pay-summary {
+    background: #fafaf6; border: 1px solid #e8e8e4; border-radius: 8px;
+    padding: 11px 13px; margin-bottom: 16px; font-size: 13px; color: #555; line-height: 1.5;
+  }
+  .pay-summary .amt { font-size: 18px; font-weight: 700; color: #1a1a1a; }
+  .pay-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 4px; }
+  .pay-field label {
+    display: block; font-size: 11px; font-weight: 500;
+    letter-spacing: 0.04em; text-transform: uppercase; color: #666; margin-bottom: 5px;
+  }
+  .pay-field input, .pay-field select {
+    width: 100%; font-family: inherit; font-size: 13px;
+    padding: 8px 10px; border: 1px solid #e0dfd8; border-radius: 6px; background: #fff; color: #1a1a1a;
+  }
+  .pay-field input:focus, .pay-field select:focus { outline: none; border-color: #1a1a1a; }
+  .pay-field.is-full { grid-column: 1 / -1; }
+  .pay-hint { font-size: 11px; color: #999; margin-top: 6px; }
+
+  /* ── Toast ── */
+  .pc-toast-host { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 2000; pointer-events: none; }
+  .pc-toast {
+    background: #1a1a1a; color: #fff; font-size: 13px; font-weight: 500;
+    padding: 11px 18px; border-radius: 24px; box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+    opacity: 0; transform: translateY(8px); transition: opacity 0.18s ease, transform 0.18s ease;
+  }
+  .pc-toast.is-shown { opacity: 1; transform: translateY(0); }
+
+  .access-denied { max-width: 520px; margin: 60px auto; text-align: center; color: #555; }
+  .access-denied h2 { font-size: 18px; color: #1a1a1a; }
+
+  body.pre-auth .page-body, body.pre-auth .page-title-row { display: none; }
+  @media (max-width: 720px) {
+    .bill-row { grid-template-columns: 1fr auto; }
+    .bill-due, .bill-amount { text-align: left; }
+    .bill-actions { grid-column: 1 / -1; justify-content: flex-start; }
+  }
+</style>
+</head>
+
+<body class="pre-auth">
+
+  <div class="page-title-row" aria-hidden="true">
+    <h1 class="page-title">Accounts Payable</h1>
+    <span class="page-title-meta" id="pageTitleMeta">v1</span>
+  </div>
+
+  <main class="page-body" id="pageBody">
+
+    <!-- Summary + aging -->
+    <div class="section-card">
+      <div class="section-card-head">
+        <h2 class="section-card-title">What you owe</h2>
+        <span class="section-card-subtitle" id="summaryAsOf"></span>
+      </div>
+      <div class="section-card-body" id="summaryBody">
+        <div class="ap-loading">Loading bills…</div>
+      </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="section-card">
+      <div class="section-card-head">
+        <h2 class="section-card-title">Filter</h2>
+      </div>
+      <div class="section-card-body">
+        <div class="ap-filters">
+          <div class="ap-field">
+            <label for="fVendor">Vendor</label>
+            <input type="text" id="fVendor" placeholder="Search vendor name…" autocomplete="off">
+          </div>
+          <div class="ap-field">
+            <label for="fVenue">Venue</label>
+            <select id="fVenue"><option value="">All venues</option></select>
+          </div>
+          <div class="ap-field">
+            <label for="fSort">Sort by</label>
+            <select id="fSort">
+              <option value="due">Due date (soonest first)</option>
+              <option value="vendor">Vendor (A–Z)</option>
+              <option value="amount">Amount (largest first)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bills to pay -->
+    <div class="section-card">
+      <div class="section-card-head">
+        <h2 class="section-card-title">Bills to pay <span class="count-badge is-muted" id="openCount">0</span></h2>
+        <span class="section-card-subtitle" id="openFilterNote"></span>
+      </div>
+      <div class="section-card-body" id="openBody">
+        <div class="ap-loading">Loading…</div>
+      </div>
+    </div>
+
+    <!-- Paid -->
+    <div class="section-card">
+      <div class="section-card-head">
+        <h2 class="section-card-title">Paid <span class="count-badge is-muted" id="paidCount">0</span></h2>
+        <span class="section-card-subtitle">Last 60 days</span>
+      </div>
+      <div class="section-card-body" id="paidBody">
+        <div class="ap-loading">Loading…</div>
+      </div>
+    </div>
+
+  </main>
+
+  <div class="pc-toast-host" id="pcToastHost" aria-live="polite" aria-atomic="true"></div>
+  <div class="modal-backdrop" id="modalBackdrop"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var SB_URL  = 'https://aoazlttdjowhlfcksoyl.supabase.co';
+  var SB_REST = SB_URL + '/rest/v1/';
+
+  var VENUE_OPTIONS = ['ACCC','Boardwalk Hall','Mann Music Center','FMP','Cure Insurance Arena','DE Chase Field House','Subaru Park','Villanova','Montage','Sports at the Beach'];
+
+  var BILL_COLS = 'id,vendor_name,invoice_number,bill_date,due_date,total_amount,amount_paid,balance,status,venue,invoice_photo_url,paid_at,payment_method,payment_reference,paid_by,notes,created_at,created_by';
+
+  var state = {
+    isAdmin: false,
+    currentUser: null,
+    openBills: [],
+    paidBills: [],
+    agingFilter: 'all',   // all | current | d1_30 | d31_60 | d60plus
+    vendorFilter: '',
+    venueFilter: '',
+    sortBy: 'due',
+    busy: false
+  };
+
+  // ── utilities ──
+  function pad2(n) { n = String(n); return n.length < 2 ? '0' + n : n; }
+  function todayIso() { var d = new Date(); return d.getFullYear() + '-' + pad2(d.getMonth()+1) + '-' + pad2(d.getDate()); }
+  function daysBetween(aIso, bIso) {
+    if (!aIso || !bIso) return 0;
+    var a = new Date(String(aIso).slice(0,10) + 'T00:00:00');
+    var b = new Date(String(bIso).slice(0,10) + 'T00:00:00');
+    return Math.round((b - a) / 86400000);
+  }
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    var p = String(iso).slice(0,10).split('-');
+    if (p.length !== 3) return iso;
+    var m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return m[parseInt(p[1],10)-1] + ' ' + parseInt(p[2],10) + ', ' + p[0];
+  }
+  function fmtMoney(n) {
+    if (n == null || isNaN(n)) n = 0;
+    var sign = n < 0 ? '-' : '';
+    return sign + '$' + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function esc(s) {
+    if (s == null) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
+  function actorName() {
+    try { var u = pcAuth.getUser(); return (u && u.display_name) || (u && u.email) || 'unknown'; } catch (e) { return 'unknown'; }
+  }
+
+  function showToast(msg, ms) {
+    ms = ms || 2400;
+    var host = document.getElementById('pcToastHost');
+    if (!host) return;
+    var el = document.createElement('div');
+    el.className = 'pc-toast'; el.textContent = msg;
+    host.appendChild(el);
+    requestAnimationFrame(function () { el.classList.add('is-shown'); });
+    setTimeout(function () { el.classList.remove('is-shown'); setTimeout(function () { el.remove(); }, 260); }, ms);
+  }
+
+  function handleAuthFailure() {
+    try { localStorage.removeItem('sb_access_token'); localStorage.removeItem('sb_refresh_token'); } catch (e) {}
+    showToast('Session expired. Reloading…', 1600);
+    setTimeout(function () { window.location.reload(); }, 1600);
+  }
+  function authFetch(url, options) {
+    return fetch(url, options).then(function (r) {
+      if (!r.ok) {
+        return r.text().then(function (t) {
+          if (r.status === 401 || (t && t.indexOf('JWT expired') !== -1)) { var e = new Error('JWT expired'); e.authFailed = true; throw e; }
+          throw new Error(t || ('HTTP ' + r.status));
+        });
+      }
+      return r.text().then(function (t) { if (!t) return []; try { return JSON.parse(t); } catch (e) { return []; } });
+    });
+  }
+
+  // ── fetches ──
+  function fetchOpenBills() {
+    return authFetch(
+      SB_REST + 'ap_bills?deleted_at=is.null&status=in.(unpaid,partial)&select=' + BILL_COLS +
+      '&order=due_date.asc&limit=1000',
+      { headers: pcAuth.headers() }
+    );
+  }
+  function fetchPaidBills() {
+    var d = new Date(); d.setDate(d.getDate() - 60);
+    var iso = d.toISOString().slice(0,10);
+    return authFetch(
+      SB_REST + 'ap_bills?deleted_at=is.null&status=eq.paid&paid_at=gte.' + iso +
+      '&select=' + BILL_COLS + '&order=paid_at.desc&limit=1000',
+      { headers: pcAuth.headers() }
+    );
+  }
+
+  function refreshAll() {
+    return Promise.all([fetchOpenBills(), fetchPaidBills()])
+      .then(function (res) {
+        state.openBills = res[0] || [];
+        state.paidBills = res[1] || [];
+        renderSummary();
+        renderOpenBills();
+        renderPaidBills();
+      })
+      .catch(function (e) {
+        if (e && e.authFailed) { handleAuthFailure(); return; }
+        console.error('[ap] load failed', e);
+        document.getElementById('summaryBody').innerHTML = '<div class="ap-empty">Could not load bills. Try refreshing.</div>';
+        document.getElementById('openBody').innerHTML = '<div class="ap-empty">Could not load.</div>';
+        document.getElementById('paidBody').innerHTML = '<div class="ap-empty">Could not load.</div>';
+      });
+  }
+
+  // ── aging ──
+  function bucketFor(bill) {
+    var od = daysBetween(bill.due_date, todayIso());  // >0 = overdue
+    if (od <= 0) return 'current';
+    if (od <= 30) return 'd1_30';
+    if (od <= 60) return 'd31_60';
+    return 'd60plus';
+  }
+  function billBalance(bill) {
+    var b = Number(bill.balance);
+    if (isFinite(b)) return b;
+    return Number(bill.total_amount || 0) - Number(bill.amount_paid || 0);
+  }
+
+  function computeAging() {
+    var agg = {
+      outstanding: 0, overdue: 0,
+      buckets: {
+        current:  { total: 0, count: 0 },
+        d1_30:    { total: 0, count: 0 },
+        d31_60:   { total: 0, count: 0 },
+        d60plus:  { total: 0, count: 0 }
+      }
+    };
+    state.openBills.forEach(function (bill) {
+      var bal = billBalance(bill);
+      var bk = bucketFor(bill);
+      agg.outstanding += bal;
+      agg.buckets[bk].total += bal;
+      agg.buckets[bk].count += 1;
+      if (bk !== 'current') agg.overdue += bal;
+    });
+    return agg;
+  }
+
+  function renderSummary() {
+    var body = document.getElementById('summaryBody');
+    var asOf = document.getElementById('summaryAsOf');
+    if (asOf) asOf.textContent = 'as of ' + fmtDate(todayIso());
+    if (!body) return;
+
+    var agg = computeAging();
+    var overdueZero = agg.overdue < 0.005;
+
+    function chip(key, label, tone) {
+      var b = agg.buckets[key];
+      var hasBills = b.count > 0;
+      var active = state.agingFilter === key ? ' is-active' : '';
+      var has = hasBills ? ' has-bills' : '';
+      return '<button type="button" class="aging-chip tone-' + tone + has + active + '" data-aging="' + key + '">' +
+        '<span class="chip-label">' + esc(label) + '</span>' +
+        '<span class="chip-amount">' + esc(fmtMoney(b.total)) + '</span>' +
+        '<span class="chip-count">' + b.count + ' bill' + (b.count === 1 ? '' : 's') + '</span>' +
+      '</button>';
+    }
+
+    var allActive = state.agingFilter === 'all' ? ' is-active' : '';
+    var openCount = state.openBills.length;
+    var openTotal = agg.outstanding;
+
+    body.innerHTML =
+      '<div class="ap-summary">' +
+        '<div class="ap-summary-metric">' +
+          '<div class="label">Outstanding</div>' +
+          '<div class="value">' + esc(fmtMoney(openTotal)) + '</div>' +
+          '<div class="sub">' + openCount + ' open bill' + (openCount === 1 ? '' : 's') + '</div>' +
+        '</div>' +
+        '<div class="ap-summary-metric is-overdue' + (overdueZero ? ' is-zero' : '') + '">' +
+          '<div class="label">Overdue</div>' +
+          '<div class="value">' + esc(fmtMoney(agg.overdue)) + '</div>' +
+          '<div class="sub">' + (overdueZero ? 'nothing past due' : (agg.buckets.d1_30.count + agg.buckets.d31_60.count + agg.buckets.d60plus.count) + ' past due') + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="aging-strip">' +
+        '<button type="button" class="aging-chip tone-current' + allActive + '" data-aging="all">' +
+          '<span class="chip-label">All open</span>' +
+          '<span class="chip-amount">' + esc(fmtMoney(openTotal)) + '</span>' +
+          '<span class="chip-count">' + openCount + ' bill' + (openCount === 1 ? '' : 's') + '</span>' +
+        '</button>' +
+        chip('current', 'Not due yet', 'current') +
+        chip('d1_30', '1–30 late', 'warn') +
+        chip('d31_60', '31–60 late', 'warn') +
+        chip('d60plus', '60+ late', 'late') +
+      '</div>';
+  }
+
+  // ── open bills ──
+  function filteredSortedOpen() {
+    var rows = state.openBills.slice();
+    if (state.agingFilter !== 'all') {
+      rows = rows.filter(function (b) { return bucketFor(b) === state.agingFilter; });
+    }
+    if (state.vendorFilter) {
+      var q = state.vendorFilter.toLowerCase();
+      rows = rows.filter(function (b) { return (b.vendor_name || '').toLowerCase().indexOf(q) !== -1; });
+    }
+    if (state.venueFilter) {
+      rows = rows.filter(function (b) { return b.venue === state.venueFilter; });
+    }
+    if (state.sortBy === 'vendor') {
+      rows.sort(function (a, b) { return (a.vendor_name || '').localeCompare(b.vendor_name || ''); });
+    } else if (state.sortBy === 'amount') {
+      rows.sort(function (a, b) { return billBalance(b) - billBalance(a); });
+    } else {
+      rows.sort(function (a, b) { return (a.due_date || '').localeCompare(b.due_date || ''); });
+    }
+    return rows;
+  }
+
+  function renderOpenBills() {
+    var body = document.getElementById('openBody');
+    var countEl = document.getElementById('openCount');
+    var noteEl = document.getElementById('openFilterNote');
+    if (!body) return;
+
+    var rows = filteredSortedOpen();
+    if (countEl) countEl.textContent = String(rows.length);
+
+    var filters = [];
+    if (state.agingFilter !== 'all') filters.push(agingLabel(state.agingFilter));
+    if (state.venueFilter) filters.push(state.venueFilter);
+    if (state.vendorFilter) filters.push('"' + state.vendorFilter + '"');
+    if (noteEl) noteEl.textContent = filters.length ? ('showing ' + filters.join(' · ')) : '';
+
+    if (state.openBills.length === 0) {
+      body.innerHTML = '<div class="ap-empty">No open bills. When a manager logs an invoice from a bill-me vendor, it lands here.</div>';
+      return;
+    }
+    if (rows.length === 0) {
+      body.innerHTML = '<div class="ap-empty">No bills match this filter. Clear it to see everything you owe.</div>';
+      return;
+    }
+
+    var today = todayIso();
+    body.innerHTML = '<div class="bill-list">' + rows.map(function (b) {
+      var od = daysBetween(b.due_date, today);
+      var rel, relClass;
+      if (od > 0) { rel = od + ' day' + (od === 1 ? '' : 's') + ' overdue'; relClass = od > 30 ? 'late' : 'soon'; }
+      else if (od === 0) { rel = 'due today'; relClass = 'soon'; }
+      else { rel = 'due in ' + (-od) + ' day' + (od === -1 ? '' : 's'); relClass = 'ok'; }
+
+      var bal = billBalance(b);
+      var partial = Number(b.amount_paid) > 0.005;
+      var invMeta = b.invoice_number ? '<span class="inv">#' + esc(b.invoice_number) + '</span> · ' : '';
+      var venueMeta = b.venue ? esc(b.venue) : 'Split / multi-venue';
+      var photoLink = b.invoice_photo_url ? '<a href="' + esc(b.invoice_photo_url) + '" target="_blank" class="link-view">Invoice</a>' : '';
+
+      return '<div class="bill-row" data-bill-id="' + esc(b.id) + '">' +
+        '<div class="bill-vendor">' +
+          '<div class="name">' + esc(b.vendor_name) + '</div>' +
+          '<div class="meta">' + invMeta + venueMeta + '</div>' +
+        '</div>' +
+        '<div class="bill-amount">' + esc(fmtMoney(bal)) +
+          (partial ? '<span class="partial">of ' + esc(fmtMoney(Number(b.total_amount || 0))) + '</span>' : '') +
+        '</div>' +
+        '<div class="bill-due">' +
+          '<div class="date">' + esc(fmtDate(b.due_date)) + '</div>' +
+          '<div class="rel ' + relClass + '">' + esc(rel) + '</div>' +
+        '</div>' +
+        '<div class="bill-actions">' +
+          photoLink +
+          '<button type="button" class="link-quiet" data-ap-action="remove" data-bill-id="' + esc(b.id) + '">Remove</button>' +
+          '<button type="button" class="btn-success" data-ap-action="pay" data-bill-id="' + esc(b.id) + '">Mark paid</button>' +
+        '</div>' +
+      '</div>';
+    }).join('') + '</div>';
+  }
+
+  function agingLabel(key) {
+    if (key === 'current') return 'not due yet';
+    if (key === 'd1_30') return '1–30 days late';
+    if (key === 'd31_60') return '31–60 days late';
+    if (key === 'd60plus') return '60+ days late';
+    return 'all';
+  }
+
+  // ── paid bills ──
+  function renderPaidBills() {
+    var body = document.getElementById('paidBody');
+    var countEl = document.getElementById('paidCount');
+    if (!body) return;
+    var rows = state.paidBills;
+    if (countEl) countEl.textContent = String(rows.length);
+
+    if (rows.length === 0) {
+      body.innerHTML = '<div class="ap-empty">Nothing paid in the last 60 days.</div>';
+      return;
+    }
+    var methodLabels = { check: 'Check', ach: 'ACH', wire: 'Wire', card: 'Card', cash: 'Cash', other: 'Other' };
+    body.innerHTML = rows.map(function (b) {
+      var methodTxt = b.payment_method ? (methodLabels[b.payment_method] || b.payment_method) : 'Paid';
+      var refTxt = b.payment_reference ? ('<span class="ref">' + esc(b.payment_reference) + '</span>') : '';
+      var invMeta = b.invoice_number ? '#' + esc(b.invoice_number) + ' · ' : '';
+      return '<div class="paid-row" data-bill-id="' + esc(b.id) + '">' +
+        '<div class="paid-vendor"><div class="name">' + esc(b.vendor_name) + '</div>' +
+          '<div class="meta">' + invMeta + 'paid ' + esc(fmtDate(b.paid_at)) + (b.paid_by ? ' by ' + esc(b.paid_by) : '') + '</div></div>' +
+        '<div class="paid-amount">' + esc(fmtMoney(Number(b.total_amount || 0))) + '</div>' +
+        '<div class="paid-method">' + esc(methodTxt) + refTxt + '</div>' +
+        '<div class="paid-actions"><button type="button" class="link-quiet" data-ap-action="undo" data-bill-id="' + esc(b.id) + '">Undo</button></div>' +
+      '</div>';
+    }).join('');
+  }
+
+  // ── lookups ──
+  function billById(id) {
+    var i;
+    for (i = 0; i < state.openBills.length; i++) if (state.openBills[i].id === id) return state.openBills[i];
+    for (i = 0; i < state.paidBills.length; i++) if (state.paidBills[i].id === id) return state.paidBills[i];
+    return null;
+  }
+
+  // ── mark paid ──
+  function openPayModal(billId) {
+    var bill = billById(billId);
+    if (!bill) return;
+    var bd = document.getElementById('modalBackdrop');
+    if (!bd) return;
+    var bal = billBalance(bill);
+    var today = todayIso();
+
+    bd.innerHTML =
+      '<div class="modal-card" role="dialog">' +
+        '<div class="modal-head">' +
+          '<div><div class="modal-title">Mark paid</div>' +
+          '<div class="modal-subtitle">' + esc(bill.vendor_name) + (bill.invoice_number ? ' · #' + esc(bill.invoice_number) : '') + '</div></div>' +
+          '<button type="button" class="modal-close" data-close-pay aria-label="Close">×</button>' +
+        '</div>' +
+        '<div class="modal-body">' +
+          '<div class="pay-summary">Recording payment for<br><span class="amt">' + esc(fmtMoney(bal)) + '</span></div>' +
+          '<div class="pay-fields">' +
+            '<div class="pay-field">' +
+              '<label for="payMethod">Method <span style="color:#aaa;">(optional)</span></label>' +
+              '<select id="payMethod">' +
+                '<option value="">— not recorded —</option>' +
+                '<option value="check">Check</option>' +
+                '<option value="ach">ACH</option>' +
+                '<option value="wire">Wire</option>' +
+                '<option value="card">Card</option>' +
+                '<option value="cash">Cash</option>' +
+                '<option value="other">Other</option>' +
+              '</select>' +
+            '</div>' +
+            '<div class="pay-field">' +
+              '<label for="payDate">Payment date</label>' +
+              '<input type="date" id="payDate" value="' + esc(today) + '" max="' + esc(today) + '">' +
+            '</div>' +
+            '<div class="pay-field is-full">' +
+              '<label for="payRef">Reference <span style="color:#aaa;">(optional — check #, confirmation)</span></label>' +
+              '<input type="text" id="payRef" placeholder="e.g. 1622, ACH conf #" autocomplete="off">' +
+            '</div>' +
+          '</div>' +
+          '<div class="pay-hint">Method and reference are optional. Recording them just makes the bill easier to trace later.</div>' +
+        '</div>' +
+        '<div class="modal-footer">' +
+          '<button type="button" class="btn-secondary" data-close-pay>Cancel</button>' +
+          '<button type="button" class="btn-success" id="payConfirm" data-bill-id="' + esc(bill.id) + '">Mark paid</button>' +
+        '</div>' +
+      '</div>';
+    bd.classList.add('is-open');
+
+    var closers = bd.querySelectorAll('[data-close-pay]');
+    for (var i = 0; i < closers.length; i++) closers[i].addEventListener('click', closeModal);
+    var confirm = document.getElementById('payConfirm');
+    if (confirm) confirm.addEventListener('click', function () { doMarkPaid(bill.id); });
+    var methodSel = document.getElementById('payMethod');
+    if (methodSel) methodSel.focus();
+  }
+
+  function closeModal() {
+    var bd = document.getElementById('modalBackdrop');
+    if (bd) { bd.classList.remove('is-open'); bd.innerHTML = ''; }
+  }
+
+  function doMarkPaid(billId) {
+    if (state.busy) return;
+    var bill = billById(billId);
+    if (!bill) return;
+    var methodEl = document.getElementById('payMethod');
+    var dateEl = document.getElementById('payDate');
+    var refEl = document.getElementById('payRef');
+    var method = methodEl ? (methodEl.value || null) : null;
+    var payDate = dateEl ? dateEl.value : todayIso();
+    var ref = refEl ? (refEl.value || '').trim() : '';
+    if (!payDate) { showToast('Pick a payment date', 2200); return; }
+
+    state.busy = true;
+    var btn = document.getElementById('payConfirm');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
+    var actor = actorName();
+    var hdrs = Object.assign({}, pcAuth.headers(), { 'Content-Type': 'application/json', 'Prefer': 'return=minimal' });
+    var patch = {
+      status: 'paid',
+      amount_paid: Number(bill.total_amount || 0),
+      paid_at: payDate,
+      payment_method: method,
+      payment_reference: ref || null,
+      paid_by: actor,
+      updated_by: actor,
+      updated_at: new Date().toISOString()
+    };
+
+    authFetch(SB_REST + 'ap_bills?id=eq.' + encodeURIComponent(billId), {
+      method: 'PATCH', headers: hdrs, body: JSON.stringify(patch)
+    })
+    .then(function () {
+      closeModal();
+      showToast('Marked paid · ' + fmtMoney(Number(bill.total_amount || 0)) + ' to ' + bill.vendor_name, 2600);
+      return refreshAll();
+    })
+    .catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      console.error('[ap] mark paid failed', e);
+      showToast('Could not mark paid · ' + ((e && e.message) ? e.message.slice(0,100) : 'error'), 4000);
+      if (btn) { btn.disabled = false; btn.textContent = 'Mark paid'; }
+    })
+    .then(function () { state.busy = false; });
+  }
+
+  // ── undo paid ──
+  function undoPaid(billId) {
+    if (state.busy) return;
+    var bill = billById(billId);
+    if (!bill) return;
+    if (!window.confirm('Move "' + bill.vendor_name + '" back to unpaid? This clears the payment details you recorded.')) return;
+
+    state.busy = true;
+    var actor = actorName();
+    var hdrs = Object.assign({}, pcAuth.headers(), { 'Content-Type': 'application/json', 'Prefer': 'return=minimal' });
+    var patch = {
+      status: 'unpaid', amount_paid: 0,
+      paid_at: null, payment_method: null, payment_reference: null, paid_by: null,
+      updated_by: actor, updated_at: new Date().toISOString()
+    };
+    authFetch(SB_REST + 'ap_bills?id=eq.' + encodeURIComponent(billId), {
+      method: 'PATCH', headers: hdrs, body: JSON.stringify(patch)
+    })
+    .then(function () { showToast('Moved back to unpaid', 2000); return refreshAll(); })
+    .catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      console.error('[ap] undo failed', e);
+      showToast('Could not undo', 2600);
+    })
+    .then(function () { state.busy = false; });
+  }
+
+  // ── remove (soft-delete) ──
+  function removeBill(billId) {
+    if (state.busy) return;
+    var bill = billById(billId);
+    if (!bill) return;
+    if (!window.confirm('Remove this bill from Accounts Payable?\n\n' + bill.vendor_name + ' · ' + fmtMoney(billBalance(bill)) + '\n\nUse this if it was entered by mistake or isn\'t really a bill you owe. The purchase/cost record is not affected.')) return;
+
+    state.busy = true;
+    var actor = actorName();
+    var hdrs = Object.assign({}, pcAuth.headers(), { 'Content-Type': 'application/json', 'Prefer': 'return=minimal' });
+    authFetch(SB_REST + 'ap_bills?id=eq.' + encodeURIComponent(billId), {
+      method: 'PATCH', headers: hdrs,
+      body: JSON.stringify({ deleted_at: new Date().toISOString(), deleted_by: actor })
+    })
+    .then(function () { showToast('Bill removed', 1800); return refreshAll(); })
+    .catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      console.error('[ap] remove failed', e);
+      showToast('Could not remove bill', 2600);
+    })
+    .then(function () { state.busy = false; });
+  }
+
+  // ── wiring ──
+  function wire() {
+    // Aging chips + row actions via delegation on the page body
+    var page = document.getElementById('pageBody');
+    if (page) page.addEventListener('click', function (ev) {
+      var t = ev.target;
+      if (!t || !t.closest) return;
+
+      var chip = t.closest('[data-aging]');
+      if (chip) { state.agingFilter = chip.getAttribute('data-aging'); renderSummary(); renderOpenBills(); return; }
+
+      var actionBtn = t.closest('[data-ap-action]');
+      if (actionBtn) {
+        var action = actionBtn.getAttribute('data-ap-action');
+        var id = actionBtn.getAttribute('data-bill-id');
+        if (action === 'pay') openPayModal(id);
+        else if (action === 'remove') removeBill(id);
+        else if (action === 'undo') undoPaid(id);
+      }
+    });
+
+    var fVendor = document.getElementById('fVendor');
+    if (fVendor) fVendor.addEventListener('input', function () { state.vendorFilter = fVendor.value.trim(); renderOpenBills(); });
+    var fVenue = document.getElementById('fVenue');
+    if (fVenue) fVenue.addEventListener('change', function () { state.venueFilter = fVenue.value; renderOpenBills(); });
+    var fSort = document.getElementById('fSort');
+    if (fSort) fSort.addEventListener('change', function () { state.sortBy = fSort.value; renderOpenBills(); });
+
+    var bd = document.getElementById('modalBackdrop');
+    if (bd) bd.addEventListener('click', function (ev) { if (ev.target === bd) closeModal(); });
+    document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') closeModal(); });
+  }
+
+  function populateVenueFilter() {
+    var sel = document.getElementById('fVenue');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">All venues</option>' +
+      VENUE_OPTIONS.map(function (v) { return '<option value="' + esc(v) + '">' + esc(v) + '</option>'; }).join('');
+  }
+
+  // ── boot ──
+  function onAuthReady(user) {
+    if (typeof pcActivity !== 'undefined' && pcActivity.init) pcActivity.init('accounts-payable');
+    document.body.classList.remove('pre-auth');
+    state.currentUser = user;
+    state.isAdmin = (pcAuth && pcAuth.isAdmin) ? pcAuth.isAdmin() : false;
+
+    if (!state.isAdmin) {
+      document.getElementById('pageBody').innerHTML =
+        '<div class="access-denied"><h2>Admins only</h2>' +
+        '<p>Accounts Payable is limited to office admins. If you need access, ask Keith.</p></div>';
+      return;
+    }
+
+    var meta = document.getElementById('pageTitleMeta');
+    if (meta) meta.textContent = 'Admin · v1';
+
+    populateVenueFilter();
+    wire();
+    refreshAll();
+  }
+
+  if (typeof pcAuth === 'undefined' || !pcAuth.require) {
+    document.body.innerHTML = '<div style="padding:60px 22px;font-family:DM Sans,sans-serif;"><h1>Authentication unavailable</h1><p>pc-auth.js failed to load.</p></div>';
+  } else {
+    pcAuth.require({ pageSlug: 'accounts-payable', onReady: onAuthReady });
+  }
+})();
+</script>
+</body>
+</html>
