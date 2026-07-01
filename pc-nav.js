@@ -74,6 +74,7 @@
     admin: [
       { label: 'Event master list',              href: '/events-admin/',           slug: 'events-admin' },
       { label: 'Accounts receivable',            href: '/accounts-receivable/',    slug: 'accounts-receivable' },
+      { label: 'Accounts payable',               href: '/accounts-payable/',       slug: 'accounts-payable' },
       { label: 'Sales by item',                  href: '/sales-by-item/',          slug: 'sales-by-item' },
       { label: 'Luciano payments',               href: '/luciano-payments/',       slug: 'luciano-payments' },
       { label: 'Expense reports',                href: '/expense-reports/',        slug: 'expense-reports' },
