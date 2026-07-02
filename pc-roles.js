@@ -130,8 +130,8 @@
     'Hawker (commission)':         'Hawker',
     'Supervisor / Manager':        'Supervisor',
 
-    // Drops (no canonical equivalent — null sentinel)
-    'Barback':                     null,
+    // Promoted to a real role 2026-07-02 (Mann Support Staff)
+    'Barback':                     'Barback',
 
     // Promoted to a real role 2026-06-06 (12th canonical role, Mann)
     'Venue Manager':               'Venue Manager',
