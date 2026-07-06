@@ -165,6 +165,16 @@ body {
 }
 .counts .unset-num { color: var(--amber-700); font-weight: 700; }
 
+.sort-select {
+  appearance: none; -webkit-appearance: none;
+  font-family: inherit; font-size: 12px; font-weight: 600;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px; background: white; color: var(--text);
+  cursor: pointer; white-space: nowrap; flex-shrink: 0;
+}
+.sort-select:focus { outline: none; border-color: #999; }
+
 /* Group headers */
 .group-head {
   padding: 9px 18px 7px;
@@ -255,6 +265,25 @@ body {
 .signup-count-badge-row.low.clickable:hover {
   background: #fbe0db;
   border-color: var(--red-600);
+}
+
+/* Rating badge on the row list — mirrors the card header rating box.
+   Amber star for a real rating; muted "NR" when still cold-start. */
+.rating-badge-row {
+  font-size: 11px; font-weight: 700;
+  color: var(--amber-600);
+  padding: 3px 8px;
+  border-radius: 5px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  background: #fff8e6;
+  border: 1px solid #f0e0b8;
+}
+.rating-badge-row.nr {
+  color: var(--muted);
+  font-weight: 600;
+  background: var(--bg);
+  border-color: var(--border-lt);
 }
 
 /* Lifetime signup line at the top of the card modal Signups section */
@@ -1789,6 +1818,11 @@ body {
         </svg>
         <input type="text" id="searchInput" class="search-input" placeholder="Search by name…" autocomplete="off">
       </div>
+      <select id="sortSelect" class="sort-select" aria-label="Sort employees">
+        <option value="name">Sort: Name</option>
+        <option value="rating_desc">Rating: high &rarr; low</option>
+        <option value="rating_asc">Rating: low &rarr; high</option>
+      </select>
       <div class="counts" id="counts">Loading…</div>
     </div>
 
@@ -2038,7 +2072,17 @@ body {
     //   { "Full Name": { total: 14, byVenue: { FMP: 9, Mann: 4, SATB: 1 } } }
     // Never refetched — recomputed only if state.signups changes (which
     // it doesn't, post-boot, on this page).
-    signupCountsByName: {}
+    signupCountsByName: {},
+
+    // Precomputed star rating per employee (employees.id → 0.0–5.0 | null).
+    // Built once at boot from the same engine the card uses, so the row
+    // list can show a rating without re-running the engine per keystroke.
+    ratingByEmpId: {},
+
+    // Row-list sort mode: 'name' (default, last-name order from the query),
+    // 'rating_desc' (high → low), 'rating_asc' (low → high). NR (unrated)
+    // rows always sink to the bottom on rating sorts.
+    sortBy: 'name'
   };
 
   // -------------------------------------------------------------
@@ -2540,6 +2584,26 @@ body {
     var wantActive = state.statusTab === 'active';
     return state.employees.filter(function(e) {
       return (e.is_active === true) === wantActive;
+    });
+  }
+
+  // Sort a list of employees per state.sortBy. 'name' preserves the query's
+  // last-name order. Rating sorts push NR (null) rows to the bottom either
+  // way, with name as the tiebreaker.
+  function sortEmployees(arr) {
+    if (state.sortBy !== 'rating_desc' && state.sortBy !== 'rating_asc') {
+      return arr;
+    }
+    var dir = (state.sortBy === 'rating_asc') ? 1 : -1;
+    return arr.slice().sort(function(a, b) {
+      var ra = state.ratingByEmpId ? state.ratingByEmpId[a.id] : null;
+      var rb = state.ratingByEmpId ? state.ratingByEmpId[b.id] : null;
+      var aNull = (ra == null), bNull = (rb == null);
+      if (aNull && bNull) return fullName(a).localeCompare(fullName(b));
+      if (aNull) return 1;   // NR always sinks
+      if (bNull) return -1;
+      if (ra !== rb) return (ra - rb) * dir;
+      return fullName(a).localeCompare(fullName(b));
     });
   }
 
@@ -3097,6 +3161,20 @@ body {
         'Card' +
       '</button>';
 
+    // Rating badge — same visibility rule as the signup badge (active tab,
+    // real home venue). Reads the boot-computed cache. "NR" when unrated.
+    var ratingBadge = '';
+    if (state.statusTab === 'active' && emp.home_venue !== 'NA') {
+      var stars = state.ratingByEmpId ? state.ratingByEmpId[emp.id] : null;
+      if (stars != null) {
+        ratingBadge = '<span class="rating-badge-row" title="Performance rating">&#9733; ' +
+          stars.toFixed(1) + '</span>';
+      } else {
+        ratingBadge = '<span class="rating-badge-row nr" ' +
+          'title="Not yet rated — needs ' + COLD_START_THRESHOLD + ' countable shifts">NR</span>';
+      }
+    }
+
     // Signup count badge — only on Active tab, only when the employee
     // has a real home venue (NA people are managers/floaters/exempt
     // and showing "0 signups" on them is just noise). Red treatment
@@ -3127,6 +3205,7 @@ body {
     return '' +
       '<div class="' + classes + '" data-emp-id="' + emp.id + '">' +
         '<div class="emp-name">' + escapeHtml(name) + '</div>' +
+        ratingBadge +
         signupBadge +
         cardBtn +
         '<div class="dropdown-wrap">' +
@@ -3140,7 +3219,7 @@ body {
   }
 
   function renderList() {
-    var visible = visibleEmployees().filter(passesFilter);
+    var visible = sortEmployees(visibleEmployees().filter(passesFilter));
     var area = document.getElementById('listArea');
 
     if (state.employees.length === 0) {
@@ -6482,6 +6561,10 @@ body {
       pcActivity.init('crew');
 
       document.getElementById('searchInput').addEventListener('input', onSearchInput);
+      document.getElementById('sortSelect').addEventListener('change', function(e) {
+        state.sortBy = e.target.value || 'name';
+        renderList();
+      });
 
       // Escape key closes top-most modal.
       document.addEventListener('keydown', function(e) {
@@ -6587,6 +6670,26 @@ body {
           state.signupCountsByName[key].total++;
           state.signupCountsByName[key].byVenue[ev.venue] =
             (state.signupCountsByName[key].byVenue[ev.venue] || 0) + 1;
+        });
+
+        // Precompute the star rating for every employee so the row list can
+        // show it cheaply. Same engine the card uses, so values match the
+        // card header exactly. Cold-start / no-data → null (rendered "NR").
+        state.ratingByEmpId = {};
+        var _ratingData = {
+          placements: state.placements,
+          signups: state.signups,
+          verifiedAttendance: state.verifiedAttendance,
+          eventsById: state.eventsById,
+          eventsWithSignin: state.eventsWithSignin
+        };
+        state.employees.forEach(function(e) {
+          try {
+            var r = computeEmployeeRating(e, getCandidateForEmployee(e), _ratingData);
+            state.ratingByEmpId[e.id] = (r && !r.coldStart && r.stars != null) ? r.stars : null;
+          } catch (err) {
+            state.ratingByEmpId[e.id] = null;
+          }
         });
 
         // Card change history — keyed by employee_id, sorted newest-first.
