@@ -2738,6 +2738,13 @@ body {
     return String(name == null ? '' : name).replace(/\s*-\s*U\s*$/i, '');
   }
 
+  // Canonical key for the signup-count map: suffix-stripped, whitespace-
+  // collapsed, lower-cased. Used both when building state.signupCountsByName
+  // and at every read so "Name - U" and "Name" resolve to the same bucket.
+  function signupCountKey(name) {
+    return stripMinorSuffix(name).toLowerCase().replace(/\s+/g, ' ').trim();
+  }
+
   // --- Name matcher: forgiving, case-insensitive, whitespace-collapsed,
   //     and "- U"-suffix-insensitive (see stripMinorSuffix). ---
   function namesMatch(a, b) {
@@ -3096,7 +3103,7 @@ body {
     // when count <= LOW_SIGNUP_THRESHOLD.
     var signupBadge = '';
     if (state.statusTab === 'active' && emp.home_venue !== 'NA') {
-      var sc = state.signupCountsByName[name];
+      var sc = state.signupCountsByName[signupCountKey(name)];
       var total = sc ? sc.total : 0;
       var badgeClass = 'signup-count-badge-row' + (total <= LOW_SIGNUP_THRESHOLD ? ' low' : '');
       var tip = total === 0
@@ -3263,7 +3270,7 @@ body {
     var lowCount = state.employees.filter(function(e) {
       if (e.is_active !== true) return false;
       if (e.home_venue === 'NA') return false;
-      var sc = state.signupCountsByName[fullName(e)];
+      var sc = state.signupCountsByName[signupCountKey(fullName(e))];
       var total = sc ? sc.total : 0;
       return total <= LOW_SIGNUP_THRESHOLD;
     }).length;
@@ -3351,6 +3358,37 @@ body {
           }
         }, 2200);
       }
+      showToast('Save failed — try again', 'error');
+    });
+  }
+
+  // Inline home-component change from within the roster modal (venue or
+  // low-engagement mode). Mirrors onVenueChange but re-renders the roster
+  // modal afterward so membership updates — e.g. marking someone "Doesn't
+  // apply" (NA) drops them out of the Low-engagement list, and reassigning
+  // a home venue in a venue roster removes them from that venue's list.
+  function onRosterVenueChange(e) {
+    var select = e.currentTarget;
+    var empId = select.getAttribute('data-emp-id');
+    var newValue = select.value || null;
+    var emp = state.employees.find(function(x) { return x.id === empId; });
+    if (!emp) return;
+    var previousValue = emp.home_venue;
+
+    patchEmployee(empId, { home_venue: newValue }).then(function() {
+      logCardChange(empId, 'home_venue', previousValue, newValue);
+      emp.home_venue = newValue;
+      showToast('Home component saved', 'success');
+      // Keep the page views behind the modal in sync, then rebuild the
+      // roster modal so counts and membership reflect the change.
+      renderList();
+      renderCounts();
+      renderScorecard();
+      renderRosterModal();
+    }).catch(function(err) {
+      if (err && err.authFailed) { handleAuthFailure(); return; }
+      console.error('Home component save failed:', err);
+      select.value = previousValue || '';
       showToast('Save failed — try again', 'error');
     });
   }
@@ -4810,7 +4848,7 @@ body {
     // has any signups on record. Pulls the pre-computed aggregate from
     // state.signupCountsByName (built at boot). Venue list sorted by
     // count descending so the most-frequent venue reads first.
-    var lifetime = state.signupCountsByName[fullName(emp)];
+    var lifetime = state.signupCountsByName[signupCountKey(fullName(emp))];
     if (lifetime && lifetime.total > 0) {
       var venueKeys = Object.keys(lifetime.byVenue).sort(function(a, b) {
         return lifetime.byVenue[b] - lifetime.byVenue[a];
@@ -4994,7 +5032,7 @@ body {
         // is on, inactive rows show too (managers may want to see who
         // was low-engaged before being deactivated).
         if (e.is_active === true) {
-          var sc = state.signupCountsByName[fullName(e)];
+          var sc = state.signupCountsByName[signupCountKey(fullName(e))];
           var total = sc ? sc.total : 0;
           if (total > LOW_SIGNUP_THRESHOLD) return false;
         }
@@ -5105,7 +5143,12 @@ body {
           '<div class="vr-list">' + rowsHtml + '</div>' +
         '</div>' +
       '</div>';
-    document.getElementById('cardModalRoot').innerHTML = html;
+    var rosterRoot = document.getElementById('cardModalRoot');
+    var prevList = rosterRoot.querySelector('.vr-list');
+    var prevScroll = prevList ? prevList.scrollTop : 0;
+    rosterRoot.innerHTML = html;
+    var newList = rosterRoot.querySelector('.vr-list');
+    if (newList && prevScroll > 0) newList.scrollTop = prevScroll;
     wireRosterModalEvents();
   }
 
@@ -5115,13 +5158,24 @@ body {
       : '<span class="status-pill inactive">Inactive</span>';
     var rowClass = 'vr-row' + (emp.is_active ? '' : ' is-inactive');
 
+    // Home component dropdown — set / clear / NA the home venue right from
+    // the roster modal. Same buildVenueOptions() as the main list, so
+    // "(none)" and "Doesn't apply" (NA) are both available here.
+    var venueSelect =
+      '<div class="dropdown-wrap">' +
+        '<select class="venue-select" data-roster-venue-select data-emp-id="' + emp.id + '" style="min-width:128px;">' +
+          buildVenueOptions(emp.home_venue) +
+        '</select>' +
+        '<span class="dropdown-arrow">&#9662;</span>' +
+      '</div>';
+
     // Signup count badge — same rule as the main row list. Hidden on
     // inactive rows (they don't sign up; would be noise). NA is already
     // filtered out at the scorecard level since a roster modal opens
     // for a specific venue, not for NA, but we keep the check for safety.
     var signupBadge = '';
     if (emp.is_active && emp.home_venue !== 'NA') {
-      var sc = state.signupCountsByName[fullName(emp)];
+      var sc = state.signupCountsByName[signupCountKey(fullName(emp))];
       var total = sc ? sc.total : 0;
       var badgeClass = 'signup-count-badge-row' + (total <= LOW_SIGNUP_THRESHOLD ? ' low' : '');
       var tip = total === 0
@@ -5143,6 +5197,7 @@ body {
       '<span class="vr-row-name">' + escapeHtml(fullName(emp)) + '</span>' +
       signupBadge +
       statusPill +
+      venueSelect +
       '<button class="card-btn" data-roster-card="' + emp.id + '" title="Open employee card">' +
         '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
           '<rect x="4" y="3" width="16" height="18" rx="2"></rect>' +
@@ -5170,6 +5225,11 @@ body {
         state.rosterModalShowInactive = ev.target.checked;
         renderRosterModal();
       });
+    }
+    // Home component dropdowns — change home_venue inline from the roster.
+    var venueSelects = root.querySelectorAll('[data-roster-venue-select]');
+    for (var vsel = 0; vsel < venueSelects.length; vsel++) {
+      venueSelects[vsel].addEventListener('change', onRosterVenueChange);
     }
     // Card buttons — switch from the roster modal to the employee card modal
     var cardBtns = root.querySelectorAll('[data-roster-card]');
@@ -6510,18 +6570,23 @@ body {
         // Name matching follows the same first_name + ' ' + last_name
         // against availability.staff_name pattern Performance Signals
         // uses; same known soft gap on nicknames/typos.
+        // Key the count map by the suffix-stripped name so signups recorded
+        // as "Name - U" and "Name" aggregate into one bucket. Reads below use
+        // signupCountKey(fullName(emp)) so both sides normalize identically.
         state.signupCountsByName = {};
         state.signups.forEach(function(s) {
           if (s.removed_at) return;
           if (!s.staff_name) return;
           var ev = state.eventsById[s.event_id];
           if (!ev || !ev.venue) return;
-          if (!state.signupCountsByName[s.staff_name]) {
-            state.signupCountsByName[s.staff_name] = { total: 0, byVenue: {} };
+          var key = signupCountKey(s.staff_name);
+          if (!key) return;
+          if (!state.signupCountsByName[key]) {
+            state.signupCountsByName[key] = { total: 0, byVenue: {} };
           }
-          state.signupCountsByName[s.staff_name].total++;
-          state.signupCountsByName[s.staff_name].byVenue[ev.venue] =
-            (state.signupCountsByName[s.staff_name].byVenue[ev.venue] || 0) + 1;
+          state.signupCountsByName[key].total++;
+          state.signupCountsByName[key].byVenue[ev.venue] =
+            (state.signupCountsByName[key].byVenue[ev.venue] || 0) + 1;
         });
 
         // Card change history — keyed by employee_id, sorted newest-first.
