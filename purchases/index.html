@@ -1613,7 +1613,7 @@ function normVendor(s) {
 async function loadKnownVendors() {
   try {
     var hdrs = apiHeaders();
-    var url = SUPA_URL + '/rest/v1/known_vendors?select=id,display_name,payment_type,default_terms_days&order=display_name.asc&limit=2000';
+    var url = SUPA_URL + '/rest/v1/known_vendors?select=id,display_name,aliases,payment_type,default_terms_days&order=display_name.asc&limit=2000';
     var res = await fetch(url, { headers: hdrs });
     if (!res.ok) { console.error('[purchases] known_vendors load failed', await res.text()); return; }
     knownVendors = await res.json();
@@ -1627,7 +1627,13 @@ function findVendorByName(name) {
   var n = String(name == null ? '' : name).trim().toLowerCase();
   if (!n) return null;
   for (var i = 0; i < knownVendors.length; i++) {
-    if ((knownVendors[i].display_name || '').toLowerCase() === n) return knownVendors[i];
+    var v = knownVendors[i];
+    if ((v.display_name || '').toLowerCase() === n) return v;
+    if (v.aliases && v.aliases.length) {
+      for (var a = 0; a < v.aliases.length; a++) {
+        if ((v.aliases[a] || '').toLowerCase() === n) return v;
+      }
+    }
   }
   return null;
 }
@@ -1637,10 +1643,14 @@ function vpFilter(q) {
   var ql = q.toLowerCase();
   var out = [];
   for (var i = 0; i < knownVendors.length; i++) {
-    if ((knownVendors[i].display_name || '').toLowerCase().indexOf(ql) !== -1) {
-      out.push(knownVendors[i]);
-      if (out.length >= 50) break;
+    var v = knownVendors[i];
+    var hit = (v.display_name || '').toLowerCase().indexOf(ql) !== -1;
+    if (!hit && v.aliases && v.aliases.length) {
+      for (var a = 0; a < v.aliases.length; a++) {
+        if ((v.aliases[a] || '').toLowerCase().indexOf(ql) !== -1) { hit = true; break; }
+      }
     }
+    if (hit) { out.push(v); if (out.length >= 50) break; }
   }
   return out;
 }
@@ -1889,15 +1899,33 @@ async function maybeCreateApBill(opts) {
     };
     var res = await fetch(SUPA_URL + '/rest/v1/ap_bills', {
       method: 'POST',
-      headers: Object.assign({}, hdrs, {'Content-Type': 'application/json', 'Prefer': 'return=minimal'}),
+      headers: Object.assign({}, hdrs, {'Content-Type': 'application/json', 'Prefer': 'return=representation'}),
       body: JSON.stringify(billBody)
     });
     if (!res.ok) { console.error('[purchases] ap_bill create failed', await res.text()); return '\n\n(!) Bill entry did not save -- tell the office so it gets tracked.'; }
+    var created = await res.json();
+    var billId = (created && created[0]) ? created[0].id : null;
+    if (billId) notifyBillCreated(billId);   // fire-and-forget email to the office
     return '\nBill created -- due ' + fmtDateDisplay(dueDate);
   } catch(e) {
     console.error('[purchases] ap_bill create exception', e);
     return '\n\n(!) Bill entry did not save -- tell the office so it gets tracked.';
   }
+}
+
+// Fire-and-forget: email the office that a new bill was entered. Never blocks
+// or fails the bill write -- a notification hiccup is not the manager's problem.
+function notifyBillCreated(billId) {
+  try {
+    var hdrs = apiHeaders();
+    fetch(SUPA_URL + '/functions/v1/notify-bill-created', {
+      method: 'POST',
+      headers: Object.assign({}, hdrs, {'Content-Type': 'application/json'}),
+      body: JSON.stringify({ bill_id: billId })
+    }).then(function(r) {
+      if (!r.ok) r.text().then(function(t) { console.warn('[purchases] bill notify failed', t); });
+    }).catch(function(e) { console.warn('[purchases] bill notify exception', e); });
+  } catch(e) { console.warn('[purchases] bill notify threw', e); }
 }
 
 // Close vendor dropdown on outside click
