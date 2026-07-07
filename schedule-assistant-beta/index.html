@@ -3508,6 +3508,10 @@ function loadAll() {
       // Added May 11: seven_shifts_synced columns for red/green pill state.
       authFetch(SUPABASE_URL + '/rest/v1/position_assignments?event_id=in.' + inList + '&removed_at=is.null&select=*',
         { headers: apiHeaders() }),
+      // Barback→cart coverage (plan-time). Same table the Tips Report reads, so
+      // coverage set here shows up there automatically. Added Jul 2026.
+      authFetch(SUPABASE_URL + '/rest/v1/event_barback_coverage?event_id=in.' + inList + '&removed_at=is.null&select=*&limit=2000',
+        { headers: apiHeaders() }),
       // Removed-but-still-tagged-as-synced placements. When a manager X's
       // off a green (synced) placed pill, the row gets removed_at but
       // seven_shifts_synced stays TRUE. We read those rows so the
@@ -3521,12 +3525,13 @@ function loadAll() {
       // doesn't return data into the destructured array — it populates
       // state.recentSignupEvents as a side effect via the lookup primed above.
       resolveMissingEvents
-    ]).then(([reqs, availAll, assigns, positions, removedSynced]) => {
+    ]).then(([reqs, availAll, assigns, positions, barbackCov, removedSynced]) => {
       state.staffingRequests = reqs || [];
       // Split availability into active (no removed_at) and removed.
       state.availability = (availAll || []).filter(a => !a.removed_at);
       state.removedAvailability = (availAll || []).filter(a => !!a.removed_at);
       state.positions = positions || [];
+      state.barbackCoverage = barbackCov || [];
       state.removedSyncedPlacements = removedSynced || [];
 
       // Build multi-signup index: count signups per (date, person)
@@ -5776,6 +5781,12 @@ function renderFilledSlot(ev, p, locked) {
       (synced ? '&#10003; 7s' : '7s') +
       '</button>';
   }
+  if (p.role === 'Barback') {
+    const _cc = barbackCoverageCount(ev.id, p.staff_name);
+    html += '<button class="cov-chip" data-cov-barback="' + escapeAttr(p.staff_name) +
+      '" data-cov-event="' + ev.id + '" title="Assign which carts / bars this barback covers">&#8862; ' +
+      (_cc ? _cc + ' cart' + (_cc === 1 ? '' : 's') : 'carts') + '</button>';
+  }
   if (!locked) html += '<button class="x" data-remove-position="' + p.id + '" title="Remove">✕</button>';
   if (signupNote) {
     html += '<div class="person-note" title="' + escapeAttr(signupNote) + '">📝 ' + escapeHtml(signupNote) + '</div>';
@@ -6381,6 +6392,14 @@ function attachEventHandlers() {
     btn.addEventListener('click', e => {
       e.stopPropagation();
       removePosition(btn.getAttribute('data-remove-position'));
+    });
+  });
+
+  // Barback coverage chip — opens the plan-time cart/bar coverage modal.
+  document.querySelectorAll('[data-cov-barback]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      openBarbackCoverageModal(btn.getAttribute('data-cov-barback'), btn.getAttribute('data-cov-event'));
     });
   });
 
@@ -8929,6 +8948,165 @@ function sendStaffListEmail() {
 }
 
 // ---------- Print ----------
+// ── Barback coverage (plan-time) ─────────────────────────────────────────────
+// Writes event_barback_coverage — the SAME table the Tips Report reads. Coverage
+// set here on the plan carries to the tips report automatically and is adjustable
+// there if the night runs differently. Barbacks only (they pull a % of tips);
+// giving a non-barback a row here would wrongly pull tips, so the chip is gated
+// to role === 'Barback' in renderFilledSlot.
+let bbCovState = null; // { eventId, staffName, venue, pending: { stand: {checked, pct} } }
+const BB_COV_CSS =
+  '.cov-chip{border:1px solid #c9b8e8;background:#f3eefb;color:#3C3489;border-radius:999px;' +
+  'font:600 10px/1 inherit;padding:3px 7px;margin-left:4px;cursor:pointer;white-space:nowrap;}' +
+  '.cov-chip:hover{background:#e9e0f7;border-color:#3C3489;}' +
+  '.bb-cov-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10000;display:flex;' +
+  'align-items:center;justify-content:center;padding:20px;}' +
+  '.bb-cov-modal{background:#fff;border-radius:16px;width:100%;max-width:460px;max-height:85vh;' +
+  'overflow-y:auto;padding:20px;box-shadow:0 10px 40px rgba(0,0,0,.25);font-family:inherit;}' +
+  '.bb-cov-head{display:flex;justify-content:space-between;align-items:center;font-size:15px;color:#1a1a1a;margin-bottom:6px;}' +
+  '.bb-cov-x{background:none;border:none;font-size:18px;cursor:pointer;color:#999;}' +
+  '.bb-cov-sub{font-size:12px;color:#999;line-height:1.5;margin-bottom:14px;}' +
+  '.bb-cov-empty{font-size:13px;color:#aaa;font-style:italic;padding:20px 0;text-align:center;}' +
+  '.bb-cov-list{display:flex;flex-direction:column;gap:2px;}' +
+  '.bb-cov-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;}' +
+  '.bb-cov-row.on{background:#f0faf5;}' +
+  '.bb-cov-check{display:flex;align-items:center;gap:8px;flex:1;cursor:pointer;font-size:13px;font-weight:600;color:#1a1a1a;}' +
+  '.bb-cov-pct{font-size:12px;color:#555;display:flex;align-items:center;gap:2px;}' +
+  '.bb-cov-pct input{width:52px;padding:4px 6px;border:1px solid #ddd;border-radius:6px;font:inherit;font-size:12px;text-align:right;}' +
+  '.bb-cov-pct input:disabled{background:#f5f5f5;color:#bbb;}' +
+  '.bb-cov-others{font-size:10px;color:#3C3489;padding:0 10px 6px 34px;}' +
+  '.bb-cov-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:16px;}' +
+  '.bb-cov-cancel{padding:8px 16px;background:#fff;border:1px solid #ddd;border-radius:8px;font:600 13px inherit;color:#555;cursor:pointer;}' +
+  '.bb-cov-save{padding:8px 16px;background:#1a1a1a;border:none;border-radius:8px;font:600 13px inherit;color:#fff;cursor:pointer;}';
+
+function barbackCoverageFor(eventId, staffName) {
+  return (state.barbackCoverage || []).filter(c =>
+    c.event_id === eventId && c.barback_staff_name === staffName);
+}
+function barbackCoverageCount(eventId, staffName) {
+  return barbackCoverageFor(eventId, staffName).length;
+}
+function _bbExistingCartPct(eventId, stand) {
+  const rows = (state.barbackCoverage || []).filter(c => c.event_id === eventId && c.stand === stand);
+  return rows.length ? (parseFloat(rows[0].pct) || 10) : 10;
+}
+
+function openBarbackCoverageModal(staffName, eventId) {
+  const ev = state.events.find(e => e.id === eventId);
+  if (!ev) return;
+  const pending = {};
+  barbackCoverageFor(eventId, staffName).forEach(c => {
+    pending[c.stand] = { checked: true, pct: parseFloat(c.pct) || 10 };
+  });
+  bbCovState = { eventId, staffName, venue: ev.venue, pending };
+  renderBarbackCoverageModal();
+}
+
+function closeBarbackCoverageModal() {
+  bbCovState = null;
+  const host = document.getElementById('bb-cov-modal-host');
+  if (host) host.innerHTML = '';
+}
+
+function renderBarbackCoverageModal() {
+  const s = bbCovState;
+  if (!s) return;
+  let host = document.getElementById('bb-cov-modal-host');
+  if (!host) {
+    host = document.createElement('div'); host.id = 'bb-cov-modal-host'; document.body.appendChild(host);
+    const st = document.createElement('style'); st.textContent = BB_COV_CSS; document.head.appendChild(st);
+  }
+  const groups = (typeof standsForEvent === 'function' ? standsForEvent(s.eventId, s.venue) : []) || [];
+  const stands = groups.map(g => g.stand).filter(st => st !== SUPPORT_STAND);
+  let html = '<div class="bb-cov-overlay" data-bb-cov-close="1"><div class="bb-cov-modal">';
+  html += '<div class="bb-cov-head"><div>Cart / bar coverage — <strong>' + escapeHtml(s.staffName) + '</strong></div>';
+  html += '<button class="bb-cov-x" data-bb-cov-close="1">✕</button></div>';
+  html += '<div class="bb-cov-sub">Check the carts and bars this barback pulls tips from, and set the rate (default 10%). This carries to the Tips Report automatically and can be adjusted there if the night runs differently.</div>';
+  if (!stands.length) {
+    html += '<div class="bb-cov-empty">No stands planned for this event yet.</div>';
+  } else {
+    html += '<div class="bb-cov-list">';
+    stands.forEach(stand => {
+      const pend = s.pending[stand] || { checked: false, pct: _bbExistingCartPct(s.eventId, stand) };
+      const others = (state.barbackCoverage || []).filter(c =>
+        c.event_id === s.eventId && c.stand === stand && c.barback_staff_name !== s.staffName)
+        .map(c => c.barback_staff_name);
+      html += '<div class="bb-cov-row' + (pend.checked ? ' on' : '') + '">';
+      html += '<label class="bb-cov-check"><input type="checkbox"' + (pend.checked ? ' checked' : '') +
+        ' data-bb-cov-toggle="' + escapeAttr(stand) + '"> <span>' + escapeHtml(stand) + '</span></label>';
+      html += '<span class="bb-cov-pct"><input type="number" min="0" max="100" step="0.5" value="' + pend.pct + '"' +
+        (pend.checked ? '' : ' disabled') + ' data-bb-cov-pct="' + escapeAttr(stand) + '">%</span>';
+      html += '</div>';
+      if (others.length) html += '<div class="bb-cov-others">shares with: ' + escapeHtml(others.join(', ')) + '</div>';
+    });
+    html += '</div>';
+  }
+  html += '<div class="bb-cov-actions"><button class="bb-cov-cancel" data-bb-cov-close="1">Cancel</button>' +
+    '<button class="bb-cov-save" id="bb-cov-save">Save coverage</button></div>';
+  html += '</div></div>';
+  host.innerHTML = html;
+
+  host.querySelectorAll('[data-bb-cov-close]').forEach(el => el.addEventListener('click', ev2 => {
+    if (ev2.currentTarget.classList.contains('bb-cov-overlay') && ev2.target !== ev2.currentTarget) return;
+    closeBarbackCoverageModal();
+  }));
+  host.querySelectorAll('[data-bb-cov-toggle]').forEach(cb => cb.addEventListener('change', () => {
+    const stand = cb.getAttribute('data-bb-cov-toggle');
+    const cur = bbCovState.pending[stand] || { checked: false, pct: _bbExistingCartPct(bbCovState.eventId, stand) };
+    cur.checked = cb.checked;
+    bbCovState.pending[stand] = cur;
+    renderBarbackCoverageModal();
+  }));
+  host.querySelectorAll('[data-bb-cov-pct]').forEach(inp => inp.addEventListener('input', () => {
+    const stand = inp.getAttribute('data-bb-cov-pct');
+    let p = parseFloat(inp.value); if (isNaN(p)) p = 0; if (p < 0) p = 0; if (p > 100) p = 100;
+    if (!bbCovState.pending[stand]) bbCovState.pending[stand] = { checked: true, pct: p };
+    else bbCovState.pending[stand].pct = p;
+  }));
+  const saveBtn = host.querySelector('#bb-cov-save');
+  if (saveBtn) saveBtn.addEventListener('click', saveBarbackCoverage);
+}
+
+function saveBarbackCoverage() {
+  const s = bbCovState;
+  if (!s) return;
+  const who = (state.user && state.user.display_name) || null;
+  const now = new Date().toISOString();
+  const desired = {};
+  Object.keys(s.pending).forEach(stand => {
+    const p = s.pending[stand];
+    if (p && p.checked) desired[stand] = (typeof p.pct === 'number' && !isNaN(p.pct)) ? p.pct : 10;
+  });
+  const currentStands = {};
+  barbackCoverageFor(s.eventId, s.staffName).forEach(c => { currentStands[c.stand] = true; });
+
+  const jobs = [];
+  Object.keys(desired).forEach(stand => {
+    const uh = Object.assign({}, apiHeadersJson(), { Prefer: 'resolution=merge-duplicates,return=minimal' });
+    jobs.push(authFetch(SUPABASE_URL + '/rest/v1/event_barback_coverage?on_conflict=event_id,barback_staff_name,stand', {
+      method: 'POST', headers: uh,
+      body: JSON.stringify({ event_id: s.eventId, barback_staff_name: s.staffName, stand: stand, pct: desired[stand], removed_at: null, updated_at: now, updated_by: who, created_by: who })
+    }));
+  });
+  Object.keys(currentStands).filter(st => !desired.hasOwnProperty(st)).forEach(st => {
+    const rh = Object.assign({}, apiHeadersJson(), { Prefer: 'return=minimal' });
+    jobs.push(authFetch(SUPABASE_URL + '/rest/v1/event_barback_coverage?event_id=eq.' + s.eventId +
+      '&barback_staff_name=eq.' + encodeURIComponent(s.staffName) + '&stand=eq.' + encodeURIComponent(st) + '&removed_at=is.null', {
+      method: 'PATCH', headers: rh, body: JSON.stringify({ removed_at: now, removed_by: who })
+    }));
+  });
+
+  const evIds = state.events.map(e => e.id).join(',');
+  Promise.all(jobs).then(() =>
+    authFetch(SUPABASE_URL + '/rest/v1/event_barback_coverage?event_id=in.' + evIds + '&removed_at=is.null&select=*&limit=2000', { headers: apiHeaders() })
+  ).then(rows => {
+    state.barbackCoverage = rows || [];
+    closeBarbackCoverageModal();
+    render();
+    if (typeof showToast === 'function') showToast('Coverage saved', 'success');
+  }).catch(() => { closeBarbackCoverageModal(); render(); });
+}
+
 function printEvent(eventId) {
   const ev = state.events.find(e => e.id === eventId);
   if (!ev) return;
@@ -9004,6 +9182,21 @@ function printEvent(eventId) {
     html += '</div>';
   });
   html += '</div>';
+  // Barback deployment — which carts/bars each barback is responsible for.
+  const _bbNames = [...new Set(state.positions
+    .filter(p => p.event_id === ev.id && p.role === 'Barback')
+    .map(p => p.staff_name))];
+  if (_bbNames.length) {
+    html += '<div style="margin-top:14px;border:1px solid black;padding:8px 10px;break-inside:avoid;">';
+    html += '<div style="font-size:13px;font-weight:700;border-bottom:1px solid black;padding-bottom:4px;margin-bottom:6px;">Barback Assignments</div>';
+    _bbNames.forEach(nm => {
+      const cov = (state.barbackCoverage || []).filter(c => c.event_id === ev.id && c.barback_staff_name === nm);
+      const carts = cov.map(c => escapeHtml(c.stand)).join(', ');
+      html += '<div style="font-size:12px;margin-bottom:3px;"><strong>' + escapeHtml(nm) + '</strong> — ' +
+        (carts || '<span style="color:#777;">no carts assigned</span>') + '</div>';
+    });
+    html += '</div>';
+  }
   const actor = (state.user && state.user.display_name) || 'manager';
   html += '<div class="pfooter"><span>Printed by ' + escapeHtml(actor) + ' · ' + new Date().toLocaleString() + '</span><span>Empty lines for hand-write at venue · TYPED = manager-added · ⚠ = needs follow-up</span></div>';
   html += '</' + 'body></' + 'html>';
