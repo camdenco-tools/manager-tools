@@ -405,6 +405,27 @@ var addPending = null;
 
 function apiHeaders() { return pcAuth.headers(); }
 
+// Fire a full ratings recompute after attendance is confirmed. Debounced so a
+// burst of confirms collapses into ONE call ~4s after the last action; fire-
+// and-forget so a failure never blocks or errors the confirm flow (the nightly
+// recompute-ratings cron is the backstop). Full recompute (not scoped): a
+// confirm can turn a placed-but-absent person into a countable no-show, and
+// that person is not among the verified names, so a scoped recompute would
+// miss exactly whose rating just changed.
+var _ratingRecomputeTimer = null;
+function scheduleRatingRecompute() {
+  if (_ratingRecomputeTimer) { clearTimeout(_ratingRecomputeTimer); }
+  _ratingRecomputeTimer = setTimeout(function () {
+    _ratingRecomputeTimer = null;
+    try {
+      var hdrs = apiHeaders(); hdrs['Content-Type'] = 'application/json';
+      fetch(SUPA_URL + '/functions/v1/recompute-ratings', {
+        method: 'POST', headers: hdrs, body: '{}'
+      }).catch(function () {});
+    } catch (e) {}
+  }, 4000);
+}
+
 function fmt(n) { return '$' + Math.round(n).toLocaleString(); }
 function fmtD(n) { return '$' + parseFloat(n).toFixed(2); }
 
@@ -1377,6 +1398,7 @@ async function confirmStand(saleId) {
       }
     } catch(e) {}
   }
+  scheduleRatingRecompute();
   renderPage();
 }
 
@@ -1399,6 +1421,7 @@ async function confirmAll() {
       } catch(e) {}
     }
   }
+  scheduleRatingRecompute();
   renderPage();
 }
 
