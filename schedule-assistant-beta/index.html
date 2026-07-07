@@ -3326,8 +3326,13 @@ function loadAll() {
     authFetch(certsUrl, { headers: apiHeaders() }),
     authFetch(certTypesUrl, { headers: apiHeaders() }),
     // Par levels for the Plan tab — Session 2 (May 25, 2026).
-    authFetch(parLevelsUrl, { headers: apiHeaders() })
-  ]).then(([events, employees, allAvail, pastPlacements, candidateRows, recentSignups, approvedRecipients, eventManagers, certs, certTypes, parLevels]) => {
+    authFetch(parLevelsUrl, { headers: apiHeaders() }),
+    // Materialized Performance Signals ratings (employee_ratings). Precomputed
+    // by the recompute-ratings edge function (nightly cron + verify-trigger);
+    // this page is a pure reader — no rating math runs here. 223 small rows.
+    authFetch(SUPABASE_URL + '/rest/v1/employee_ratings?select=employee_id,stars,is_nr&limit=100000',
+      { headers: apiHeaders() })
+  ]).then(([events, employees, allAvail, pastPlacements, candidateRows, recentSignups, approvedRecipients, eventManagers, certs, certTypes, parLevels, ratingRows]) => {
     state.events = events || [];
     state.employees = employees || [];
     state.recentSignups = recentSignups || [];
@@ -3340,6 +3345,12 @@ function loadAll() {
     state.candidates = {};
     (candidateRows || []).forEach(c => {
       if (c.punch_id) state.candidates[c.punch_id] = c;
+    });
+
+    // Ratings index — keyed by employee_id (UUID), the grain the modal reads.
+    state.ratingByEmpId = {};
+    (ratingRows || []).forEach(r => {
+      if (r.employee_id) state.ratingByEmpId[r.employee_id] = r;
     });
 
     // Certifications + cert types (May 11)
@@ -7296,6 +7307,7 @@ function openCrewCardModal(staffName, sourceVenue) {
   state.crewCardEmpId = emp.id;
   state.crewCardEmpName = ((emp.first_name || '') + ' ' + (emp.last_name || '')).trim();
   state.crewCardSourceVenue = sourceVenue || null;
+  ensureCrewCardEvr(emp.id);
   renderCrewCardModal();
   document.getElementById('crew-card-modal').classList.add('show');
 }
@@ -7304,8 +7316,40 @@ function closeCrewCardModal() {
   state.crewCardEmpId = null;
   state.crewCardEmpName = null;
   state.crewCardSourceVenue = null;
+  // Clear the per-person EVR cache so every open refetches. This page's
+  // whole "cards show no roles" saga was a stale/empty cached read; fetching
+  // fresh each open (a cheap single-employee query) sidesteps it and makes
+  // "reopen the card" a reliable retry after a failed fetch.
+  state.evrByEmpId = {};
   document.getElementById('crew-card-modal').classList.remove('show');
   document.getElementById('crew-card-modal-box').innerHTML = '';
+}
+
+// Per-person EVR fetch for the crew-card modal. employee_venue_roles is the
+// source of truth for per-venue role assignments (canonical roles) — the same
+// data the Crew page renders. We fetch one employee's rows on card-open. Three
+// cache states, read by renderCrewCardModal():
+//   undefined  -> not fetched yet        (render shows "Loading roles…")
+//   array      -> loaded (may be empty = genuinely no assignments)
+//   {error:1}  -> fetch failed           (render shows reopen prompt)
+// We deliberately do NOT cache an empty array on error — that would render as
+// "no assignments" and mask an expired-token fetch, the exact failure that made
+// the Crew card look empty.
+function ensureCrewCardEvr(empId) {
+  if (!state.evrByEmpId) state.evrByEmpId = {};
+  if (Object.prototype.hasOwnProperty.call(state.evrByEmpId, empId)) return;
+  if (!window.pcRoles || !pcRoles.getEmployeeVenueRoles) {
+    state.evrByEmpId[empId] = { error: true };
+    return;
+  }
+  pcRoles.getEmployeeVenueRoles(empId).then(function (rows) {
+    state.evrByEmpId[empId] = rows || [];
+    if (state.crewCardEmpId === empId) renderCrewCardModal();
+  }).catch(function (err) {
+    console.warn('[crew-card] EVR fetch failed for', empId, err);
+    state.evrByEmpId[empId] = { error: true };
+    if (state.crewCardEmpId === empId) renderCrewCardModal();
+  });
 }
 
 function renderCrewCardModal() {
@@ -7359,7 +7403,7 @@ function renderCrewCardModal() {
         : '<div class="cc-venue-line no-venue">Home component not set</div>');
 
   // Rating tile — slim version
-  const rating = computeCrewCardRating(emp, cand);
+  const rating = crewCardStoredRating(emp.id);
   const ratingLabelColor = hasVenue ? venueColor : null;
   const ratingNumColor = (hasVenue && !rating.isNR) ? venueColor : null;
   const ratingBorderColor = hasVenue ? hexToRgba(venueColor, 0.4) : null;
@@ -7422,38 +7466,60 @@ function renderCrewCardModal() {
     '</div>';
   }
 
-  // Assigned venues + roles columns
-  const assignedVenues = (cand && cand.assigned_venues) || [];
-  const assignedRoles = (cand && cand.assigned_roles) || [];
+  // Assigned venues + roles — sourced from employee_venue_roles (the per-venue,
+  // canonical-role source of truth the Crew page uses), NOT the legacy flat
+  // candidates.assigned_venues/roles cross-product (which painted every role
+  // under every venue with stale legacy vocab). Roles only, no pay. Fetched
+  // per-person on open by ensureCrewCardEvr(); the three cache states are
+  // handled below.
   html += '<div class="cc-section">' +
     '<div class="cc-section-title">Assigned venues and roles</div>';
-  if (assignedVenues.length === 0 && assignedRoles.length === 0) {
+  const evr = state.evrByEmpId ? state.evrByEmpId[emp.id] : undefined;
+  if (evr === undefined) {
+    html += '<div class="cc-rv-empty">Loading roles…</div>';
+  } else if (evr && evr.error) {
+    html += '<div class="cc-rv-empty">Couldn\'t load roles — reopen the card to try again.</div>';
+  } else if (!evr.length) {
     html += '<div class="cc-rv-empty">No venue or role assignments on file. Set on the Crew page.</div>';
-  } else if (assignedVenues.length === 0) {
-    html += '<div class="cc-rv-empty">No venues assigned yet. Roles on file: ' +
-      assignedRoles.map(r => escapeHtml(r)).join(', ') +
-    '</div>';
   } else {
-    const sorted = assignedVenues.slice().sort();
-    html += '<div class="cc-rv-columns">';
-    sorted.forEach(code => {
-      const color = VENUE_COLORS[code] || '#666';
-      const bg = hexToRgba(color, 0.12);
-      html += '<div class="cc-rv-column">' +
-        '<div class="cc-rv-column-head" style="background:' + bg + ';color:' + color + ';">' +
-          escapeHtml(code) +
-        '</div>' +
-        '<div class="cc-rv-column-body">';
-      if (assignedRoles.length === 0) {
-        html += '<span style="font-size:11px;color:var(--label);font-style:italic;">no roles</span>';
-      } else {
-        assignedRoles.forEach(r => {
-          html += '<span class="cc-rv-role">' + escapeHtml(r) + '</span>';
-        });
-      }
-      html += '</div></div>';
+    // Group EVR rows by venue code. Field names coalesced defensively: the
+    // deployed getEmployeeVenueRoles resolves venue_code/role_name, but tolerate
+    // alternates so a shape change can't silently blank the card.
+    const byVenue = {};
+    const roleSort = {};
+    evr.forEach(function (r) {
+      const code = r.venue_code || r.code || r.venue || '—';
+      const role = r.role_name || r.role || r.name || '';
+      if (!role) return;
+      if (!byVenue[code]) byVenue[code] = [];
+      if (byVenue[code].indexOf(role) === -1) byVenue[code].push(role);
+      if (r.role_sort != null && roleSort[role] == null) roleSort[role] = r.role_sort;
     });
-    html += '</div>';
+    const codes = Object.keys(byVenue).sort();
+    if (codes.length === 0) {
+      html += '<div class="cc-rv-empty">No venue or role assignments on file. Set on the Crew page.</div>';
+    } else {
+      html += '<div class="cc-rv-columns">';
+      codes.forEach(function (code) {
+        const color = VENUE_COLORS[code] || '#666';
+        const bg = hexToRgba(color, 0.12);
+        const roles = byVenue[code].slice().sort(function (a, b) {
+          const sa = roleSort[a], sb = roleSort[b];
+          if (sa != null && sb != null && sa !== sb) return sa - sb;
+          return a < b ? -1 : (a > b ? 1 : 0);
+        });
+        html += '<div class="cc-rv-column">' +
+          '<div class="cc-rv-column-head" style="background:' + bg + ';color:' + color + ';">' +
+            escapeHtml(code) +
+          '</div>' +
+          '<div class="cc-rv-column-body">';
+        roles.forEach(function (role) {
+          html += '<span class="cc-rv-role">' + escapeHtml(role) + '</span>';
+        });
+        html += '</div></div>';
+      });
+      html += '</div>';
+    }
   }
   html += '</div>';
 
@@ -7468,6 +7534,19 @@ function renderCrewCardModal() {
 // data fetched. Schedule Assistant has enough already-loaded data
 // (positions, signups, employees, candidates) to ballpark a rating;
 // we keep it simple and conservative.
+// Read the materialized Performance Signals rating for this employee from
+// state.ratingByEmpId (loaded at boot from employee_ratings). Returns the same
+// { isNR, stars } shape the old placeholder did, so the render is unchanged.
+// No row yet, or is_nr/null stars (cold-start) -> NR. This replaces the old
+// per-open placeholder math; the real engine now runs in the recompute-ratings
+// edge function and matches the Crew page to the decimal.
+function crewCardStoredRating(empId) {
+  const r = state.ratingByEmpId ? state.ratingByEmpId[empId] : null;
+  if (!r || r.is_nr || r.stars == null) return { isNR: true, stars: 0 };
+  return { isNR: false, stars: Number(r.stars) };
+}
+
+// (Retired placeholder — kept for reference; no longer called.)
 function computeCrewCardRating(emp, cand) {
   // Cold-start threshold matches the Crew page constant
   const COLD_START = 8;
