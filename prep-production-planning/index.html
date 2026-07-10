@@ -410,6 +410,14 @@
   .pc-print-item .nm { flex:1; font-weight:500; }
   .pc-print-item .qt { font-variant-numeric:tabular-nums; color:var(--pc-muted); }
   .pc-print-item .qt .u { font-size:10px; text-transform:uppercase; color:var(--pc-faint); margin-left:3px; }
+  .pc-print-modes { display:flex; gap:6px; padding:14px 22px 0; }
+  .pc-pm-btn { appearance:none; border:1px solid var(--pc-line); background:#fff; color:var(--pc-muted); font-family:inherit; font-size:12.5px; font-weight:500; padding:7px 14px; border-radius:20px; cursor:pointer; }
+  .pc-pm-btn:hover { color:var(--pc-ink); }
+  .pc-pm-btn.is-active { background:var(--pc-ink); color:#fff; border-color:var(--pc-ink); }
+  .pc-print-mode-note { padding:6px 22px 0; font-size:12px; color:var(--pc-muted); }
+  .pc-print-item .tag { font-size:9px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; padding:2px 6px; border-radius:5px; margin-left:8px; }
+  .pc-print-item .tag.est { color:var(--pc-ops); background:var(--pc-ops-soft); }
+  .pc-print-item .tag.mixed { color:var(--pc-amber); background:var(--pc-amber-soft); }
 </style>
 </head>
 <body>
@@ -590,6 +598,12 @@
       </div>
       <button class="pc-modal-x" id="pcPrintClose" type="button" aria-label="Close">&times;</button>
     </div>
+    <div class="pc-print-modes" id="pcPrintModes">
+      <button type="button" class="pc-pm-btn" data-mode="both">Best available</button>
+      <button type="button" class="pc-pm-btn" data-mode="planned">Planned only</button>
+      <button type="button" class="pc-pm-btn" data-mode="est">Estimated only</button>
+    </div>
+    <div class="pc-print-mode-note" id="pcPrintModeNote"></div>
     <div class="pc-copy-head" style="padding:14px 22px 4px;">
       <span>Items this week</span>
       <label class="pc-copy-all"><input type="checkbox" id="pcPrintAll" checked> Select all</label>
@@ -848,12 +862,16 @@
 
     if (!weeks.length) { PC.toast('No fiscal weeks available', true); return; }
 
-    // Default: week containing today, else next upcoming, else last.
+    // Default to the NEXT week — we plan a week ahead, so the current week
+    // doesn't matter. Find the week containing today (else next upcoming,
+    // else last), then step forward one, clamped to the last available week.
+    // The back arrow still reaches the current week.
     var t = todayISO();
     var idx = -1, i;
     for (i = 0; i < weeks.length; i++) { if (weeks[i].start <= t && t <= weeks[i].end) { idx = i; break; } }
     if (idx === -1) { for (i = 0; i < weeks.length; i++) { if (weeks[i].start >= t) { idx = i; break; } } }
     if (idx === -1) idx = weeks.length - 1;
+    if (idx < weeks.length - 1) idx = idx + 1;   // plan a week ahead
 
     PC.setWeek(idx);
   };
@@ -1780,6 +1798,7 @@
     for (i = 0; i < PC.weeks.length; i++) { if (PC.weeks[i].start <= t && t <= PC.weeks[i].end) { idx = i; break; } }
     if (idx === -1) { for (i = 0; i < PC.weeks.length; i++) { if (PC.weeks[i].start >= t) { idx = i; break; } } }
     if (idx === -1) idx = PC.weeks.length - 1;
+    if (idx < PC.weeks.length - 1) idx = idx + 1;   // plan a week ahead
     PC.setProdWeek(idx);
   };
 
@@ -1837,8 +1856,10 @@
   // Mix-based estimate from the week's forecasts. Mirrors Planning's suggest:
   // ceil(forecast * mix / price * 1.05). Tubs and on-site items get none.
   PC.computeEstimates = function (filter) {
-    var byItem = {}, byItemVenue = {}, meta = {};
+    var w = PC.weeks[PC.prodWeekIndex];
+    var byItem = {}, byItemVenue = {}, byItemVenueDay = {}, meta = {};
     (PC._prodEvents || []).forEach(function (e) {
+      var di = w ? PC.dayIndex(w.start, e.event_date) : -1;   // estimate's due date = event date
       (e.staffing_requests || []).forEach(function (r) {
         var f = Number(r.sales_forecast); if (!(f > 0)) return;
         var venue = r.venue || e.venue;
@@ -1854,11 +1875,14 @@
           byItem[itemId] = (byItem[itemId] || 0) + sug;
           if (!byItemVenue[itemId]) byItemVenue[itemId] = {};
           byItemVenue[itemId][venue] = (byItemVenue[itemId][venue] || 0) + sug;
+          if (!byItemVenueDay[itemId]) byItemVenueDay[itemId] = {};
+          if (!byItemVenueDay[itemId][venue]) byItemVenueDay[itemId][venue] = [0,0,0,0,0,0,0];
+          if (di >= 0 && di <= 6) byItemVenueDay[itemId][venue][di] += sug;
           if (!meta[itemId]) meta[itemId] = m;
         });
       });
     });
-    return { byItem: byItem, byItemVenue: byItemVenue, meta: meta };
+    return { byItem: byItem, byItemVenue: byItemVenue, byItemVenueDay: byItemVenueDay, meta: meta };
   };
 
   // Top-of-page bubbles. Three "made from scratch" items (make_ship, non-tub)
@@ -1983,7 +2007,7 @@
     var ids = Object.keys(allIds).sort(function (a, b) { return sortOf(a) - sortOf(b); });
 
     // Stash the merged rollup so the print make-list renders exactly what's on screen.
-    PC._prodItems = items; PC._prodWeek = w; PC._prodFilter = filter;
+    PC._prodItems = items; PC._prodWeek = w; PC._prodFilter = filter; PC._prodEst = est;
 
     var countEl = document.getElementById('pcProdCount');
     if (countEl) countEl.textContent = ids.length + ' item' + (ids.length === 1 ? '' : 's') + (filter ? ' \u00b7 ' + filter : '');
@@ -2018,13 +2042,21 @@
       var unit = meta.unit || '';
       var onsite = meta.production_mode === 'on_site';
       var plannedTotal = it ? it.total : 0;
-      var byDay = it ? it.byDay : [0,0,0,0,0,0,0];
-      var plannedVenues = it ? it.byVenue : {};
       var estVenues = est.byItemVenue[id] || {};
+      var estVenueDay = (est.byItemVenueDay && est.byItemVenueDay[id]) || {};
+      // Estimate day totals for this item = sum of its estimate venue-day arrays.
+      var estItemDay = [0,0,0,0,0,0,0];
+      Object.keys(estVenueDay).forEach(function (vc) {
+        var arr = estVenueDay[vc] || [];
+        for (var ei = 0; ei < 7; ei++) estItemDay[ei] += (arr[ei] || 0);
+      });
+      var byDay = it ? it.byDay : estItemDay;   // planned days if planned, else estimate days
+      var plannedVenues = it ? it.byVenue : {};
+      var estOnly = (plannedTotal <= 0);
 
       var dayCells = '';
       for (var d = 0; d < 7; d++) {
-        dayCells += '<span class="pc-prod-daycell' + (byDay[d] > 0 ? '' : ' is-zero') + '">' + (byDay[d] > 0 ? byDay[d] : '\u00b7') + '</span>';
+        dayCells += '<span class="pc-prod-daycell' + (byDay[d] > 0 && !estOnly ? '' : ' is-zero') + '">' + (byDay[d] > 0 ? byDay[d] : '\u00b7') + '</span>';
       }
       // Item-row total: planned number if any; else the estimate, tagged.
       var totalCell;
@@ -2066,9 +2098,16 @@
         // Estimate-only (forecasted, not yet planned): muted, "est", not claimable.
         if (pq <= 0) {
           var edot = '<span style="width:8px;height:8px;border-radius:50%;background:' + vc + ';opacity:.5;display:inline-block;margin-right:7px;"></span>';
+          var evd = estVenueDay[vcode] || [0,0,0,0,0,0,0];
+          var estDayDetail = '<span class="pc-prod-days pc-prod-vdays">';
+          for (var ez = 0; ez < 7; ez++) {
+            var evv = evd[ez] || 0;
+            estDayDetail += '<span class="' + (evv > 0 ? '' : 'z') + '">' + (evv > 0 ? evv.toLocaleString() : '\u00b7') + '</span>';
+          }
+          estDayDetail += '</span>';
           html += '<div class="pc-prod-vrow est"><span class="pc-prod-vname">' + edot + escAttr(vcode) +
             '<span class="pc-prod-esttag">est</span></span>' +
-            '<span class="pc-prod-vqty">' + eq.toLocaleString() + ' <span class="pc-prod-unit">' + escAttr(unit) + '</span></span></div>';
+            '<span class="pc-prod-vqty">' + eq.toLocaleString() + ' <span class="pc-prod-unit">' + escAttr(unit) + '</span></span>' + estDayDetail + '</div>';
           return;
         }
 
@@ -2237,6 +2276,11 @@
   };
 
   // ---- Print make-list (DOM-built; nothing written into the print window) ----
+  // Three modes: 'both' (best available — planned where committed, estimate to
+  // fill the gaps), 'planned' (committed plan lines only), 'est' (mix×forecast
+  // projection only). Estimate cells are flagged so the sheet stays honest.
+  PC._printMode = 'both';
+
   PC.initPrint = function () {
     function wire(id, fn) { var el = document.getElementById(id); if (el && !el._wired) { el.addEventListener('click', fn); el._wired = true; } }
     wire('pcPrintBtn', PC.openPrint);
@@ -2251,31 +2295,102 @@
       });
       all._wired = true;
     }
+    var modes = document.getElementById('pcPrintModes');
+    if (modes && !modes._wired) {
+      modes.querySelectorAll('.pc-pm-btn').forEach(function (b) {
+        b.addEventListener('click', function () {
+          PC._printMode = b.getAttribute('data-mode');
+          PC.renderPrintList();
+        });
+      });
+      modes._wired = true;
+    }
     var bd = document.getElementById('pcPrintBackdrop');
     if (bd && !bd._wired) { bd.addEventListener('click', function (e) { if (e.target === bd) PC.closePrint(); }); bd._wired = true; }
   };
 
   PC.closePrint = function () { document.getElementById('pcPrintBackdrop').classList.remove('is-on'); };
 
-  PC.openPrint = function () {
+  // Build the ordered print rows for a given mode from the merged planned
+  // rollup (PC._prodItems) and the forecast estimate (PC._prodEst).
+  PC.buildPrintRows = function (mode) {
     var items = PC._prodItems || {};
-    var ids = Object.keys(items).sort(function (a, b) {
-      return ((items[a].meta.sort_order || 0) - (items[b].meta.sort_order || 0));
+    var est = PC._prodEst || { byItem: {}, byItemVenue: {}, byItemVenueDay: {}, meta: {} };
+    var idset = {};
+    if (mode === 'planned' || mode === 'both') Object.keys(items).forEach(function (id) { idset[id] = true; });
+    if (mode === 'est' || mode === 'both') Object.keys(est.byItem).forEach(function (id) { if ((est.byItem[id] || 0) > 0) idset[id] = true; });
+    function metaOf(id) { return items[id] ? items[id].meta : est.meta[id]; }
+    function sortOf(id) { var m = metaOf(id); return (m && m.sort_order) || 0; }
+    var ids = Object.keys(idset).sort(function (a, b) { return sortOf(a) - sortOf(b); });
+
+    var out = [];
+    ids.forEach(function (id) {
+      var m = metaOf(id); if (!m) return;
+      var plannedV = (items[id] && items[id].byVenue) || {};
+      var estV = est.byItemVenue[id] || {};
+      var plannedVDay = (items[id] && items[id].byVenueDay) || {};
+      var estVDay = (est.byItemVenueDay && est.byItemVenueDay[id]) || {};
+      var vset = {};
+      if (mode === 'planned' || mode === 'both') Object.keys(plannedV).forEach(function (v) { vset[v] = true; });
+      if (mode === 'est' || mode === 'both') Object.keys(estV).forEach(function (v) { vset[v] = true; });
+      var venues = [], total = 0, anyEst = false, anyPlanned = false;
+      var byDay = [0,0,0,0,0,0,0], anyDay = false;
+      Object.keys(vset).sort().forEach(function (v) {
+        var pq = plannedV[v] || 0, eq = estV[v] || 0, qty, isEst;
+        if (mode === 'planned') { qty = pq; isEst = false; }
+        else if (mode === 'est') { qty = eq; isEst = true; }
+        else { if (pq > 0) { qty = pq; isEst = false; } else { qty = eq; isEst = true; } }
+        if (qty <= 0) return;
+        var src = isEst ? estVDay[v] : plannedVDay[v];   // day detail from whichever source we chose
+        venues.push({ venue: v, qty: qty, isEst: isEst, byDay: (src ? src.slice() : [0,0,0,0,0,0,0]) });
+        total += qty;
+        if (isEst) anyEst = true; else anyPlanned = true;
+        if (src) { for (var k = 0; k < 7; k++) { if (src[k] > 0) { byDay[k] += src[k]; anyDay = true; } } }
+      });
+      if (!venues.length) return;
+      out.push({ id: id, meta: m, total: total, venues: venues, byDay: (anyDay ? byDay : null), mixed: (anyEst && anyPlanned), allEst: (anyEst && !anyPlanned) });
     });
+    return out;
+  };
+
+  PC.openPrint = function () {
+    var modes = document.getElementById('pcPrintModes');
+    if (modes) modes.querySelectorAll('.pc-pm-btn').forEach(function (b) {
+      b.classList.toggle('is-active', b.getAttribute('data-mode') === PC._printMode);
+    });
+    document.getElementById('pcPrintBackdrop').classList.add('is-on');
+    PC.renderPrintList();
+  };
+
+  PC.renderPrintList = function () {
+    var modes = document.getElementById('pcPrintModes');
+    if (modes) modes.querySelectorAll('.pc-pm-btn').forEach(function (b) {
+      b.classList.toggle('is-active', b.getAttribute('data-mode') === PC._printMode);
+    });
+    var note = document.getElementById('pcPrintModeNote');
+    if (note) {
+      note.textContent = PC._printMode === 'planned'
+        ? 'Committed plan numbers only.'
+        : (PC._printMode === 'est'
+          ? 'Projected from forecasts \u2014 nothing committed yet.'
+          : 'Planned numbers where committed; estimates fill the rest (tagged \u201cest\u201d).');
+    }
+    var rows = PC.buildPrintRows(PC._printMode);
+    PC._printRows = {};
     var list = document.getElementById('pcPrintList');
-    if (!ids.length) {
-      list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--pc-faint);font-size:13px;">Nothing planned to print this week.</div>';
+    if (!rows.length) {
+      list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--pc-faint);font-size:13px;">Nothing to print this week for that choice.</div>';
     } else {
-      list.innerHTML = ids.map(function (id) {
-        var it = items[id];
-        return '<label class="pc-print-item"><input type="checkbox" class="pc-print-cb" value="' + id + '" checked>' +
-          '<span class="nm">' + escAttr(it.meta.name) + '</span>' +
-          '<span class="qt">' + (it.total || 0).toLocaleString() + ' <span class="u">' + escAttr(it.meta.unit || '') + '</span></span></label>';
+      list.innerHTML = rows.map(function (r) {
+        PC._printRows[r.id] = r;
+        var tag = r.allEst ? '<span class="tag est">est</span>' : (r.mixed ? '<span class="tag mixed">mixed</span>' : '');
+        return '<label class="pc-print-item"><input type="checkbox" class="pc-print-cb" value="' + r.id + '" checked>' +
+          '<span class="nm">' + escAttr(r.meta.name) + tag + '</span>' +
+          '<span class="qt">' + (r.total || 0).toLocaleString() + ' <span class="u">' + escAttr(r.meta.unit || '') + '</span></span></label>';
       }).join('');
       list.querySelectorAll('.pc-print-cb').forEach(function (cb) { cb.addEventListener('change', PC.updatePrintGo); });
     }
-    document.getElementById('pcPrintAll').checked = ids.length > 0;
-    document.getElementById('pcPrintBackdrop').classList.add('is-on');
+    document.getElementById('pcPrintAll').checked = rows.length > 0;
     PC.updatePrintGo();
   };
 
@@ -2292,8 +2407,9 @@
     var chosen = [];
     document.querySelectorAll('#pcPrintList .pc-print-cb:checked').forEach(function (cb) { chosen.push(cb.value); });
     if (!chosen.length) return;
-    var items = PC._prodItems || {};
+    var rowsById = PC._printRows || {};
     var w = PC._prodWeek, filter = PC._prodFilter || '';
+    var mode = PC._printMode;
 
     var win = window.open('', '_blank');
     if (!win) { PC.toast('Allow pop-ups to print the make-list', true); return; }
@@ -2305,56 +2421,105 @@
       '@page{margin:0.6in;}' +
       'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;color:#1a1a1a;margin:0;}' +
       'h1{font-size:18px;margin:0 0 2px;}' +
-      '.sub{font-size:12px;color:#666;margin:0 0 16px;}' +
-      '.item{break-inside:avoid;margin:0 0 14px;border:1px solid #ddd;border-radius:8px;overflow:hidden;}' +
-      '.ihead{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:9px 12px;background:#f4f4f1;border-bottom:1px solid #ddd;}' +
+      '.sub{font-size:12px;color:#666;margin:0 0 6px;}' +
+      '.legend{font-size:11px;color:#666;margin:0 0 16px;}' +
+      '.legend .est{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#185FA5;background:#eaf1f8;padding:1px 5px;border-radius:4px;}' +
+      '.item{break-inside:avoid;margin:0 0 16px;}' +
+      '.ihead{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin:0 0 4px;}' +
       '.iname{font-size:15px;font-weight:700;}' +
-      '.itot{font-size:14px;font-weight:700;}' +
-      '.itot .u{font-size:11px;font-weight:400;color:#666;text-transform:uppercase;margin-left:3px;}' +
-      '.vrow{display:flex;justify-content:space-between;padding:6px 12px;border-bottom:1px solid #eee;font-size:13px;}' +
-      '.vrow:last-child{border-bottom:none;}' +
-      '.chk{display:inline-block;width:13px;height:13px;border:1px solid #999;border-radius:3px;margin-right:9px;vertical-align:-2px;}' +
-      '.days{padding:6px 12px;font-size:11px;color:#666;border-top:1px solid #eee;}' +
-      '.days b{color:#1a1a1a;}';
+      '.itot{font-size:13px;font-weight:700;}' +
+      '.itot .u{font-size:10px;font-weight:400;color:#666;text-transform:uppercase;margin-left:3px;}' +
+      'table.daygrid{width:100%;border-collapse:collapse;font-size:12px;}' +
+      '.daygrid th,.daygrid td{border:1px solid #e2e2de;padding:4px 5px;text-align:center;font-variant-numeric:tabular-nums;}' +
+      '.daygrid th{background:#f4f4f1;font-size:9px;text-transform:uppercase;letter-spacing:.04em;color:#666;font-weight:700;line-height:1.25;}' +
+      '.daygrid th.vh,.daygrid td.vname{text-align:left;white-space:nowrap;}' +
+      '.daygrid td.vname{font-weight:600;}' +
+      '.daygrid td.z{color:#c4c4c0;}' +
+      '.daygrid th.th-tot,.daygrid td.tot{font-weight:700;background:#f4f4f1;}' +
+      '.daygrid tr.est-row td{color:#8a8a86;}' +
+      '.daygrid tr.tot-row td{font-weight:700;background:#faf9f7;}' +
+      '.vname .est{font-size:8px;font-weight:700;text-transform:uppercase;color:#185FA5;margin-left:6px;}' +
+      '.chk{display:inline-block;width:12px;height:12px;border:1px solid #999;border-radius:3px;margin-right:7px;vertical-align:-1px;}';
     doc.head.appendChild(style);
 
     var h1 = doc.createElement('h1'); h1.textContent = 'Production make-list'; doc.body.appendChild(h1);
     var sub = doc.createElement('p'); sub.className = 'sub';
-    sub.textContent = (w ? (w.label + ' (' + fmtMD(w.start) + '\u2013' + fmtMD(w.end) + ')') : '') + '  \u00b7  ' + (filter ? filter : 'All venues');
+    var modeLabel = mode === 'planned' ? 'Planned only' : (mode === 'est' ? 'Estimated only' : 'Best available');
+    sub.textContent = (w ? (w.label + ' (' + fmtMD(w.start) + '\u2013' + fmtMD(w.end) + ')') : '') + '  \u00b7  ' + (filter ? filter : 'All venues') + '  \u00b7  ' + modeLabel;
     doc.body.appendChild(sub);
 
-    chosen.sort(function (a, b) { return ((items[a].meta.sort_order || 0) - (items[b].meta.sort_order || 0)); });
+    if (mode !== 'planned') {
+      var leg = doc.createElement('p'); leg.className = 'legend';
+      leg.innerHTML = 'Lines marked <span class="est">est</span> are projected from forecasts and not yet planned.';
+      doc.body.appendChild(leg);
+    }
+
+    // Day headers (Mon..Sun) from the week start — same order as the on-screen grid.
+    var dayLabels = [];
+    for (var hd = 0; hd < 7; hd++) {
+      var ds = PC.addDays(w.start, hd);
+      dayLabels.push(PC.dowName(ds) + ' ' + parseInt(String(ds).slice(8, 10), 10));
+    }
+
+    chosen.sort(function (a, b) {
+      var ra = rowsById[a], rb = rowsById[b];
+      return ((ra && ra.meta.sort_order || 0) - (rb && rb.meta.sort_order || 0));
+    });
     chosen.forEach(function (id) {
-      var it = items[id]; if (!it) return;
-      var unit = it.meta.unit || '';
+      var r = rowsById[id]; if (!r) return;
+      var unit = r.meta.unit || '';
       var box = doc.createElement('div'); box.className = 'item';
 
       var head = doc.createElement('div'); head.className = 'ihead';
-      var nm = doc.createElement('span'); nm.className = 'iname'; nm.textContent = it.meta.name;
+      var nm = doc.createElement('span'); nm.className = 'iname'; nm.textContent = r.meta.name;
       var tot = doc.createElement('span'); tot.className = 'itot';
-      tot.appendChild(doc.createTextNode((it.total || 0).toLocaleString() + ' '));
+      tot.appendChild(doc.createTextNode((r.total || 0).toLocaleString() + ' '));
       var tu = doc.createElement('span'); tu.className = 'u'; tu.textContent = unit; tot.appendChild(tu);
       head.appendChild(nm); head.appendChild(tot); box.appendChild(head);
 
-      Object.keys(it.byVenue || {}).sort().forEach(function (vc) {
-        var row = doc.createElement('div'); row.className = 'vrow';
-        var left = doc.createElement('span');
-        var chk = doc.createElement('span'); chk.className = 'chk';
-        left.appendChild(chk); left.appendChild(doc.createTextNode(vc));
-        var qty = doc.createElement('span'); qty.textContent = (it.byVenue[vc] || 0).toLocaleString() + ' ' + unit;
-        row.appendChild(left); row.appendChild(qty); box.appendChild(row);
+      var table = doc.createElement('table'); table.className = 'daygrid';
+      var thead = doc.createElement('thead'); var htr = doc.createElement('tr');
+      var vh = doc.createElement('th'); vh.className = 'vh'; vh.textContent = ''; htr.appendChild(vh);
+      dayLabels.forEach(function (lbl) { var th = doc.createElement('th'); th.textContent = lbl; htr.appendChild(th); });
+      var tt = doc.createElement('th'); tt.className = 'th-tot'; tt.textContent = 'Total'; htr.appendChild(tt);
+      thead.appendChild(htr); table.appendChild(thead);
+
+      var tbody = doc.createElement('tbody');
+      r.venues.forEach(function (v) {
+        var tr = doc.createElement('tr'); if (v.isEst) tr.className = 'est-row';
+        var vn = doc.createElement('td'); vn.className = 'vname';
+        var chk = doc.createElement('span'); chk.className = 'chk'; vn.appendChild(chk);
+        vn.appendChild(doc.createTextNode(v.venue));
+        if (v.isEst) { var et = doc.createElement('span'); et.className = 'est'; et.textContent = 'est'; vn.appendChild(et); }
+        tr.appendChild(vn);
+        var vd = v.byDay || [0,0,0,0,0,0,0];
+        for (var d = 0; d < 7; d++) {
+          var td = doc.createElement('td');
+          if (vd[d] > 0) { td.textContent = vd[d].toLocaleString(); }
+          else { td.textContent = '\u00b7'; td.className = 'z'; }
+          tr.appendChild(td);
+        }
+        var vt = doc.createElement('td'); vt.className = 'tot'; vt.textContent = (v.qty || 0).toLocaleString(); tr.appendChild(vt);
+        tbody.appendChild(tr);
       });
 
-      var dayParts = [];
-      for (var d = 0; d < 7; d++) {
-        if (it.byDay[d] > 0) dayParts.push(PC.dowName(PC.addDays(w.start, d)) + ' ' + it.byDay[d]);
+      // Multi-venue items get an "All" totals row across the bottom.
+      if (r.venues.length > 1) {
+        var agg = r.byDay || [0,0,0,0,0,0,0];
+        var trT = doc.createElement('tr'); trT.className = 'tot-row';
+        var vnT = doc.createElement('td'); vnT.className = 'vname'; vnT.textContent = 'All'; trT.appendChild(vnT);
+        for (var dd = 0; dd < 7; dd++) {
+          var tdT = doc.createElement('td');
+          if (agg[dd] > 0) { tdT.textContent = agg[dd].toLocaleString(); }
+          else { tdT.textContent = '\u00b7'; tdT.className = 'z'; }
+          trT.appendChild(tdT);
+        }
+        var vtT = doc.createElement('td'); vtT.className = 'tot'; vtT.textContent = (r.total || 0).toLocaleString(); trT.appendChild(vtT);
+        tbody.appendChild(trT);
       }
-      if (dayParts.length) {
-        var days = doc.createElement('div'); days.className = 'days';
-        days.appendChild(doc.createTextNode('By day: '));
-        var bd = doc.createElement('b'); bd.textContent = dayParts.join('  \u00b7  ');
-        days.appendChild(bd); box.appendChild(days);
-      }
+
+      table.appendChild(tbody);
+      box.appendChild(table);
       doc.body.appendChild(box);
     });
 
