@@ -1270,7 +1270,95 @@ body {
   padding: 1px 5px; border-radius: 3px;
   cursor: help;
 }
-.person-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ============================================================
+ * SHIFT CONFIRMATION — Session 3 (Jul 13, 2026)
+ * ------------------------------------------------------------
+ * Confirmation is an ORTHOGONAL axis to the existing pill state
+ * machine (available / placed-here / assigned-away). It is a second
+ * dimension, not a fourth value.
+ *
+ * NOT_DUE renders nothing at all. That is load-bearing: without it,
+ * every event three months out would render "unconfirmed", the panel
+ * would fill with amber, and the signal would die of noise. Amber must
+ * mean "you owe me an answer and have not given it" — never "we have
+ * not got there yet".
+ * ============================================================ */
+.confirm-tag {
+  font-size: 9px; font-weight: 800; letter-spacing: 0.04em;
+  padding: 1px 5px; border-radius: 3px;
+  cursor: help; white-space: nowrap;
+}
+.confirm-tag.yes {
+  background: var(--green-dark); color: white;
+}
+.confirm-tag.no {
+  background: var(--amber-light); color: var(--amber-dark);
+  border: 1px solid var(--amber-border);
+  padding: 1px 4px;
+}
+/* Glyph, not a sentence. The count lives in the ribbon badge; the pill only
+   needs to say "this one". Hover gives the full explanation. */
+/* Glyph + short word. "UNCONFIRMED" was 90px of shouting on every pill and it
+   crushed the names; the count lives in the ribbon badge anyway. "UNCONF" is
+   readable at a glance without eating the pill. Hover gives the full story. */
+.confirm-tag.no::before { content: '\26A0\00A0UNCONF'; }
+.confirm-tag.no { font-size: 9px; letter-spacing: 0.03em; }
+.confirm-tag.drift {
+  background: var(--blue-light); color: var(--blue-dark);
+  border: 1px solid var(--blue-mid);
+  font-size: 11px; padding: 1px 4px;
+}
+/* Declined — they actively said no and are STILL occupying a slot. Loudest
+   state on the board, and it should be: this is a hole you do not know you have. */
+.confirm-tag.declined {
+  background: var(--red); color: white;
+  font-size: 9px; letter-spacing: 0.04em; padding: 1px 5px;
+}
+.declined-tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10px; font-weight: 700;
+  padding: 3px 8px; border-radius: 4px;
+  background: var(--red); color: white;
+  letter-spacing: 0.02em; white-space: nowrap; cursor: help;
+}
+.person-pill.unconfirmed {
+  border-style: dashed;
+}
+/* Ribbon badge — sits in the same cluster as .unresolved-tag and .ghost-tag
+   so every "this event needs attention" signal lives together. */
+.unconfirmed-tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10px; font-weight: 700;
+  padding: 3px 8px; border-radius: 4px;
+  background: var(--amber-light); color: var(--amber-dark);
+  border: 1px solid var(--amber-border);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  cursor: help;
+}
+/* Stacked coverage bar. Solid = confirmed (what you have). Ghost = signed up
+   but unconfirmed (what you might still get). Empty = nobody. Three facts,
+   one glance. The ghost segment quietly IS the chase list. */
+.coverage-bar { display: flex; }
+.coverage-fill.ghost { background: var(--blue); opacity: 0.32; }
+/* The name gets its own full-width line; badges wrap beneath it. Before this,
+   the name was the only flex-shrinkable thing on the pill, so every badge we
+   added ate its width until people rendered as "B" and "D.". The name is the
+   one piece of information the pill exists to convey — it never yields. */
+.person-name {
+  flex-basis: 100%;
+  min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-weight: 700;
+}
+.person-pill { row-gap: 3px; }
+.person-pill .home-venue-tag,
+.person-pill .confirm-tag,
+.person-pill .signup-multi,
+.person-pill .placed-here-tag,
+.person-pill .assigned-away-tag { flex-shrink: 0; }
+.person-pill .signup-x { margin-left: auto; }
 
 .summary-bar {
   display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
@@ -1361,14 +1449,22 @@ body {
   border-color: var(--blue); background: var(--blue-light); color: var(--blue-dark);
 }
 .slot-filled {
-  display: flex; align-items: center; gap: 6px;
-  padding: 5px 10px;
+  display: flex; align-items: center; gap: 5px; row-gap: 3px;
+  padding: 5px 8px;
   border-width: 1px; border-style: solid;
   border-radius: 6px; font-size: 12px; font-weight: 600;
   cursor: grab;
   user-select: none;
   flex-wrap: wrap;
 }
+/* Same rule as the available panel: the name owns a full line, chrome wraps
+   below it. A stand card is ~240px wide — a name plus a venue tag plus a
+   confirm tag plus a 7s toggle plus an X will never fit on one row. */
+.slot-filled .person-name {
+  flex-basis: 100%;
+  font-weight: 700;
+}
+.slot-filled .x { margin-left: auto; }
 /* base color/background/border-color owned by the SYNC PILL STATES block above */
 .slot-filled .x {
   background: none; border: none; color: inherit;
@@ -2069,48 +2165,11 @@ body {
 .conflict-icon { cursor: pointer; }
 .conflict-icon:hover { opacity: 0.7; }
 
-/* ===== Home-venue override dialog =====
-   Fires when a manager places a non-home-venue person ahead of an unplaced
-   home-venue person. Forces a typed reason (>= 15 chars) before the
-   placement commits. Cancelling does not place. */
-.override-info {
-  background: var(--amber-light); border: 1px solid var(--amber-border);
-  padding: 10px 12px; border-radius: 8px;
-  font-size: 13px; line-height: 1.5; color: var(--amber-dark);
-  margin-bottom: 12px;
-}
-.override-info strong { color: var(--amber-dark); }
-.override-list {
-  list-style: none; padding: 0; margin: 6px 0 0 0;
-}
-.override-list li {
-  padding: 3px 0; font-size: 12px; font-weight: 600;
-}
-.override-list li::before {
-  content: '• '; color: var(--amber); font-weight: 800;
-}
-.override-sublist-head {
-  font-size: 10px; font-weight: 800; letter-spacing: 0.06em;
-  text-transform: uppercase; color: var(--amber-dark);
-  margin-top: 8px; padding-bottom: 2px;
-  border-bottom: 1px solid var(--amber-border);
-}
-.override-sublist-head + .override-list { margin-top: 2px; }
-.override-question {
-  font-size: 13px; font-weight: 600; margin: 14px 0 8px; color: var(--primary);
-}
-.override-textarea {
-  width: 100%; min-height: 70px; padding: 8px 10px;
-  border: 1.5px solid var(--border); border-radius: 7px;
-  font-family: inherit; font-size: 13px; resize: vertical;
-  color: var(--primary); background: white;
-}
-.override-textarea:focus { outline: none; border-color: var(--blue); }
-.override-counter {
-  display: flex; justify-content: space-between; align-items: center;
-  margin-top: 6px; font-size: 11px; color: var(--label);
-}
-.override-counter.met { color: var(--green-dark); font-weight: 700; }
+/* NOTE (Jul 13, 2026): the home-venue override dialog was removed — see
+   shift-confirmation-spec-v1.md. The three rules below (.override-actions,
+   .btn-cancel, .btn-confirm) survive it: the clear-stand, notify-staffing,
+   email, and managers modals all borrowed them. Do NOT delete them.
+   Renaming them is a separate, wider cleanup. */
 .override-actions {
   display: flex; gap: 8px; justify-content: flex-end;
   margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border);
@@ -2503,33 +2562,9 @@ body {
   </div>
 </div>
 
-<!-- Home-venue override dialog. Shown when placing a non-home-venue person
-     ahead of unplaced home-venue people for the event. Manager must type a
-     reason (>= 15 chars) before "Save and place" enables. Cancel = no
-     placement. The reason is appended to the position_assignment_log row's
-     details JSON under `override_reason` and is rendered on a second line
-     in the audit log for that event. -->
-<div class="modal-backdrop" id="override-modal">
-  <div class="modal">
-    <div class="modal-head">
-      <h3>Reason needed</h3>
-      <button class="modal-close" data-close-modal="override-modal">✕</button>
-    </div>
-    <div class="modal-body">
-      <div class="override-info" id="override-info"></div>
-      <div class="override-question">Why is this person being scheduled here over them?</div>
-      <textarea class="override-textarea" id="override-reason" placeholder="e.g. requested by venue manager / specific role need / etc."></textarea>
-      <div class="override-counter" id="override-counter">
-        <span id="override-counter-text">Min 15 characters</span>
-        <span id="override-counter-num">0 / 15</span>
-      </div>
-      <div class="override-actions">
-        <button class="btn-cancel" data-close-modal="override-modal">Cancel</button>
-        <button class="btn-confirm" id="override-confirm-btn" disabled>Save and place</button>
-      </div>
-    </div>
-  </div>
-</div>
+<!-- Home-venue override dialog removed Jul 13, 2026 (shift-confirmation-spec-v1.md).
+     Historical override rows in position_assignment_log still render their
+     override_reason on a second line in the audit log — that renderer stays. -->
 
 <script>
 /* =====================================================================
@@ -2659,6 +2694,111 @@ const VENUE_COLORS = {
 // and the override dialog never fires when an 'NA' person is involved
 // — they're treated identically to a NULL home_venue.
 const HOME_VENUE_NA = 'NA';
+
+// ============================================================
+// SHIFT CONFIRMATION — Session 3 (Jul 13, 2026)
+// ------------------------------------------------------------
+// 21 days, and deliberately WIDER than the 14-day scheduling horizon.
+// The Monday call works two weeks out; if the confirm window were also
+// 14 days an event would enter it on the same morning we staff it —
+// zero slack, and we would be chasing people during the call.
+//
+// State is DERIVED, never stored. The availability page computes it the
+// same way, so the two surfaces can never disagree about whether someone
+// has committed. Mirror any change here on employees.camdenco.com/availability.
+// ============================================================
+// 14 days, down from 21. The 21-day buffer existed because availability-
+// confirmation had to land BEFORE staffing. Placement-confirmation happens
+// AFTER staffing, so the horizon collapses to the thing we actually schedule.
+const CONFIRM_WINDOW_DAYS = 14;
+
+// Sources that can never confirm. JMAC is an agency call, not a person; a
+// placeholder is a name we made up. Counting them as unconfirmed forever would
+// mean a trucked or agency-covered event could never go green.
+//
+// 'manual' IS confirmable. The manager typed them in, but they are a real person
+// with a real name, the offer email will reach them, and "the manager says he
+// spoke to them" is precisely the assumption that got us here.
+const CONFIRM_EXEMPT_SOURCES = ['jmac', 'placeholder'];
+
+function daysUntilEvent(eventDateIso) {
+  const t = new Date(); t.setHours(0, 0, 0, 0);
+  const d = new Date(eventDateIso + 'T00:00:00');
+  return Math.round((d - t) / 86400000);
+}
+function eventInConfirmWindow(ev) {
+  if (!ev || !ev.event_date) return false;
+  return daysUntilEvent(ev.event_date) <= CONFIRM_WINDOW_DAYS;
+}
+
+// 'CONFIRMED' | 'DECLINED' | 'UNCONFIRMED' | 'NOT_DUE' | 'EXEMPT'
+//
+// NOT_DUE is load-bearing. Managers place people months ahead — those are
+// working drafts, not offers. Without NOT_DUE the whole board renders amber and
+// the signal dies of noise. Amber must mean "they were asked and did not answer",
+// never "we have not got there yet".
+function confirmStateForPlacement(ev, p) {
+  if (CONFIRM_EXEMPT_SOURCES.indexOf(p.source) !== -1) return 'EXEMPT';
+  if (p.declined_at) return 'DECLINED';
+  if (p.confirmed_at) return 'CONFIRMED';
+  if (!eventInConfirmWindow(ev)) return 'NOT_DUE';
+  return 'UNCONFIRMED';
+}
+
+// Drift: they confirmed, then we moved them. The confirmation SURVIVES — the
+// promise was "I'll be there Friday", not "I'll be there only if I'm on pizza".
+// Invalidating on every drag would nuke confirmations constantly, leave the board
+// permanently amber, and teach everyone to ignore the colour inside a week.
+//
+// This is NOT the seven_shifts_synced pattern. That flag clears on any move
+// because it means "our data is stale". This means "their commitment is real".
+// Different thing — do not copy the pattern just because the mechanics rhyme.
+function placementDrift(p) {
+  if (!p.confirmed_at) return null;
+  if (!p.confirmed_stand) return null;
+  if (p.confirmed_stand === p.stand && p.confirmed_role === p.role) return null;
+  return { stand: p.confirmed_stand, role: p.confirmed_role };
+}
+
+function unconfirmedPlacementsFor(eventId) {
+  const ev = state.events.find(e => e.id === eventId);
+  if (!ev) return [];
+  return positionsForEvent(eventId).filter(p =>
+    confirmStateForPlacement(ev, p) === 'UNCONFIRMED');
+}
+function declinedPlacementsFor(eventId) {
+  const ev = state.events.find(e => e.id === eventId);
+  if (!ev) return [];
+  return positionsForEvent(eventId).filter(p =>
+    confirmStateForPlacement(ev, p) === 'DECLINED');
+}
+
+// The real coverage picture. "36 / 37 filled" only ever meant 36 pills on a
+// board. This answers the question that actually matters: how many of those
+// people have said yes.
+function confirmBreakdown(ev) {
+  const placements = positionsForEvent(ev.id);
+  let confirmed = 0, unconfirmed = 0, declined = 0, exempt = 0, notDue = 0;
+  placements.forEach(p => {
+    const st = confirmStateForPlacement(ev, p);
+    if (st === 'CONFIRMED') confirmed++;
+    else if (st === 'UNCONFIRMED') unconfirmed++;
+    else if (st === 'DECLINED') declined++;
+    else if (st === 'EXEMPT') exempt++;
+    else notDue++;
+  });
+  return {
+    filled: placements.length,
+    confirmed: confirmed,
+    unconfirmed: unconfirmed,
+    declined: declined,
+    exempt: exempt,
+    notDue: notDue,
+    // Exempt pills count as settled -- JMAC will never click a button.
+    good: confirmed + exempt,
+    inWindow: eventInConfirmWindow(ev)
+  };
+}
 
 // Uniform shirt sizes — must match the CHECK constraint on
 // employees.shirt_size and candidates.shirt_size. Order is small → large
@@ -3500,7 +3640,7 @@ function loadAll() {
       // Fetch ALL availability rows for these events (including soft-deleted ones).
       // We split active vs removed client-side so the manager can toggle a "removed"
       // section in the available panel and restore people if needed.
-      authFetch(SUPABASE_URL + '/rest/v1/availability?select=id,staff_name,event_id,note,removed_at,removed_by&event_id=in.' + inList,
+      authFetch(SUPABASE_URL + '/rest/v1/availability?select=id,staff_name,event_id,note,removed_at,removed_by,confirmed_at,confirmed_via,self_released,release_kind,release_reason&event_id=in.' + inList,
         { headers: apiHeaders() }),
       authFetch(SUPABASE_URL + '/rest/v1/availability_assignments?event_date=in.' + dateInList,
         { headers: apiHeaders() }),
@@ -3937,6 +4077,10 @@ function render() {
     // Count distinct unique humans available across the day, multi-signup people only count once.
     // Same logic as effectiveSignupCount but at day level: every signup name on that date,
     // deduped — that's the actual headcount available across all events combined.
+    // Every event in a day group shares event_date, so window state is uniform.
+    // Inside the window we count CONFIRMED humans only — otherwise the day header
+    // renders green while every event beneath it renders amber, and the header
+    // wins the glance.
     const uniqueNames = new Set();
     events.forEach(e => {
       const sigs = state.availability.filter(a => a.event_id === e.id);
@@ -4149,6 +4293,27 @@ function renderEventRow(ev) {
         '⚠ Replace JMAC? (' + replaceable + ')</span>';
     }
   }
+  // Unconfirmed badge — how many signups on this event have not actually
+  // committed. Only renders inside the 21-day window; outside it, nothing has
+  // been asked of anyone and the badge would be pure noise.
+  // Unconfirmed PLACEMENTS. Only inside the window — outside it nothing has been
+  // asked of anyone and the badge would be pure noise on every event on the board.
+  const evUnconf = unconfirmedPlacementsFor(ev.id);
+  if (evUnconf.length > 0) {
+    const ucNames = evUnconf.slice(0, 8).map(p => p.staff_name).join(', ') +
+      (evUnconf.length > 8 ? ', +' + (evUnconf.length - 8) + ' more' : '');
+    const ucTip = evUnconf.length + ' scheduled but NOT CONFIRMED — ' + ucNames +
+      '. Do not put them into 7shifts. Chase them, or release the slots.';
+    html += '<span class="unconfirmed-tag" title="' + escapeAttr(ucTip) + '">' +
+      '⚠ ' + evUnconf.length + ' unconfirmed</span>';
+  }
+  const evDeclined = declinedPlacementsFor(ev.id);
+  if (evDeclined.length > 0) {
+    const dcTip = evDeclined.length + ' DECLINED this shift and are still on the schedule — ' +
+      evDeclined.map(p => p.staff_name).join(', ') + '. Release them and backfill.';
+    html += '<span class="declined-tag" title="' + escapeAttr(dcTip) + '">' +
+      '✕ ' + evDeclined.length + ' declined</span>';
+  }
   if (locked) html += '<span class="lock-tag">🔒 Locked</span>';
   // Scratchpad pill removed Jun 24, 2026 — weak signal, and this slot is now
   // home to the truck icon. The Scratchpad editor itself stays on the Staff tab.
@@ -4160,24 +4325,78 @@ function renderEventRow(ev) {
   }
   html += '<span class="event-spacer"></span>';
 
-  // Dual coverage meter: signed-up + filled side by side
+  // Coverage meter — LEFT BLOCK.
+  //
+  // Inside the 21-day window the label FLIPS from "signed up" to "confirmed",
+  // and the headline number flips with it. The word changing IS the event going
+  // live: no legend, no training. Everyone knows what changed.
+  //
+  // "22 signed up" was never 22 people. It was 22 maybes. This is the number we
+  // should have been scheduling against all along.
+  //
+  // The bar goes stacked so the gap stays visible: solid = confirmed (what you
+  // have), ghost = signed up but unconfirmed (what you might still get), empty =
+  // nobody (what you will never get without calling outside the signup pool).
+  //
+  // Known and ACCEPTED: an event looks alarming for its first few days in the
+  // window, because people have until Sunday night to answer. That amber IS the
+  // signal, and it surfaces exactly when chasing still works. Flipping the label
+  // only at the deadline was considered and rejected — it hides the number during
+  // the precise window where it is actionable.
+  // LEFT BLOCK -- plain signups, no confirmation. Confirmation is a property of
+  // a PLACEMENT under spec v2, not a signup, so it has no business here. The
+  // confirmed/filled flip lives in the RIGHT block below.
   const signedUp = effectiveSignupCount(ev);
   const sigPct = needed > 0 ? Math.min(100, Math.round((signedUp / needed) * 100)) : 0;
   const sigShort = needed > 0 && signedUp < needed;
   let sigBarCls = 'blue';
-  if (needed > 0 && signedUp < needed) sigBarCls = 'red';
+  if (sigShort) sigBarCls = 'red';
 
   if (needed > 0 || filled > 0 || signedUp > 0) {
     html += '<div class="coverage-dual">';
-    // Signups (left)
     html += '<div class="coverage-block signups' + (sigShort ? ' short' : '') + '">';
     html += '<div class="coverage-line"><span class="coverage-count">' + signedUp + ' / ' + (needed || '?') + '</span><span class="coverage-sub">signed up</span></div>';
     html += '<div class="coverage-bar"><div class="coverage-fill ' + sigBarCls + '" style="width:' + sigPct + '%"></div></div>';
     html += '</div>';
-    // Filled (right)
-    html += '<div class="coverage-block">';
-    html += '<div class="coverage-line"><span class="coverage-count">' + filled + ' / ' + (needed || '?') + '</span><span class="coverage-sub">filled</span></div>';
-    html += '<div class="coverage-bar"><div class="coverage-fill ' + fillCls + '" style="width:' + pct + '%"></div></div>';
+    // RIGHT BLOCK — inside the window the label FLIPS from "filled" to
+    // "confirmed", and the number flips with it. The word changing IS the event
+    // going live: no legend, no training, everyone knows what changed.
+    //
+    // "36 / 37 filled" only ever meant 36 pills on a board. It never meant 36
+    // people had agreed to show up. This is the number that was always the truth.
+    //
+    // Stacked bar: solid = confirmed (what you have), ghost = placed but not
+    // confirmed (what you might still get), empty = unfilled.
+    //
+    // ACCEPTED: an event looks alarming for its first days in the window, because
+    // people have until Sunday to answer. That amber IS the signal, and it shows
+    // up exactly when chasing still works.
+    const _cb = confirmBreakdown(ev);
+    const rShow = _cb.inWindow ? _cb.good : filled;
+    const rLabel = _cb.inWindow ? 'confirmed' : 'filled';
+    const rPct = needed > 0 ? Math.min(100, Math.round((rShow / needed) * 100)) : 0;
+    const rGhostPct = (_cb.inWindow && needed > 0)
+      ? Math.min(100 - rPct, Math.round(((_cb.unconfirmed + _cb.declined) / needed) * 100))
+      : 0;
+    let rBarCls = 'red';
+    if (rPct >= 100) rBarCls = 'green';
+    else if (rPct >= 50) rBarCls = 'amber';
+
+    const rTip = _cb.inWindow
+      ? _cb.confirmed + ' confirmed' +
+        (_cb.exempt > 0 ? ', ' + _cb.exempt + ' agency/placeholder (exempt)' : '') +
+        ', ' + _cb.unconfirmed + ' scheduled but NOT confirmed' +
+        (_cb.declined > 0 ? ', ' + _cb.declined + ' DECLINED' : '') +
+        ' — out of ' + filled + ' placed and ' + (needed || '?') + ' needed.'
+      : filled + ' of ' + (needed || '?') + ' placed. Confirmations start once the event is within ' +
+        CONFIRM_WINDOW_DAYS + ' days.';
+
+    html += '<div class="coverage-block" title="' + escapeAttr(rTip) + '">';
+    html += '<div class="coverage-line"><span class="coverage-count">' + rShow + ' / ' + (needed || '?') + '</span><span class="coverage-sub">' + rLabel + '</span></div>';
+    html += '<div class="coverage-bar">' +
+      '<div class="coverage-fill ' + rBarCls + '" style="width:' + rPct + '%"></div>' +
+      (rGhostPct > 0 ? '<div class="coverage-fill ghost" style="width:' + rGhostPct + '%"></div>' : '') +
+      '</div>';
     html += '</div>';
     html += '</div>';
   }
@@ -5493,6 +5712,8 @@ function renderAvailablePanel(ev) {
   const awayCount = sigs.filter(s => pillState(s.staff_name) === 'ASSIGNED_AWAY').length;
   const unplaced = sigs.length - placedCount - awayCount;
 
+  // Panel count flips inside the window, same as the coverage meter. Outside it,
+  // "22 signed up" is the honest number. Inside it, "13 of 22 confirmed" is.
   let html = '<aside class="available-panel">';
   html += '<div class="panel-head">';
   html += '<span class="panel-title">Available</span>';
@@ -5530,6 +5751,7 @@ function renderAvailablePanel(ev) {
     } else if (isMulti) {
       cls += ' multi';
     }
+    
 
     // 7shifts sync state — if this person was X'd off a synced placement
     // and Meg hasn't dismissed the warning yet, tint the pill red.
@@ -5765,6 +5987,39 @@ function renderFilledSlot(ev, p, locked) {
   }
   if (p.source === 'manual') html += '<span class="manual-tag">TYPED</span>';
   if (p.source === 'placeholder') html += '<span class="placeholder-tag">PLACEHOLDER</span>';
+  // Unconfirmed warning on a PLACED pill — the sharpest signal on the board.
+  // This person is on the schedule and never said yes. Only the warning renders;
+  // a green tick on every confirmed pill would be clutter and the absence of a
+  // warning already IS the good news.
+  //
+  // Deliberately NOT shown on manual/placeholder/JMAC: a manager typing someone
+  // in is asserting they spoke to them, and JMAC is an agency call, not a person
+  // who was ever asked to confirm.
+  // Confirmation state of THIS PLACEMENT. A person on the schedule who never
+  // said yes is the most dangerous category on the board — we are counting on
+  // someone who never agreed to be counted on.
+  const _pcs = confirmStateForPlacement(ev, p);
+  if (_pcs === 'UNCONFIRMED') {
+    html += '<span class="confirm-tag no" title="On the schedule but NOT CONFIRMED. They were offered this shift and have not answered. Do not put them into 7shifts. Chase them, or give the slot to someone who did confirm."></span>';
+  } else if (_pcs === 'DECLINED') {
+    html += '<span class="confirm-tag declined" title="' +
+      escapeAttr('DECLINED this shift' +
+        (p.decline_reason ? ' — ' + p.decline_reason : '') +
+        '. They actively said no and are still occupying the slot. Release them.') +
+      '">&#10007; DECLINED</span>';
+  } else if (_pcs === 'CONFIRMED') {
+    const _drift = placementDrift(p);
+    if (_drift) {
+      html += '<span class="confirm-tag drift" title="' +
+        escapeAttr('Confirmed ' + fmtNotifiedAt(p.confirmed_at) + ' — but as ' +
+          _drift.role + ' at ' + _drift.stand + '. They still think that is where they are working. ' +
+          'Their commitment stands; they just do not know about the move.') +
+        '">&#8646;</span>';
+    } else {
+      html += '<span class="confirm-tag yes" title="' +
+        escapeAttr('Confirmed ' + fmtNotifiedAt(p.confirmed_at)) + '">&#10003;</span>';
+    }
+  }
   // 7s toggle — present on every placed pill except JMAC (JMAC is an
   // agency staffing record, not a person Meg copies into 7shifts).
   // Stays interactive even after midnight lock so late additions /
@@ -6550,26 +6805,26 @@ function handleDrop(stack) {
   placePosition(eventId, stand, role, drag.staffName, drag.source || 'signup');
 }
 
-// ===== Home-venue override dialog =====
+// ===== Home-venue override dialog — REMOVED Jul 13, 2026 =====
 //
-// The dialog fires before a placement commits if all of the following are true:
-// 1) The person being placed has a home_venue set, AND it does not match the
-//    event's venue (i.e. they're being scheduled outside their home component).
-// 2) At least one OTHER signup at this event has home_venue == event.venue
-//    AND is currently unplaced (not in a position_assignments row, not
-//    assigned-away to a different event the same date).
+// 60-day audit: fired on 10% of placements (146 / 1457). The 15-char typed
+// reason was being padded to clear the minimum — "good to go here",
+// "need her here......", "best for the job......". It captured nothing and
+// taxed every cross-venue placement. Erika signed off on removal.
 //
-// If both hold, the manager must type a reason (>= 15 chars) before the
-// placement commits. Cancel = no placement. Confirm = placement proceeds
-// and the reason is appended to the position_assignment_log.details under
-// `override_reason` for that specific placement, plus a top-level
-// `override = true` flag.
+// Lesson, load-bearing for the confirmation work: NEVER build a typed-reason
+// gate. Gates are hard blocks or structured choices from a list. Free text
+// as a gate becomes "...." within a week.
 //
-// People with home_venue == NULL or 'NA' are invisible to this logic — they
-// neither trigger the dialog when being placed, nor count as "home-venue
-// signups" for the purpose of triggering it on someone else's placement.
-
-// Returns the unplaced "priority claimants" for this event — people who
+// Deleted: unplacedPriorityClaimantsAt, checkOverrideRequired,
+// _overrideContext, openOverrideDialog, updateOverrideCounter,
+// confirmOverride, cancelOverride, #override-modal, .override-* CSS.
+// Kept: homeVenueOf, isNewAtVenue, venuePlacementCount, HOME_VENUE_NA
+// (crew card + home-venue badges), and the audit log's override_reason
+// second-line renderer (history stays readable).
+//
+// UNUSED — kept only as a comment anchor. Original doc follows:
+// Returned the unplaced "priority claimants" for this event — people who
 // the dialog should treat as having a stake in being placed here. Two
 // disjoint groups (no person appears in both):
 //
@@ -6588,173 +6843,23 @@ function handleDrop(stack) {
 //
 // Returns null if both groups are empty (no dialog needed). Otherwise
 // returns { home: [name, ...], newPipeline: [name, ...] }.
-function unplacedPriorityClaimantsAt(eventId) {
-  const ev = state.events.find(e => e.id === eventId);
-  if (!ev) return null;
-  const sigs = state.availability.filter(a => a.event_id === eventId);
-  const placedNames = new Set(positionsForEvent(eventId).map(p => p.staff_name));
-  const dayAssign = state.assignments[ev.event_date] || {};
-  const home = [];
-  const newPipeline = [];
-  sigs.forEach(s => {
-    if (placedNames.has(s.staff_name)) return; // already placed somewhere here
-    const assigned = dayAssign[s.staff_name];
-    if (assigned && assigned !== eventId) return; // assigned-away to another event
-    const hv = homeVenueOf(s.staff_name);
-    if (hv === ev.venue) {
-      home.push(s.staff_name);
-      return;
-    }
-    if (hv) return; // home venue is set but doesn't match this event — no claim
-    // hv is null (NULL or 'NA' in DB). Check for NEW-at-this-venue signal.
-    if (isNewAtVenue(s.staff_name, ev.venue)) {
-      newPipeline.push(s.staff_name);
-    }
-  });
-  if (home.length === 0 && newPipeline.length === 0) return null;
-  return { home, newPipeline };
-}
 
-// Decides whether a proposed placement should trigger the override dialog.
-// Returns the priority-claimants object if so, or null if the placement can
-// proceed normally.
-//
-// Triggers when BOTH:
-//   1) The person being placed has a home_venue set AND it does not match
-//      the event's venue (i.e., they're being scheduled outside their home
-//      component). People with no home venue (NULL or 'NA') do not trigger
-//      this — we have no signal saying they belong elsewhere.
-//   2) There's at least one unplaced priority claimant for this event —
-//      either an event-home-venue person, or a NEW pipeline hire flagged
-//      at this venue without a home set yet (see unplacedPriorityClaimantsAt).
-function checkOverrideRequired(eventId, staffName) {
-  const ev = state.events.find(e => e.id === eventId);
-  if (!ev) return null;
-  const personHome = homeVenueOf(staffName);
-  if (!personHome) return null; // no home venue (NULL or NA) — no dialog
-  if (personHome === ev.venue) return null; // matches event venue — no dialog
-  const claimants = unplacedPriorityClaimantsAt(eventId);
-  if (!claimants) return null;
-  return claimants;
-}
 
-// In-flight override state. While this is non-null the modal is open and
-// holding a queued placement — Confirm calls _commitPlacement(reason),
-// Cancel clears state.
-let _overrideContext = null;
-
-function openOverrideDialog(eventId, stand, role, staffName, source, claimants) {
-  const ev = state.events.find(e => e.id === eventId);
-  const personHome = homeVenueOf(staffName);
-  const info = document.getElementById('override-info');
-
-  // Lead line — name the placing person, their home, and the event venue.
-  let html = "You're placing <strong>" + escapeHtml(staffName) + "</strong>";
-  if (personHome) html += ' (home: <strong>' + escapeHtml(personHome) + '</strong>)';
-  html += ' at a <strong>' + escapeHtml(ev.venue) + '</strong> event. ';
-
-  const totalClaimants = claimants.home.length + claimants.newPipeline.length;
-  html += 'The following ' + escapeHtml(ev.venue) + '-priority employee' +
-    (totalClaimants === 1 ? ' is' : 's are') + ' still unplaced for this event:';
-
-  // Two visible sub-lists so Brian can see why each person is on the list.
-  // Both are rendered the same way — bullets — but with a labeled header
-  // when both groups have entries. If only one group has entries, the
-  // header is suppressed so the dialog stays compact.
-  const showHeaders = claimants.home.length > 0 && claimants.newPipeline.length > 0;
-
-  if (claimants.home.length > 0) {
-    if (showHeaders) {
-      html += '<div class="override-sublist-head">' +
-        escapeHtml(ev.venue) + '-home (' + claimants.home.length + ')' +
-        '</div>';
-    }
-    html += '<ul class="override-list">';
-    claimants.home.forEach(n => { html += '<li>' + escapeHtml(n) + '</li>'; });
-    html += '</ul>';
-  }
-
-  if (claimants.newPipeline.length > 0) {
-    if (showHeaders) {
-      html += '<div class="override-sublist-head">' +
-        'New pipeline hires at ' + escapeHtml(ev.venue) +
-        ' (' + claimants.newPipeline.length + ')' +
-        '</div>';
-    }
-    html += '<ul class="override-list">';
-    claimants.newPipeline.forEach(n => { html += '<li>' + escapeHtml(n) + '</li>'; });
-    html += '</ul>';
-  }
-
-  info.innerHTML = html;
-
-  const ta = document.getElementById('override-reason');
-  ta.value = '';
-  updateOverrideCounter();
-  document.getElementById('override-modal').classList.add('show');
-  setTimeout(() => { ta.focus(); }, 50);
-
-  _overrideContext = { eventId, stand, role, staffName, source };
-}
-
-function updateOverrideCounter() {
-  const ta = document.getElementById('override-reason');
-  const len = (ta.value || '').trim().length;
-  const num = document.getElementById('override-counter-num');
-  const text = document.getElementById('override-counter-text');
-  const counter = document.getElementById('override-counter');
-  const btn = document.getElementById('override-confirm-btn');
-  num.textContent = len + ' / 15';
-  if (len >= 15) {
-    counter.classList.add('met');
-    text.textContent = '✓ Reason logged';
-    btn.disabled = false;
-  } else {
-    counter.classList.remove('met');
-    text.textContent = 'Min 15 characters';
-    btn.disabled = true;
-  }
-}
-
-function confirmOverride() {
-  if (!_overrideContext) return;
-  const reason = (document.getElementById('override-reason').value || '').trim();
-  if (reason.length < 15) return;
-  const ctx = _overrideContext;
-  _overrideContext = null;
-  document.getElementById('override-modal').classList.remove('show');
-  _commitPlacement(ctx.eventId, ctx.stand, ctx.role, ctx.staffName, ctx.source, reason);
-}
-
-function cancelOverride() {
-  _overrideContext = null;
-  document.getElementById('override-modal').classList.remove('show');
-}
-
-// One-time wiring (modal is reused across placements)
-document.getElementById('override-confirm-btn').addEventListener('click', confirmOverride);
-document.getElementById('override-reason').addEventListener('input', updateOverrideCounter);
-document.querySelectorAll('#override-modal [data-close-modal]').forEach(b => {
-  b.addEventListener('click', cancelOverride);
-});
+// Override-dialog machinery removed Jul 13, 2026 — see the block comment above
+// placePosition(). The three parse-time listener wirings that lived here
+// (#override-confirm-btn, #override-reason, #override-modal [data-close-modal])
+// went with it; leaving them behind after the HTML was deleted would throw on a
+// null element and kill this entire <script> block, blanking the page.
 
 function placePosition(eventId, stand, role, staffName, source) {
-  // Override-dialog guard. If this placement requires a typed reason
-  // (non-home-venue person bumping unplaced priority claimants — either
-  // event-home people or new pipeline hires at this venue), show the
-  // dialog and bail. The user's confirm-with-reason will re-enter via
-  // _commitPlacement which carries the reason through to the log.
+  // Straight through. The home-venue override gate was removed Jul 13, 2026
+  // (shift-confirmation-spec-v1.md). _commitPlacement keeps its overrideReason
+  // parameter — nothing passes one now, but historical log rows still carry
+  // override:true + override_reason and the audit renderer reads them.
   //
-  // JMAC is exempt: it has no home venue and represents an external
-  // staffing call, not a person being preferentially placed.
-  if (source !== 'jmac') {
-    const claimants = checkOverrideRequired(eventId, staffName);
-    if (claimants) {
-      openOverrideDialog(eventId, stand, role, staffName, source, claimants);
-      return;
-    }
-  }
-  // Normal path: no override needed.
+  // Session 7 reintroduces a gate here: unconfirmed people get blocked, with a
+  // two-button structured override (Spoke to them directly / Emergency
+  // coverage). No text field. See Finding 1 in the spec.
   _commitPlacement(eventId, stand, role, staffName, source, null);
 }
 
