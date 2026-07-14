@@ -72,6 +72,9 @@ body {
 .stat.warn .stat-l, .stat.warn .stat-v, .stat.warn .stat-f { color: var(--amber-dark); }
 .stat.bad   { background: var(--red-light);  border-color: var(--red-border); }
 .stat.bad .stat-l, .stat.bad .stat-v, .stat.bad .stat-f { color: var(--red); }
+.stat.click { cursor: pointer; transition: box-shadow 0.12s ease; }
+.stat.click:hover { border-color: var(--border-strong); box-shadow: var(--shadow-md); }
+.evt-head { font-size: 12px; font-weight: 600; color: var(--label); margin: 14px 0 6px; text-transform: uppercase; letter-spacing: 0.04em; }
 
 .headline {
   background: var(--card); border: 1px solid var(--border); border-left: 4px solid var(--amber);
@@ -225,7 +228,7 @@ tbody tr:last-child td { border-bottom: none; }
       <p class="headline-sub" id="hl-sub"></p>
       <div class="headline-bar" id="hl-bar"></div>
     </div>
-    <button class="btn dark" id="copy-btn">Copy names and phone numbers</button>
+    <button class="btn dark" id="show-btn">Show who hasn't seen it</button>
   </div>
 
   <div class="controls" id="controls" style="display:none">
@@ -374,16 +377,25 @@ tbody tr:last-child td { border-bottom: none; }
 
   // ---------- derived state -------------------------------------------------
   // Status is derived, never stored. Release is the gate — never a day count.
+  // Have they LOOKED since the oldest thing they owe an answer on?
+  // Computed independently of every other status, because "new shift since clear"
+  // must not hide the fact that they also haven't seen the new shift.
+  function seenKOf(r) {
+    if (!r.awaiting) return null;
+    if (!r.last_opened_at) return 'unseen';
+    if (r.oldest_unanswered_offer_at &&
+        new Date(r.last_opened_at) > new Date(r.oldest_unanswered_offer_at)) return 'seen';
+    return 'unseen';
+  }
+
   function statusOf(r) {
-    if (!r.asked)                       return { k: 'none',   t: 'Nothing asked',        c: 'p-none' };
-    if (!r.awaiting)                    return { k: 'clear',  t: 'All clear',            c: 'p-clear' };
+    if (!r.asked)    return { k: 'none',  t: 'Nothing asked', c: 'p-none' };
+    if (!r.awaiting) return { k: 'clear', t: 'All clear',     c: 'p-clear' };
     if (r.last_answered_at && r.newest_offer_at &&
         new Date(r.newest_offer_at) > new Date(r.last_answered_at))
-                                        return { k: 'new',    t: 'New shift since clear', c: 'p-new' };
-    if (!r.last_opened_at)              return { k: 'unseen', t: 'Never opened page',    c: 'p-unseen' };
-    if (r.oldest_unanswered_offer_at &&
-        new Date(r.last_opened_at) > new Date(r.oldest_unanswered_offer_at))
-                                        return { k: 'seen',   t: 'Seen, no answer',      c: 'p-seen' };
+      return { k: 'new', t: 'New shift since clear', c: 'p-new' };
+    if (r.seen_k === 'seen') return { k: 'seen', t: 'Seen, no answer', c: 'p-seen' };
+    if (!r.page_opens)       return { k: 'unseen', t: 'Never opened page', c: 'p-unseen' };
     return { k: 'unseen', t: 'Not seen since asked', c: 'p-unseen' };
   }
 
@@ -435,7 +447,7 @@ tbody tr:last-child td { border-bottom: none; }
       api('position_assignment_log?select=action,details,actor,actor_at' +
           '&action=in.(shift_confirmed,shift_declined,released)' +
           '&actor_at=gte.' + since + '&order=actor_at.desc&limit=' + FEED_LIMIT),
-      api('position_assignments?select=id,staff_name,venue,stand,role,source,offer_sent_at,confirmed_at,declined_at,' +
+      api('position_assignments?select=id,staff_name,venue,stand,role,source,offer_sent_at,confirmed_at,declined_at,decline_reason,' +
           'events!inner(event_name,event_date,venue,cancelled_at,deleted_at)' +
           '&removed_at=is.null&source=not.in.(placeholder,jmac)' +
           '&events.event_date=gte.' + today +
@@ -486,6 +498,7 @@ tbody tr:last-child td { border-bottom: none; }
           last_note: d.last_note || null,
           last_note_at: d.last_note_at || null
         };
+        r.seen_k = seenKOf(r);
         r.st = statusOf(r);
         r.status = r.st.t;
         r.verdict = verdictOf(r);
@@ -493,6 +506,7 @@ tbody tr:last-child td { border-bottom: none; }
       });
 
       // Group upcoming shifts by normalized name for the drawer.
+      state.allShifts = res[6];
       state.shifts = {};
       res[6].forEach(function (p) {
         var k = nameKey(p.staff_name);
@@ -517,25 +531,30 @@ tbody tr:last-child td { border-bottom: none; }
     });
     var rate = a ? Math.round((c / a) * 100) : 0;
     var cards = [
-      { l: 'Not released', v: nr,  f: 'hidden from staff' },
-      { l: 'Asked',        v: a,   f: 'released to staff' },
-      { l: 'Confirmed',    v: c,   f: rate + '% of asked', cls: 'good' },
-      { l: 'Awaiting',     v: aw,  f: 'no answer yet',     cls: 'warn' },
-      { l: 'Declined',     v: dcl, f: 'said no',           cls: 'bad' },
+      { l: 'Not released', v: nr,  f: 'hidden from staff',  k: 'not_released' },
+      { l: 'Asked',        v: a,   f: 'released to staff',  k: 'asked' },
+      { l: 'Confirmed',    v: c,   f: rate + '% of asked',  k: 'confirmed', cls: 'good' },
+      { l: 'Awaiting',     v: aw,  f: 'no answer yet',      k: 'awaiting',  cls: 'warn' },
+      { l: 'Declined',     v: dcl, f: 'said no',            k: 'declined',  cls: 'bad' },
       { l: 'Response rate',v: rate + '%', f: 'of everyone asked', cls: rate >= 50 ? 'good' : 'warn' }
     ];
-    document.getElementById('strip').innerHTML = cards.map(function (x) {
-      return '<div class="stat ' + (x.cls || '') + '">' +
+    var strip = document.getElementById('strip');
+    strip.innerHTML = cards.map(function (x) {
+      return '<div class="stat ' + (x.cls || '') + (x.k ? ' click' : '') + '"' +
+        (x.k ? ' data-drill="' + x.k + '"' : '') + '>' +
         '<div class="stat-l">' + esc(x.l) + '</div>' +
         '<div class="stat-v">' + esc(x.v) + '</div>' +
         '<div class="stat-f">' + esc(x.f) + '</div></div>';
     }).join('');
+    Array.prototype.forEach.call(strip.querySelectorAll('.stat[data-drill]'), function (el) {
+      el.onclick = function () { pushView(openShiftList, el.getAttribute('data-drill'), true); };
+    });
     document.getElementById('sub').textContent =
       state.rows.length + ' active employees · ' + (a + nr) + ' live upcoming placements';
   }
 
   function unseenList() {
-    return state.rows.filter(function (r) { return r.awaiting > 0 && r.st.k === 'unseen'; });
+    return state.rows.filter(function (r) { return r.awaiting > 0 && r.seen_k === 'unseen'; });
   }
 
   function renderHeadline() {
@@ -555,15 +574,15 @@ tbody tr:last-child td { border-bottom: none; }
     document.getElementById('hl-bar').innerHTML =
       '<span style="width:' + pctUnseen + '%;background:var(--amber)"></span>' +
       '<span style="width:' + (100 - pctUnseen) + '%;background:var(--slate)"></span>';
-    document.getElementById('copy-btn').textContent =
-      'Copy ' + unseen.length + ' names and phone numbers';
+    document.getElementById('show-btn').textContent =
+      'Show the ' + unseen.length + ' who haven\u2019t seen it';
     document.getElementById('headline').style.display = 'flex';
   }
 
   function matchesPreset(r, p) {
     if (p === 'all')    return true;
-    if (p === 'unseen') return r.awaiting > 0 && r.st.k === 'unseen';
-    if (p === 'seen')   return r.awaiting > 0 && r.st.k === 'seen';
+    if (p === 'unseen') return r.awaiting > 0 && r.seen_k === 'unseen';
+    if (p === 'seen')   return r.awaiting > 0 && r.seen_k === 'seen';
     if (p === 'new')    return r.st.k === 'new';
     if (p === 'clear')  return r.st.k === 'clear';
     if (p === 'passed') return !!r.verdict;
@@ -625,7 +644,7 @@ tbody tr:last-child td { border-bottom: none; }
       '</tr>';
     }).join('');
     Array.prototype.forEach.call(tb.querySelectorAll('tr'), function (tr) {
-      tr.onclick = function () { openDrawer(tr.getAttribute('data-id')); };
+      tr.onclick = function () { pushView(openDrawer, tr.getAttribute('data-id'), true); };
     });
   }
 
@@ -691,13 +710,13 @@ tbody tr:last-child td { border-bottom: none; }
       dstat('Page opens', r.page_opens) +
     '</div>';
 
-    if (r.awaiting > 0 && r.st.k === 'unseen') {
+    if (r.awaiting > 0 && r.seen_k === 'unseen') {
       h += '<div class="note-box" style="background:var(--amber-light);border-color:var(--amber-border);color:var(--amber-dark)">' +
         '<b>Has not seen the offer.</b> ' +
         (r.page_opens ? 'Last opened the page ' + ago(r.last_opened_at) + ', before these shifts were released.'
                       : 'Has never opened the availability page.') +
         ' They have not ignored you.</div>';
-    } else if (r.st.k === 'seen') {
+    } else if (r.awaiting > 0 && r.seen_k === 'seen') {
       h += '<div class="note-box" style="background:var(--amber-light);border-color:var(--amber-border);color:var(--amber-dark)">' +
         '<b>Opened the page ' + ago(r.last_opened_at) + ', after these shifts were released, and answered none of them.</b></div>';
     }
@@ -755,16 +774,150 @@ tbody tr:last-child td { border-bottom: none; }
     document.getElementById('drawer').setAttribute('aria-hidden', 'false');
     document.getElementById('ov').classList.add('open');
   }
+  var DRILL = {
+    not_released: { t: 'Not released',
+      note: 'Hidden from the people on them. The grid is still moving; these have not been promised to anyone.',
+      f: function (p) { return !p.offer_sent_at; } },
+    asked: { t: 'Asked',
+      note: 'Released to the employee\u2019s page. Every one of these people has genuinely been asked.',
+      f: function (p) { return !!p.offer_sent_at; } },
+    confirmed: { t: 'Confirmed',
+      note: 'They said yes to this shift.',
+      f: function (p) { return !!p.confirmed_at; } },
+    awaiting: { t: 'Awaiting an answer',
+      note: 'Released, unanswered. Most of these people have not opened the page \u2014 silence here is not refusal.',
+      f: function (p) { return !!p.offer_sent_at && !p.confirmed_at && !p.declined_at; } },
+    declined: { t: 'Declined',
+      note: 'They actively said no. Different from silence, and far more useful.',
+      f: function (p) { return !!p.declined_at; } }
+  };
+
+  function openShiftList(kind) {
+    var d = DRILL[kind];
+    if (!d) return;
+    var list = (state.allShifts || []).filter(d.f);
+
+    document.getElementById('d-name').textContent = d.t;
+    document.getElementById('d-meta').textContent =
+      list.length + (list.length === 1 ? ' placement' : ' placements') + ' \u00b7 upcoming events';
+
+    var h = '<p class="sub" style="margin:0 0 4px">' + esc(d.note) + '</p>';
+
+    var byEvent = {};
+    list.forEach(function (p) {
+      var k = p.events.event_date + '|' + p.events.venue + '|' + p.events.event_name;
+      if (!byEvent[k]) byEvent[k] = [];
+      byEvent[k].push(p);
+    });
+    var keys = Object.keys(byEvent).sort();
+
+    if (!keys.length) {
+      h += '<p class="sub" style="margin-top:14px">Nothing in this bucket.</p>';
+    } else {
+      keys.forEach(function (k) {
+        var parts = k.split('|');
+        var people = byEvent[k].slice().sort(function (a, b) {
+          return String(a.staff_name).localeCompare(String(b.staff_name));
+        });
+        h += '<div class="evt-head">' + esc(dstr(parts[0])) + ' \u00b7 ' + esc(parts[1]) +
+             ' \u00b7 ' + esc(parts[2]) + ' <span style="text-transform:none;font-weight:400">(' +
+             people.length + ')</span></div>';
+        h += people.map(function (p) {
+          var post = [p.stand, p.role].filter(Boolean).join(' \u00b7 ');
+          var when = p.confirmed_at ? 'confirmed ' + ago(p.confirmed_at)
+                   : p.declined_at  ? 'declined ' + ago(p.declined_at)
+                   : p.offer_sent_at ? 'asked ' + ago(p.offer_sent_at)
+                   : 'not released';
+          var why = (p.declined_at && p.decline_reason)
+            ? '<span class="pill p-miss" style="margin-left:6px">' + esc(p.decline_reason) + '</span>' : '';
+          return '<div class="shift">' +
+            '<div><div class="shift-l">' + esc(p.staff_name) + why + '</div>' +
+            '<div class="shift-s">' + esc(when) + (post ? ' \u00b7 ' + esc(post) : '') + '</div></div>' +
+          '</div>';
+        }).join('');
+      });
+    }
+
+    document.getElementById('d-body').innerHTML = h;
+    document.getElementById('drawer').classList.add('open');
+    document.getElementById('drawer').setAttribute('aria-hidden', 'false');
+    document.getElementById('ov').classList.add('open');
+  }
+
   function dstat(l, v) {
     return '<div class="dstat"><div class="dstat-l">' + esc(l) + '</div><div class="dstat-v">' + esc(v) + '</div></div>';
   }
+  // Drawer view stack. The close button is a BACK button whenever there is
+  // somewhere to go back to, and only a close button at the root.
+  var viewStack = [];
+
+  function pushView(fn, arg, isRoot) {
+    if (isRoot) viewStack = [];
+    viewStack.push({ fn: fn, arg: arg });
+    fn(arg);
+    updateCloseBtn();
+  }
+  function popView() {
+    viewStack.pop();
+    if (!viewStack.length) { closeDrawer(); return; }
+    var v = viewStack[viewStack.length - 1];
+    v.fn(v.arg);
+    updateCloseBtn();
+  }
+  function updateCloseBtn() {
+    var b = document.getElementById('dclose');
+    if (!b) return;
+    var back = viewStack.length > 1;
+    b.innerHTML = back ? '&#8592;' : '&times;';
+    b.setAttribute('aria-label', back ? 'Back' : 'Close');
+    b.title = back ? 'Back' : 'Close';
+  }
+
   function closeDrawer() {
+    viewStack = [];
     document.getElementById('drawer').classList.remove('open');
     document.getElementById('drawer').setAttribute('aria-hidden', 'true');
     document.getElementById('ov').classList.remove('open');
   }
 
-  // ---------- copy list -----------------------------------------------------
+  // ---------- the people who haven't seen the offer --------------------------
+  function openUnseenList() {
+    var list = unseenList().slice().sort(function (a, b) {
+      return (b.awaiting - a.awaiting) || a.full_name.localeCompare(b.full_name);
+    });
+
+    document.getElementById('d-name').textContent = 'Haven\u2019t seen the offer';
+    document.getElementById('d-meta').textContent =
+      list.length + ' people \u00b7 ' +
+      list.reduce(function (n, r) { return n + r.awaiting; }, 0) + ' shifts unanswered';
+
+    var h = '<p class="sub" style="margin:0 0 12px">They have not ignored you \u2014 they have not looked. ' +
+            'There is no push channel, so working this list means picking up the phone.</p>' +
+            '<button class="btn" id="copy-inline" style="margin-bottom:14px">Copy as a table</button>';
+
+    h += list.map(function (r) {
+      return '<div class="shift" data-open="' + esc(r.employee_id) + '" style="cursor:pointer">' +
+        '<div><div class="shift-l">' + esc(r.full_name) + '</div>' +
+        '<div class="shift-s">' + esc(r.phone || 'no phone on file') +
+          (r.home_venue ? ' \u00b7 ' + esc(r.home_venue) : '') +
+          (r.page_opens ? ' \u00b7 last looked ' + ago(r.last_opened_at) : ' \u00b7 never opened the page') +
+        '</div></div>' +
+        '<span class="pill p-seen">' + r.awaiting + (r.awaiting === 1 ? ' shift' : ' shifts') + '</span>' +
+      '</div>';
+    }).join('');
+
+    var body = document.getElementById('d-body');
+    body.innerHTML = h;
+    document.getElementById('copy-inline').onclick = copyUnseen;
+    Array.prototype.forEach.call(body.querySelectorAll('.shift[data-open]'), function (el) {
+      el.onclick = function () { pushView(openDrawer, el.getAttribute('data-open')); };
+    });
+
+    document.getElementById('drawer').classList.add('open');
+    document.getElementById('drawer').setAttribute('aria-hidden', 'false');
+    document.getElementById('ov').classList.add('open');
+  }
+
   function copyUnseen() {
     var list = unseenList();
     if (!list.length) { toast('Nobody to copy.'); return; }
@@ -815,10 +968,13 @@ tbody tr:last-child td { border-bottom: none; }
     });
     document.getElementById('f-home').onchange = function (e) { state.home = e.target.value; renderGrid(); };
     document.getElementById('f-q').oninput = function (e) { state.q = e.target.value; renderGrid(); };
-    document.getElementById('copy-btn').onclick = copyUnseen;
-    document.getElementById('dclose').onclick = closeDrawer;
+    document.getElementById('show-btn').onclick = function () { pushView(openUnseenList, null, true); };
+    document.getElementById('dclose').onclick = popView;
     document.getElementById('ov').onclick = closeDrawer;
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeDrawer(); });
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') return;
+      if (viewStack.length > 1) popView(); else closeDrawer();
+    });
   }
 
   function fillHomeFilter() {
