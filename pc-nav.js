@@ -26,7 +26,7 @@
   // To grey out / hide a no-access row, the slug must match exactly what
   // user_roles.page_access stores. Admins bypass these checks.
   //
-  // Dashboards is a SINGLE direct link (no dropdown) per spec.
+  // Dashboards is a dropdown like every other lane.
   // ---------------------------------------------------------------------
   var PC_NAV_CONFIG = {
     people: [
@@ -66,7 +66,8 @@
       { label: 'Order guide',                    href: '/order-guide/',            slug: 'order-guide' }
     ],
     dashboards: [
-      { label: 'Staffing dashboard',           href: '/dashboard/',          slug: 'dashboard' },
+      { label: 'Confirmation dashboard',       href: '/dashboard/',          slug: 'dashboard' },
+      
       { label: 'Weather Impacts',               href: '/weather-impacts/',    slug: 'weather-impacts' },
       { label: 'Popfax — Event history',        href: '/popfax/',             slug: 'popfax' },
       { label: 'Truck calendar',                href: '/truck-calendar/' }
