@@ -1304,6 +1304,15 @@ body {
    readable at a glance without eating the pill. Hover gives the full story. */
 .confirm-tag.no::before { content: '\26A0\00A0UNCONF'; }
 .confirm-tag.no { font-size: 9px; letter-spacing: 0.03em; }
+/* Dashed, grey, quiet. This person has NOT been asked. Their silence is not a signal
+   and must never be styled like one — the amber UNCONF tag is a warning, and warning
+   somebody about a question that was never posed is how a board loses its meaning. */
+.confirm-tag.notrel {
+  background: transparent; color: var(--label);
+  border: 1px dashed var(--border);
+  font-size: 9px; letter-spacing: 0.03em; padding: 1px 4px;
+}
+.confirm-tag.notrel::before { content: '\23F3\00A0NOT ASKED'; }
 .confirm-tag.drift {
   background: var(--blue-light); color: var(--blue-dark);
   border: 1px solid var(--blue-mid);
@@ -1342,6 +1351,27 @@ body {
    one glance. The ghost segment quietly IS the chase list. */
 .coverage-bar { display: flex; }
 .coverage-fill.ghost { background: var(--blue); opacity: 0.32; }
+/* NOT RELEASED — the loudest thing the gate needs to say. "0 / 24 confirmed" on an
+   event nobody has been asked about is indistinguishable from "24 people ignored us",
+   and that is the one wrong conclusion this whole system could cause somebody to draw. */
+.notreleased-tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10px; font-weight: 700;
+  padding: 3px 8px; border-radius: 4px;
+  background: var(--amber-light); color: var(--amber-dark);
+  border: 1px dashed var(--amber-border);
+  letter-spacing: 0.02em; white-space: nowrap; cursor: help;
+}
+.coverage-count.not-released { font-size: 12px; color: var(--amber-dark); }
+.release-now-btn {
+  font-size: 11px; font-weight: 700; font-family: inherit;
+  padding: 3px 10px; border-radius: 4px; cursor: pointer;
+  background: var(--amber-light); color: var(--amber-dark);
+  border: 1px solid var(--amber-border);
+  white-space: nowrap;
+}
+.release-now-btn:hover { background: var(--amber); color: #fff; }
+.release-now-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 /* The name gets its own full-width line; badges wrap beneath it. Before this,
    the name was the only flex-shrinkable thing on the pill, so every badge we
    added ate its width until people rendered as "B" and "D.". The name is the
@@ -2060,6 +2090,27 @@ body {
    the event card itself (✓ Notified pill) — not in this modal.
    ============================================================ */
 .ns-modal { max-width: 480px; }
+
+/* ---- The removal guard (Session 7, Jul 14 2026) ---- */
+.rg-modal { max-width: 460px; }
+.rg-event-line { font-size: 12px; color: var(--label); margin-bottom: 14px; line-height: 1.5; }
+.rg-event-line strong { color: var(--primary); font-size: 13px; }
+.rg-warning { display: none; font-size: 12px; line-height: 1.55; padding: 10px 12px; border-radius: 6px; margin-bottom: 14px; }
+.rg-warning.show { display: block; }
+/* Amber = they SAID YES. This is the only tier that gets a warning colour, because
+   it is the only tier where somebody is about to have a promise broken. */
+.rg-warning { background: var(--amber-light); color: var(--amber-dark); border: 1px solid var(--amber-border); font-weight: 600; }
+/* Blue = context, not a warning. Released-but-unanswered, or already declined. */
+.rg-warning.info { background: var(--blue-light); color: var(--blue-dark); border: 1px solid var(--blue-mid); font-weight: 500; }
+.rg-reason-list { display: flex; flex-direction: column; gap: 6px; }
+.rg-reason {
+  text-align: left; font-family: inherit; font-size: 13px; font-weight: 600;
+  padding: 9px 12px; border-radius: 6px; cursor: pointer;
+  background: white; border: 1.5px solid var(--border); color: var(--primary);
+}
+.rg-reason:hover { border-color: var(--blue); background: var(--blue-light); }
+.rg-reason.on { border-color: var(--blue); background: var(--blue-light); color: var(--blue-dark); }
+.rg-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--label); margin-bottom: 7px; }
 .ns-event-line {
   padding: 12px 14px;
   background: var(--bg);
@@ -2420,6 +2471,31 @@ body {
   </div>
 </div>
 
+<!-- THE REMOVAL GUARD.
+     Fires ONLY on a RELEASED placement. An unreleased pill is a scratchpad entry and
+     ✕ still removes it instantly, with no dialog and no reason -- 763 removals in 90
+     days went through that path, and putting a modal in front of them would get this
+     dialog click-throughed into meaninglessness inside a week.
+     NO FREE TEXT. The reason list IS the live CHECK constraint. -->
+<div class="modal-backdrop" id="removal-guard-modal">
+  <div class="modal rg-modal">
+    <div class="modal-head">
+      <h3 id="removal-guard-title">Remove from this shift?</h3>
+      <button class="modal-close" data-close-modal="removal-guard-modal">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="rg-event-line" id="removal-guard-event-line"></div>
+      <div class="rg-warning" id="removal-guard-warning"></div>
+      <div class="rg-label">Why are they coming off?</div>
+      <div class="rg-reason-list" id="removal-guard-reasons"></div>
+    </div>
+    <div class="modal-foot" style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;align-items:center;">
+      <button class="btn" data-close-modal="removal-guard-modal" style="background:white;border-color:var(--border-strong);color:var(--primary);">Cancel</button>
+      <button class="btn-confirm" id="removal-guard-confirm-btn" style="padding:6px 18px;" disabled>Pick a reason first</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-backdrop" id="audit-modal">
   <div class="modal">
     <div class="modal-head">
@@ -2741,7 +2817,22 @@ function confirmStateForPlacement(ev, p) {
   if (CONFIRM_EXEMPT_SOURCES.indexOf(p.source) !== -1) return 'EXEMPT';
   if (p.declined_at) return 'DECLINED';
   if (p.confirmed_at) return 'CONFIRMED';
-  if (!eventInConfirmWindow(ev)) return 'NOT_DUE';
+  // THE GATE — Session 6, Jul 14 2026.
+  //
+  // NOT_DUE was a day count: "placed, but the event is more than 14 days out." It is
+  // gone. A placement is NOT_RELEASED until release_due_placements() (pg_cron, hourly)
+  // stamps offer_sent_at — which requires BOTH clocks to run out: the EVENT clock
+  // (<= 7 days out) and the ROW clock (>= 12h untouched; a move RESETS it).
+  //
+  // 90 days of position_assignment_log: 26.5% of in-window placements get pulled, and
+  // 53% of those pulls land within 24h of the placement. That is the manager still
+  // building the grid, and until today the employee could see every keystroke of it.
+  //
+  // AMBER MUST MEAN "we asked and they did not answer." It must NEVER mean "we have
+  // not asked yet." That distinction is the entire point of the gate, it is the
+  // precondition for ever fairly pulling anyone, and this line is where it is enforced.
+  // Do not reintroduce a day count here.
+  if (!p.offer_sent_at) return 'NOT_RELEASED';
   return 'UNCONFIRMED';
 }
 
@@ -2753,9 +2844,33 @@ function confirmStateForPlacement(ev, p) {
 // This is NOT the seven_shifts_synced pattern. That flag clears on any move
 // because it means "our data is stale". This means "their commitment is real".
 // Different thing — do not copy the pattern just because the mechanics rhyme.
-function placementDrift(p) {
+// The 4:00 AM disclosure moment on the day of the event.
+//
+// Built in LOCAL time on purpose. Every manager on this board is in ET, and this
+// mirrors hasEventStarted(), which already constructs event-local instants exactly
+// this way. The server does the same computation in America/New_York; if a manager
+// ever runs this board from another timezone, THAT is the day to make this explicit.
+function disclosureMomentMs(ev) {
+  if (!ev || !ev.event_date) return Infinity;
+  return new Date(ev.event_date + 'T04:00:00').getTime();
+}
+
+function placementDrift(ev, p) {
   if (!p.confirmed_at) return null;
   if (!p.confirmed_stand) return null;
+  // SESSION 7 -- DRIFT ONLY EXISTS IF THEY EVER SAW THE POST.
+  //
+  // Staged disclosure means the stand and role are hidden from the employee until 4am
+  // on show day. Almost everybody confirms days before that, having seen NO STAND AT
+  // ALL. For those people confirmed_stand is a snapshot of something they never knew
+  // about -- and the old tooltip on this pill said "they still think that is where
+  // they are working", which for them is simply FALSE.
+  //
+  // So drift survives only for the person who confirmed AFTER the post went up and was
+  // then moved. Rare, and TRUE. It used to be frequent, and misleading.
+  const _confMs = new Date(p.confirmed_at).getTime();
+  if (isNaN(_confMs)) return null;
+  if (_confMs < disclosureMomentMs(ev)) return null;
   if (p.confirmed_stand === p.stand && p.confirmed_role === p.role) return null;
   return { stand: p.confirmed_stand, role: p.confirmed_role };
 }
@@ -2765,6 +2880,14 @@ function unconfirmedPlacementsFor(eventId) {
   if (!ev) return [];
   return positionsForEvent(eventId).filter(p =>
     confirmStateForPlacement(ev, p) === 'UNCONFIRMED');
+}
+// Placed, but nobody has told them. They cannot see this shift. Their silence is not
+// data. This is the list "Release now" acts on.
+function notReleasedPlacementsFor(eventId) {
+  const ev = state.events.find(e => e.id === eventId);
+  if (!ev) return [];
+  return positionsForEvent(eventId).filter(p =>
+    confirmStateForPlacement(ev, p) === 'NOT_RELEASED');
 }
 function declinedPlacementsFor(eventId) {
   const ev = state.events.find(e => e.id === eventId);
@@ -2778,14 +2901,14 @@ function declinedPlacementsFor(eventId) {
 // people have said yes.
 function confirmBreakdown(ev) {
   const placements = positionsForEvent(ev.id);
-  let confirmed = 0, unconfirmed = 0, declined = 0, exempt = 0, notDue = 0;
+  let confirmed = 0, unconfirmed = 0, declined = 0, exempt = 0, notReleased = 0;
   placements.forEach(p => {
     const st = confirmStateForPlacement(ev, p);
     if (st === 'CONFIRMED') confirmed++;
     else if (st === 'UNCONFIRMED') unconfirmed++;
     else if (st === 'DECLINED') declined++;
     else if (st === 'EXEMPT') exempt++;
-    else notDue++;
+    else notReleased++;
   });
   return {
     filled: placements.length,
@@ -2793,9 +2916,19 @@ function confirmBreakdown(ev) {
     unconfirmed: unconfirmed,
     declined: declined,
     exempt: exempt,
-    notDue: notDue,
+    notReleased: notReleased,
+    // ASKED = released and non-exempt. The denominator that was always missing.
+    // Note the cron does not filter on source, so a JMAC/placeholder row can carry an
+    // offer_sent_at stamp — harmless (nobody can log in as an agency), and EXEMPT is
+    // tested first in confirmStateForPlacement, so they never reach this count.
+    asked: confirmed + unconfirmed + declined,
     // Exempt pills count as settled -- JMAC will never click a button.
     good: confirmed + exempt,
+    // Replaces inWindow, which was a day count and lied in both directions: it claimed
+    // people had been asked when they had not, and it would now claim they had NOT been
+    // asked after a manual Release now 10 days out. inWindow is kept below only so no
+    // other consumer breaks; nothing on this page should read it again.
+    released: (confirmed + unconfirmed + declined) > 0,
     inWindow: eventInConfirmWindow(ev)
   };
 }
@@ -4298,6 +4431,19 @@ function renderEventRow(ev) {
   // been asked of anyone and the badge would be pure noise.
   // Unconfirmed PLACEMENTS. Only inside the window — outside it nothing has been
   // asked of anyone and the badge would be pure noise on every event on the board.
+  // NOT RELEASED — amber, dashed, and deliberately BEFORE the unconfirmed badge.
+  // These people have not been asked. They are not ignoring you.
+  const evNotRel = notReleasedPlacementsFor(ev.id);
+  if (evNotRel.length > 0) {
+    const nrNames = evNotRel.slice(0, 8).map(p => p.staff_name).join(', ') +
+      (evNotRel.length > 8 ? ', +' + (evNotRel.length - 8) + ' more' : '');
+    const nrTip = evNotRel.length + ' NOT YET RELEASED — ' + nrNames +
+      '. They cannot see this shift and have not been asked, so their silence means ' +
+      'nothing. Releases automatically 7 days out, once a row has sat untouched for ' +
+      '12 hours. Press "Release now" on the Staff tab to ask them sooner.';
+    html += '<span class="notreleased-tag" title="' + escapeAttr(nrTip) + '">' +
+      '\u23F3 ' + evNotRel.length + ' not released</span>';
+  }
   const evUnconf = unconfirmedPlacementsFor(ev.id);
   if (evUnconf.length > 0) {
     const ucNames = evUnconf.slice(0, 8).map(p => p.staff_name).join(', ') +
@@ -4372,27 +4518,42 @@ function renderEventRow(ev) {
     // people have until Sunday to answer. That amber IS the signal, and it shows
     // up exactly when chasing still works.
     const _cb = confirmBreakdown(ev);
-    const rShow = _cb.inWindow ? _cb.good : filled;
-    const rLabel = _cb.inWindow ? 'confirmed' : 'filled';
+    // Nothing to ASK is not the same as "not released". An event with no placements yet
+    // — or one covered entirely by agency/placeholder — must read exactly as it always
+    // did. Otherwise the board shouts "Not released — 0 of 0 asked" at a plan nobody has
+    // written. Noise is how a signal dies.
+    const rNotRel = !_cb.released && (filled - _cb.exempt) > 0;
+    const rShow = rNotRel ? 0 : _cb.good;
+    const rLabel = _cb.released ? 'confirmed' : (rNotRel ? 'not released' : 'filled');
+    // Say the true thing. An unreleased event reads "Not released — 0 of 24 asked",
+    // not "0 / 24 confirmed". The second sentence is a lie that looks like a crisis.
+    const rAsked = filled - _cb.exempt;
+    const rCountTxt = rNotRel ? 'Not released' : (rShow + ' / ' + (needed || '?'));
+    const rSubTxt = rNotRel ? ('0 of ' + rAsked + ' asked') : rLabel;
     const rPct = needed > 0 ? Math.min(100, Math.round((rShow / needed) * 100)) : 0;
-    const rGhostPct = (_cb.inWindow && needed > 0)
+    const rGhostPct = (_cb.released && needed > 0)
       ? Math.min(100 - rPct, Math.round(((_cb.unconfirmed + _cb.declined) / needed) * 100))
       : 0;
-    let rBarCls = 'red';
+    let rBarCls = rNotRel ? 'amber' : 'red';
     if (rPct >= 100) rBarCls = 'green';
     else if (rPct >= 50) rBarCls = 'amber';
 
-    const rTip = _cb.inWindow
+    const rTip = !rNotRel
       ? _cb.confirmed + ' confirmed' +
         (_cb.exempt > 0 ? ', ' + _cb.exempt + ' agency/placeholder (exempt)' : '') +
         ', ' + _cb.unconfirmed + ' scheduled but NOT confirmed' +
         (_cb.declined > 0 ? ', ' + _cb.declined + ' DECLINED' : '') +
-        ' — out of ' + filled + ' placed and ' + (needed || '?') + ' needed.'
-      : filled + ' of ' + (needed || '?') + ' placed. Confirmations start once the event is within ' +
-        CONFIRM_WINDOW_DAYS + ' days.';
+        ' — out of ' + _cb.asked + ' asked, ' + filled + ' placed, ' + (needed || '?') + ' needed.' +
+        (_cb.notReleased > 0
+          ? ' ' + _cb.notReleased + ' more placed but NOT YET RELEASED — they have not been asked.'
+          : '')
+      : 'NOT RELEASED. ' + filled + ' placed, ' + (needed || '?') + ' needed, and NOBODY has been asked ' +
+        'to confirm — so 0 confirmed is expected, not a problem. Releases automatically 7 days out, ' +
+        'once each row has sat untouched for 12 hours. Press "Release now" on the Staff tab to ask them now. ' +
+        'Release is one-way — there is no un-release.';
 
     html += '<div class="coverage-block" title="' + escapeAttr(rTip) + '">';
-    html += '<div class="coverage-line"><span class="coverage-count">' + rShow + ' / ' + (needed || '?') + '</span><span class="coverage-sub">' + rLabel + '</span></div>';
+    html += '<div class="coverage-line"><span class="coverage-count' + (rNotRel ? ' not-released' : '') + '">' + escapeHtml(rCountTxt) + '</span><span class="coverage-sub">' + escapeHtml(rSubTxt) + '</span></div>';
     html += '<div class="coverage-bar">' +
       '<div class="coverage-fill ' + rBarCls + '" style="width:' + rPct + '%"></div>' +
       (rGhostPct > 0 ? '<div class="coverage-fill ghost" style="width:' + rGhostPct + '%"></div>' : '') +
@@ -4447,6 +4608,20 @@ function renderEventRow(ev) {
     // To restore: uncomment the two lines below.
     // html += '<button class="tab-btn review-tab' + (activeTab === 'review' ? ' active' : '') +
     //   '" data-event-tab="' + ev.id + '" data-tab-name="review">Review</button>';
+    // RELEASE NOW — the early-ask override. It can only pull the release EARLIER,
+    // never later and never back. There is no un-release: once somebody has seen a
+    // shift, taking it away is a withdrawal, not a retraction.
+    //
+    // This button is deliberately NOT load-bearing. notified_staffing is pressed on
+    // 36% of events over 90 days — that is a revealed preference, not a training gap.
+    // Nobody's schedule may depend on a manager remembering to press anything, which
+    // is why the cron is the primary path and this is a convenience.
+    const _nrCount = notReleasedPlacementsFor(ev.id).length;
+    if (_nrCount > 0) {
+      html += '<button class="release-now-btn" data-release-event="' + ev.id + '" ' +
+        'title="Ask these ' + _nrCount + ' people now, instead of waiting for the automatic release. Cannot be undone.">' +
+        '\u23F3 Release now (' + _nrCount + ')</button>';
+    }
     html += '<span class="tab-spacer"></span>';
     html += '<button class="audit-link-tab" data-audit-event="' + ev.id + '" title="Open audit log">' +
       '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
@@ -5999,7 +6174,9 @@ function renderFilledSlot(ev, p, locked) {
   // said yes is the most dangerous category on the board — we are counting on
   // someone who never agreed to be counted on.
   const _pcs = confirmStateForPlacement(ev, p);
-  if (_pcs === 'UNCONFIRMED') {
+  if (_pcs === 'NOT_RELEASED') {
+    html += '<span class="confirm-tag notrel" title="NOT RELEASED. This person cannot see this shift and has not been asked to confirm it. Their silence is not a signal — do not chase them, and do not hold it against them. Releases automatically 7 days out once this row has sat untouched for 12 hours; a move restarts that 12 hours."></span>';
+  } else if (_pcs === 'UNCONFIRMED') {
     html += '<span class="confirm-tag no" title="On the schedule but NOT CONFIRMED. They were offered this shift and have not answered. Do not put them into 7shifts. Chase them, or give the slot to someone who did confirm."></span>';
   } else if (_pcs === 'DECLINED') {
     html += '<span class="confirm-tag declined" title="' +
@@ -6008,7 +6185,7 @@ function renderFilledSlot(ev, p, locked) {
         '. They actively said no and are still occupying the slot. Release them.') +
       '">&#10007; DECLINED</span>';
   } else if (_pcs === 'CONFIRMED') {
-    const _drift = placementDrift(p);
+    const _drift = placementDrift(ev, p);
     if (_drift) {
       html += '<span class="confirm-tag drift" title="' +
         escapeAttr('Confirmed ' + fmtNotifiedAt(p.confirmed_at) + ' — but as ' +
@@ -6017,7 +6194,11 @@ function renderFilledSlot(ev, p, locked) {
         '">&#8646;</span>';
     } else {
       html += '<span class="confirm-tag yes" title="' +
-        escapeAttr('Confirmed ' + fmtNotifiedAt(p.confirmed_at)) + '">&#10003;</span>';
+        escapeAttr('Confirmed ' + fmtNotifiedAt(p.confirmed_at) +
+          (Date.now() >= disclosureMomentMs(ev)
+            ? '. Their stand and role are posted -- they have seen them. A move now is a move they will notice.'
+            : '. They have NOT seen their stand or role yet (those post at 4am on show day), so you can still move them freely.')) +
+        '">&#10003;</span>';
     }
   }
   // 7s toggle — present on every placed pill except JMAC (JMAC is an
@@ -6479,6 +6660,13 @@ function attachEventHandlers() {
       e.preventDefault();
       const eventId = btn.getAttribute('data-print-menu');
       openPrintMenu(btn, eventId);
+    });
+  });
+
+  document.querySelectorAll('[data-release-event]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      releaseEventNow(btn.getAttribute('data-release-event'));
     });
   });
 
@@ -6999,7 +7187,153 @@ function movePosition(positionId, newEventId, newStand, newRole) {
   });
 }
 
+// ============================================================
+// THE REMOVAL GUARD -- Session 7, Jul 14 2026
+// ------------------------------------------------------------
+// The x on a pill used to be free: 763 removals in 90 days, and 495 of 495 in-window
+// removals recorded removal_reason = (none). That was FINE when nobody had been told
+// anything. It is not fine now.
+//
+// The release gate means some of these people have SEEN the shift on their page, and
+// some have SAID YES to it. Those are different acts and they earn different friction.
+//
+//   TIER 1 -- NOT RELEASED (or JMAC/placeholder). SILENT. No modal, no reason, exactly
+//     as before. This is the scratchpad and it is MOST OF THE VOLUME. A dialog here
+//     would fire dozens of times a week on people who were never told anything, Erika
+//     would learn to click through it without reading inside a week, and the reason
+//     field would fill with garbage -- which is EXACTLY how the typed-reason gate died
+//     ("good to go here", "need her here......"). Never add friction to this tier.
+//
+//   TIER 2 -- RELEASED, unanswered. Pick a reason. No warning, no scolding. They can
+//     see this shift right now; why it vanished is worth one click.
+//
+//   TIER 3 -- RELEASED AND CONFIRMED. Pick a reason, and look at the date they said
+//     yes. This tier is the whole point: the guard is worth more than the employee-side
+//     notice, because it puts the friction on the person MAKING the decision, in the
+//     moment they make it -- the only place an outcome can actually change.
+//
+// The reason list IS the live CHECK constraint on position_assignments. No free text,
+// project-wide, forever.
+//
+// FUTURE: when the bulk "Release all unconfirmed (N)" button ships, it calls
+// doRemovePosition(id, 'no_confirmation') directly and BYPASSES this dialog. The
+// routine cycle-4 sweep must stay one click; the dialog is for pulling one specific
+// person you had been waiting on.
+// ============================================================
+const REMOVAL_REASONS = [
+  { value: 'our_call',        label: 'Our call \u2014 we changed the schedule' },
+  { value: 'gave_it_up',      label: 'They gave it back' },
+  { value: 'called_out',      label: 'They called out' },
+  { value: 'no_show',         label: 'No-show' },
+  { value: 'emergency',       label: 'Emergency' },
+  { value: 'no_confirmation', label: 'Never confirmed' },
+  { value: 'other',           label: 'Other' }
+];
+
+let removalGuardCtx = null;
+
+// The gatekeeper. Decides the tier, then either removes silently or asks.
 function removePosition(positionId) {
+  const pos = state.positions.find(p => p.id === positionId);
+  if (!pos) return;
+  const ev = state.events.find(e => e.id === pos.event_id);
+
+  // JMAC is an agency call and a placeholder is a name we invented. Neither was ever
+  // told anything and neither can confirm, so neither earns a dialog -- even though the
+  // hourly cron does stamp offer_sent_at on their rows.
+  const exempt = CONFIRM_EXEMPT_SOURCES.indexOf(pos.source) !== -1;
+  const released = pos.offer_sent_at ? true : false;
+
+  if (!released || exempt) {
+    doRemovePosition(positionId, null);   // TIER 1
+    return;
+  }
+  openRemovalGuard(pos, ev);              // TIER 2 / 3
+}
+
+function openRemovalGuard(pos, ev) {
+  removalGuardCtx = { positionId: pos.id, reason: null };
+
+  const confirmed = pos.confirmed_at ? true : false;
+  const declined = pos.declined_at ? true : false;
+
+  document.getElementById('removal-guard-title').textContent = 'Remove ' + pos.staff_name + '?';
+
+  document.getElementById('removal-guard-event-line').innerHTML =
+    '<strong>' + escapeHtml(ev ? (ev.event_name || '(unnamed event)') : '') + '</strong>' +
+    (ev ? ' &middot; ' + escapeHtml(fmtEventDateLong(ev.event_date)) : '') +
+    '<br>' + escapeHtml(pos.stand) + ' &middot; ' + escapeHtml(pos.role);
+
+  const warn = document.getElementById('removal-guard-warning');
+
+  if (declined) {
+    // They already told us no. Removing them is doing what they asked -- and the
+    // employee page deliberately does NOT show them a withdrawn notice, because telling
+    // somebody "we took this back" after THEY handed it back would be gaslighting.
+    warn.textContent = pos.staff_name + ' already told you they could not work this' +
+      (pos.decline_reason ? ' \u2014 ' + pos.decline_reason : '') +
+      '. Removing them is doing what they asked. They will not see a withdrawn notice.';
+    warn.className = 'rg-warning info show';
+  } else if (confirmed) {
+    // TIER 3. The date is the whole guard.
+    warn.textContent = pos.staff_name + ' confirmed this shift on ' +
+      fmtNotifiedAt(pos.confirmed_at) + '. They are expecting to work it. They will see ' +
+      'a "we had to take this back" notice on their page.';
+    warn.className = 'rg-warning show';
+  } else {
+    // TIER 2. Context, not a telling-off.
+    warn.textContent = pos.staff_name + ' can see this shift on their page and has not ' +
+      'answered yet. They have not ignored you \u2014 they may simply not have looked.';
+    warn.className = 'rg-warning info show';
+  }
+
+  // Pre-select the obvious answer when there IS one. If they gave it back, that is the
+  // reason -- making Erika hunt for it is friction carrying no information.
+  const preset = declined ? 'gave_it_up' : null;
+  removalGuardCtx.reason = preset;
+  buildRemovalReasonList(preset);
+
+  const btn = document.getElementById('removal-guard-confirm-btn');
+  btn.disabled = preset ? false : true;
+  btn.textContent = preset ? 'Remove' : 'Pick a reason first';
+  // .onclick, not addEventListener -- this runs on every open and addEventListener
+  // would stack a new handler each time, firing the removal N times on the Nth open.
+  btn.onclick = submitRemovalGuard;
+
+  document.getElementById('removal-guard-modal').classList.add('show');
+}
+
+function buildRemovalReasonList(preset) {
+  const wrap = document.getElementById('removal-guard-reasons');
+  wrap.innerHTML = '';
+  REMOVAL_REASONS.forEach(r => {
+    const b = document.createElement('button');
+    b.className = 'rg-reason' + (preset === r.value ? ' on' : '');
+    b.textContent = r.label;
+    b.addEventListener('click', e => {
+      e.stopPropagation();
+      if (!removalGuardCtx) return;
+      removalGuardCtx.reason = r.value;
+      wrap.querySelectorAll('.rg-reason').forEach(el => el.classList.remove('on'));
+      b.classList.add('on');
+      const btn = document.getElementById('removal-guard-confirm-btn');
+      btn.disabled = false;
+      btn.textContent = 'Remove';
+    });
+    wrap.appendChild(b);
+  });
+}
+
+function submitRemovalGuard() {
+  if (!removalGuardCtx) return;
+  if (!removalGuardCtx.reason) return;
+  const ctx = removalGuardCtx;
+  removalGuardCtx = null;
+  document.getElementById('removal-guard-modal').classList.remove('show');
+  doRemovePosition(ctx.positionId, ctx.reason);
+}
+
+function doRemovePosition(positionId, removalReason) {
   const pos = state.positions.find(p => p.id === positionId);
   if (!pos) return;
   const actor = (state.user && state.user.display_name) || (state.user && state.user.email) || 'unknown';
@@ -7015,7 +7349,7 @@ function removePosition(positionId) {
   // removed"). The dismiss button (✓) is what clears the flag.
   authFetch(SUPABASE_URL + '/rest/v1/position_assignments?id=eq.' + positionId, {
     method: 'PATCH', headers: apiHeadersJson(),
-    body: JSON.stringify({ removed_at: now, removed_by: actor })
+    body: JSON.stringify({ removed_at: now, removed_by: actor, removal_reason: removalReason || null })
   }).then(() => {
     state.positions = state.positions.filter(p => p.id !== positionId);
     // If the removed row was synced, push it into removedSyncedPlacements so
@@ -7032,7 +7366,14 @@ function removePosition(positionId) {
     }
     return logAction(pos.event_id, positionId, 'removed', {
       stand: pos.stand, role: pos.role, staff_name: pos.staff_name,
-      was_synced: wasSynced
+      was_synced: wasSynced,
+      // The three facts that make this row answerable later. Until now you could not
+      // tell "WE pulled 78 people on show day" from "78 people BAILED on us" -- opposite
+      // problems with opposite fixes, and the data could not separate them.
+      removal_reason: removalReason || null,
+      was_released: pos.offer_sent_at ? true : false,
+      was_confirmed: pos.confirmed_at ? true : false,
+      had_declined: pos.declined_at ? true : false
     });
   }).then(() => {
     // If the pill was synced before removal, log a second audit entry
@@ -7214,6 +7555,71 @@ function autoResolveMultiSignup(staffName, date, eventId) {
     state.assignments[date][staffName] = eventId;
   }).catch(err => {
     console.warn('Auto-resolve failed (non-blocking):', err);
+  });
+}
+
+// ============================================================
+// RELEASE NOW — manual override of the release gate (Session 6, Jul 14 2026)
+// ------------------------------------------------------------
+// Stamps offer_sent_at on every placement on this event that has not got one, and
+// writes a 'released' log row for each with the manager as actor. That actor is what
+// separates a real release DECISION from the Jul 14 backfill (actor='backfill'), which
+// retroactively stamped 67 people who had answered before the gate existed. The cron
+// reads that distinction — a walk-up confirmation must never be mistaken for a release.
+//
+// ONE-WAY. offer_sent_at is only ever set, never cleared, anywhere in this codebase.
+// ============================================================
+function releaseEventNow(eventId) {
+  const ev = state.events.find(e => e.id === eventId);
+  if (!ev) return;
+  if (isCancelledEvent(ev)) { showToast('This event has been cancelled.', 'error'); return; }
+
+  const targets = notReleasedPlacementsFor(eventId);
+  if (targets.length === 0) { showToast('Everyone on this event has already been asked.'); return; }
+
+  const names = targets.map(p => p.staff_name).join(', ');
+  const ok = window.confirm(
+    'Release ' + targets.length + ' placement' + (targets.length === 1 ? '' : 's') +
+    ' on ' + ev.event_name + ' now?\n\n' + names +
+    '\n\nThey will see the shift immediately and be asked to confirm it.' +
+    '\n\nTHIS CANNOT BE UNDONE. There is no un-release. If you pull one of them after ' +
+    'this, they will have seen the shift, and it becomes a withdrawal.'
+  );
+  if (!ok) return;
+
+  const stamp = new Date().toISOString();
+
+  const jobs = targets.map(p =>
+    authFetch(SUPABASE_URL + '/rest/v1/position_assignments?id=eq.' + encodeURIComponent(p.id), {
+      method: 'PATCH',
+      headers: apiHeadersJson(),
+      body: JSON.stringify({ offer_sent_at: stamp })
+    }).then(rows => {
+      // SILENCE IS NOT SUCCESS. apiHeadersJson sends Prefer: return=representation, so a
+      // PATCH that matched zero rows comes back as an empty array with a 200. Telling a
+      // manager 24 people were asked when nobody was is the worst lie this page can tell.
+      if (!rows || rows.length === 0) {
+        throw new Error('Release did not take effect for ' + p.staff_name + '. Refresh and try again.');
+      }
+      p.offer_sent_at = stamp;
+      return logAction(eventId, p.id, 'released', {
+        staff_name: p.staff_name,
+        stand: p.stand,
+        role: p.role,
+        venue: p.venue,
+        source: p.source,
+        via: 'manual'
+      });
+    })
+  );
+
+  Promise.all(jobs).then(() => {
+    showToast('Released ' + targets.length + ' — they can see the shift now.', 'success');
+    render();
+  }).catch(err => {
+    console.error('Release failed:', err);
+    showToast(err.message || 'Release failed. Refresh and try again.', 'error');
+    render();  // Some rows may have landed. Re-render so the count is honest.
   });
 }
 
