@@ -1062,6 +1062,26 @@ body {
   user-select: none;
   flex-wrap: wrap; /* allow note line to wrap below the name row */
 }
+
+/* Placement-rate chip. "1/12" = placed once out of twelve signups AT THIS
+   VENUE. Amber when the person sits well below the venue's own median —
+   an invitation to look, not an accusation. Muted grey otherwise.
+   Suppressed entirely under 4 signups (too thin to mean anything) and
+   when the venue has no computable median. */
+.rate-tag {
+  font-size: 9px; font-weight: 700; letter-spacing: 0.3px;
+  padding: 1px 5px; border-radius: 8px;
+  background: #ececeb; color: #7a7a76;
+  font-variant-numeric: tabular-nums;
+  cursor: help;
+}
+.rate-tag.below {
+  background: var(--purple-light); color: var(--purple-dark);
+  border: 1px solid var(--purple-border);
+  font-size: 10px;
+  padding: 1px 6px;
+}
+.slot-filled .rate-tag { font-size: 8px; padding: 1px 4px; }
 .person-pill[draggable=true]:hover { transform: translateX(2px); border-color: var(--blue); }
 /* Available-panel pill styling for a person currently placed at THIS event.
    Shows "✓ HERE" tag. Green-tinted. Unrelated to the 7shifts sync state of
@@ -3371,6 +3391,54 @@ const CLICK_DRAG_THRESHOLD_PX = 4;
 let _clickStartX = null;
 let _clickStartY = null;
 
+// Placement-rate chip config.
+//   RATE_MIN_SIGNUPS      — below this, we show nothing. Someone with 2
+//                           signups and 0 placements is not overlooked,
+//                           they're new. Never render 0/2 as a verdict.
+//   RATE_MIN_VENUE_SAMPLE — a venue needs at least this many qualifying
+//                           people before we trust its median enough to
+//                           call anyone "below" it.
+//   RATE_BELOW_FACTOR     — amber when the person's hit rate is under this
+//                           fraction of the venue median. 0.6 = "well under,"
+//                           not "a hair under." We want a handful of amber
+//                           chips on a 60-name list, not thirty.
+const RATE_MIN_SIGNUPS = 4;
+const RATE_MIN_VENUE_SAMPLE = 8;
+const RATE_BELOW_FACTOR = 0.6;
+
+// Placement rate for a person AT A VENUE. Pure read on boot-built state —
+// safe inside render loops. Returns null when there's nothing honest to say.
+function rateFor(staffName, venue) {
+  if (!staffName || !venue) return null;
+  const k = staffName + '|' + venue;
+  const signups = state.signupsByVenue ? (state.signupsByVenue[k] || 0) : 0;
+  if (signups < RATE_MIN_SIGNUPS) return null;
+  const placed = state.placementsByVenue ? (state.placementsByVenue[k] || 0) : 0;
+  const pct = 100 * placed / signups;
+  const median = state.venueMedianRate ? state.venueMedianRate[venue] : undefined;
+  const below = (typeof median === 'number' && median > 0)
+    ? (pct < median * RATE_BELOW_FACTOR)
+    : false;
+  return { signups: signups, placed: placed, pct: pct, median: median, below: below };
+}
+
+// Renders the chip, or '' when rateFor() has nothing to say.
+function rateTagHtml(staffName, venue) {
+  const r = rateFor(staffName, venue);
+  if (!r) return '';
+  const pctTxt = Math.round(r.pct) + '%';
+  let tip = 'Placed ' + r.placed + ' of ' + r.signups + ' times they signed up at ' +
+    venue + ' (' + pctTxt + ').';
+  if (typeof r.median === 'number') {
+    tip += ' The median here is ' + Math.round(r.median) + '%.';
+  }
+  if (r.below) {
+    tip += ' They are well below the pack at this venue — worth a look before you pass again.';
+  }
+  return '<span class="rate-tag' + (r.below ? ' below' : '') + '" title="' +
+    escapeAttr(tip) + '">' + r.placed + '/' + r.signups + '</span>';
+}
+
 // Returns true if the person should display a NEW HIRE badge at this venue.
 // Pure read on already-loaded state — safe to call inside render loops.
 function isNewAtVenue(staffName, venue) {
@@ -3576,7 +3644,7 @@ function loadAll() {
     // Historical availability counts for "reliability" sort on the Available-to-call list.
     // We fetch ALL availability rows (including soft-deleted) just to count past activity.
     // Lightweight: only staff_name, no joins.
-    authFetch(SUPABASE_URL + '/rest/v1/availability?select=staff_name',
+    authFetch(SUPABASE_URL + '/rest/v1/availability?select=staff_name,event_id,removed_at',
       { headers: apiHeaders() }),
     // NEW HIRE badge — past placements (no date filter, trimmed client-side
     // by joining against state.events / loaded events. See note above.)
@@ -3604,8 +3672,14 @@ function loadAll() {
     // by the recompute-ratings edge function (nightly cron + verify-trigger);
     // this page is a pure reader — no rating math runs here. 223 small rows.
     authFetch(SUPABASE_URL + '/rest/v1/employee_ratings?select=employee_id,stars,is_nr&limit=100000',
+      { headers: apiHeaders() }),
+    // Event -> venue map for EVERY event, not just the visible date range.
+    // Two columns, no joins. This is the ONLY request added for the
+    // placement-rate chip; signups and placements both come from fetches
+    // this page already made. Bounded by event count (low hundreds).
+    authFetch(SUPABASE_URL + '/rest/v1/events?select=id,venue&deleted_at=is.null&limit=10000',
       { headers: apiHeaders() })
-  ]).then(([events, employees, allAvail, pastPlacements, candidateRows, recentSignups, approvedRecipients, eventManagers, certs, certTypes, parLevels, ratingRows]) => {
+  ]).then(([events, employees, allAvail, pastPlacements, candidateRows, recentSignups, approvedRecipients, eventManagers, certs, certTypes, parLevels, ratingRows, allEventVenues]) => {
     state.events = events || [];
     state.employees = employees || [];
     state.recentSignups = recentSignups || [];
@@ -3711,6 +3785,61 @@ function loadAll() {
     });
 
     // ----- end NEW HIRE assembly -----
+
+    // ----- Placement-rate index -----
+    // Answers: at THIS venue, how many times did this person raise their
+    // hand, and how many times were they picked? Both numbers already exist
+    // in memory — placements carry `venue` directly, signups get their venue
+    // via the event map. Computed once at boot, O(1) per pill thereafter.
+    //
+    // Basis is ALL events (past and future) on both sides of the fraction,
+    // so numerator and denominator always describe the same universe.
+    // Soft-deleted signups are excluded: a signup they gave back is not a
+    // time we ignored them.
+    const _evVenue = {};
+    (allEventVenues || []).forEach(e => { if (e.id) _evVenue[e.id] = e.venue; });
+
+    state.signupsByVenue = {};
+    (allAvail || []).forEach(r => {
+      if (r.removed_at) return;
+      const v = _evVenue[r.event_id];
+      if (!v || !r.staff_name) return;
+      const k = r.staff_name + '|' + v;
+      state.signupsByVenue[k] = (state.signupsByVenue[k] || 0) + 1;
+    });
+
+    state.placementsByVenue = {};
+    (pastPlacements || []).forEach(p => {
+      if (!p.staff_name || !p.venue) return;
+      const k = p.staff_name + '|' + p.venue;
+      state.placementsByVenue[k] = (state.placementsByVenue[k] || 0) + 1;
+    });
+
+    // Per-venue median hit rate. Only people with >= RATE_MIN_SIGNUPS count
+    // toward the median — thin data would drag it toward zero and make
+    // everyone look "below pack." Venues without enough qualifying people
+    // get no median at all, which suppresses every amber chip there.
+    // (This is what keeps SATB, at ~1% fill, from painting the whole list.)
+    const _byVenue = {};
+    Object.keys(state.signupsByVenue).forEach(k => {
+      const parts = k.split('|');
+      const venue = parts[1];
+      const signups = state.signupsByVenue[k];
+      if (signups < RATE_MIN_SIGNUPS) return;
+      const placed = state.placementsByVenue[k] || 0;
+      if (!_byVenue[venue]) _byVenue[venue] = [];
+      _byVenue[venue].push(100 * placed / signups);
+    });
+    state.venueMedianRate = {};
+    Object.keys(_byVenue).forEach(v => {
+      const arr = _byVenue[v].sort((a, b) => a - b);
+      if (arr.length < RATE_MIN_VENUE_SAMPLE) return;
+      const mid = Math.floor(arr.length / 2);
+      state.venueMedianRate[v] = arr.length % 2
+        ? arr[mid]
+        : (arr[mid - 1] + arr[mid]) / 2;
+    });
+    // ----- end placement-rate index -----
 
     // ----- Recent-signups event resolution -----
     // Recent signups can reference events outside the current visible date
@@ -5946,6 +6075,10 @@ function renderAvailablePanel(ev) {
     // NEW HIRE badge removed from pills on May 11, 2026 — surfacing moved
     // into the crew card modal (opened on click of .person-name).
 
+    // Placement rate at this venue. The whole point: a manager choosing 20
+    // out of 60 should not be choosing on name recognition alone.
+    html += rateTagHtml(s.staff_name, ev.venue);
+
     // Home-venue badge — renders on every pill state (AVAILABLE, PLACED_HERE,
     // ASSIGNED_AWAY) because "should this person be here at all?" is relevant
     // in every context. NULL and 'NA' both suppress (homeVenueOf normalizes both
@@ -6150,6 +6283,7 @@ function renderFilledSlot(ev, p, locked) {
   // Clickable name hook — opens the crew card modal.
   html += '<span class="person-name" data-staff-name-click="' + escapeAttr(p.staff_name) + '" data-source-venue="' + escapeAttr(ev.venue) + '">' + escapeHtml(p.staff_name) + '</span>';
   // NEW HIRE badge removed May 11, 2026 — moved into the crew card modal.
+  html += rateTagHtml(p.staff_name, ev.venue);
 
   // Home-venue badge on the placed pill — same logic as the Available panel.
   // Renders on every placed pill so the manager can scan a stand and see
