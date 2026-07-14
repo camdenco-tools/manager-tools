@@ -1,254 +1,863 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Popcorn Chez — Staffing Dashboard</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Confirmation Dashboard — Popcorn Chez</title>
 <style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
-  --bg: #f0f0ec; --card: #ffffff; --primary: #1a1a1a;
-  --green: #1D9E75; --green-light: #e8f7f2; --label: #999;
-  --border: #e8e8e4; --shadow: 0 2px 12px rgba(0,0,0,0.06);
-  --radius: 16px; --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --red: #c0392b; --red-light: #fde8e8;
-  --amber: #856404; --amber-light: #fff3cd;
-  --blue: #2471a3; --blue-light: #deeef9;
+  --bg: #f0f0ec;
+  --card: #ffffff;
+  --primary: #1a1a1a;
+  --label: #666;
+  --border: #e8e8e4;
+  --border-strong: #d8d8d4;
+
+  --green: #1D9E75;
+  --green-light: #e8f7f2;
+  --green-mid: #d0ecdf;
+  --green-dark: #0F6E56;
+
+  --red: #c0392b;
+  --red-light: #fdecea;
+  --red-border: #f0c8c4;
+
+  --amber: #d97706;
+  --amber-light: #fffbeb;
+  --amber-border: #fcd34d;
+  --amber-dark: #92400e;
+
+  --blue: #378ADD;
+  --blue-light: #E6F1FB;
+  --blue-mid: #cfe1f4;
+  --blue-dark: #0C447C;
+
+  --purple: #7c3aed;
+  --purple-light: #f3edff;
+  --purple-mid: #e0d4fb;
+  --purple-dark: #5b21b6;
+
+  --slate: #475569;
+  --slate-light: #f1f5f9;
+
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 2px 8px rgba(0,0,0,0.06);
+  --shadow-lg: 0 4px 16px rgba(0,0,0,0.08);
 }
-body { background: var(--bg); font-family: var(--font); color: var(--primary); min-height: 100vh; }
-header { background: var(--card); border-bottom: 1px solid var(--border); padding: 0 32px; display: flex; align-items: center; justify-content: space-between; height: 64px; position: sticky; top: 0; z-index: 50; }
-.header-left { display: flex; align-items: center; gap: 16px; }
-.back-link { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--label); text-decoration: none; display: flex; align-items: center; gap: 6px; transition: color 0.15s; }
-.back-link:hover { color: var(--primary); }
-.hdivider { width: 1px; height: 20px; background: var(--border); }
-.header-title { font-size: 15px; font-weight: 700; }
-.header-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: var(--primary); color: white; padding: 3px 8px; border-radius: 20px; }
-.header-right { display: flex; align-items: center; gap: 10px; }
-.header-user { font-size: 11px; color: var(--label); font-weight: 600; }
-.sign-out-btn { font-size: 11px; font-weight: 700; color: var(--label); background: none; border: 1px solid var(--border); padding: 5px 12px; border-radius: 8px; cursor: pointer; font-family: var(--font); transition: all 0.15s; }
-.sign-out-btn:hover { color: var(--primary); border-color: var(--primary); }
-.last-updated { font-size: 11px; color: var(--label); }
-.refresh-btn { font-size: 12px; font-weight: 700; color: var(--label); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 6px 14px; cursor: pointer; font-family: var(--font); }
-.refresh-btn:hover { color: var(--primary); background: var(--border); }
-.main { max-width: 1280px; margin: 0 auto; padding: 24px 32px 80px; }
-.section { margin-bottom: 28px; }
-.section-hdr { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
-.section-title { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--label); }
-.section-sub { font-size: 11px; color: #bbb; }
-.metric-row { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin-bottom: 16px; }
-.metric-card { background: var(--card); border-radius: 12px; border: 1px solid var(--border); padding: 16px 18px; box-shadow: var(--shadow); cursor: default; }
-.metric-card.clickable { cursor: pointer; }
-.metric-card.clickable:hover { border-color: #999; }
-.metric-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--label); margin-bottom: 8px; }
-.metric-val { font-size: 28px; font-weight: 800; color: var(--primary); line-height: 1; margin-bottom: 4px; }
-.metric-val .denom { font-size: 16px; font-weight: 400; color: var(--label); }
-.metric-sub { font-size: 11px; color: var(--label); }
-.metric-trend { font-size: 11px; font-weight: 700; margin-top: 4px; }
-.trend-up { color: var(--green); }
-.trend-down { color: var(--red); }
-.metric-detail { font-size: 10px; color: var(--blue); margin-top: 4px; }
-.donut-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 0; }
-.donut-card { background: var(--card); border-radius: 14px; border: 1px solid var(--border); padding: 20px 24px; box-shadow: var(--shadow); cursor: pointer; display: flex; align-items: center; gap: 20px; transition: border-color 0.15s; }
-.donut-card:hover { border-color: #999; }
-.donut-svg-wrap { flex-shrink: 0; }
-.donut-info { flex: 1; min-width: 0; }
-.donut-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--label); margin-bottom: 6px; }
-.donut-fraction { font-size: 36px; font-weight: 800; color: var(--primary); line-height: 1; margin-bottom: 4px; }
-.donut-fraction .denom { font-size: 20px; font-weight: 400; color: var(--label); }
-.donut-status { font-size: 12px; font-weight: 700; margin-bottom: 6px; }
-.donut-hint { font-size: 11px; color: var(--blue); }
-.donut-legend { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
-.donut-legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--label); }
-.donut-legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.drill-panel { display: none; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-top: 8px; margin-bottom: 12px; box-shadow: var(--shadow); }
-.drill-panel.open { display: block; }
-.drill-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--label); margin-bottom: 10px; }
-.drill-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
-.drill-row:last-child { border-bottom: none; }
-.drill-venue { color: var(--primary); font-weight: 600; }
-.drill-status { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
-.ds-missing { background: var(--red-light); color: var(--red); }
-.ds-pending { background: var(--amber-light); color: var(--amber); }
-.week-block { margin-bottom: 16px; }
-.week-label { font-size: 11px; font-weight: 700; color: var(--label); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
-.week-line { flex: 1; height: 1px; background: var(--border); }
-.venue-status-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; }
-.vs-card { background: var(--card); border-radius: 10px; border: 1px solid var(--border); padding: 12px 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
-.vs-venue { font-size: 12px; font-weight: 700; color: var(--primary); margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.vs-no-events { font-size: 11px; color: #ccc; font-style: italic; }
-.vs-evt-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 4px; }
-.vs-evt-row:last-child { margin-bottom: 0; }
-.vs-evt-name { font-size: 11px; color: #555; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
-.status-pill { font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 8px; white-space: nowrap; flex-shrink: 0; letter-spacing: 0.04em; text-transform: uppercase; }
-.sp-staffed { background: #e8f7f2; color: #0f6e56; }
-.sp-submitted { background: #deeef9; color: #0e3f6a; }
-.sp-pending { background: var(--amber-light); color: var(--amber); }
-.sp-missing { background: var(--red-light); color: var(--red); }
-.table-card { background: var(--card); border-radius: 12px; border: 1px solid var(--border); overflow: hidden; box-shadow: var(--shadow); }
-.data-table { width: 100%; border-collapse: collapse; }
-.data-table th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--label); padding: 10px 14px; text-align: left; background: var(--bg); border-bottom: 1px solid var(--border); }
-.data-table td { font-size: 13px; padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; color: var(--primary); }
-.data-table tr:last-child td { border-bottom: none; }
-.data-table tbody tr:hover td { background: #fafaf8; }
-.bar-wrap { width: 80px; height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; display: inline-block; vertical-align: middle; margin-right: 5px; }
-.bar-fill { height: 100%; border-radius: 3px; }
-.bf-green { background: var(--green); }
-.bf-amber { background: #e8c94e; }
-.bf-red { background: var(--red); }
-.conf-badge { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 8px; }
-.cb-yes { background: #e8f7f2; color: #0f6e56; }
-.cb-no { background: var(--bg); color: var(--label); }
-.muted { color: var(--label); font-size: 11px; }
-.tag-sub { font-size: 11px; color: var(--label); }
-.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 28px; }
-.sales-header { display: flex; align-items: baseline; justify-content: space-between; padding: 16px 18px 12px; border-bottom: 1px solid var(--border); }
-.sales-grand-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--label); }
-.sales-grand-total { font-size: 32px; font-weight: 800; color: var(--primary); }
-.sales-grand-date { font-size: 12px; color: var(--label); margin-top: 2px; }
-.sales-table-header { display: grid; grid-template-columns: 1fr 100px 100px 120px; gap: 0; background: var(--bg); border-bottom: 1px solid var(--border); }
-.sales-table-header span { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--label); padding: 8px 14px; }
-.sales-table-header span:not(:first-child) { text-align: right; }
-.sales-row { display: grid; grid-template-columns: 1fr 100px 100px 120px; gap: 0; border-bottom: 1px solid var(--border); align-items: center; }
-.sales-row:last-child { border-bottom: none; }
-.sales-row:hover { background: #fafaf8; }
-.sales-venue-cell { padding: 12px 14px; }
-.sales-venue-name { font-size: 13px; font-weight: 700; }
-.sales-venue-meta { font-size: 11px; color: var(--label); margin-top: 1px; }
-.sales-num-cell { padding: 12px 14px; text-align: right; font-size: 13px; font-weight: 700; }
-.sales-num-cell.muted { color: var(--label); font-weight: 400; font-style: italic; font-size: 12px; }
-.sales-num-cell.total { font-size: 15px; }
-.perf-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid var(--border); }
-.perf-row:last-child { border-bottom: none; }
-.perf-venue { font-size: 13px; font-weight: 600; }
-.perf-right { display: flex; align-items: center; gap: 16px; }
-.perf-val { font-size: 14px; font-weight: 800; color: var(--primary); min-width: 50px; text-align: right; }
-.perf-trend { font-size: 11px; font-weight: 700; min-width: 48px; text-align: right; }
-.perf-period { font-size: 10px; color: var(--label); min-width: 70px; text-align: right; }
-.toast { position: fixed; bottom: 28px; right: 28px; background: var(--primary); color: white; padding: 12px 20px; border-radius: 10px; font-size: 13px; font-weight: 600; box-shadow: 0 8px 24px rgba(0,0,0,0.2); z-index: 999; transform: translateY(80px); opacity: 0; transition: all 0.25s ease; }
-.toast.show { transform: translateY(0); opacity: 1; }
-.loading-state { text-align: center; padding: 32px; font-size: 13px; color: var(--label); }
-.empty-state { text-align: center; padding: 24px; font-size: 13px; color: #ccc; font-style: italic; }
-@media (max-width: 900px) {
-  header { padding: 12px 16px; height: auto; flex-wrap: wrap; gap: 8px; }
-  .main { padding: 16px 12px 60px; }
-  .metric-row { grid-template-columns: repeat(2, 1fr); }
-  .venue-status-grid { grid-template-columns: repeat(2, 1fr); }
-  .two-col { grid-template-columns: 1fr; }
-  .sales-table-header { grid-template-columns: 1fr 80px 80px 90px; }
-  .sales-row { grid-template-columns: 1fr 80px 80px 90px; }
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--primary);
+  font-family: var(--font); font-size: 14px; line-height: 1.5;
 }
+.wrap { max-width: 1360px; margin: 0 auto; padding: 22px 22px 80px; }
+
+.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 18px; flex-wrap: wrap; }
+.page-title { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; margin: 0; }
+.page-sub { font-size: 13px; color: var(--label); margin: 4px 0 0; }
+.cycle-pill {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  background: var(--amber-light); color: var(--amber-dark); border: 1px solid var(--amber-border);
+  padding: 5px 10px; border-radius: 20px;
+}
+
+.strip { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 16px; }
+.stat { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; box-shadow: var(--shadow-sm); }
+.stat-l { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--label); }
+.stat-v { font-size: 26px; font-weight: 600; margin-top: 3px; letter-spacing: -0.02em; }
+.stat-f { font-size: 11px; color: var(--label); margin-top: 2px; }
+.stat.good  { background: var(--green-light); border-color: var(--green-mid); }
+.stat.good .stat-l, .stat.good .stat-v, .stat.good .stat-f { color: var(--green-dark); }
+.stat.warn  { background: var(--amber-light); border-color: var(--amber-border); }
+.stat.warn .stat-l, .stat.warn .stat-v, .stat.warn .stat-f { color: var(--amber-dark); }
+.stat.bad   { background: var(--red-light);  border-color: var(--red-border); }
+.stat.bad .stat-l, .stat.bad .stat-v, .stat.bad .stat-f { color: var(--red); }
+
+.headline {
+  background: var(--card); border: 1px solid var(--border); border-left: 4px solid var(--amber);
+  border-radius: 0 10px 10px 0; padding: 16px 18px; margin-bottom: 16px; box-shadow: var(--shadow-sm);
+  display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap;
+}
+.headline-main { flex: 1; min-width: 320px; }
+.headline-big { font-size: 17px; font-weight: 600; margin: 0 0 4px; }
+.headline-sub { font-size: 13px; color: var(--label); margin: 0; }
+.headline-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin-top: 10px; background: var(--border); }
+.headline-bar span { display: block; height: 100%; }
+
+.btn {
+  background: var(--card); border: 1px solid var(--border-strong); color: var(--primary);
+  border-radius: 20px; padding: 7px 14px; font-size: 13px; font-weight: 500;
+  font-family: inherit; cursor: pointer; white-space: nowrap;
+}
+.btn:hover { background: #f6f6f3; }
+.btn:active { transform: scale(0.98); }
+.btn.dark { background: var(--primary); color: #fff; border-color: var(--primary); }
+.btn.dark:hover { background: #333; }
+
+.controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.chip {
+  background: var(--card); border: 1px solid var(--border); border-radius: 20px;
+  padding: 6px 13px; font-size: 12.5px; font-weight: 500; cursor: pointer; font-family: inherit;
+  color: var(--primary); white-space: nowrap;
+}
+.chip:hover { background: #f6f6f3; }
+.chip.on { background: var(--primary); color: #fff; border-color: var(--primary); }
+.chip .n { opacity: 0.55; margin-left: 5px; font-variant-numeric: tabular-nums; }
+.chip.on .n { opacity: 0.7; }
+select, input[type=search] {
+  font-family: inherit; font-size: 13px; border: 1px solid var(--border-strong);
+  border-radius: 20px; padding: 6px 12px; background: var(--card); color: var(--primary); outline: none;
+}
+input[type=search] { min-width: 190px; }
+.spacer { flex: 1; }
+
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-sm); overflow: hidden; margin-bottom: 16px; }
+.card-head { padding: 13px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.card-title { font-size: 14px; font-weight: 600; margin: 0; }
+.card-note { font-size: 12px; color: var(--label); }
+
+table { width: 100%; border-collapse: collapse; }
+thead th {
+  text-align: left; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--label); padding: 9px 12px; background: #faf9f6; border-bottom: 1px solid var(--border);
+  cursor: pointer; user-select: none; white-space: nowrap;
+}
+thead th.num { text-align: right; }
+thead th .arrow { opacity: 0.4; margin-left: 3px; }
+thead th.sorted { color: var(--primary); }
+thead th.sorted .arrow { opacity: 1; }
+tbody td { padding: 9px 12px; border-bottom: 1px solid var(--border); font-size: 13px; vertical-align: middle; }
+tbody td.num { text-align: right; font-variant-numeric: tabular-nums; }
+tbody tr { cursor: pointer; }
+tbody tr:hover { background: #faf9f6; }
+tbody tr:last-child td { border-bottom: none; }
+.nm { font-weight: 500; }
+.sub { font-size: 11px; color: var(--label); }
+.muted { color: var(--label); }
+
+.pill { display: inline-block; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 20px; white-space: nowrap; }
+.p-clear { background: var(--green-light); color: var(--green-dark); }
+.p-new   { background: var(--blue-light);  color: var(--blue-dark); }
+.p-seen  { background: var(--amber-light); color: var(--amber-dark); }
+.p-unseen{ background: var(--slate-light); color: var(--slate); }
+.p-none  { background: #f4f4f1; color: var(--label); }
+.p-note  { background: var(--purple-light); color: var(--purple-dark); }
+.p-miss  { background: var(--red-light);   color: var(--red); }
+
+.venue-tag { font-size: 11px; color: var(--label); }
+.gap { font-weight: 600; color: var(--red); }
+
+.feed-row { display: flex; gap: 10px; padding: 9px 16px; border-bottom: 1px solid var(--border); font-size: 13px; align-items: baseline; }
+.feed-row:last-child { border-bottom: none; }
+.feed-t { width: 74px; flex: none; color: var(--label); font-size: 12px; }
+.feed-i { width: 16px; flex: none; text-align: center; font-weight: 700; }
+.i-conf { color: var(--green); }
+.i-dec  { color: var(--red); }
+.i-rel  { color: var(--blue); }
+
+.note-box {
+  background: var(--purple-light); border: 1px solid var(--purple-mid); border-radius: 8px;
+  padding: 9px 12px; font-size: 13px; color: var(--purple-dark); margin: 10px 0;
+}
+.note-box b { font-weight: 600; }
+
+.callout {
+  background: var(--slate-light); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 13px; font-size: 12.5px; color: var(--slate); margin: 12px 16px 16px;
+}
+
+.overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: none; z-index: 1000; }
+.overlay.open { display: block; }
+.drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; width: 480px; max-width: 94vw;
+  background: var(--bg); z-index: 1001; transform: translateX(100%);
+  transition: transform 0.18s ease; overflow-y: auto; box-shadow: var(--shadow-lg);
+}
+.drawer.open { transform: translateX(0); }
+.drawer-head { padding: 18px 20px 14px; border-bottom: 1px solid var(--border); background: var(--card); position: sticky; top: 0; z-index: 2; }
+.drawer-body { padding: 16px 20px 60px; }
+.dclose { float: right; background: none; border: none; font-size: 22px; line-height: 1; cursor: pointer; color: var(--label); font-family: inherit; }
+.dname { font-size: 18px; font-weight: 600; margin: 0; }
+.dmeta { font-size: 12px; color: var(--label); margin: 3px 0 0; }
+.dgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 12px 0 14px; }
+.dstat { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
+.dstat-l { font-size: 10px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--label); }
+.dstat-v { font-size: 17px; font-weight: 600; margin-top: 2px; }
+.dsec { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--label); margin: 16px 0 7px; }
+.shift {
+  background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+  padding: 9px 12px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; gap: 10px;
+}
+.shift-l { font-size: 13px; }
+.shift-s { font-size: 11px; color: var(--label); margin-top: 1px; }
+
+.loading, .empty { padding: 30px 16px; text-align: center; color: var(--label); font-size: 13px; }
+.err { background: var(--red-light); border: 1px solid var(--red-border); color: var(--red); padding: 12px 16px; border-radius: 8px; margin-bottom: 14px; font-size: 13px; }
+.toast {
+  position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(90px);
+  background: var(--primary); color: #fff; padding: 10px 18px; border-radius: 22px;
+  font-size: 13px; z-index: 2000; transition: transform 0.2s ease; box-shadow: var(--shadow-lg);
+}
+.toast.show { transform: translateX(-50%) translateY(0); }
+
+@media (max-width: 1100px) { .strip { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 640px)  { .strip { grid-template-columns: repeat(2, 1fr); } .dgrid { grid-template-columns: repeat(2, 1fr); } }
 </style>
 </head>
 <body>
-<header>
-  <div class="header-left">
-    <a href="/" class="back-link">&#8592; Toolkit</a>
-    <div class="hdivider"></div>
-    <span class="header-title">Staffing Dashboard</span>
-    <span class="header-badge">Live</span>
-  </div>
-  <div class="header-right" id="header-right">
-    <span class="last-updated" id="last-updated">Loading...</span>
-    <button class="refresh-btn" onclick="init()">&#8635; Refresh</button>
-  </div>
-</header>
 
-<div class="main">
-  <div class="donut-row" id="donut-row">
-    <div class="donut-card" onclick="toggleDrill()">
-      <div class="donut-svg-wrap"><svg width="90" height="90" viewBox="0 0 90 90" id="donut-requests-svg"><circle cx="45" cy="45" r="36" fill="none" stroke="#f0f0ec" stroke-width="10"/><circle cx="45" cy="45" r="36" fill="none" stroke="#e8e8e4" stroke-width="10" id="donut-requests-track"/><circle cx="45" cy="45" r="36" fill="none" stroke="#1D9E75" stroke-width="10" stroke-linecap="round" stroke-dasharray="226" stroke-dashoffset="226" id="donut-requests-fill" transform="rotate(-90 45 45)" style="transition: stroke-dashoffset 0.8s ease;"/><text x="45" y="49" text-anchor="middle" font-size="16" font-weight="800" fill="#1a1a1a" id="donut-requests-pct">--</text></svg></div>
-      <div class="donut-info"><div class="donut-label">Staffing requests</div><div class="donut-fraction"><span id="m-requests">--</span><span class="denom" id="m-requests-denom"></span></div><div class="donut-status" id="m-requests-sub">Loading...</div><div class="donut-legend"><div class="donut-legend-item"><div class="donut-legend-dot" style="background:#1D9E75;"></div>Submitted</div><div class="donut-legend-item"><div class="donut-legend-dot" style="background:#e8e8e4;"></div>Outstanding</div></div><div class="donut-hint" id="m-requests-detail"></div></div>
+<div class="wrap">
+  <div class="page-head">
+    <div>
+      <h1 class="page-title">Confirmation dashboard</h1>
+      <p class="page-sub" id="sub">Loading…</p>
     </div>
-    <div class="donut-card" onclick="toggleDrillConfirmed()">
-      <div class="donut-svg-wrap"><svg width="90" height="90" viewBox="0 0 90 90"><circle cx="45" cy="45" r="36" fill="none" stroke="#f0f0ec" stroke-width="10"/><circle cx="45" cy="45" r="36" fill="none" stroke="#e8e8e4" stroke-width="10"/><circle cx="45" cy="45" r="36" fill="none" stroke="#1D9E75" stroke-width="10" stroke-linecap="round" stroke-dasharray="226" stroke-dashoffset="226" id="donut-confirmed-fill" transform="rotate(-90 45 45)" style="transition: stroke-dashoffset 0.8s ease;"/><text x="45" y="49" text-anchor="middle" font-size="16" font-weight="800" fill="#1a1a1a" id="donut-confirmed-pct">--</text></svg></div>
-      <div class="donut-info"><div class="donut-label">Events confirmed staffed</div><div class="donut-fraction"><span id="m-confirmed">--</span><span class="denom" id="m-confirmed-denom"></span></div><div class="donut-status" id="m-confirmed-sub">Loading...</div><div class="donut-legend"><div class="donut-legend-item"><div class="donut-legend-dot" style="background:#1D9E75;"></div>Confirmed staffed</div><div class="donut-legend-item"><div class="donut-legend-dot" style="background:#e8e8e4;"></div>Pending</div></div><div class="donut-hint" id="m-confirmed-detail"></div></div>
+    <span class="cycle-pill" id="cycle">Cycle 1 · counting only · nobody gets pulled</span>
+  </div>
+
+  <div id="err-slot"></div>
+
+  <div class="strip" id="strip"></div>
+
+  <div class="headline" id="headline" style="display:none">
+    <div class="headline-main">
+      <p class="headline-big" id="hl-big"></p>
+      <p class="headline-sub" id="hl-sub"></p>
+      <div class="headline-bar" id="hl-bar"></div>
+    </div>
+    <button class="btn dark" id="copy-btn">Copy names and phone numbers</button>
+  </div>
+
+  <div class="controls" id="controls" style="display:none">
+    <button class="chip on" data-preset="all">All<span class="n" id="c-all">0</span></button>
+    <button class="chip" data-preset="unseen">Owes an answer, hasn't seen it<span class="n" id="c-unseen">0</span></button>
+    <button class="chip" data-preset="seen">Seen, no answer<span class="n" id="c-seen">0</span></button>
+    <button class="chip" data-preset="new">New shift since clear<span class="n" id="c-new">0</span></button>
+    <button class="chip" data-preset="passed">Raising their hand, not picked<span class="n" id="c-passed">0</span></button>
+    <button class="chip" data-preset="clear">All clear<span class="n" id="c-clear">0</span></button>
+    <div class="spacer"></div>
+    <select id="f-home"><option value="">All home venues</option></select>
+    <input type="search" id="f-q" placeholder="Search name…">
+  </div>
+
+  <div class="card" id="grid-card" style="display:none">
+    <table id="grid">
+      <thead>
+        <tr>
+          <th data-k="full_name">Employee <span class="arrow">↕</span></th>
+          <th data-k="home_venue">Home <span class="arrow">↕</span></th>
+          <th class="num" data-k="asked">Asked <span class="arrow">↕</span></th>
+          <th class="num" data-k="confirmed">Conf <span class="arrow">↕</span></th>
+          <th class="num" data-k="awaiting">Owes <span class="arrow">↕</span></th>
+          <th data-k="last_opened_at">Last seen <span class="arrow">↕</span></th>
+          <th class="num" data-k="signups_90">Signups <span class="arrow">↕</span></th>
+          <th class="num" data-k="placements_90">Placed <span class="arrow">↕</span></th>
+          <th class="num" data-k="expected_90">Expected <span class="arrow">↕</span></th>
+          <th data-k="status">Status <span class="arrow">↕</span></th>
+        </tr>
+      </thead>
+      <tbody id="grid-body"><tr><td colspan="10" class="loading">Loading…</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="card" id="venue-card" style="display:none">
+    <div class="card-head">
+      <h2 class="card-title">Venue opportunity</h2>
+      <span class="card-note">Settled events, last 90 days</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Venue</th>
+          <th class="num">Events</th>
+          <th class="num">Signups</th>
+          <th class="num">Per event</th>
+          <th class="num">Placements</th>
+          <th class="num">People placed</th>
+          <th class="num">Odds</th>
+        </tr>
+      </thead>
+      <tbody id="venue-body"></tbody>
+    </table>
+    <div class="callout">
+      This is a fact about the <b>venue</b>, never about its people. A venue with signups and almost no placements is a venue
+      that does not staff through this toolkit — the people who signed up there almost certainly worked. Nobody on this page
+      is ever scored against a venue that does not place.
     </div>
   </div>
-  <div class="drill-panel open" id="drill-panel"><div class="drill-title">Venues with outstanding staffing requests</div><div id="drill-content"><div class="loading-state">Loading...</div></div></div>
-  <div class="metric-row" style="margin-top: 16px;">
-    <div class="metric-card"><div class="metric-label">Latest date sales</div><div class="metric-val" id="m-sales">--</div><div class="metric-sub" id="m-sales-sub">Loading...</div></div>
-    <div class="metric-card"><div class="metric-label">SPE -- current fiscal period</div><div class="metric-val" id="m-spe">--</div><div class="metric-sub" id="m-spe-sub">Sales per employee</div><div class="metric-trend" id="m-spe-trend"></div></div>
-    <div class="metric-card" id="m-percap-card"><div class="metric-label">Per cap -- current fiscal period</div><div class="metric-val" id="m-percap">--</div><div class="metric-sub" id="m-percap-sub">Loading...</div><div class="metric-trend" id="m-percap-trend"></div></div>
-    <div class="metric-card"><div class="metric-label">Latest date total staff</div><div class="metric-val" id="m-staff">--</div><div class="metric-sub" id="m-staff-sub">Across all venues</div></div>
+
+  <div class="card" id="feed-card" style="display:none">
+    <div class="card-head">
+      <h2 class="card-title">Recent activity</h2>
+      <span class="card-note">Last 48 hours</span>
+    </div>
+    <div id="feed-body"></div>
   </div>
-  <div class="drill-panel open" id="drill-panel-confirmed"><div class="drill-title">Events not yet confirmed staffed</div><div id="drill-confirmed-content"><div class="loading-state">Loading...</div></div></div>
-  <div class="section"><div class="section-hdr"><span class="section-title">Staffing request status</span><span class="section-sub" id="weeks-label">Upcoming 2 weeks</span></div><div id="weeks-container"><div class="loading-state">Loading...</div></div></div>
-  <div class="section"><div class="section-hdr"><span class="section-title">Staffing coverage -- availability vs requested</span><span class="section-sub">Next 14 days</span></div><div class="table-card"><div id="coverage-table"><div class="loading-state">Loading...</div></div></div></div>
-  <div class="two-col">
-    <div><div class="section-hdr"><span class="section-title">Requested vs actual staff</span><span class="section-sub">Last 30 days -- per event</span></div><div class="table-card"><div id="req-vs-actual"><div class="loading-state">Loading...</div></div></div></div>
-    <div><div class="section-hdr"><span class="section-title">Per cap by venue</span><span class="section-sub" id="percap-period-label">Current fiscal period</span></div><div class="table-card"><div id="percap-table"><div class="loading-state">Loading...</div></div></div></div>
-  </div>
-  <div class="section"><div class="section-hdr"><span class="section-title">Latest date sales</span><span class="section-sub" id="latest-date-label">--</span></div><div class="table-card" id="latest-sales-card"><div class="loading-state">Loading...</div></div></div>
 </div>
+
+<div class="overlay" id="ov"></div>
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <div class="drawer-head">
+    <button class="dclose" id="dclose" aria-label="Close">&times;</button>
+    <p class="dname" id="d-name"></p>
+    <p class="dmeta" id="d-meta"></p>
+  </div>
+  <div class="drawer-body" id="d-body"></div>
+</aside>
 
 <div class="toast" id="toast"></div>
 
 <script src="/pc-auth.js"></script>
+<script src="/pc-nav.js"></script>
 <script>
-const SB_URL='https://aoazlttdjowhlfcksoyl.supabase.co';
-const VENUE_LABELS={FMP:'Freedom Mortgage Pavilion',Mann:'Mann Music Center',BWH:'Boardwalk Hall',ACCC:'AC Convention Center',Cure:'Cure Insurance Arena',Subaru:'Subaru Park',DE:'DE Chase Field House',Montage:'Montage Mountain',SATB:'Sports at the Beach',Villanova:'Villanova',Kirkwood:'Kirkwood'};
-const ALL_VENUES=Object.keys(VENUE_LABELS);
-const SUPPORT_STAND='Support Staff';
-const HAWKING_STAND='Hawking';
-const VENUE_STANDS={Mann:[SUPPORT_STAND,HAWKING_STAND,'Upper Concession','Upper Popcorn','Lower Popcorn','Upper Pizza','Lower Pizza','Farm & Fry Truck','Crescendo','Lawn Portable','Stage Left Bar','Upper Linear Bar','Food Court Bar 2','Parkside Tent Bar','Parkside GA View Bar'],FMP:[SUPPORT_STAND,HAWKING_STAND,'Stand 782','SC1','LM1','LM2','WWI','Ben Kettle','Walt Kettle','IC1','BWI','Ziggys','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4','Mobile Cart 5'],Cure:[SUPPORT_STAND,HAWKING_STAND,'Popcorn','Candy','Cotton Candy'],ACCC:[SUPPORT_STAND,HAWKING_STAND,'Stand 1','Stand 2'],BWH:[SUPPORT_STAND,HAWKING_STAND,'North Stand','South Stand'],DE:[SUPPORT_STAND,HAWKING_STAND,'VIP Bar','Cafe','Popcorn','Bar','Farm & Fry'],Subaru:[SUPPORT_STAND,HAWKING_STAND,'Popcorn','VIP'],Villanova:[SUPPORT_STAND,HAWKING_STAND,'Stand 1'],Montage:[SUPPORT_STAND,HAWKING_STAND,'BW Pizza','Midway Pizza','Midway Popcorn','Boardwalk Popcorn','Festival Foods','Potato Stand','Boardwalk New Food','Mobile Cart 1','Mobile Cart 2'],SATB:[SUPPORT_STAND,HAWKING_STAND,'Stand 1','Ice Cream 1','Stand 2','Stand 3','Catering'],Kirkwood:[SUPPORT_STAND,HAWKING_STAND,'Stand 1']};
-const FISCAL_PERIODS=[{name:'June 2025',start:'2025-05-25',end:'2025-06-28'},{name:'July 2025',start:'2025-06-29',end:'2025-08-02'},{name:'August 2025',start:'2025-08-03',end:'2025-08-30'},{name:'September 2025',start:'2025-08-31',end:'2025-09-27'},{name:'October 2025',start:'2025-09-28',end:'2025-11-01'},{name:'November 2025',start:'2025-11-02',end:'2025-11-29'},{name:'December 2025',start:'2025-11-30',end:'2026-01-03'},{name:'January 2026',start:'2026-01-04',end:'2026-01-31'},{name:'February 2026',start:'2026-02-01',end:'2026-02-28'},{name:'March 2026',start:'2026-03-01',end:'2026-04-04'},{name:'April 2026',start:'2026-04-05',end:'2026-05-02'},{name:'May 2026',start:'2026-05-03',end:'2026-05-30'},{name:'June 2026',start:'2026-05-31',end:'2026-07-04'},{name:'July 2026',start:'2026-07-05',end:'2026-08-01'},{name:'August 2026',start:'2026-08-02',end:'2026-09-05'},{name:'September 2026',start:'2026-09-06',end:'2026-10-03'},{name:'October 2026',start:'2026-10-04',end:'2026-10-31'},{name:'November 2026',start:'2026-11-01',end:'2026-11-28'},{name:'December 2026',start:'2026-12-06',end:'2027-01-02'}];
+(function () {
+  'use strict';
 
-function apiHeaders() { return pcAuth.headers(); }
+  // ==========================================================================
+  // TUNABLES — Popfax PLAN_* pattern. Move these without touching logic.
+  // ==========================================================================
+  var PASSOVER_MIN_EXPECTED = 2.0;   // below this, "0 placements" is not a finding
+  var SUGG_MIN_ODDS_LIFT    = 0.15;  // a suggestion needs a real edge, not noise
+  var SUGG_MIN_EVENTS       = 5;     // a 2-event venue cannot become advice
+  var FEED_HOURS            = 48;
+  var FEED_LIMIT            = 40;
 
-function getCurrentFiscalPeriod(){const today=todayStr();for(const p of FISCAL_PERIODS){if(today>=p.start&&today<=p.end)return p;}return FISCAL_PERIODS[FISCAL_PERIODS.length-1];}
-function getPriorFiscalPeriod(){const curr=getCurrentFiscalPeriod();const idx=FISCAL_PERIODS.indexOf(curr);return idx>0?FISCAL_PERIODS[idx-1]:null;}
-function todayStr(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
-function addDays(dateStr,n){const d=new Date(dateStr+'T12:00:00');d.setDate(d.getDate()+n);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
-function getWeekBounds(offsetWeeks){const today=new Date();const dow=today.getDay();const monday=new Date(today);monday.setDate(today.getDate()-(dow===0?6:dow-1)+offsetWeeks*7);const sunday=new Date(monday);sunday.setDate(monday.getDate()+6);const fmt=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;const fmtLabel=d=>d.toLocaleDateString('en-US',{month:'short',day:'numeric'});return{start:fmt(monday),end:fmt(sunday),label:`${fmtLabel(monday)} – ${fmtLabel(sunday)}`};}
-function fmtDateShort(ds){return new Date(ds+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'numeric',day:'numeric'});}
-function fmtDateFull(ds){return new Date(ds+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});}
-function fmtMoney(n){return '$'+Math.round(n).toLocaleString();}
-function fmtMoneyDec(n){return '$'+n.toFixed(2);}
-async function sbFetch(p){const r=await fetch(SB_URL+'/rest/v1/'+p,{headers:apiHeaders()});if(!r.ok)throw new Error(await r.text());return r.json();}
+  var SB = 'https://aoazlttdjowhlfcksoyl.supabase.co';
+  if (typeof pcAuth !== 'undefined' && pcAuth.SUPABASE_URL) SB = pcAuth.SUPABASE_URL;
 
-let drillOpen=true;
-let drillConfirmedOpen=true;
-let drillData=[];
-function toggleDrill(){drillOpen=!drillOpen;document.getElementById('drill-panel').classList.toggle('open',drillOpen);}
-function toggleDrillConfirmed(){drillConfirmedOpen=!drillConfirmedOpen;document.getElementById('drill-panel-confirmed').classList.toggle('open',drillConfirmedOpen);}
+  var state = {
+    rows: [], venues: [], feed: [], shifts: {},
+    preset: 'all', home: '', q: '',
+    sortKey: 'awaiting', sortDir: -1
+  };
 
-async function init(){document.getElementById('last-updated').textContent='Loading...';try{const today=todayStr();const twoWeeksOut=addDays(today,14);const thirtyDaysAgo=addDays(today,-30);const fiscalPeriod=getCurrentFiscalPeriod();const priorPeriod=getPriorFiscalPeriod();const[events,submissions,availability,staffingStatus,salesRecent,salesFiscal,salesPrior]=await Promise.all([sbFetch('events?order=event_date.asc'),sbFetch('staffing_requests?select=event_id,venue,stand,role,headcount,manager_name,submitted_at'),sbFetch('availability?select=staff_name,event_id'),sbFetch('event_staffing_status?select=event_id,venue,is_confirmed,confirmed_by,confirmed_at'),sbFetch('sales?order=event_date.desc&limit=500&select=event_date,venue,stand,amount,staff_count,event_name'),sbFetch(`sales?event_date=gte.${fiscalPeriod.start}&event_date=lte.${fiscalPeriod.end}&select=venue,amount,staff_count,event_date`),priorPeriod?sbFetch(`sales?event_date=gte.${priorPeriod.start}&event_date=lte.${priorPeriod.end}&select=venue,amount,staff_count,event_date`):Promise.resolve([])]);const subsByEvt={};submissions.forEach(r=>{if(!subsByEvt[r.event_id])subsByEvt[r.event_id]=[];subsByEvt[r.event_id].push(r);});const availByEvt={};availability.forEach(r=>{if(!availByEvt[r.event_id])availByEvt[r.event_id]=[];availByEvt[r.event_id].push(r);});const statusByKey={};staffingStatus.forEach(r=>{statusByKey[r.event_id+'||'+r.venue]=r;});const upcomingEvts=events.filter(e=>e.event_date>=today&&e.event_date<=twoWeeksOut);const latestDate=salesRecent.length>0?salesRecent[0].event_date:null;const latestSales=latestDate?salesRecent.filter(r=>r.event_date===latestDate):[];renderMetrics(upcomingEvts,subsByEvt,statusByKey,salesFiscal,salesPrior,priorPeriod,fiscalPeriod,latestSales,latestDate,events);renderWeeks(upcomingEvts,subsByEvt,statusByKey);renderCoverageTable(upcomingEvts,subsByEvt,availByEvt,statusByKey);renderReqVsActual(events,subsByEvt,salesRecent,thirtyDaysAgo);renderPerCap(events,salesFiscal,salesPrior,priorPeriod,fiscalPeriod);renderLatestSales(latestSales,latestDate,events);document.getElementById('last-updated').textContent='Updated '+new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});}catch(e){console.error(e);showToast('Error loading dashboard data.');document.getElementById('last-updated').textContent='Error loading';}}
-
-function getReqTotal(evtId,venue,subs){const rows=(subs[evtId]||[]).filter(r=>r.venue===venue&&r.stand!==SUPPORT_STAND);return rows.reduce((s,r)=>s+(r.headcount||0),0);}
-function isSubmitted(evtId,subs){return!!(subs[evtId]&&subs[evtId].length>0);}
-
-function renderMetrics(upcomingEvts,subs,statusByKey,salesFiscal,salesPrior,priorPeriod,fiscalPeriod,latestSales,latestDate,events){const latestTotal=latestSales.reduce((s,r)=>s+parseFloat(r.amount),0);document.getElementById('m-sales').textContent=fmtMoney(latestTotal);document.getElementById('m-sales-sub').textContent=latestDate?fmtDateFull(latestDate):'No sales logged yet';const latestStaff=latestSales.reduce((s,r)=>s+(parseInt(r.staff_count)||0),0);document.getElementById('m-staff').textContent=latestStaff||'--';document.getElementById('m-staff-sub').textContent=latestDate?fmtDateFull(latestDate):'No data yet';const fiscalDates=[...new Set(salesFiscal.map(r=>r.event_date))];const fiscalEvts=events.filter(e=>fiscalDates.includes(e.event_date)&&e.actual_attendance);const totalAtt=fiscalEvts.reduce((s,e)=>s+(e.actual_attendance||0),0);const totalFiscalSales=salesFiscal.reduce((s,r)=>s+parseFloat(r.amount),0);const perCap=totalAtt>0?totalFiscalSales/totalAtt:null;document.getElementById('m-percap').textContent=perCap?fmtMoneyDec(perCap):'--';document.getElementById('m-percap-sub').textContent=perCap?fiscalPeriod.name:'Attendance not yet entered';if(perCap&&priorPeriod){const priorDates=[...new Set((salesPrior||[]).map(r=>r.event_date))];const priorEvts=events.filter(e=>priorDates.includes(e.event_date)&&e.actual_attendance);const priorAtt=priorEvts.reduce((s,e)=>s+(e.actual_attendance||0),0);const priorSales=(salesPrior||[]).reduce((s,r)=>s+parseFloat(r.amount),0);const priorPerCap=priorAtt>0?priorSales/priorAtt:null;if(priorPerCap){const diff=perCap-priorPerCap;const trendEl=document.getElementById('m-percap-trend');trendEl.textContent=(diff>=0?'↑':'↓')+' '+fmtMoneyDec(Math.abs(diff))+' vs '+priorPeriod.name;trendEl.className='metric-trend '+(diff>=0?'trend-up':'trend-down');}}const submitted=upcomingEvts.filter(e=>isSubmitted(e.id,subs)).length;const total=upcomingEvts.length;const reqPct=total>0?Math.round((submitted/total)*100):0;const reqOffset=226-(226*submitted/Math.max(total,1));document.getElementById('m-requests').textContent=submitted;document.getElementById('m-requests-denom').textContent=' / '+total;document.getElementById('donut-requests-pct').textContent=reqPct+'%';const reqFill=document.getElementById('donut-requests-fill');reqFill.style.stroke=reqPct===100?'#1D9E75':reqPct>=70?'#e8c94e':'#c0392b';setTimeout(()=>{reqFill.style.strokeDashoffset=reqOffset;},100);const outstanding=total-submitted;document.getElementById('m-requests-sub').textContent=outstanding===0?'All submitted ✓':`${outstanding} venue${outstanding!==1?'s':''} outstanding`;document.getElementById('m-requests-sub').style.color=outstanding>0?'var(--red)':'var(--green)';if(outstanding>0){document.getElementById('m-requests-detail').textContent='Tap to collapse ↑';drillData=upcomingEvts.filter(e=>!isSubmitted(e.id,subs));renderDrill(drillData);}else{document.getElementById('m-requests-detail').textContent='';drillData=[];document.getElementById('drill-content').innerHTML='<div class="empty-state">All submissions are in.</div>';}const confirmed=upcomingEvts.filter(e=>{const s=statusByKey[e.id+'||'+e.venue];return s&&s.is_confirmed;}).length;const confPct=total>0?Math.round((confirmed/total)*100):0;const confOffset=226-(226*confirmed/Math.max(total,1));document.getElementById('m-confirmed').textContent=confirmed;document.getElementById('m-confirmed-denom').textContent=' / '+total;document.getElementById('donut-confirmed-pct').textContent=confPct+'%';const confFill=document.getElementById('donut-confirmed-fill');confFill.style.stroke=confPct===100?'#1D9E75':confPct>=70?'#e8c94e':'#c0392b';setTimeout(()=>{confFill.style.strokeDashoffset=confOffset;},200);const notConfirmed=total-confirmed;document.getElementById('m-confirmed-sub').textContent=notConfirmed===0?'All confirmed ✓':`${notConfirmed} not yet confirmed`;document.getElementById('m-confirmed-sub').style.color=notConfirmed>0?'var(--amber)':'var(--green)';if(notConfirmed>0)document.getElementById('m-confirmed-detail').textContent='Tap to collapse ↑';const notConfirmedEvts=upcomingEvts.filter(e=>{const s=statusByKey[e.id+'||'+e.venue];return!(s&&s.is_confirmed);});if(notConfirmedEvts.length===0){document.getElementById('drill-confirmed-content').innerHTML='<div class="empty-state">All events confirmed staffed.</div>';}else{document.getElementById('drill-confirmed-content').innerHTML=notConfirmedEvts.map(e=>{const sub=isSubmitted(e.id,subs);return `<div class="drill-row"><span class="drill-venue">${VENUE_LABELS[e.venue]||e.venue} -- ${e.event_name}</span><div style="display:flex;align-items:center;gap:8px;"><span class="tag-sub">${fmtDateShort(e.event_date)}</span><span class="drill-status ${sub?'ds-pending':'ds-missing'}">${sub?'Submitted -- awaiting confirmation':'Not submitted'}</span></div></div>`;}).join('');}const fiscalTotal=salesFiscal.reduce((s,r)=>s+parseFloat(r.amount),0);const fiscalStaff=salesFiscal.reduce((s,r)=>s+(parseInt(r.staff_count)||0),0);const spe=fiscalStaff>0?fiscalTotal/fiscalStaff:null;document.getElementById('m-spe').textContent=spe?fmtMoneyDec(spe):'--';document.getElementById('m-spe-sub').textContent=`Sales per employee -- ${fiscalPeriod.name}`;if(spe&&priorPeriod){const priorTotal=salesPrior.reduce((s,r)=>s+parseFloat(r.amount),0);const priorStaff=salesPrior.reduce((s,r)=>s+(parseInt(r.staff_count)||0),0);const priorSpe=priorStaff>0?priorTotal/priorStaff:null;if(priorSpe){const diff=spe-priorSpe;const trendEl=document.getElementById('m-spe-trend');trendEl.textContent=(diff>=0?'↑':'↓')+' '+fmtMoneyDec(Math.abs(diff))+' vs '+priorPeriod.name;trendEl.className='metric-trend '+(diff>=0?'trend-up':'trend-down');}}}
-
-function renderDrill(evts){if(evts.length===0){document.getElementById('drill-content').innerHTML='<div class="empty-state">All submissions are in.</div>';return;}document.getElementById('drill-content').innerHTML=evts.map(e=>`<div class="drill-row"><span class="drill-venue">${VENUE_LABELS[e.venue]||e.venue} -- ${e.event_name}</span><div style="display:flex;align-items:center;gap:8px;"><span class="tag-sub">${fmtDateShort(e.event_date)}</span><span class="drill-status ds-missing">Not submitted</span></div></div>`).join('');}
-
-function renderWeeks(upcomingEvts,subs,statusByKey){const week1=getWeekBounds(0);const week2=getWeekBounds(1);function buildWeekBlock(week,label){const evtsThisWeek=upcomingEvts.filter(e=>e.event_date>=week.start&&e.event_date<=week.end);const venuesWithEvts=[...new Set(evtsThisWeek.map(e=>e.venue))];let innerHtml;if(venuesWithEvts.length===0){innerHtml='<div class="empty-state" style="padding:20px;">No events scheduled this week.</div>';}else{innerHtml=`<div class="venue-status-grid">${venuesWithEvts.map(venue=>{const evts=evtsThisWeek.filter(e=>e.venue===venue);return `<div class="vs-card"><div class="vs-venue">${VENUE_LABELS[venue]||venue}</div>${evts.map(e=>{const confirmed=statusByKey[e.id+'||'+e.venue]?.is_confirmed;const submitted=isSubmitted(e.id,subs);let pillClass,pillText;if(confirmed){pillClass='sp-staffed';pillText='✓ Staffed';}else if(submitted){pillClass='sp-submitted';pillText='Submitted';}else{pillClass='sp-missing';pillText='Not submitted';}return `<div class="vs-evt-row"><span class="vs-evt-name">${e.event_name}</span><span class="status-pill ${pillClass}">${pillText}</span></div>`;}).join('')}</div>`;}).join('')}</div>`;}return `<div class="week-block"><div class="week-label"><span>${label}: ${week.label}</span><div class="week-line"></div></div>${innerHtml}</div>`;}document.getElementById('weeks-container').innerHTML=buildWeekBlock(week1,'This week')+buildWeekBlock(week2,'Next week');}
-
-function renderCoverageTable(evts,subs,avail,statusByKey){if(evts.length===0){document.getElementById('coverage-table').innerHTML='<div class="empty-state">No upcoming events in next 14 days.</div>';return;}let html=`<table class="data-table"><thead><tr><th>Event</th><th>Venue</th><th>Date</th><th>Requested</th><th>Signed up</th><th>Coverage</th><th>Confirmed</th></tr></thead><tbody>`;evts.forEach(e=>{const req=getReqTotal(e.id,e.venue,subs);const signed=(avail[e.id]||[]).length;const submitted=isSubmitted(e.id,subs);const confirmed=statusByKey[e.id+'||'+e.venue]?.is_confirmed;const pct=req>0?Math.min(100,Math.round((signed/req)*100)):null;const barClass=pct===null?'':pct>=100?'bf-green':pct>=60?'bf-amber':'bf-red';const pctLabel=pct===null?'<span class="muted">No request</span>':`<div class="bar-wrap"><div class="bar-fill ${barClass}" style="width:${pct}%"></div></div>${pct}%`;html+=`<tr><td><strong>${e.event_name}</strong></td><td class="muted">${e.venue}</td><td class="muted">${fmtDateShort(e.event_date)}</td><td>${submitted?req:'<span class="muted">--</span>'}</td><td>${signed}</td><td>${pctLabel}</td><td><span class="conf-badge ${confirmed?'cb-yes':'cb-no'}">${confirmed?'✓ Staffed':'Pending'}</span></td></tr>`;});html+='</tbody></table>';document.getElementById('coverage-table').innerHTML=html;}
-
-function renderReqVsActual(events,subs,salesRecent,thirtyDaysAgo){const recentEvts=events.filter(e=>e.event_date>=thirtyDaysAgo&&e.event_date<todayStr());const rows=[];recentEvts.forEach(e=>{const req=getReqTotal(e.id,e.venue,subs);if(req===0)return;const salesRows=salesRecent.filter(s=>s.event_date===e.event_date&&s.venue===(VENUE_LABELS[e.venue]||e.venue));const actual=salesRows.reduce((s,r)=>s+(parseInt(r.staff_count)||0),0);rows.push({venue:VENUE_LABELS[e.venue]||e.venue,event:e.event_name,date:e.event_date,req,actual,gap:actual-req});});if(rows.length===0){document.getElementById('req-vs-actual').innerHTML='<div class="empty-state">No data for last 30 days yet.</div>';return;}rows.sort((a,b)=>b.date.localeCompare(a.date));let html=`<table class="data-table"><thead><tr><th>Event</th><th>Date</th><th>Requested</th><th>Actual</th><th>Gap</th></tr></thead><tbody>`;rows.slice(0,10).forEach(r=>{const gapColor=r.gap>0?'color:var(--green);font-weight:700;':r.gap<0?'color:var(--red);font-weight:700;':'color:var(--label);';const gapText=r.gap>0?'+'+r.gap:r.gap===0?'--':r.gap;html+=`<tr><td><strong style="font-size:12px;">${r.event}</strong><div class="tag-sub">${r.venue}</div></td><td class="muted">${fmtDateShort(r.date)}</td><td>${r.req}</td><td>${r.actual||'<span class="muted">--</span>'}</td><td style="${gapColor}">${gapText}</td></tr>`;});html+='</tbody></table>';document.getElementById('req-vs-actual').innerHTML=html;}
-
-function renderPerCap(events,salesFiscal,salesPrior,priorPeriod,fiscalPeriod){document.getElementById('percap-period-label').textContent=fiscalPeriod.name;const byVenue={};salesFiscal.forEach(r=>{if(!byVenue[r.venue])byVenue[r.venue]={sales:0,dates:new Set()};byVenue[r.venue].sales+=parseFloat(r.amount);byVenue[r.venue].dates.add(r.event_date);});const fiscalDates=[...new Set(salesFiscal.map(r=>r.event_date))];const fiscalEvts=events.filter(e=>fiscalDates.includes(e.event_date)&&e.actual_attendance);const venueAttendance={};fiscalEvts.forEach(e=>{const vLabel=VENUE_LABELS[e.venue];if(!venueAttendance[vLabel])venueAttendance[vLabel]=0;venueAttendance[vLabel]+=(e.actual_attendance||0);});const priorByVenue={};(salesPrior||[]).forEach(r=>{if(!priorByVenue[r.venue])priorByVenue[r.venue]=0;priorByVenue[r.venue]+=parseFloat(r.amount);});const priorDates=[...new Set((salesPrior||[]).map(r=>r.event_date))];const priorEvts=events.filter(e=>priorDates.includes(e.event_date)&&e.actual_attendance);const priorAttendance={};priorEvts.forEach(e=>{const vLabel=VENUE_LABELS[e.venue];if(!priorAttendance[vLabel])priorAttendance[vLabel]=0;priorAttendance[vLabel]+=(e.actual_attendance||0);});const rows=Object.entries(byVenue).map(([venue,d])=>{const att=venueAttendance[venue]||0;const perCap=att>0?d.sales/att:null;const priorAtt=priorAttendance[venue]||0;const priorSales=priorByVenue[venue]||0;const priorPerCap=priorAtt>0?priorSales/priorAtt:null;return{venue,sales:d.sales,perCap,priorPerCap};}).filter(r=>r.sales>0).sort((a,b)=>(b.perCap||0)-(a.perCap||0));if(rows.length===0){document.getElementById('percap-table').innerHTML='<div class="empty-state">No sales data for this fiscal period yet.</div>';return;}let html='';rows.forEach(r=>{const perCapStr=r.perCap?fmtMoneyDec(r.perCap):'<span class="muted" style="font-size:11px;">--</span>';let trendHtml='';if(r.perCap&&r.priorPerCap){const diff=r.perCap-r.priorPerCap;trendHtml=`<span class="perf-trend ${diff>=0?'trend-up':'trend-down'}">${diff>=0?'↑':'↓'} ${fmtMoneyDec(Math.abs(diff))}</span>`;}else{trendHtml='<span class="perf-trend" style="color:var(--label);">--</span>';}html+=`<div class="perf-row"><span class="perf-venue">${r.venue}</span><div class="perf-right"><span class="perf-val">${perCapStr}</span>${trendHtml}</div></div>`;});document.getElementById('percap-table').innerHTML=html;}
-
-function renderLatestSales(latestSales,latestDate,events){const card=document.getElementById('latest-sales-card');if(!latestDate||latestSales.length===0){card.innerHTML='<div class="empty-state">No sales logged yet.</div>';return;}const grandTotal=latestSales.reduce((s,r)=>s+parseFloat(r.amount),0);const dateEvts=events.filter(e=>e.event_date===latestDate);const byVenue={};latestSales.forEach(r=>{if(!byVenue[r.venue])byVenue[r.venue]={sales:0,staff:0,stands:0,eventName:r.event_name||''};byVenue[r.venue].sales+=parseFloat(r.amount);byVenue[r.venue].staff+=parseInt(r.staff_count)||0;byVenue[r.venue].stands++;});const attByVenueLabel={};dateEvts.forEach(e=>{const lbl=VENUE_LABELS[e.venue]||e.venue;attByVenueLabel[lbl]=(attByVenueLabel[lbl]||0)+(e.actual_attendance||0);});const venueRows=Object.entries(byVenue).sort((a,b)=>b[1].sales-a[1].sales);const grandStaff=venueRows.reduce((s,[,v])=>s+v.staff,0);const grandSPE=grandStaff>0?grandTotal/grandStaff:null;let html=`<div class="sales-header"><div><div class="sales-grand-label">Company total</div><div class="sales-grand-date">${fmtDateFull(latestDate)}</div></div><div style="text-align:right;"><div class="sales-grand-total">${fmtMoney(grandTotal)}</div>${grandSPE?`<div style="font-size:12px;color:var(--label);margin-top:2px;">SPE: ${fmtMoneyDec(grandSPE)}</div>`:''}</div></div><div class="sales-table-header"><span>Venue</span><span>SPE</span><span>Per cap</span><span>Total sales</span></div>`;venueRows.forEach(([venue,d])=>{const spe=d.staff>0?fmtMoneyDec(d.sales/d.staff):null;const att=attByVenueLabel[venue]||0;const perCap=att>0?fmtMoneyDec(d.sales/att):null;html+=`<div class="sales-row"><div class="sales-venue-cell"><div class="sales-venue-name">${venue}</div><div class="sales-venue-meta">${d.eventName}${d.stands>0?' -- '+d.stands+' stand'+(d.stands!==1?'s':''):''}</div></div><div class="sales-num-cell ${spe?'':'muted'}">${spe||'--'}</div><div class="sales-num-cell ${perCap?'':'muted'}">${perCap||'--'}</div><div class="sales-num-cell total">${fmtMoney(d.sales)}</div></div>`;});document.getElementById('latest-date-label').textContent=fmtDateFull(latestDate);card.innerHTML=html;}
-
-function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3500);}
-
-// Login gate
-pcAuth.require({
-  pageSlug: 'dashboard',
-  onReady: function(user) {
-    var hrEl = document.getElementById('header-right');
-    if (hrEl && user) {
-      var userHtml = '<span class="header-user">' + (user.display_name || user.email) + '</span>' +
-        '<button class="sign-out-btn" onclick="pcAuth.signOut()">Sign out</button>';
-      // Prepend user info before existing refresh controls
-      var existing = hrEl.innerHTML;
-      hrEl.innerHTML = userHtml + existing;
-    }
-    init();
-    setInterval(init, 300000);
+  // ---------- helpers -------------------------------------------------------
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
-});
+  function api(path) {
+    if (!SB || SB.indexOf('supabase.co') < 0) throw new Error('SUPABASE_URL not resolved — fetches would hit the local server.');
+    var h = pcAuth.headers();
+    return fetch(SB + '/rest/v1/' + path, { headers: h }).then(function (r) {
+      if (r.status === 401 || r.status === 403) { var e = new Error('auth'); e.authFailed = true; throw e; }
+      if (!r.ok) return r.text().then(function (t) { throw new Error(path.split('?')[0] + ' → ' + r.status + ' ' + t); });
+      return r.json();
+    });
+  }
+  function ago(iso) {
+    if (!iso) return null;
+    var ms = Date.now() - new Date(iso).getTime();
+    var m = Math.round(ms / 60000);
+    if (m < 60) return m + 'm ago';
+    var h = Math.round(m / 60);
+    if (h < 24) return h + 'h ago';
+    var d = Math.round(h / 24);
+    if (d < 7) return d + 'd ago';
+    return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  }
+  function dstr(d) {
+    if (!d) return '';
+    var p = String(d).split('-');
+    return new Date(+p[0], +p[1] - 1, +p[2])
+      .toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  }
+  function toast(msg) {
+    var t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(function () { t.classList.remove('show'); }, 2400);
+  }
+  function fail(msg) {
+    document.getElementById('err-slot').innerHTML = '<div class="err">' + esc(msg) + '</div>';
+  }
+
+  // ---------- derived state -------------------------------------------------
+  // Status is derived, never stored. Release is the gate — never a day count.
+  function statusOf(r) {
+    if (!r.asked)                       return { k: 'none',   t: 'Nothing asked',        c: 'p-none' };
+    if (!r.awaiting)                    return { k: 'clear',  t: 'All clear',            c: 'p-clear' };
+    if (r.last_answered_at && r.newest_offer_at &&
+        new Date(r.newest_offer_at) > new Date(r.last_answered_at))
+                                        return { k: 'new',    t: 'New shift since clear', c: 'p-new' };
+    if (!r.last_opened_at)              return { k: 'unseen', t: 'Never opened page',    c: 'p-unseen' };
+    if (r.oldest_unanswered_offer_at &&
+        new Date(r.last_opened_at) > new Date(r.oldest_unanswered_offer_at))
+                                        return { k: 'seen',   t: 'Seen, no answer',      c: 'p-seen' };
+    return { k: 'unseen', t: 'Not seen since asked', c: 'p-unseen' };
+  }
+
+  // The passed-over verdict. A self-stated constraint OUTRANKS every inference —
+  // "bar only" explains a zero, and we print it verbatim rather than guessing.
+  function verdictOf(r) {
+    if (r.placements_90 > 0)                        return null;
+    if (r.expected_90 < PASSOVER_MIN_EXPECTED)      return null;
+
+    if (r.last_note)
+      return { k: 'note', t: 'Stated a constraint', c: 'p-note', detail: r.last_note };
+
+    if (!r.home_venue)
+      return { k: 'nohome', t: 'No home venue set', c: 'p-unseen',
+               detail: 'Nobody owns this person. Set a home venue and they enter someone\u2019s priority list.' };
+
+    if (!r.signups_at_home_90)
+      return { k: 'mismatch', t: 'Home venue mismatch', c: 'p-miss',
+               detail: 'Homed at ' + r.home_venue + ' but has never signed up there \u2014 signs up at ' +
+                       (r.venues_csv || '\u2014') + '. They are the away player at every event they raise a hand for, ' +
+                       'and home-venue people go first. Fix the field, not the person.' };
+
+    if (r.best_venue && r.best_odds != null && r.home_odds != null &&
+        r.best_events >= SUGG_MIN_EVENTS &&
+        (r.best_odds - r.home_odds) >= SUGG_MIN_ODDS_LIFT)
+      return { k: 'better', t: 'Better odds at ' + r.best_venue, c: 'p-new',
+               detail: 'Home venue ' + r.home_venue + ' places ' + pct(r.home_odds) + ' of signups. ' +
+                       r.best_venue + ' \u2014 which they already sign up for \u2014 places ' + pct(r.best_odds) + '. ' +
+                       'A conversation with a number attached.' };
+
+    return { k: 'nosugg', t: 'No suggestion \u2014 we just didn\u2019t pick them', c: 'p-miss',
+             detail: 'The odds at their venues were fine. They signed up ' + r.signups_90 +
+                     ' times, we should have placed them about ' + r.expected_90.toFixed(1) +
+                     ' times, and we placed them zero. There is no advice to give them. This one is ours.' };
+  }
+  function pct(x) { return x == null ? '\u2014' : Math.round(x * 100) + '%'; }
+
+  // ---------- load ----------------------------------------------------------
+  function load() {
+    var since = new Date(Date.now() - FEED_HOURS * 3600 * 1000).toISOString();
+    var today = new Date().toISOString().slice(0, 10);
+
+    return Promise.all([
+      api('employees?select=id,first_name,last_name,phone,punch_id,home_venue&is_active=eq.true&order=last_name'),
+      api('v_employee_confirmation?select=*'),
+      api('v_employee_page_activity?select=*'),
+      api('v_confirmation_engagement?select=*'),
+      api('v_venue_opportunity?select=*'),
+      api('position_assignment_log?select=action,details,actor,actor_at' +
+          '&action=in.(shift_confirmed,shift_declined,released)' +
+          '&actor_at=gte.' + since + '&order=actor_at.desc&limit=' + FEED_LIMIT),
+      api('position_assignments?select=id,staff_name,venue,stand,role,source,offer_sent_at,confirmed_at,declined_at,' +
+          'events!inner(event_name,event_date,venue,cancelled_at,deleted_at)' +
+          '&removed_at=is.null&source=not.in.(placeholder,jmac)' +
+          '&events.event_date=gte.' + today +
+          '&events.cancelled_at=is.null&events.deleted_at=is.null')
+    ]).then(function (res) {
+      var emps = res[0], conf = res[1], act = res[2], eng = res[3];
+      state.venues = res[4];
+      state.feed = res[5];
+
+      var byId = {};
+      function put(list) {
+        list.forEach(function (r) {
+          var id = r.employee_id;
+          if (!byId[id]) byId[id] = {};
+          Object.keys(r).forEach(function (k) { if (k !== 'employee_id') byId[id][k] = r[k]; });
+        });
+      }
+      put(conf); put(act); put(eng);
+
+      state.rows = emps.map(function (e) {
+        var d = byId[e.id] || {};
+        var r = {
+          employee_id: e.id,
+          full_name: ((e.first_name || '') + ' ' + (e.last_name || '')).trim(),
+          punch_id: e.punch_id,
+          phone: e.phone,
+          home_venue: d.home_venue || (e.home_venue === 'NA' ? null : e.home_venue) || null,
+          asked: d.asked || 0,
+          not_released: d.not_released || 0,
+          confirmed: d.confirmed || 0,
+          declined: d.declined || 0,
+          awaiting: d.awaiting || 0,
+          last_answered_at: d.last_answered_at || null,
+          newest_offer_at: d.newest_offer_at || null,
+          oldest_unanswered_offer_at: d.oldest_unanswered_offer_at || null,
+          last_opened_at: d.last_opened_at || null,
+          page_opens: d.page_opens || 0,
+          signups_90: d.signups_90 || 0,
+          placements_90: d.placements_90 || 0,
+          expected_90: Number(d.expected_90 || 0),
+          signups_at_home_90: d.signups_at_home_90 || 0,
+          venues_csv: d.venues_csv || null,
+          home_odds: d.home_odds == null ? null : Number(d.home_odds),
+          home_events: d.home_events || 0,
+          best_venue: d.best_venue || null,
+          best_odds: d.best_odds == null ? null : Number(d.best_odds),
+          best_events: d.best_events || 0,
+          last_note: d.last_note || null,
+          last_note_at: d.last_note_at || null
+        };
+        r.st = statusOf(r);
+        r.status = r.st.t;
+        r.verdict = verdictOf(r);
+        return r;
+      });
+
+      // Group upcoming shifts by normalized name for the drawer.
+      state.shifts = {};
+      res[6].forEach(function (p) {
+        var k = nameKey(p.staff_name);
+        if (!state.shifts[k]) state.shifts[k] = [];
+        state.shifts[k].push(p);
+      });
+    });
+  }
+
+  // Mirrors public.pc_name_key() in the database. If one changes, change both.
+  function nameKey(s) {
+    return String(s || '').toLowerCase().trim()
+      .replace(/\s*-\s*u\s*$/, '')
+      .replace(/\s+/g, ' ');
+  }
+
+  // ---------- render --------------------------------------------------------
+  function renderStrip() {
+    var a = 0, nr = 0, c = 0, dcl = 0, aw = 0;
+    state.rows.forEach(function (r) {
+      a += r.asked; nr += r.not_released; c += r.confirmed; dcl += r.declined; aw += r.awaiting;
+    });
+    var rate = a ? Math.round((c / a) * 100) : 0;
+    var cards = [
+      { l: 'Not released', v: nr,  f: 'hidden from staff' },
+      { l: 'Asked',        v: a,   f: 'released to staff' },
+      { l: 'Confirmed',    v: c,   f: rate + '% of asked', cls: 'good' },
+      { l: 'Awaiting',     v: aw,  f: 'no answer yet',     cls: 'warn' },
+      { l: 'Declined',     v: dcl, f: 'said no',           cls: 'bad' },
+      { l: 'Response rate',v: rate + '%', f: 'of everyone asked', cls: rate >= 50 ? 'good' : 'warn' }
+    ];
+    document.getElementById('strip').innerHTML = cards.map(function (x) {
+      return '<div class="stat ' + (x.cls || '') + '">' +
+        '<div class="stat-l">' + esc(x.l) + '</div>' +
+        '<div class="stat-v">' + esc(x.v) + '</div>' +
+        '<div class="stat-f">' + esc(x.f) + '</div></div>';
+    }).join('');
+    document.getElementById('sub').textContent =
+      state.rows.length + ' active employees · ' + (a + nr) + ' live upcoming placements';
+  }
+
+  function unseenList() {
+    return state.rows.filter(function (r) { return r.awaiting > 0 && r.st.k === 'unseen'; });
+  }
+
+  function renderHeadline() {
+    var owing = state.rows.filter(function (r) { return r.awaiting > 0; });
+    var unseen = unseenList();
+    var seen = owing.length - unseen.length;
+    if (!owing.length) {
+      document.getElementById('headline').style.display = 'none';
+      return;
+    }
+    var pctUnseen = Math.round((unseen.length / owing.length) * 100);
+    document.getElementById('hl-big').textContent =
+      unseen.length + ' of the ' + owing.length + ' people who owe you an answer have not seen the offer.';
+    document.getElementById('hl-sub').textContent =
+      seen + ' opened the page and did not answer. When people see the offer, they answer it \u2014 ' +
+      'this is a reach problem, not a compliance problem. Nobody gets pulled for it.';
+    document.getElementById('hl-bar').innerHTML =
+      '<span style="width:' + pctUnseen + '%;background:var(--amber)"></span>' +
+      '<span style="width:' + (100 - pctUnseen) + '%;background:var(--slate)"></span>';
+    document.getElementById('copy-btn').textContent =
+      'Copy ' + unseen.length + ' names and phone numbers';
+    document.getElementById('headline').style.display = 'flex';
+  }
+
+  function matchesPreset(r, p) {
+    if (p === 'all')    return true;
+    if (p === 'unseen') return r.awaiting > 0 && r.st.k === 'unseen';
+    if (p === 'seen')   return r.awaiting > 0 && r.st.k === 'seen';
+    if (p === 'new')    return r.st.k === 'new';
+    if (p === 'clear')  return r.st.k === 'clear';
+    if (p === 'passed') return !!r.verdict;
+    return true;
+  }
+
+  function renderChips() {
+    ['all', 'unseen', 'seen', 'new', 'passed', 'clear'].forEach(function (p) {
+      var n = state.rows.filter(function (r) { return matchesPreset(r, p); }).length;
+      var el = document.getElementById('c-' + p);
+      if (el) el.textContent = n;
+    });
+  }
+
+  function visibleRows() {
+    var q = state.q.toLowerCase();
+    var out = state.rows.filter(function (r) {
+      if (!matchesPreset(r, state.preset)) return false;
+      if (state.home && (r.home_venue || '') !== state.home) return false;
+      if (q && r.full_name.toLowerCase().indexOf(q) < 0) return false;
+      return true;
+    });
+    var k = state.sortKey, d = state.sortDir;
+    out.sort(function (a, b) {
+      var x = a[k], y = b[k];
+      if (x == null) x = (typeof y === 'number') ? -1 : '';
+      if (y == null) y = (typeof x === 'number') ? -1 : '';
+      if (typeof x === 'number' && typeof y === 'number') return (x - y) * d;
+      return String(x).localeCompare(String(y)) * d;
+    });
+    return out;
+  }
+
+  function renderGrid() {
+    var rows = visibleRows();
+    var tb = document.getElementById('grid-body');
+    if (!rows.length) {
+      tb.innerHTML = '<tr><td colspan="10" class="empty">Nobody in this view.</td></tr>';
+      return;
+    }
+    tb.innerHTML = rows.map(function (r) {
+      var seen = r.last_opened_at ? ago(r.last_opened_at) : '<span class="muted">never</span>';
+      var gapCls = (r.verdict && r.expected_90 >= PASSOVER_MIN_EXPECTED) ? ' gap' : '';
+      var pill = r.verdict
+        ? '<span class="pill ' + r.verdict.c + '">' + esc(r.verdict.t) + '</span>'
+        : '<span class="pill ' + r.st.c + '">' + esc(r.st.t) + '</span>';
+      return '<tr data-id="' + esc(r.employee_id) + '">' +
+        '<td><div class="nm">' + esc(r.full_name) + '</div>' +
+          (r.punch_id ? '<div class="sub">punch ' + esc(r.punch_id) + '</div>' : '') + '</td>' +
+        '<td><span class="venue-tag">' + esc(r.home_venue || '\u2014') + '</span></td>' +
+        '<td class="num">' + r.asked + '</td>' +
+        '<td class="num">' + r.confirmed + '</td>' +
+        '<td class="num">' + (r.awaiting ? '<b>' + r.awaiting + '</b>' : '<span class="muted">0</span>') + '</td>' +
+        '<td>' + seen + '</td>' +
+        '<td class="num">' + r.signups_90 + '</td>' +
+        '<td class="num">' + r.placements_90 + '</td>' +
+        '<td class="num' + gapCls + '">' + (r.expected_90 ? r.expected_90.toFixed(1) : '<span class="muted">0</span>') + '</td>' +
+        '<td>' + pill + '</td>' +
+      '</tr>';
+    }).join('');
+    Array.prototype.forEach.call(tb.querySelectorAll('tr'), function (tr) {
+      tr.onclick = function () { openDrawer(tr.getAttribute('data-id')); };
+    });
+  }
+
+  function renderVenues() {
+    var vs = state.venues.slice().sort(function (a, b) { return (b.odds || 0) - (a.odds || 0); });
+    document.getElementById('venue-body').innerHTML = vs.map(function (v) {
+      var o = v.odds == null ? null : Number(v.odds);
+      var cls = o == null ? 'p-none' : (o >= 0.6 ? 'p-clear' : (o >= 0.35 ? 'p-seen' : 'p-miss'));
+      return '<tr>' +
+        '<td class="nm">' + esc(v.venue) + '</td>' +
+        '<td class="num">' + v.events + '</td>' +
+        '<td class="num">' + v.signups + '</td>' +
+        '<td class="num">' + (v.signups_per_event == null ? '\u2014' : v.signups_per_event) + '</td>' +
+        '<td class="num">' + v.placements + '</td>' +
+        '<td class="num">' + v.people_placed + '</td>' +
+        '<td class="num"><span class="pill ' + cls + '">' + pct(o) + '</span></td>' +
+      '</tr>';
+    }).join('');
+  }
+
+  function renderFeed() {
+    var el = document.getElementById('feed-body');
+    if (!state.feed.length) {
+      el.innerHTML = '<div class="empty">Nothing in the last ' + FEED_HOURS + ' hours.</div>';
+      return;
+    }
+    el.innerHTML = state.feed.map(function (f) {
+      var d = f.details || {};
+      var who = d.staff_name || f.actor || 'Someone';
+      var where = [d.venue, d.event_name].filter(Boolean).join(' \u00b7 ');
+      var icon, cls, txt;
+      if (f.action === 'shift_confirmed') {
+        icon = '\u2713'; cls = 'i-conf'; txt = '<b>' + esc(who) + '</b> confirmed';
+      } else if (f.action === 'shift_declined') {
+        icon = '\u2715'; cls = 'i-dec'; txt = '<b>' + esc(who) + '</b> declined' +
+          (d.reason ? ' <span class="muted">\u2014 ' + esc(d.reason) + '</span>' : '');
+      } else {
+        icon = '\u2192'; cls = 'i-rel'; txt = '<span class="muted">Released to ' + esc(who) + '</span>';
+      }
+      return '<div class="feed-row">' +
+        '<div class="feed-t">' + esc(ago(f.actor_at)) + '</div>' +
+        '<div class="feed-i ' + cls + '">' + icon + '</div>' +
+        '<div>' + txt + (where ? ' <span class="muted">' + esc(where) + '</span>' : '') + '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  // ---------- drawer --------------------------------------------------------
+  function openDrawer(id) {
+    var r = state.rows.filter(function (x) { return x.employee_id === id; })[0];
+    if (!r) return;
+
+    document.getElementById('d-name').textContent = r.full_name;
+    document.getElementById('d-meta').textContent =
+      [r.home_venue || 'no home venue', r.punch_id ? 'punch ' + r.punch_id : null, r.phone]
+      .filter(Boolean).join(' \u00b7 ');
+
+    var h = '';
+    h += '<div class="dgrid">' +
+      dstat('Asked', r.asked) +
+      dstat('Confirmed', r.confirmed) +
+      dstat('Owes', r.awaiting) +
+      dstat('Page opens', r.page_opens) +
+    '</div>';
+
+    if (r.awaiting > 0 && r.st.k === 'unseen') {
+      h += '<div class="note-box" style="background:var(--amber-light);border-color:var(--amber-border);color:var(--amber-dark)">' +
+        '<b>Has not seen the offer.</b> ' +
+        (r.page_opens ? 'Last opened the page ' + ago(r.last_opened_at) + ', before these shifts were released.'
+                      : 'Has never opened the availability page.') +
+        ' They have not ignored you.</div>';
+    } else if (r.st.k === 'seen') {
+      h += '<div class="note-box" style="background:var(--amber-light);border-color:var(--amber-border);color:var(--amber-dark)">' +
+        '<b>Opened the page ' + ago(r.last_opened_at) + ', after these shifts were released, and answered none of them.</b></div>';
+    }
+
+    if (r.last_note) {
+      h += '<div class="note-box"><b>They told us, in their own words:</b><br>\u201C' +
+        esc(r.last_note) + '\u201D<div class="sub" style="margin-top:4px">' +
+        (r.last_note_at ? 'availability note \u00b7 ' + ago(r.last_note_at) : 'availability note') +
+        '</div></div>';
+    }
+
+    if (r.verdict) {
+      h += '<div class="dsec">Why they have no placements</div>' +
+        '<span class="pill ' + r.verdict.c + '">' + esc(r.verdict.t) + '</span>' +
+        '<p style="font-size:13px;color:var(--label);margin:8px 0 0">' + esc(r.verdict.detail) + '</p>';
+    }
+
+    h += '<div class="dsec">Last 90 days (settled events)</div>' +
+      '<div class="dgrid">' +
+        dstat('Signups', r.signups_90) +
+        dstat('Placed', r.placements_90) +
+        dstat('Expected', r.expected_90 ? r.expected_90.toFixed(1) : '0') +
+        dstat('Home odds', pct(r.home_odds)) +
+      '</div>';
+    if (r.venues_csv) {
+      h += '<p class="sub" style="margin:-4px 0 0">Signs up at: ' + esc(r.venues_csv) + '</p>';
+    }
+
+    var mine = (state.shifts[nameKey(r.full_name)] || []).slice().sort(function (a, b) {
+      return String(a.events.event_date).localeCompare(String(b.events.event_date));
+    });
+    h += '<div class="dsec">Upcoming placements (' + mine.length + ')</div>';
+    if (!mine.length) {
+      h += '<p class="sub">None.</p>';
+    } else {
+      h += mine.map(function (p) {
+        var st, cls;
+        if (p.confirmed_at)       { st = 'Confirmed'; cls = 'p-clear'; }
+        else if (p.declined_at)   { st = 'Declined';  cls = 'p-miss'; }
+        else if (p.offer_sent_at) { st = 'Awaiting';  cls = 'p-seen'; }
+        else                      { st = 'Not asked'; cls = 'p-none'; }
+        var post = [p.stand, p.role].filter(Boolean).join(' \u00b7 ');
+        return '<div class="shift">' +
+          '<div><div class="shift-l">' + esc(p.events.event_name) + ' <span class="muted">\u00b7 ' + esc(p.events.venue) + '</span></div>' +
+          '<div class="shift-s">' + esc(dstr(p.events.event_date)) +
+            (p.offer_sent_at ? '' : ' \u00b7 not released \u2014 hidden from them') +
+            (post ? ' \u00b7 ' + esc(post) : '') + '</div></div>' +
+          '<span class="pill ' + cls + '">' + st + '</span>' +
+        '</div>';
+      }).join('');
+    }
+
+    document.getElementById('d-body').innerHTML = h;
+    document.getElementById('drawer').classList.add('open');
+    document.getElementById('drawer').setAttribute('aria-hidden', 'false');
+    document.getElementById('ov').classList.add('open');
+  }
+  function dstat(l, v) {
+    return '<div class="dstat"><div class="dstat-l">' + esc(l) + '</div><div class="dstat-v">' + esc(v) + '</div></div>';
+  }
+  function closeDrawer() {
+    document.getElementById('drawer').classList.remove('open');
+    document.getElementById('drawer').setAttribute('aria-hidden', 'true');
+    document.getElementById('ov').classList.remove('open');
+  }
+
+  // ---------- copy list -----------------------------------------------------
+  function copyUnseen() {
+    var list = unseenList();
+    if (!list.length) { toast('Nobody to copy.'); return; }
+    var lines = list.map(function (r) {
+      return [r.full_name, r.phone || 'no phone', r.awaiting + (r.awaiting === 1 ? ' shift' : ' shifts'),
+              r.home_venue || ''].join('\t');
+    });
+    var txt = 'Name\tPhone\tShifts owed\tHome venue\n' + lines.join('\n');
+    var done = function () { toast('Copied ' + list.length + ' people.'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(txt).then(done, function () { legacyCopy(txt, done); });
+    } else {
+      legacyCopy(txt, done);
+    }
+  }
+  function legacyCopy(txt, done) {
+    var ta = document.createElement('textarea');
+    ta.value = txt; ta.style.position = 'fixed'; ta.style.left = '-9999px';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); done(); }
+    catch (e) { toast('Copy failed \u2014 select manually.'); }
+    document.body.removeChild(ta);
+  }
+
+  // ---------- wiring --------------------------------------------------------
+  function wire() {
+    Array.prototype.forEach.call(document.querySelectorAll('.chip[data-preset]'), function (b) {
+      b.onclick = function () {
+        Array.prototype.forEach.call(document.querySelectorAll('.chip[data-preset]'), function (x) {
+          x.classList.remove('on');
+        });
+        b.classList.add('on');
+        state.preset = b.getAttribute('data-preset');
+        renderGrid();
+      };
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('#grid thead th'), function (th) {
+      th.onclick = function () {
+        var k = th.getAttribute('data-k');
+        if (state.sortKey === k) { state.sortDir *= -1; }
+        else { state.sortKey = k; state.sortDir = (k === 'full_name' || k === 'home_venue' || k === 'status') ? 1 : -1; }
+        Array.prototype.forEach.call(document.querySelectorAll('#grid thead th'), function (x) {
+          x.classList.remove('sorted');
+        });
+        th.classList.add('sorted');
+        renderGrid();
+      };
+    });
+    document.getElementById('f-home').onchange = function (e) { state.home = e.target.value; renderGrid(); };
+    document.getElementById('f-q').oninput = function (e) { state.q = e.target.value; renderGrid(); };
+    document.getElementById('copy-btn').onclick = copyUnseen;
+    document.getElementById('dclose').onclick = closeDrawer;
+    document.getElementById('ov').onclick = closeDrawer;
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeDrawer(); });
+  }
+
+  function fillHomeFilter() {
+    var seen = {}, out = [];
+    state.rows.forEach(function (r) {
+      if (r.home_venue && !seen[r.home_venue]) { seen[r.home_venue] = 1; out.push(r.home_venue); }
+    });
+    out.sort();
+    var sel = document.getElementById('f-home');
+    sel.innerHTML = '<option value="">All home venues</option>' +
+      out.map(function (v) { return '<option value="' + esc(v) + '">' + esc(v) + '</option>'; }).join('');
+  }
+
+  function boot() {
+    load().then(function () {
+      renderStrip();
+      renderHeadline();
+      renderChips();
+      fillHomeFilter();
+      renderGrid();
+      renderVenues();
+      renderFeed();
+      document.getElementById('controls').style.display = 'flex';
+      document.getElementById('grid-card').style.display = 'block';
+      document.getElementById('venue-card').style.display = 'block';
+      document.getElementById('feed-card').style.display = 'block';
+      wire();
+    }).catch(function (err) {
+      if (err && err.authFailed) { pcAuth.handleAuthFailure ? pcAuth.handleAuthFailure() : location.reload(); return; }
+      console.error(err);
+      fail('Could not load the dashboard. ' + (err.message || 'Unknown error.'));
+      document.getElementById('grid-body').innerHTML =
+        '<tr><td colspan="10" class="empty">Load failed \u2014 nothing is shown rather than something wrong.</td></tr>';
+      document.getElementById('grid-card').style.display = 'block';
+    });
+  }
+
+  pcAuth.require({ pageSlug: 'dashboard', onReady: boot });
+})();
 </script>
 </body>
 </html>
