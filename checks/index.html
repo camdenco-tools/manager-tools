@@ -304,6 +304,12 @@
     color: #b85a5a;
     font-style: italic;
   }
+  .recent-void {
+    background: transparent; border: 0; color: #b0763a; cursor: pointer;
+    font-family: inherit; font-size: 11px; font-weight: 600; padding: 0;
+    margin-left: 8px; text-decoration: underline; text-underline-offset: 2px;
+  }
+  .recent-void:hover { color: #791F1F; }
 
   .pc-toast-host {
     position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
@@ -377,6 +383,15 @@
             <div class="field-hint" id="reportLoaderHint">Picks an approved-but-unpaid report and pre-fills payee, address, amount. Printing auto-marks it paid.</div>
           </div>
 
+          <!-- AP bill loader dropdown (admin-only) -->
+          <div class="field" id="apLoaderField" hidden>
+            <label for="apLoaderSelect">Load from open bill (Accounts Payable) <span class="opt">— optional</span></label>
+            <select id="apLoaderSelect">
+              <option value="">— None —</option>
+            </select>
+            <div class="field-hint" id="apLoaderHint">Picks an unpaid bill and pre-fills payee, address, amount, invoice #. Printing marks the bill paid and writes the check number back to AP.</div>
+          </div>
+
           <div class="field" id="savedPayeeField">
             <label for="savedPayeeSelect">Saved payee <span class="opt">— pick to auto-fill</span></label>
             <select id="savedPayeeSelect">
@@ -396,7 +411,7 @@
           <div class="field">
             <label for="fldAddress">Mailing address <span class="opt">— prints with payee name in the window</span></label>
             <textarea id="fldAddress" placeholder="Street&#10;City, State ZIP" rows="2"></textarea>
-            <div class="field-hint">The payee name above prints automatically above this address in the window. Leave blank if hand-addressing.</div>
+            <div class="field-hint" id="addressHint">The payee name above prints automatically above this address in the window. Leave blank if hand-addressing.</div>
           </div>
 
           <div class="field-row">
@@ -539,24 +554,20 @@
   // FIELD POSITIONS — inches from top-left of the 8.5x11 sheet.
   // ---------------------------------------------------------------------
   var DEFAULT_POS = {
-    // CHECK (top third) — calibrated against Checkomatic Wells Fargo voucher stock
     date:        { top: 0.75, left: 5.60, width: 1.8,  align: 'left'  },
     payee:       { top: 1.35, left: 1.40, width: 4.8,  align: 'left'  },
     amountBox:   { top: 1.35, left: 6.55, width: 1.4,  align: 'right' },
     amountWords: { top: 1.70, left: 0.40, width: 5.6,  align: 'left'  },
     memo:        { top: 2.85, left: 1.00, width: 3.6,  align: 'left'  },
 
-    // ENVELOPE WINDOW (in Stub 1) — name above address, lands in bottom window after tri-fold
     windowName:    { top: 5.85, left: 1.20, width: 3.8, align: 'left' },
     windowAddress: { top: 6.10, left: 1.20, width: 3.8, align: 'left' },
 
-    // STUB 1 (middle third) — full record on the right side
     stub1Date:   { top: 3.95, left: 5.20, width: 2.6, align: 'left' },
     stub1Payee:  { top: 4.20, left: 5.20, width: 3.0, align: 'left' },
     stub1Amount: { top: 4.45, left: 5.20, width: 3.0, align: 'left' },
     stub1Memo:   { top: 4.75, left: 5.20, width: 3.0, align: 'left' },
 
-    // STUB 2 (bottom third) — summary copy
     stub2Date:   { top: 8.10, left: 1.00, width: 2.6, align: 'left' },
     stub2Payee:  { top: 8.10, left: 4.20, width: 4.0, align: 'left' },
     stub2Amount: { top: 8.35, left: 1.00, width: 2.6, align: 'left' },
@@ -593,33 +604,20 @@
   var state = {
     isAdmin: false, currentUser: null,
     categories: [], payees: [],
-    approvedReports: [],   // dropdown options (admin only)
+    approvedReports: [],   // report loader options (admin only)
+    approvedBills: [],     // AP bill loader options (admin only)
     recentChecks: [],      // recent checks list
 
-    fromReport: null,      // the expense_reports row when loaded via dropdown or ?id=
-    mode: 'standalone',    // 'standalone' | 'report'
+    fromReport: null,      // the expense_reports row when loaded
+    fromBill: null,        // the ap_bills row when loaded
+    mode: 'standalone',    // 'standalone' | 'report' | 'ap_bill'
 
-    // Post-print state — set when a print has just succeeded so the
-    // Reprint / Edit-number / All-good banner can act on the right rows.
     lastPrint: null
-    // lastPrint shape: {
-    //   registerId: bigint,        // check_register.id of the just-inserted row
-    //   checkNumber: '2704',       // the number we logged
-    //   amount, payee, addr, dateV, memo, catId, reportId, payeeRowId
-    //   expenseFanoutIds: [uuid, ...]  // expenses table rows created (report-fanout only)
-    //   standaloneExpenseId: uuid | null   // single expense row for standalone with category
-    //   isReprint: false           // true if this print itself was a reprint
-    // }
   };
 
   // =====================================================================
   // UTILITIES
   // =====================================================================
-  /**
-   * Normalize a US mailing address into "street\ncity, state ZIP" format.
-   * Idempotent. Returns the input unchanged if it already has newlines or
-   * if we can't find a trailing "STATE ZIP" pattern to anchor on.
-   */
   function normalizeAddress(raw) {
     if (!raw) return raw;
     var s = String(raw).trim();
@@ -699,10 +697,10 @@
       'eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen'];
     var tens = ['','','twenty','thirty','forty','fifty','sixty','seventy','eighty','ninety'];
     var scales = ['', ' thousand', ' million', ' billion'];
-    function chunkToWords(num) {
+    function chunkToWords(numc) {
       var str = '';
-      var h = Math.floor(num / 100);
-      var rem = num % 100;
+      var h = Math.floor(numc / 100);
+      var rem = numc % 100;
       if (h > 0) { str += ones[h] + ' hundred'; if (rem > 0) str += ' '; }
       if (rem > 0) {
         if (rem < 20) str += ones[rem];
@@ -795,11 +793,6 @@
       { headers: pcAuth.headers() }
     );
   }
-  /**
-   * Fetch approved-but-unpaid reports (status='approved') for the dropdown.
-   * RLS only allows admins to see these — non-admins will get an empty list,
-   * which is why we also gate UI visibility by isAdmin.
-   */
   function fetchApprovedReports() {
     var sel = 'select=id,submitter_name,total_amount,line_count,period_start,period_end,approved_at';
     return authFetch(
@@ -810,9 +803,6 @@
       { headers: pcAuth.headers() }
     );
   }
-  /**
-   * For the auto Mark-paid fan-out — pull the full line list for a report.
-   */
   function fetchReportLinesForFanout(reportId) {
     var sel = 'select=' + [
       'id','line_no','line_date','description','amount',
@@ -826,6 +816,23 @@
       { headers: pcAuth.headers() }
     );
   }
+  // AP bill loader: open (unpaid/partial), not deleted.
+  function fetchOpenBills() {
+    var sel = 'select=id,vendor_id,vendor_name,invoice_number,bill_date,due_date,total_amount,amount_paid,balance,venue';
+    return authFetch(
+      SB_REST + 'ap_bills?deleted_at=is.null&status=in.(unpaid,partial)&' + sel +
+      '&order=due_date.asc.nullslast&limit=100',
+      { headers: pcAuth.headers() }
+    );
+  }
+  // Vendor remit-to address, looked up by the bill's vendor_id (separate fetch,
+  // so we don't depend on a PostgREST FK embed being configured).
+  function fetchVendorRemit(vendorId) {
+    return authFetch(
+      SB_REST + 'known_vendors?id=eq.' + encodeURIComponent(vendorId) + '&select=id,remit_address',
+      { headers: pcAuth.headers() }
+    );
+  }
   function fetchDupCheck(checkNum) {
     if (!checkNum) return Promise.resolve([]);
     return authFetch(
@@ -835,13 +842,9 @@
       { headers: pcAuth.headers() }
     );
   }
-  /**
-   * Recent checks list (last 10 by check_date desc). Includes voided so
-   * we can render them struck through.
-   */
   function fetchRecentChecks() {
     return authFetch(
-      SB_REST + 'check_register?select=id,check_number,check_date,payee_name,amount,memo,voided,void_reason,source' +
+      SB_REST + 'check_register?select=id,check_number,check_date,payee_name,amount,memo,voided,void_reason,source,expense_id,expense_report_id,ap_bill_id' +
       '&order=created_at.desc&limit=10',
       { headers: pcAuth.headers() }
     );
@@ -982,7 +985,7 @@
   function updateSavePayeeRow() {
     var row = document.getElementById('savePayeeRow');
     if (!row) return;
-    if (state.mode === 'report') { row.hidden = true; return; }
+    if (state.mode !== 'standalone') { row.hidden = true; return; }
     var name = document.getElementById('fldPayee').value.trim().toLowerCase();
     if (!name) { row.hidden = true; return; }
     var exists = state.payees.some(function (p) {
@@ -1020,11 +1023,7 @@
     var sel = document.getElementById('reportLoaderSelect');
     if (!sel) return;
     var id = sel.value;
-    if (!id) {
-      // User reverted to standalone mode mid-stream
-      exitReportMode();
-      return;
-    }
+    if (!id) { exitReportMode(); return; }
     loadFromReport(id);
   }
   function refreshApprovedReports() {
@@ -1035,6 +1034,58 @@
     }).catch(function (e) {
       if (e && e.authFailed) handleAuthFailure();
       else console.error('[checks] fetchApprovedReports failed:', e);
+    });
+  }
+
+  // =====================================================================
+  // AP BILL LOADER DROPDOWN
+  // =====================================================================
+  function billBalance(bill) {
+    if (!bill) return 0;
+    var b = Number(bill.balance);
+    if (isFinite(b) && b > 0) return b;
+    return Number(bill.total_amount || 0) - Number(bill.amount_paid || 0);
+  }
+  function billById(id) {
+    for (var i = 0; i < state.approvedBills.length; i++) {
+      if (String(state.approvedBills[i].id) === String(id)) return state.approvedBills[i];
+    }
+    return null;
+  }
+  function populateBillLoaderSelect() {
+    var sel = document.getElementById('apLoaderSelect');
+    if (!sel) return;
+    if (!state.approvedBills.length) {
+      sel.innerHTML = '<option value="">— No open bills to pay —</option>';
+      sel.disabled = true;
+      return;
+    }
+    sel.disabled = false;
+    sel.innerHTML = '<option value="">— None —</option>' +
+      state.approvedBills.map(function (b) {
+        var amt = fmtMoney(billBalance(b));
+        var inv = b.invoice_number ? (' · #' + b.invoice_number) : '';
+        var due = b.due_date ? (' · due ' + fmtDateShort(b.due_date)) : '';
+        var who = b.vendor_name || '(unknown vendor)';
+        var label = who + ' · ' + amt + inv + due;
+        return '<option value="' + esc(b.id) + '">' + esc(label) + '</option>';
+      }).join('');
+  }
+  function onBillLoaderPick() {
+    var sel = document.getElementById('apLoaderSelect');
+    if (!sel) return;
+    var id = sel.value;
+    if (!id) { exitBillMode(); return; }
+    loadFromBill(id);
+  }
+  function refreshApprovedBills() {
+    if (!state.isAdmin) return Promise.resolve();
+    return fetchOpenBills().then(function (rows) {
+      state.approvedBills = rows || [];
+      populateBillLoaderSelect();
+    }).catch(function (e) {
+      if (e && e.authFailed) handleAuthFailure();
+      else console.error('[checks] fetchOpenBills failed:', e);
     });
   }
 
@@ -1091,7 +1142,10 @@
   }
 
   // =====================================================================
-  // PRINT + LOG + (report mode: AUTO MARK-PAID + EXPENSE FAN-OUT)
+  // PRINT + LOG
+  //  - standalone: optional expense row + register row
+  //  - report:     expense fan-out + register row + mark report paid
+  //  - ap_bill:    register row + mark bill paid + save address back to vendor
   // =====================================================================
   function handlePrint() {
     if (pcSubmitting) return;
@@ -1115,13 +1169,15 @@
     var minimalHdrs   = Object.assign({}, pcAuth.headers(), { 'Content-Type': 'application/json', 'Prefer': 'return=minimal' });
     var representHdrs = Object.assign({}, pcAuth.headers(), { 'Content-Type': 'application/json', 'Prefer': 'return=representation' });
 
-    // We'll collect everything we need for the post-print state machine.
     var ctx = {
       registerId: null,
       checkNumber: ckNum,
       amount: amt, payee: payee, addr: addr, dateV: dateV,
       memo: memo, catId: catId,
       reportId: state.mode === 'report' && state.fromReport ? state.fromReport.id : null,
+      apBillId: state.mode === 'ap_bill' && state.fromBill ? state.fromBill.id : null,
+      apBillTotal: state.mode === 'ap_bill' && state.fromBill ? Number(state.fromBill.total_amount || 0) : null,
+      vendorId: state.mode === 'ap_bill' && state.fromBill ? (state.fromBill.vendor_id || null) : null,
       payeeRowId: parseInt(document.getElementById('savedPayeeSelect').value, 10) || null,
       expenseFanoutIds: [],
       standaloneExpenseId: null,
@@ -1172,14 +1228,18 @@
 
     // --- STEP 3: check_register row ---
     var registerStep = reportFanoutStep.then(function () {
+      var src = state.mode === 'report' ? 'expense_report'
+              : state.mode === 'ap_bill' ? 'ap_bill'
+              : 'standalone';
       var regRow = {
         check_number: ckNum, check_date: dateV,
         payee_name: payee, mailing_address: addr || null,
         amount: amt, memo: memo,
-        source: state.mode === 'report' ? 'expense_report' : 'standalone',
+        source: src,
         payee_id: ctx.payeeRowId, category_id: catId,
         expense_id: ctx.standaloneExpenseId,
         expense_report_id: ctx.reportId,
+        ap_bill_id: ctx.apBillId,
         created_by: actor
       };
       return authFetch(SB_REST + 'check_register', {
@@ -1192,7 +1252,6 @@
     // --- STEP 4: PATCH report to paid (report mode only) ---
     var reportPaidStep = registerStep.then(function () {
       if (state.mode !== 'report' || !ctx.reportId) return;
-      var nowIso = new Date().toISOString();
       return authFetch(
         SB_REST + 'expense_reports?id=eq.' + encodeURIComponent(ctx.reportId),
         {
@@ -1207,8 +1266,44 @@
       );
     });
 
+    // --- STEP 4b: mark AP bill paid + save address back to vendor ---
+    var billPaidStep = reportPaidStep.then(function () {
+      if (state.mode !== 'ap_bill' || !ctx.apBillId) return;
+      var billPatch = authFetch(
+        SB_REST + 'ap_bills?id=eq.' + encodeURIComponent(ctx.apBillId),
+        {
+          method: 'PATCH', headers: minimalHdrs,
+          body: JSON.stringify({
+            status: 'paid',
+            amount_paid: (ctx.apBillTotal != null ? ctx.apBillTotal : amt),
+            paid_at: dateV,
+            payment_method: 'check',
+            payment_reference: ckNum,
+            paid_by: actor,
+            updated_by: actor,
+            updated_at: new Date().toISOString()
+          })
+        }
+      );
+      return billPatch.then(function () {
+        // Save the remit-to address back onto the vendor so it auto-fills next time.
+        if (ctx.vendorId && addr) {
+          return authFetch(
+            SB_REST + 'known_vendors?id=eq.' + encodeURIComponent(ctx.vendorId),
+            {
+              method: 'PATCH', headers: minimalHdrs,
+              body: JSON.stringify({ remit_address: addr, updated_by: actor, updated_at: new Date().toISOString() })
+            }
+          ).catch(function (e) {
+            // Address save-back is a convenience — never fail the whole print over it.
+            console.warn('[checks] remit_address save-back failed:', e);
+          });
+        }
+      });
+    });
+
     // --- STEP 5: optionally save the payee ---
-    var savePayeeStep = reportPaidStep.then(function () {
+    var savePayeeStep = billPaidStep.then(function () {
       if (!doSavePayee) return;
       var payeeRow = {
         payee_name: payee, mailing_address: addr || null,
@@ -1225,10 +1320,11 @@
         state.lastPrint = ctx;
         var loggedMsg = state.mode === 'report'
           ? 'Logged · report marked paid · opening print…'
-          : 'Logged · opening print…';
+          : state.mode === 'ap_bill'
+            ? 'Logged · bill marked paid · opening print…'
+            : 'Logged · opening print…';
         showToast(loggedMsg, 1600);
         renderPostPrintBanner();
-        // Small delay so the toast paints before the print dialog steals focus
         setTimeout(function () { window.print(); }, 250);
       })
       .catch(function (e) {
@@ -1241,17 +1337,12 @@
         pcSubmitting = false;
         if (btn) { btn.disabled = false; btn.textContent = '🖨 Print & log check'; }
         updatePrintEnabled();
-        // Refresh dropdowns / lists after the print transaction is fully done
         if (state.mode === 'report') refreshApprovedReports();
+        if (state.mode === 'ap_bill') refreshApprovedBills();
         refreshRecentChecks();
       });
   }
 
-  /**
-   * Build one expenses row from a single expense_report_line, mirroring
-   * the logic the Mark-paid flow on /expense-reports uses so Bank Review
-   * sees the same vendor_name conventions.
-   */
   function buildExpenseRowFromLine(line, payeeName, checkNum, actor, reportId) {
     var cat = line.expense_categories;
     var catName = cat ? cat.name : '';
@@ -1328,12 +1419,6 @@
     renderPostPrintBanner();
   }
 
-  /**
-   * Reprint as new # — void the original row, then put the same data back
-   * in the form so the user can type a new check number and print again.
-   * We do NOT re-fan-out expenses or re-PATCH the report — the original
-   * fan-out is still valid; only the cash check changed.
-   */
   function startReprint() {
     var lp = state.lastPrint;
     if (!lp || !lp.registerId) return;
@@ -1342,7 +1427,7 @@
       'Reason for voiding check #' + lp.checkNumber + '? (e.g. "Paper jam — reprinted as new #")',
       'Paper jam — reprinted as new #'
     );
-    if (reason == null) return;  // cancelled
+    if (reason == null) return;
     reason = String(reason).trim();
     if (!reason) {
       showToast('A reason is required', 2200);
@@ -1361,25 +1446,21 @@
       }
     )
     .then(function () {
-      // Restore form fields so user can adjust the check number and re-print
       document.getElementById('fldPayee').value     = lp.payee || '';
       document.getElementById('fldAddress').value   = lp.addr  || '';
       document.getElementById('fldAmount').value    = String(lp.amount || '');
       document.getElementById('fldDate').value      = lp.dateV || todayIso();
       document.getElementById('fldMemo').value      = lp.memo  || '';
-      document.getElementById('fldCheckNum').value  = '';  // BLANK — force fresh number
+      document.getElementById('fldCheckNum').value  = '';
       if (lp.catId) {
         var catSel = document.getElementById('fldCategory');
         if (catSel) catSel.value = lp.catId;
       }
 
-      // If this was a report print, we need to flip BACK to report mode so the
-      // form behaves correctly (category gate off, banner up, no double fan-out).
-      // The category was already nulled on the original register row for report
-      // prints; same for the new print.
+      // Reprint keeps whatever mode (report/ap_bill/standalone) is still active in
+      // state — the linked report/bill was not reversed, so re-printing simply
+      // logs a fresh register row (and re-marks paid, idempotently).
       if (lp.reportId) {
-        // Re-load the report to refresh state.fromReport and UI affordances.
-        // Note: it's now in 'paid' status; loadFromReport doesn't filter on status.
         loadFromReport(lp.reportId).then(function () {
           showToast('Voided. Enter the new check number and print again.', 3000);
         });
@@ -1387,13 +1468,11 @@
         showToast('Voided. Enter the new check number and print again.', 3000);
       }
 
-      // Tag the next print as a reprint (UI hint only — DB is fine)
       state.lastPrint = null;
       renderPostPrintBanner();
       renderPreview();
       updatePrintEnabled();
 
-      // Focus the check-number field so the user can just type
       var nf = document.getElementById('fldCheckNum');
       if (nf) nf.focus();
 
@@ -1406,12 +1485,6 @@
     });
   }
 
-  /**
-   * Edit number — just rename the check number on the existing register
-   * row (and any linked expenses + the linked report's check_number).
-   * No void; the original physical check is fine, the system just had the
-   * wrong number typed.
-   */
   function startEditNumber() {
     var lp = state.lastPrint;
     if (!lp || !lp.registerId) return;
@@ -1452,7 +1525,6 @@
       return;
     }
     if (newNum === lp.checkNumber) {
-      // No change — just close
       var banner = document.getElementById('postPrintBanner');
       if (banner) banner.classList.remove('is-editing');
       renderPostPrintBanner();
@@ -1463,7 +1535,6 @@
 
     showToast('Updating check number…', 1400);
 
-    // Step 1: update check_register row
     var step1 = authFetch(
       SB_REST + 'check_register?id=eq.' + encodeURIComponent(lp.registerId),
       {
@@ -1472,7 +1543,6 @@
       }
     );
 
-    // Step 2: update expense_reports.check_number (report-print path)
     var step2 = step1.then(function () {
       if (!lp.reportId) return;
       return authFetch(
@@ -1484,17 +1554,25 @@
       );
     });
 
-    // Step 3: rewrite notes on linked expense rows so "Check #2704" → "Check #2706"
-    // Standalone path → one expense row; report-fanout path → many.
-    var step3 = step2.then(function () {
+    // Also update the AP bill's payment_reference when this check paid a bill.
+    var step2b = step2.then(function () {
+      if (!lp.apBillId) return;
+      return authFetch(
+        SB_REST + 'ap_bills?id=eq.' + encodeURIComponent(lp.apBillId),
+        {
+          method: 'PATCH', headers: minimalHdrs,
+          body: JSON.stringify({ payment_reference: newNum })
+        }
+      );
+    });
+
+    var step3 = step2b.then(function () {
       var ids = [];
       if (lp.standaloneExpenseId) ids.push(lp.standaloneExpenseId);
       if (lp.expenseFanoutIds && lp.expenseFanoutIds.length) {
         ids = ids.concat(lp.expenseFanoutIds);
       }
       if (!ids.length) return;
-      // Fetch current notes, replace #oldNum with #newNum, PATCH each row.
-      // We do this individually since each row's notes may have other text.
       var idList = ids.map(function (i) { return encodeURIComponent(i); }).join(',');
       return authFetch(
         SB_REST + 'expenses?select=id,notes&id=in.(' + idList + ')',
@@ -1526,6 +1604,130 @@
         if (e && e.authFailed) { handleAuthFailure(); return; }
         console.error('[checks] edit number failed:', e);
         showToast('Update failed · ' + ((e && e.message) || 'unknown'), 4000);
+      });
+  }
+
+  // =====================================================================
+  // VOID A CHECK  (from the Recent checks list)
+  // =====================================================================
+  // Voids the check_register row, soft-deletes the expense row(s) it created,
+  // and reverses the linked record:
+  //   - reimbursement report → back to Approved, check number cleared
+  //   - AP bill              → back to unpaid, payment details cleared
+  // Standalone checks with no category have no expense to clean.
+  function voidCheck(id) {
+    if (!state.isAdmin) { showToast('Only admins can void checks', 2400); return; }
+
+    var chk = null;
+    for (var i = 0; i < state.recentChecks.length; i++) {
+      if (String(state.recentChecks[i].id) === String(id)) { chk = state.recentChecks[i]; break; }
+    }
+    if (!chk) return;
+    if (chk.voided) { showToast('That check is already voided', 2000); return; }
+
+    var isReport = chk.source === 'expense_report' && !!chk.expense_report_id;
+    var isApBill = chk.source === 'ap_bill' && !!chk.ap_bill_id;
+
+    var promptMsg = 'Void check #' + chk.check_number + ' — ' +
+      (chk.payee_name || '—') + ' for ' + fmtMoney(Number(chk.amount || 0)) + '.\n\n';
+    if (isReport) {
+      promptMsg += 'Reimbursement check: voiding also removes the expense rows it ' +
+        'created AND flips the report back to Approved (unpaid).\n\n';
+    } else if (isApBill) {
+      promptMsg += 'This check paid an Accounts Payable bill: voiding flips that bill ' +
+        'back to unpaid and clears the check number from AP.\n\n';
+    } else if (chk.expense_id) {
+      promptMsg += 'Voiding also removes the expense row it created from Bank Review.\n\n';
+    }
+    promptMsg += 'Reason (required):';
+
+    var reason = window.prompt(promptMsg, '');
+    if (reason == null) return;
+    reason = String(reason).trim();
+    if (!reason) { showToast('A reason is required to void', 2400); return; }
+
+    var minimalHdrs = Object.assign({}, pcAuth.headers(), { 'Content-Type': 'application/json', 'Prefer': 'return=minimal' });
+    var actor = actorName();
+    var nowIso = new Date().toISOString();
+
+    showToast('Voiding check #' + chk.check_number + '…', 1400);
+
+    // Step 1 — void the register row
+    var step1 = authFetch(
+      SB_REST + 'check_register?id=eq.' + encodeURIComponent(chk.id),
+      {
+        method: 'PATCH', headers: minimalHdrs,
+        body: JSON.stringify({ voided: true, void_reason: reason })
+      }
+    );
+
+    // Step 2 — soft-delete the linked expense(s). AP checks create no expense.
+    var step2 = step1.then(function () {
+      if (isReport) {
+        return authFetch(
+          SB_REST + 'expenses?expense_report_id=eq.' + encodeURIComponent(chk.expense_report_id) +
+          '&deleted_at=is.null',
+          {
+            method: 'PATCH', headers: minimalHdrs,
+            body: JSON.stringify({ deleted_at: nowIso, deleted_by: actor })
+          }
+        );
+      }
+      if (chk.expense_id) {
+        return authFetch(
+          SB_REST + 'expenses?id=eq.' + encodeURIComponent(chk.expense_id) +
+          '&deleted_at=is.null',
+          {
+            method: 'PATCH', headers: minimalHdrs,
+            body: JSON.stringify({ deleted_at: nowIso, deleted_by: actor })
+          }
+        );
+      }
+      return null;
+    });
+
+    // Step 3 — reverse the linked record
+    var step3 = step2.then(function () {
+      if (isReport) {
+        return authFetch(
+          SB_REST + 'expense_reports?id=eq.' + encodeURIComponent(chk.expense_report_id),
+          {
+            method: 'PATCH', headers: minimalHdrs,
+            body: JSON.stringify({ status: 'approved', paid_at: null, paid_by: null, check_number: null })
+          }
+        );
+      }
+      if (isApBill) {
+        return authFetch(
+          SB_REST + 'ap_bills?id=eq.' + encodeURIComponent(chk.ap_bill_id),
+          {
+            method: 'PATCH', headers: minimalHdrs,
+            body: JSON.stringify({
+              status: 'unpaid', amount_paid: 0,
+              paid_at: null, payment_method: null, payment_reference: null, paid_by: null,
+              updated_by: actor, updated_at: nowIso
+            })
+          }
+        );
+      }
+      return null;
+    });
+
+    step3
+      .then(function () {
+        showToast('Check #' + chk.check_number + ' voided', 2400);
+        if (state.lastPrint && String(state.lastPrint.registerId) === String(chk.id)) {
+          state.lastPrint = null;
+          renderPostPrintBanner();
+        }
+        refreshRecentChecks();
+        if (isReport) refreshApprovedReports();
+        if (isApBill) refreshApprovedBills();
+      })
+      .catch(function (e) {
+        if (e && e.authFailed) { handleAuthFailure(); return; }
+        console.error('[checks] void failed:', e);
+        showToast('Void failed · ' + ((e && e.message) || 'unknown'), 4000);
       });
   }
 
@@ -1580,20 +1782,27 @@
     }
     body.innerHTML = state.recentChecks.map(function (r) {
       var dateStr = r.check_date ? fmtDateShort(r.check_date) : '—';
-      var srcLabel = r.source === 'expense_report' ? 'Reimbursement' : 'Standalone';
+      var srcLabel = r.source === 'expense_report' ? 'Reimbursement'
+                   : r.source === 'ap_bill' ? 'Bill payment'
+                   : 'Standalone';
       var voidNote = r.voided && r.void_reason
         ? ' · VOIDED — ' + r.void_reason
         : (r.voided ? ' · VOIDED' : '');
       var rowClass = 'recent-row' + (r.voided ? ' is-voided' : '');
+      var voidBtn = r.voided ? '' :
+        '<button type="button" class="recent-void" data-void-id="' + esc(r.id) + '">Void</button>';
       return '<div class="' + rowClass + '">' +
         '<div class="recent-num">#' + esc(r.check_number) + '</div>' +
         '<div class="recent-mid">' +
           '<div class="recent-payee">' + esc(r.payee_name || '—') + '</div>' +
-          '<div class="recent-meta">' + esc(dateStr + ' · ' + srcLabel + voidNote) + '</div>' +
+          '<div class="recent-meta">' + esc(dateStr + ' · ' + srcLabel + voidNote) + voidBtn + '</div>' +
         '</div>' +
         '<div class="recent-amount">' + esc(fmtMoney(Number(r.amount || 0))) + '</div>' +
       '</div>';
     }).join('');
+    body.querySelectorAll('[data-void-id]').forEach(function (btn) {
+      btn.addEventListener('click', function () { voidCheck(btn.getAttribute('data-void-id')); });
+    });
   }
 
   // =====================================================================
@@ -1610,10 +1819,12 @@
     document.getElementById('fldMemo').value = '';
     var warn = document.getElementById('dupCheckWarn');
     if (warn) warn.hidden = true;
-    // Also reset report mode if active
     if (state.mode === 'report') exitReportMode();
+    else if (state.mode === 'ap_bill') exitBillMode();
     var rls = document.getElementById('reportLoaderSelect');
     if (rls) rls.value = '';
+    var als = document.getElementById('apLoaderSelect');
+    if (als) als.value = '';
     updateSavePayeeRow();
     renderPreview();
     updatePrintEnabled();
@@ -1621,9 +1832,34 @@
   }
 
   // =====================================================================
-  // LOAD FROM EXPENSE REPORT — used by both ?id= URL and the dropdown
+  // SHARED UI RESTORE (back to standalone affordances)
+  // =====================================================================
+  function restoreStandaloneUI() {
+    var catStar = document.getElementById('categoryReqStar');
+    var catHint = document.getElementById('categoryHint');
+    if (catStar) catStar.style.display = '';
+    if (catHint) catHint.textContent = 'Required — files this check as an expense for bank review.';
+    var catSel = document.getElementById('fldCategory');
+    if (catSel) catSel.disabled = false;
+    var savedField = document.getElementById('savedPayeeField');
+    if (savedField) savedField.style.display = '';
+    var banner = document.getElementById('fromReportBanner');
+    if (banner) { banner.hidden = true; banner.innerHTML = ''; }
+    var sub = document.getElementById('formSubtitle');
+    if (sub) sub.textContent = 'Enter the info, then print onto your check stock';
+    var addrHint = document.getElementById('addressHint');
+    if (addrHint) addrHint.textContent = 'The payee name above prints automatically above this address in the window. Leave blank if hand-addressing.';
+  }
+
+  // =====================================================================
+  // LOAD FROM EXPENSE REPORT
   // =====================================================================
   function loadFromReport(reportId) {
+    // Leaving AP mode if we were in it
+    state.fromBill = null;
+    var als = document.getElementById('apLoaderSelect');
+    if (als) als.value = '';
+
     return fetchReport(reportId)
       .then(function (rows) {
         var report = rows && rows[0];
@@ -1650,11 +1886,8 @@
         var saveRow = document.getElementById('savePayeeRow');
         if (saveRow) saveRow.hidden = true;
 
-        // Sync the report-loader dropdown to this report (in case the URL set it)
         var rls = document.getElementById('reportLoaderSelect');
         if (rls && state.isAdmin) {
-          // The selected option may not be in the approved list anymore (e.g. already paid).
-          // Make sure it's selectable by injecting it if missing.
           var has = false;
           for (var i = 0; i < rls.options.length; i++) {
             if (rls.options[i].value === report.id) { has = true; break; }
@@ -1696,28 +1929,104 @@
       });
   }
 
-  /**
-   * Flip back to standalone mode (e.g. user picked None on the dropdown,
-   * or clicked Cancel in the banner). Does NOT clear field values — that's
-   * what Clear is for.
-   */
   function exitReportMode() {
     state.fromReport = null;
     state.mode = 'standalone';
-    var catStar = document.getElementById('categoryReqStar');
-    var catHint = document.getElementById('categoryHint');
-    if (catStar) catStar.style.display = '';
-    if (catHint) catHint.textContent = 'Required — files this check as an expense for bank review.';
-    var catSel = document.getElementById('fldCategory');
-    if (catSel) catSel.disabled = false;
-    var savedField = document.getElementById('savedPayeeField');
-    if (savedField) savedField.style.display = '';
-    var banner = document.getElementById('fromReportBanner');
-    if (banner) { banner.hidden = true; banner.innerHTML = ''; }
-    var sub = document.getElementById('formSubtitle');
-    if (sub) sub.textContent = 'Enter the info, then print onto your check stock';
+    restoreStandaloneUI();
     var rls = document.getElementById('reportLoaderSelect');
     if (rls) rls.value = '';
+    updateSavePayeeRow();
+    updatePrintEnabled();
+  }
+
+  // =====================================================================
+  // LOAD FROM AP BILL
+  // =====================================================================
+  function loadFromBill(billId) {
+    var bill = billById(billId);
+    if (!bill) { showToast('Bill not found', 2400); return Promise.resolve(); }
+
+    // Leaving report mode if we were in it
+    state.fromReport = null;
+    var rls = document.getElementById('reportLoaderSelect');
+    if (rls) rls.value = '';
+
+    state.fromBill = bill;
+    state.mode = 'ap_bill';
+
+    var bal = billBalance(bill);
+    document.getElementById('fldPayee').value   = bill.vendor_name || '';
+    document.getElementById('fldAmount').value  = bal != null ? String(Math.round(bal * 100) / 100) : '';
+    document.getElementById('fldDate').value    = todayIso();
+    document.getElementById('fldMemo').value    = bill.invoice_number
+      ? ('Inv #' + bill.invoice_number)
+      : ('AP bill ' + String(bill.id).substring(0, 8));
+
+    // Address: blank until the vendor lookup returns
+    document.getElementById('fldAddress').value = '';
+
+    var catStar = document.getElementById('categoryReqStar');
+    var catHint = document.getElementById('categoryHint');
+    if (catStar) catStar.style.display = 'none';
+    if (catHint) catHint.textContent = 'Not needed — the cost was already recorded when the invoice was logged. Printing marks the bill paid in Accounts Payable.';
+    var catSel = document.getElementById('fldCategory');
+    if (catSel) { catSel.value = ''; catSel.disabled = true; }
+
+    var savedField = document.getElementById('savedPayeeField');
+    if (savedField) savedField.style.display = 'none';
+    var saveRow = document.getElementById('savePayeeRow');
+    if (saveRow) saveRow.hidden = true;
+
+    var addrHint = document.getElementById('addressHint');
+    if (addrHint) addrHint.textContent = bill.vendor_id
+      ? 'Auto-filled from the vendor\'s saved remit-to address. Edit if needed — your change saves back to the vendor for next time.'
+      : 'This bill has no linked vendor, so no saved address. Type one if you\'re mailing it.';
+
+    var banner = document.getElementById('fromReportBanner');
+    if (banner) {
+      banner.hidden = false;
+      banner.innerHTML = '<strong>Loaded from Accounts Payable.</strong> ' +
+        'Paying ' + esc(bill.vendor_name || 'vendor') + ' ' + esc(fmtMoney(bal)) +
+        (bill.invoice_number ? ' on invoice #' + esc(bill.invoice_number) : '') +
+        '. Enter the check number, then print. Printing marks this bill paid and ' +
+        'writes the check number back to AP.' +
+        '<button type="button" class="clear-link" id="fromBillClear">Cancel — write a standalone check instead</button>';
+      var clr = document.getElementById('fromBillClear');
+      if (clr) clr.addEventListener('click', function () {
+        exitBillMode();
+        clearForm();
+      });
+    }
+    var sub = document.getElementById('formSubtitle');
+    if (sub) sub.textContent = 'Bill payment from Accounts Payable';
+
+    renderPreview();
+    updatePrintEnabled();
+
+    // Fetch the vendor's remit address and drop it in.
+    if (bill.vendor_id) {
+      fetchVendorRemit(bill.vendor_id)
+        .then(function (vrows) {
+          // Guard against a later pick changing the active bill before this resolves.
+          if (state.mode !== 'ap_bill' || !state.fromBill || String(state.fromBill.id) !== String(bill.id)) return;
+          var addr = (vrows && vrows[0]) ? vrows[0].remit_address : '';
+          if (addr) {
+            document.getElementById('fldAddress').value = normalizeAddress(addr);
+            renderPreview();
+          }
+        })
+        .catch(function (e) { if (e && e.authFailed) handleAuthFailure(); });
+    }
+
+    return Promise.resolve();
+  }
+
+  function exitBillMode() {
+    state.fromBill = null;
+    state.mode = 'standalone';
+    restoreStandaloneUI();
+    var als = document.getElementById('apLoaderSelect');
+    if (als) als.value = '';
     updateSavePayeeRow();
     updatePrintEnabled();
   }
@@ -1796,6 +2105,8 @@
     if (savedSel) savedSel.addEventListener('change', onSavedPayeePick);
     var rls = document.getElementById('reportLoaderSelect');
     if (rls) rls.addEventListener('change', onReportLoaderPick);
+    var als = document.getElementById('apLoaderSelect');
+    if (als) als.addEventListener('change', onBillLoaderPick);
     var printBtn = document.getElementById('btnPrint');
     if (printBtn) printBtn.addEventListener('click', handlePrint);
     var clearBtn = document.getElementById('btnClear');
@@ -1824,9 +2135,13 @@
     state.isAdmin = (pcAuth && pcAuth.isAdmin) ? pcAuth.isAdmin() : false;
     document.getElementById('fldDate').value = todayIso();
 
-    // Reveal the admin-only report-loader dropdown
-    var loaderField = document.getElementById('reportLoaderField');
-    if (loaderField && state.isAdmin) loaderField.hidden = false;
+    // Reveal the admin-only loader dropdowns
+    if (state.isAdmin) {
+      var loaderField = document.getElementById('reportLoaderField');
+      if (loaderField) loaderField.hidden = false;
+      var apField = document.getElementById('apLoaderField');
+      if (apField) apField.hidden = false;
+    }
 
     applyPositions();
     buildCalibFields();
@@ -1839,7 +2154,10 @@
       fetchPayees(),
       refreshRecentChecks()
     ];
-    if (state.isAdmin) initialLoads.push(refreshApprovedReports());
+    if (state.isAdmin) {
+      initialLoads.push(refreshApprovedReports());
+      initialLoads.push(refreshApprovedBills());
+    }
 
     Promise.all(initialLoads)
       .then(function (res) {
@@ -1848,7 +2166,6 @@
         populateCategorySelect();
         populatePayeeSelect();
         renderPayeeManage();
-        // URL-pre-load wins over the dropdown
         var reportId = getReportIdFromUrl();
         if (reportId) return loadFromReport(reportId);
       })
