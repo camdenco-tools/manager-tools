@@ -238,7 +238,7 @@ tbody tr:last-child td { border-bottom: none; }
     <button class="chip" data-preset="passed">Raising their hand, not picked<span class="n" id="c-passed">0</span></button>
     <button class="chip" data-preset="clear">All clear<span class="n" id="c-clear">0</span></button>
     <div class="spacer"></div>
-    <select id="f-home"><option value="">All home venues</option></select>
+    <select id="f-home"><option value="">Home base: all</option></select>
     <input type="search" id="f-q" placeholder="Search name…">
   </div>
 
@@ -709,15 +709,23 @@ tbody tr:last-child td { border-bottom: none; }
       dstat('Page opens', r.page_opens) +
     '</div>';
 
-    if (r.awaiting > 0 && r.seen_k === 'unseen') {
-      h += '<div class="note-box" style="background:var(--amber-light);border-color:var(--amber-border);color:var(--amber-dark)">' +
-        '<b>Has not seen the offer.</b> ' +
-        (r.page_opens ? 'Last opened the page ' + ago(r.last_opened_at) + ', before these shifts were released.'
-                      : 'Has never opened the availability page.') +
-        ' They have not ignored you.</div>';
-    } else if (r.awaiting > 0 && r.seen_k === 'seen') {
-      h += '<div class="note-box" style="background:var(--amber-light);border-color:var(--amber-border);color:var(--amber-dark)">' +
-        '<b>Opened the page ' + ago(r.last_opened_at) + ', after these shifts were released, and answered none of them.</b></div>';
+    if (r.awaiting > 0) {
+      var owes = r.awaiting + (r.awaiting === 1 ? ' shift' : ' shifts');
+      var acted = (r.confirmed + r.declined) > 0;   // have they answered anything at all?
+      var amber = 'background:var(--amber-light);border-color:var(--amber-border);color:var(--amber-dark)';
+      if (r.seen_k === 'unseen') {
+        h += '<div class="note-box" style="' + amber + '"><b>Hasn\u2019t seen ' +
+          (acted ? 'the newest offer.' : 'the offer.') + '</b> ' +
+          (r.page_opens ? 'Last opened the page ' + ago(r.last_opened_at) + ', before ' +
+              (acted ? 'the ' + owes + ' still open ' : 'these shifts ') + 'went out.'
+                        : 'Has never opened the availability page.') +
+          ' Still owes ' + owes + '. They have not ignored you.</div>';
+      } else if (r.seen_k === 'seen') {
+        h += '<div class="note-box" style="' + amber + '"><b>Opened the page ' + ago(r.last_opened_at) +
+          ', after the ' + owes + ' still open went out' +
+          (acted ? ' \u2014 answered ' + (r.confirmed + r.declined) + ' other, left ' + owes + ' unanswered.'
+                 : ', and answered none.') + '</b></div>';
+      }
     }
 
     if (r.last_note) {
@@ -983,7 +991,7 @@ tbody tr:last-child td { border-bottom: none; }
     });
     out.sort();
     var sel = document.getElementById('f-home');
-    sel.innerHTML = '<option value="">All home venues</option>' +
+    sel.innerHTML = '<option value="">Home base: all</option>' +
       out.map(function (v) { return '<option value="' + esc(v) + '">' + esc(v) + '</option>'; }).join('');
   }
 
