@@ -1884,7 +1884,9 @@ async function maybeCreateApBill(opts) {
     var userName = 'unknown';
     if (typeof pcAuth !== 'undefined') { var u = pcAuth.getUser(); if (u) userName = u.display_name; }
     var hdrs = apiHeaders();
+    var newBillId = crypto.randomUUID();
     var billBody = {
+      id: newBillId,
       vendor_id: opts.vendorId,
       vendor_name: opts.vendorName,
       invoice_number: opts.invoiceNumber || null,
@@ -1899,13 +1901,11 @@ async function maybeCreateApBill(opts) {
     };
     var res = await fetch(SUPA_URL + '/rest/v1/ap_bills', {
       method: 'POST',
-      headers: Object.assign({}, hdrs, {'Content-Type': 'application/json', 'Prefer': 'return=representation'}),
+      headers: Object.assign({}, hdrs, {'Content-Type': 'application/json', 'Prefer': 'return=minimal'}),
       body: JSON.stringify(billBody)
     });
     if (!res.ok) { console.error('[purchases] ap_bill create failed', await res.text()); return '\n\n(!) Bill entry did not save -- tell the office so it gets tracked.'; }
-    var created = await res.json();
-    var billId = (created && created[0]) ? created[0].id : null;
-    if (billId) notifyBillCreated(billId);   // fire-and-forget email to the office
+    notifyBillCreated(newBillId);   // fire-and-forget email to the office
     return '\nBill created -- due ' + fmtDateDisplay(dueDate);
   } catch(e) {
     console.error('[purchases] ap_bill create exception', e);
