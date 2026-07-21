@@ -291,6 +291,7 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
 <script src="/pc-nav.js"></script>
 <script src="/pc-activity.js"></script>
 <script src="/pc-catalog.js"></script>
+<script src="/pc-attach.js"></script>
 <script src="/pc-fiscal.js"></script>
 <script>
 var SUPA_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
@@ -1182,10 +1183,14 @@ function updateEditStands(selectedStand) {
 function handleEditFile(input, type) {
   if (input.files && input.files[0]) {
     var file = input.files[0];
-    var ext = file.name.toLowerCase().split('.').pop();
-    var mime = (file.type || '').toLowerCase();
-    if (ext === 'heic' || ext === 'heif' || mime.indexOf('heic') !== -1 || mime.indexOf('heif') !== -1) {
-      alert('HEIC files are not supported — please use JPG or PNG.');
+    // Validation lives in pc-attach.js so this page and Log Sales can never
+    // drift apart. Mode is 'image' here on purpose: this modal writes straight
+    // to the legacy sales.photo_url / units_photo_url columns, which are
+    // rendered as links elsewhere and are documented as image-only. PDF / CSV
+    // attachments belong on Log Sales, which writes them to sale_photos.
+    var vErr = pcAttach.validate(file, 'image');
+    if (vErr) {
+      alert(vErr);
       input.value = '';
       return;
     }
@@ -1225,7 +1230,7 @@ document.addEventListener('click', function(e) {
 
 async function uploadPhoto(file, path) {
   var hdrs = apiHeaders();
-  hdrs['Content-Type'] = file.type;
+  hdrs['Content-Type'] = pcAttach.resolveMime(file);
   var res = await fetch(SUPA_URL + '/storage/v1/object/sale-photos/' + path, {
     method: 'POST',
     headers: hdrs,
