@@ -266,6 +266,8 @@ header { background: #fff; border-bottom: 1px solid #e8e8e4; padding: 0 32px; di
 .barback-card { border: 1px solid #e8e8e4; border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; }
 .bb-card-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
 .bb-card-name { font-size: 14px; font-weight: 700; color: #1a1a1a; }
+.bb-role-chip { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 999px; background: #EEF0FA; color: #3C3489; font-size: 9px; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase; vertical-align: middle; }
+.bb-dd-warn { font-size: 11px; color: #8A1C1C; background: #FBEAEA; border: 1px solid #F0CFCF; border-radius: 8px; padding: 6px 8px; margin-bottom: 8px; line-height: 1.4; }
 .bb-card-total { font-size: 16px; font-weight: 700; color: #27500A; }
 .bb-card-lines { border-top: 1px solid #f0f0f0; padding-top: 8px; margin-bottom: 10px; }
 .bb-line { display: flex; justify-content: space-between; font-size: 12px; color: #555; padding: 2px 0; }
@@ -475,17 +477,35 @@ var removedRows = {};
 var addingForSaleId = null;
 var addPending = null;
 
-// ── Barback tip-out state (Jul 2026) ────────────────────────────────────────
-// Barbacks are placed on the event via the Schedule Assistant (position_assignments,
-// role = 'Barback'). They are NOT sales-stand workers and never appear in
-// sale_staff_assignments. Each barback pulls a percentage of the tips off the
-// carts/bars they cover; the rate lives on the CART (event_barback_coverage.pct),
-// so if several barbacks share one cart they split a single pull.
+// ── Tip-out state (Jul 2026; widened beyond Barback Jul 21, 2026) ───────────
+// Tip-out earners are placed on the event via the Event Workspace
+// (position_assignments). They are NOT sales-stand workers and normally never
+// appear in sale_staff_assignments. Each one pulls a percentage of the tips off
+// the stands (carts AND bars) they cover; the rate lives on the STAND
+// (event_barback_coverage.pct), so if several people share one stand they split
+// a single pull.
+//
+// ROLE GATE: a Barback is a tip-out earner by definition. Warehouse/Runner and
+// Supervisor CAN be — Carlo's case is one person scheduled as Warehouse (higher
+// hourly) who also covers a bar on a small show, instead of burning two slots.
+// The gate is the COVERAGE ROW itself: no stand checked = not in the pool, so
+// eligible-but-uncovered people never clutter the band with $0 cards. Venue
+// Manager is deliberately excluded.
+var TIPOUT_ELIGIBLE_ROLES = ['Barback', 'Warehouse/Runner', 'Warehouse', 'Supervisor'];
 var currentEventId = null;   // resolved in loadEvent from the events table
-var barbacks = [];           // distinct staff_name of barbacks placed on this event
+var barbacks = [];           // distinct staff_name of eligible people placed on this event
+var barbackRoles = {};       // staff_name → role, for the card chip + band membership
 var coverage = [];           // active event_barback_coverage rows for this event
 var barbackModalName = null; // staff_name whose coverage modal is open (null = closed)
 var barbackModalPending = {};// { stand: { checked: bool, pct: number } } working state in the modal
+
+// Normalize a name for comparing position_assignments.staff_name against
+// sale_staff_assignments.raw_name_text (sign-in sheet OCR). Loose on case,
+// whitespace and punctuation; deliberately NOT fuzzy — a miss here only means
+// the double-dip warning stays quiet, it never changes the math.
+function bbNormName(n) {
+  return String(n || '').toLowerCase().replace(/[^a-z ]/g, '').replace(/\s+/g, ' ').trim();
+}
 
 function apiHeaders() { return pcAuth.headers(); }
 
@@ -852,18 +872,25 @@ async function loadEvent() {
             staffingRequested[r.stand] = (staffingRequested[r.stand] || 0) + r.headcount;
           });
         }
-        // Barbacks placed on this event (Schedule Assistant → position_assignments)
+        // Tip-out eligible people placed on this event (Event Workspace →
+        // position_assignments). Barbacks always; Warehouse/Supervisor only
+        // surface in the band once they actually have a coverage row.
         try {
+          var roleList = TIPOUT_ELIGIBLE_ROLES.map(function(r) { return '"' + r + '"'; }).join(',');
           var bbRes = await fetch(
             SUPA_URL + '/rest/v1/position_assignments?event_id=eq.' + eventId +
-            '&role=eq.Barback&removed_at=is.null&select=staff_name',
+            '&role=in.(' + encodeURIComponent(roleList) + ')&removed_at=is.null&select=staff_name,role',
             { headers: apiHeaders() }
           );
           var bbRows = await bbRes.json();
           if (Array.isArray(bbRows)) {
             var seen = {};
             bbRows.forEach(function(r) {
-              if (r.staff_name && !seen[r.staff_name]) { seen[r.staff_name] = true; barbacks.push(r.staff_name); }
+              if (r.staff_name && !seen[r.staff_name]) {
+                seen[r.staff_name] = true;
+                barbacks.push(r.staff_name);
+                barbackRoles[r.staff_name] = r.role || '';
+              }
             });
             barbacks.sort();
           }
@@ -1708,18 +1735,65 @@ function _existingCartPct(stand) {
   return 10;
 }
 
+// Who appears in the band. A Barback is always shown (a barback with no stands
+// set is a manager oversight worth surfacing). Anyone else eligible appears only
+// once they have at least one active coverage row — the coverage row IS the gate
+// into the tip pool, so nobody lands here with a $0 card by accident.
+function bbInBand(name) {
+  if (barbackRoles[name] === 'Barback') return true;
+  for (var i = 0; i < coverage.length; i++) {
+    if (coverage[i].barback_staff_name === name) return true;
+  }
+  return false;
+}
+
+// Double-dip check. A barback never lands in sale_staff_assignments, so this is
+// structurally impossible for them — but a Supervisor or Warehouse person can
+// end up signed in on the same stand they're pulling from, which would take 10%
+// off the top AND a worker share of the remainder. We warn, we don't auto-drop:
+// the ✕ on the stand card is right there and the manager may have a reason.
+function bbDoubleDip(name, salesByStand) {
+  var hits = [], target = bbNormName(name);
+  if (!target) return hits;
+  Object.keys(salesByStand).forEach(function(stand) {
+    var covered = false;
+    for (var i = 0; i < coverage.length; i++) {
+      if (coverage[i].barback_staff_name === name && coverage[i].stand === stand) { covered = true; break; }
+    }
+    if (!covered) return;
+    var sales = salesByStand[stand] || [];
+    for (var j = 0; j < sales.length; j++) {
+      var assigns = assignmentsData[sales[j].id] || [];
+      for (var k = 0; k < assigns.length; k++) {
+        if (removedRows[assigns[k].id]) continue;
+        if (bbNormName(assigns[k].raw_name_text) === target) { hits.push(stand); return; }
+      }
+    }
+  });
+  return hits;
+}
+
 function renderBarbackBand(salesByStand) {
-  if (!barbacks.length) return ''; // no barbacks placed on this event
+  var shown = barbacks.filter(bbInBand);
+  if (!shown.length) return ''; // nobody in the tip-out pool on this event
   var totals = barbackTotals(salesByStand);
   var html = '<div class="barback-section">';
-  html += '<div class="barback-section-head">&#127864; Barbacks &mdash; tip-out from carts &amp; bars</div>';
-  html += '<div class="barback-section-sub">Each barback pulls a set % of tips off the carts and bars they cover. The rate lives on the cart, so when two barbacks share a cart they split that one pull. Barbacks are not part of any worker pool. Click a barback to set which carts they pull from.</div>';
+  html += '<div class="barback-section-head">&#127864; Tip-Out Pulls</div>';
+  html += '<div class="barback-section-sub">Each person below pulls a set % of tips off the stands they cover &mdash; carts and bars alike. The rate lives on the stand, so when two people share one they split that single pull. Tip-out earners are not part of any worker pool. Warehouse and Supervisor staff appear here only once they&rsquo;ve been given coverage; they keep their own hourly rate on top of the pull.</div>';
   html += '<div class="barback-grid">';
-  barbacks.forEach(function(name) {
+  shown.forEach(function(name) {
     var t = totals[name] || { total: 0, lines: [] };
+    var role = barbackRoles[name] || '';
     html += '<div class="barback-card">';
-    html += '<div class="bb-card-head"><div class="bb-card-name">' + bbEscHtml(name) + '</div>';
+    html += '<div class="bb-card-head"><div class="bb-card-name">' + bbEscHtml(name) +
+      (role && role !== 'Barback' ? '<span class="bb-role-chip">' + bbEscHtml(role) + '</span>' : '') +
+      '</div>';
     html += '<div class="bb-card-total">' + fmtD(t.total) + '</div></div>';
+    var dd = bbDoubleDip(name, salesByStand);
+    if (dd.length) {
+      html += '<div class="bb-dd-warn">&#9888; Also signed in as a worker on ' + bbEscHtml(dd.join(', ')) +
+        '. They&rsquo;re taking the pull <em>and</em> a share of what&rsquo;s left. Drop the name on that stand card, or uncheck the stand here.</div>';
+    }
     if (t.lines.length) {
       html += '<div class="bb-card-lines">';
       t.lines.forEach(function(ln) {
@@ -1727,7 +1801,7 @@ function renderBarbackBand(salesByStand) {
       });
       html += '</div>';
     } else {
-      html += '<div class="bb-card-empty">No carts assigned yet.</div>';
+      html += '<div class="bb-card-empty">No stands assigned yet.</div>';
     }
     html += '<button class="bb-edit-btn" onclick="openBarbackModal(\'' + bbEscAttr(name) + '\')">Set coverage</button>';
     html += '</div>';
@@ -1752,7 +1826,7 @@ function renderBarbackModal(salesByStand) {
   html += '<div class="bb-modal" onclick="event.stopPropagation()">';
   html += '<div class="bb-modal-head"><div>Coverage for <strong>' + bbEscHtml(name) + '</strong></div>';
   html += '<button class="bb-modal-close" onclick="closeBarbackModal()">&times;</button></div>';
-  html += '<div class="bb-modal-sub">Check each cart or bar ' + bbEscHtml(name) + ' pulls tips from, and set the rate (default 10%). If another barback also covers a cart, they split that one pull.</div>';
+  html += '<div class="bb-modal-sub">Check each stand &mdash; cart or bar &mdash; that ' + bbEscHtml(name) + ' pulls tips from, and set the rate (default 10%). If someone else also covers a stand, they split that one pull. Unchecking every stand takes ' + bbEscHtml(name) + ' out of the tip pool entirely.</div>';
   if (!eligible.length) {
     html += '<div class="bb-modal-empty">No carts or bars have reported sales for this event yet.</div>';
   } else {
