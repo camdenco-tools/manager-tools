@@ -2970,6 +2970,17 @@ const ROLE_ORDER = [
   'Cleaning Crew', 'Warehouse/Runner'
 ];
 
+// Roles that may be given tip-out coverage (a % pull off the stands they cover).
+// A Barback is one by definition. Warehouse/Runner and Supervisor CAN be: on a
+// small show one person is scheduled as Warehouse (higher hourly) and also
+// covers the one open bar, instead of burning two slots. The gate is the
+// COVERAGE ROW itself — no stand checked = not in the tip pool — so eligible
+// people never enter the pool by merely being scheduled. Venue Manager is
+// deliberately excluded. Legacy 'Warehouse' is listed alongside canonical
+// 'Warehouse/Runner' because pre-migration rows still carry the short form.
+const TIPOUT_ELIGIBLE_ROLES = ['Barback', 'Warehouse/Runner', 'Warehouse', 'Supervisor'];
+function isTipoutEligible(role) { return TIPOUT_ELIGIBLE_ROLES.indexOf(role) !== -1; }
+
 function roleSortKey(role) {
   // Try direct match first — handles legacy role strings ("Concessions
   // Cashier", "Pizza Lead", etc.) which are still what's in the DB
@@ -6351,11 +6362,20 @@ function renderFilledSlot(ev, p, locked) {
       (synced ? '&#10003; 7s' : '7s') +
       '</button>';
   }
-  if (p.role === 'Barback') {
+  if (isTipoutEligible(p.role)) {
     const _cc = barbackCoverageCount(ev.id, p.staff_name);
+    // Label carries the state: a count once they're covering something, an
+    // invitation while they aren't. Barbacks read as "stands" (they're expected
+    // to have some); everyone else reads as "+ tip-out" — the explicit act of
+    // putting a warehouse or supervisor person into the tip pool.
+    const _cl = _cc
+      ? '&#8862; ' + _cc + ' stand' + (_cc === 1 ? '' : 's')
+      : (p.role === 'Barback' ? '&#8862; stands' : '&#43; tip-out');
+    const _ct = p.role === 'Barback'
+      ? 'Assign which carts / bars this barback pulls tips from'
+      : 'Put ' + p.staff_name + ' in the tip pool for specific carts / bars. Their ' + p.role + ' pay rate is unaffected.';
     html += '<button class="cov-chip" data-cov-barback="' + escapeAttr(p.staff_name) +
-      '" data-cov-event="' + ev.id + '" title="Assign which carts / bars this barback covers">&#8862; ' +
-      (_cc ? _cc + ' cart' + (_cc === 1 ? '' : 's') : 'carts') + '</button>';
+      '" data-cov-event="' + ev.id + '" title="' + escapeAttr(_ct) + '">' + _cl + '</button>';
   }
   if (!locked) html += '<button class="x" data-remove-position="' + p.id + '" title="Remove">✕</button>';
   if (signupNote) {
@@ -9679,9 +9699,9 @@ function renderBarbackCoverageModal() {
   const groups = (typeof standsForEvent === 'function' ? standsForEvent(s.eventId, s.venue) : []) || [];
   const stands = groups.map(g => g.stand).filter(st => st !== SUPPORT_STAND);
   let html = '<div class="bb-cov-overlay" data-bb-cov-close="1"><div class="bb-cov-modal">';
-  html += '<div class="bb-cov-head"><div>Cart / bar coverage — <strong>' + escapeHtml(s.staffName) + '</strong></div>';
+  html += '<div class="bb-cov-head"><div>Tip-out coverage &mdash; <strong>' + escapeHtml(s.staffName) + '</strong></div>';
   html += '<button class="bb-cov-x" data-bb-cov-close="1">✕</button></div>';
-  html += '<div class="bb-cov-sub">Check the carts and bars this barback pulls tips from, and set the rate (default 10%). This carries to the Tips Report automatically and can be adjusted there if the night runs differently.</div>';
+  html += '<div class="bb-cov-sub">Check every stand &mdash; cart or bar &mdash; that ' + escapeHtml(s.staffName) + ' pulls tips from, and set the rate (default 10%). Checking at least one puts them in the tip pool; unchecking them all takes them back out. Their scheduled role and pay rate are unaffected. This carries to the Tips Report automatically and can be adjusted there if the night runs differently.</div>';
   if (!stands.length) {
     html += '<div class="bb-cov-empty">No stands planned for this event yet.</div>';
   } else {
@@ -9842,18 +9862,25 @@ function printEvent(eventId) {
     html += '</div>';
   });
   html += '</div>';
-  // Barback deployment — which carts/bars each barback is responsible for.
+  // Tip-out deployment — which carts/bars each tip-out earner is responsible
+  // for. Barbacks always print (a blank line is a visible reminder to set them);
+  // warehouse/supervisor staff print only if they were actually given coverage.
+  const _bbCovNames = new Set((state.barbackCoverage || [])
+    .filter(c => c.event_id === ev.id).map(c => c.barback_staff_name));
   const _bbNames = [...new Set(state.positions
-    .filter(p => p.event_id === ev.id && p.role === 'Barback')
+    .filter(p => p.event_id === ev.id && isTipoutEligible(p.role) &&
+      (p.role === 'Barback' || _bbCovNames.has(p.staff_name)))
     .map(p => p.staff_name))];
   if (_bbNames.length) {
     html += '<div style="margin-top:14px;border:1px solid black;padding:8px 10px;break-inside:avoid;">';
-    html += '<div style="font-size:13px;font-weight:700;border-bottom:1px solid black;padding-bottom:4px;margin-bottom:6px;">Barback Assignments</div>';
+    html += '<div style="font-size:13px;font-weight:700;border-bottom:1px solid black;padding-bottom:4px;margin-bottom:6px;">Tip-Out Assignments</div>';
     _bbNames.forEach(nm => {
       const cov = (state.barbackCoverage || []).filter(c => c.event_id === ev.id && c.barback_staff_name === nm);
       const carts = cov.map(c => escapeHtml(c.stand)).join(', ');
-      html += '<div style="font-size:12px;margin-bottom:3px;"><strong>' + escapeHtml(nm) + '</strong> — ' +
-        (carts || '<span style="color:#777;">no carts assigned</span>') + '</div>';
+      const _bbRole = (state.positions.find(pp => pp.event_id === ev.id && pp.staff_name === nm) || {}).role || '';
+      html += '<div style="font-size:12px;margin-bottom:3px;"><strong>' + escapeHtml(nm) + '</strong>' +
+        (_bbRole && _bbRole !== 'Barback' ? ' <span style="font-size:10px;color:#555;">(' + escapeHtml(_bbRole) + ')</span>' : '') +
+        ' — ' + (carts || '<span style="color:#777;">no stands assigned</span>') + '</div>';
     });
     html += '</div>';
   }
