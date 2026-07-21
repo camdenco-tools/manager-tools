@@ -2506,7 +2506,7 @@ body {
     <div class="modal-body">
       <div class="rg-event-line" id="removal-guard-event-line"></div>
       <div class="rg-warning" id="removal-guard-warning"></div>
-      <div class="rg-label">Why are they coming off?</div>
+      <div class="rg-label" id="removal-guard-reason-label">Why are they coming off?</div>
       <div class="rg-reason-list" id="removal-guard-reasons"></div>
     </div>
     <div class="modal-foot" style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;align-items:center;">
@@ -7419,15 +7419,31 @@ function openRemovalGuard(pos, ev) {
     warn.className = 'rg-warning info show';
   }
 
-  // Pre-select the obvious answer when there IS one. If they gave it back, that is the
-  // reason -- making Erika hunt for it is friction carrying no information.
-  const preset = declined ? 'gave_it_up' : null;
-  removalGuardCtx.reason = preset;
-  buildRemovalReasonList(preset);
+  // TIER 1.5 -- THEY ALREADY DECLINED. Jul 20 2026.
+  // No reason list. The employee answered this question themselves and the answer is
+  // already sitting in decline_reason; asking Erika to re-answer it produces a second,
+  // worse copy of a fact we hold. It used to pre-select gave_it_up, which was actively
+  // false -- a decline is not a give-back, and every one of those wrote a wrong row
+  // into removal analytics. The modal stays ONLY as a misclick guard on a 10px x.
+  const lbl  = document.getElementById('removal-guard-reason-label');
+  const list = document.getElementById('removal-guard-reasons');
+  const btn  = document.getElementById('removal-guard-confirm-btn');
 
-  const btn = document.getElementById('removal-guard-confirm-btn');
-  btn.disabled = preset ? false : true;
-  btn.textContent = preset ? 'Remove' : 'Pick a reason first';
+  if (declined) {
+    lbl.style.display = 'none';
+    list.style.display = 'none';
+    list.innerHTML = '';
+    removalGuardCtx.reason = 'declined';
+    btn.disabled = false;
+    btn.textContent = 'Remove';
+  } else {
+    lbl.style.display = '';
+    list.style.display = '';
+    removalGuardCtx.reason = null;
+    buildRemovalReasonList(null);
+    btn.disabled = true;
+    btn.textContent = 'Pick a reason first';
+  }
   // .onclick, not addEventListener -- this runs on every open and addEventListener
   // would stack a new handler each time, firing the removal N times on the Nth open.
   btn.onclick = submitRemovalGuard;
