@@ -200,6 +200,24 @@ header { background: #fff; border-bottom: 1px solid #e8e8e4; padding: 0 32px; di
 .lightbox-close { position: absolute; top: -14px; right: -14px; width: 32px; height: 32px; border-radius: 50%; background: white; border: none; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #1a1a1a; line-height: 1; font-family: inherit; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
 .lightbox-close:hover { background: #f0f0f0; }
 .lightbox-caption { text-align: center; color: #aaa; font-size: 12px; margin-top: 10px; }
+/* Multi-file navigation + non-image tiles — added Jul 21, 2026.
+   Before this, a stand with 2 units photos showed "units x2" but the lightbox
+   could only ever open the first one; there was no way to reach the rest. */
+.lb-nav { position: absolute; top: 45%; transform: translateY(-50%); width: 42px; height: 42px; border-radius: 50%; background: rgba(255,255,255,0.92); border: none; font-size: 17px; cursor: pointer; display: none; align-items: center; justify-content: center; color: #1a1a1a; box-shadow: 0 2px 8px rgba(0,0,0,0.35); font-family: inherit; padding: 0; }
+.lb-nav.show { display: flex; }
+.lb-nav:hover { background: #fff; }
+.lb-prev { left: -56px; }
+.lb-next { right: -56px; }
+@media (max-width: 900px) { .lb-prev { left: 6px; } .lb-next { right: 6px; } }
+.lb-count { text-align: center; color: #ddd; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; margin-top: 4px; }
+.lb-doc { background: #fff; border-radius: 10px; padding: 36px 32px; text-align: center; min-width: 300px; max-width: 90vw; }
+.lb-doc-badge { display: inline-block; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; padding: 5px 12px; border-radius: 6px; color: #fff; margin-bottom: 14px; }
+.lb-doc-badge.csv { background: #1D9E75; }
+.lb-doc-badge.pdf { background: #A32D2D; }
+.lb-doc-badge.other { background: #888; }
+.lb-doc-name { font-size: 13px; color: #666; margin-bottom: 18px; word-break: break-all; }
+.lb-doc-btn { padding: 11px 22px; background: #1a1a1a; color: #fff; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.lb-doc-btn:hover { background: #333; }
 
 /* Loading / empty */
 .loading-card { background: white; border-radius: 14px; padding: 32px; text-align: center; color: #aaa; font-size: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
@@ -286,8 +304,11 @@ header { background: #fff; border-bottom: 1px solid #e8e8e4; padding: 0 32px; di
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
   <div class="lightbox-inner" onclick="event.stopPropagation()">
     <button class="lightbox-close" onclick="closeLightbox()">&#215;</button>
-    <img id="lightbox-img" src="" alt="">
+    <button class="lb-nav lb-prev" id="lb-prev" onclick="event.stopPropagation();lbStep(-1)" title="Previous">&#10094;</button>
+    <button class="lb-nav lb-next" id="lb-next" onclick="event.stopPropagation();lbStep(1)" title="Next">&#10095;</button>
+    <div id="lightbox-content"><img id="lightbox-img" src="" alt=""></div>
     <div class="lightbox-caption" id="lightbox-caption"></div>
+    <div class="lb-count" id="lb-count"></div>
   </div>
 </div>
 
@@ -361,6 +382,7 @@ header { background: #fff; border-bottom: 1px solid #e8e8e4; padding: 0 32px; di
 <script src="/pc-nav.js"></script>
 <script src="/pc-activity.js"></script>
 <script src="/pc-catalog.js"></script>
+<script src="/pc-attach.js"></script>
 <script>
 var SUPA_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
 var POOL_VENUES = ['FMP'];
@@ -1327,10 +1349,12 @@ function renderStandCard(sale, dupes, isPool, poolTipPerPerson) {
   html += '<div class="sc-pills">';
   var regAll = photos.register.length ? photos.register : (sale.photo_url ? [{photo_url: sale.photo_url, photo_type:'register'}] : []);
   var unitsAll = photos.units.length ? photos.units : (sale.units_photo_url ? [{photo_url: sale.units_photo_url, photo_type:'units'}] : []);
-  if (regAll.length) html += '<span class="sc-pill pill-reg" onclick="openPhoto(\'' + regAll[0].photo_url.replace(/'/g,"\\'") + '\',\'Register photo\')">reg &times;' + regAll.length + '</span>';
-  if (unitsAll.length) html += '<span class="sc-pill pill-units" onclick="openPhoto(\'' + unitsAll[0].photo_url.replace(/'/g,"\\'") + '\',\'Units sold photo\')">units &times;' + unitsAll.length + '</span>';
+  // Pills now open the WHOLE set for that type, not just item [0]. openPhotoSet
+  // re-reads photosData at click time so it stays correct after a re-render.
+  if (regAll.length) html += '<span class="sc-pill pill-reg" onclick="openPhotoSet(\'' + sale.id + '\',\'register\')">reg &times;' + regAll.length + '</span>';
+  if (unitsAll.length) html += '<span class="sc-pill pill-units" onclick="openPhotoSet(\'' + sale.id + '\',\'units\')">units &times;' + unitsAll.length + '</span>';
   if (photos.signin.length) {
-    html += '<span class="sc-pill pill-signin" onclick="openPhoto(\'' + photos.signin[0].photo_url.replace(/'/g,"\\'") + '\',\'Sign-in sheet\')">sign-in &times;' + photos.signin.length + '</span>';
+    html += '<span class="sc-pill pill-signin" onclick="openPhotoSet(\'' + sale.id + '\',\'signin\')">sign-in &times;' + photos.signin.length + '</span>';
   } else {
     html += '<span class="sc-pill pill-missing">no sign-in</span>';
   }
@@ -1839,18 +1863,115 @@ async function saveBarbackCoverage() {
 }
 
 // ── Lightbox ──────────────────────────────────────────────────────────────────
-function openPhoto(url, caption) {
-  document.getElementById('lightbox-img').src = url;
-  document.getElementById('lightbox-caption').textContent = caption || '';
+// Rewritten Jul 21, 2026. Two fixes in one:
+//   1. Multi-file sets. The pills always said "units x2" but openPhoto() only
+//      ever received item [0], so items 2..n were unreachable from this page.
+//   2. Non-image attachments. Register / units may now be a PDF or a CSV
+//      (Square exports). An <img> tag renders those as nothing at all, which is
+//      exactly what Walt Kettle looked like on Jul 20. Documents get a panel
+//      with an open button; CSVs open in pcAttach's inline table viewer.
+
+var lbItems = [];   // [{ photo_url, mime_type, photo_type }]
+var lbIndex = 0;
+var LB_CAPTIONS = { register: 'Register photo', units: 'Units sold photo', signin: 'Sign-in sheet' };
+
+function openPhotoSet(saleId, type) {
+  var photos = photosData[saleId] || { register: [], units: [], signin: [] };
+  var list = (photos[type] || []).slice();
+
+  // Legacy fallback: sales rows that predate sale_photos carry the URL inline.
+  if (!list.length) {
+    var sale = null;
+    for (var i = 0; i < salesData.length; i++) {
+      if (salesData[i].id === saleId) { sale = salesData[i]; break; }
+    }
+    if (sale) {
+      if (type === 'register' && sale.photo_url) list = [{ photo_url: sale.photo_url, mime_type: null, photo_type: 'register' }];
+      if (type === 'units' && sale.units_photo_url) list = [{ photo_url: sale.units_photo_url, mime_type: null, photo_type: 'units' }];
+    }
+  }
+  if (!list.length) return;
+
+  lbItems = list;
+  lbIndex = 0;
   document.getElementById('lightbox').classList.add('open');
+  lbRender();
+}
+
+// Kept for any caller still passing a bare URL.
+function openPhoto(url, caption) {
+  if (!url) return;
+  lbItems = [{ photo_url: url, mime_type: null, photo_type: null }];
+  lbIndex = 0;
+  document.getElementById('lightbox').classList.add('open');
+  lbRender(caption);
+}
+
+function lbStep(delta) {
+  if (!lbItems.length) return;
+  lbIndex = (lbIndex + delta + lbItems.length) % lbItems.length;
+  lbRender();
+}
+
+function lbRender(captionOverride) {
+  var item = lbItems[lbIndex];
+  if (!item) return;
+  var contentEl = document.getElementById('lightbox-content');
+  var kind = (typeof pcAttach !== 'undefined')
+    ? pcAttach.kindOf(item.mime_type || '', item.photo_url)
+    : 'image';
+
+  if (kind === 'image') {
+    contentEl.innerHTML = '<img id="lightbox-img" src="' + item.photo_url + '" alt="">';
+  } else {
+    var badge = kind === 'csv' ? 'CSV' : kind === 'pdf' ? 'PDF' : 'FILE';
+    var cls = kind === 'csv' ? 'csv' : kind === 'pdf' ? 'pdf' : 'other';
+    var fname = String(item.photo_url).split('/').pop();
+    contentEl.innerHTML =
+      '<div class="lb-doc">' +
+        '<div class="lb-doc-badge ' + cls + '">' + badge + '</div>' +
+        '<div class="lb-doc-name">' + fname + '</div>' +
+        '<button class="lb-doc-btn" onclick="event.stopPropagation();lbOpenCurrent()">' +
+          (kind === 'csv' ? 'View table' : 'Open file') +
+        '</button>' +
+      '</div>';
+  }
+
+  var cap = captionOverride || LB_CAPTIONS[item.photo_type] || 'Attachment';
+  document.getElementById('lightbox-caption').textContent = cap;
+
+  var multi = lbItems.length > 1;
+  document.getElementById('lb-prev').className = 'lb-nav lb-prev' + (multi ? ' show' : '');
+  document.getElementById('lb-next').className = 'lb-nav lb-next' + (multi ? ' show' : '');
+  document.getElementById('lb-count').textContent = multi ? (lbIndex + 1) + ' of ' + lbItems.length : '';
+}
+
+function lbOpenCurrent() {
+  var item = lbItems[lbIndex];
+  if (!item) return;
+  // pcAttach renders CSV as an inline table and opens PDFs in a new tab.
+  if (typeof pcAttach !== 'undefined') {
+    pcAttach.viewRemote(item.photo_url, item.mime_type || '', item.photo_url);
+  } else {
+    window.open(item.photo_url, '_blank');
+  }
 }
 
 function closeLightbox() {
   document.getElementById('lightbox').classList.remove('open');
-  document.getElementById('lightbox-img').src = '';
+  var img = document.getElementById('lightbox-img');
+  if (img) img.src = '';
+  lbItems = [];
+  lbIndex = 0;
 }
 
-document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
+document.addEventListener('keydown', function(e) {
+  var open = document.getElementById('lightbox').classList.contains('open');
+  if (e.key === 'Escape') { closeLightbox(); return; }
+  if (!open) return;
+  if (e.key === 'ArrowLeft') lbStep(-1);
+  if (e.key === 'ArrowRight') lbStep(1);
+});
 </script>
 </body>
 </html>
