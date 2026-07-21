@@ -11,6 +11,7 @@
 <script src="/pc-nav.js"></script>
 <script src="/pc-activity.js"></script>
 <script src="/pc-catalog.js"></script>
+<script src="/pc-attach.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f0ec; min-height: 100vh; }
@@ -381,10 +382,10 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
              below give managers the library option.
              ============================================================ -->
         <div class="photo-section">
-          <div class="photo-section-label">Register total photos <span>JPG or PNG only</span></div>
+          <div class="photo-section-label">Register total <span>Photo, PDF, or CSV &middot; max 15MB</span></div>
           <div class="photo-drop-zone" id="dz-register" onclick="dzClick('register')">
             <div class="dz-icon">&#128196;</div>
-            <div class="dz-prompt">Tap to add register photo</div>
+            <div class="dz-prompt">Tap for camera &mdash; or use the buttons below for a PDF / CSV</div>
             <div class="photo-previews" id="prev-register"></div>
           </div>
           <div class="capture-row">
@@ -392,22 +393,22 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
               <span class="capture-btn-icon">&#128247;</span> Take photo
             </button>
             <button type="button" class="capture-btn capture-btn-library" onclick="captureClick('register','library')">
-              <span class="capture-btn-icon">&#128194;</span> Choose from library
+              <span class="capture-btn-icon">&#128194;</span> Choose file
             </button>
           </div>
           <div class="photo-error-msg" id="err-register"></div>
           <!-- Two paired inputs: camera (capture="environment") and library (no capture attr).
                Both share the same onchange handler so all queueing/preview logic is unchanged. -->
           <input type="file" id="file-register-camera" accept="image/*" capture="environment" multiple style="display:none;" onchange="handlePhotoSelect(this,'register')">
-          <input type="file" id="file-register-library" accept="image/*" multiple style="display:none;" onchange="handlePhotoSelect(this,'register')">
+          <input type="file" id="file-register-library" accept="image/*,application/pdf,.pdf,text/csv,.csv" multiple style="display:none;" onchange="handlePhotoSelect(this,'register')">
         </div>
 
         <!-- ============================================================ UNITS PHOTOS ============================================================ -->
         <div class="photo-section">
-          <div class="photo-section-label">Units sold photos <span>Optional</span></div>
+          <div class="photo-section-label">Units sold <span>Optional &middot; photo, PDF, or CSV</span></div>
           <div class="photo-drop-zone" id="dz-units" onclick="dzClick('units')">
             <div class="dz-icon">&#128203;</div>
-            <div class="dz-prompt">Tap to add units sold photo</div>
+            <div class="dz-prompt">Tap for camera &mdash; or use the buttons below for a PDF / CSV</div>
             <div class="photo-previews" id="prev-units"></div>
           </div>
           <div class="capture-row">
@@ -415,12 +416,12 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
               <span class="capture-btn-icon">&#128247;</span> Take photo
             </button>
             <button type="button" class="capture-btn capture-btn-library" onclick="captureClick('units','library')">
-              <span class="capture-btn-icon">&#128194;</span> Choose from library
+              <span class="capture-btn-icon">&#128194;</span> Choose file
             </button>
           </div>
           <div class="photo-error-msg" id="err-units"></div>
           <input type="file" id="file-units-camera" accept="image/*" capture="environment" multiple style="display:none;" onchange="handlePhotoSelect(this,'units')">
-          <input type="file" id="file-units-library" accept="image/*" multiple style="display:none;" onchange="handlePhotoSelect(this,'units')">
+          <input type="file" id="file-units-library" accept="image/*,application/pdf,.pdf,text/csv,.csv" multiple style="display:none;" onchange="handlePhotoSelect(this,'units')">
         </div>
 
         <!-- ============================================================ SIGN-IN SHEET ============================================================ -->
@@ -609,10 +610,19 @@ function scoreboardDate() {
   return { date: todayLocal(), label: "Tonight's sales" };
 }
 
-function isBlockedFile(file) {
-  var ext = file.name.toLowerCase().split('.').pop();
-  var mime = (file.type || '').toLowerCase();
-  return ext === 'heic' || ext === 'heif' || mime.indexOf('heic') !== -1 || mime.indexOf('heif') !== -1;
+/* File-type rules moved to pc-attach.js on Jul 20, 2026 (shared with Sales
+ * History). isBlockedFile() is gone — call pcAttach.validate(file, mode)
+ * instead, where mode is 'image' (sign-in sheets) or 'document' (register /
+ * units: photo, PDF, or CSV). HEIC is still rejected in every mode.
+ *
+ * Helper: the legacy sales.photo_url / units_photo_url columns are rendered as
+ * <img> by other pages, so they only ever receive an IMAGE url. A CSV or PDF
+ * attaches to sale_photos and leaves the legacy column null. */
+function firstImageUrl(uploads) {
+  for (var i = 0; i < uploads.length; i++) {
+    if (pcAttach.kindOf(uploads[i].mime, uploads[i].name) === 'image') return uploads[i].url;
+  }
+  return null;
 }
 
 /* ============================================================
@@ -641,13 +651,17 @@ function handlePhotoSelect(input, type) {
   if (!input.files || !input.files.length) return;
   var errEl = document.getElementById('err-' + type);
   errEl.style.display = 'none';
-  var blocked = [];
+  // Sign-in sheets stay image-only — that photo feeds the AI read.
+  // Register / units accept a photo, a PDF, or a CSV.
+  var mode = (type === 'signin') ? 'image' : 'document';
+  var problems = [];
   Array.from(input.files).forEach(function(file) {
-    if (isBlockedFile(file)) { blocked.push(file.name); return; }
+    var err = pcAttach.validate(file, mode);
+    if (err) { problems.push(file.name + ' — ' + err); return; }
     photoQueues[type].push(file);
   });
-  if (blocked.length) {
-    errEl.textContent = 'HEIC not supported — use JPG or PNG: ' + blocked.join(', ');
+  if (problems.length) {
+    errEl.textContent = problems.join('  |  ');
     errEl.style.display = 'block';
   }
   input.value = '';
@@ -663,13 +677,18 @@ function renderPreviews(type) {
   dzEl.classList.add('has-files');
   files.forEach(function(file, idx) {
     var url = URL.createObjectURL(file);
+    var mime = pcAttach.resolveMime(file);
     var thumb = document.createElement('div');
     thumb.className = 'photo-thumb';
-    var img = document.createElement('img'); img.src = url;
+    // Images render as a thumbnail; PDFs and CSVs render as a labelled tile so
+    // nothing ever shows a broken-image icon. Tap either one to view it.
+    thumb.innerHTML = pcAttach.tileInnerHtml(mime, file.name, url);
+    thumb.title = file.name + ' (' + pcAttach.humanSize(file.size) + ')';
+    thumb.onclick = function(e) { e.stopPropagation(); pcAttach.viewLocal(file); };
     var btn = document.createElement('button');
     btn.className = 'remove-btn'; btn.innerHTML = '&#215;';
     btn.onclick = function(e) { e.stopPropagation(); removePhoto(type, idx); };
-    thumb.appendChild(img); thumb.appendChild(btn);
+    thumb.appendChild(btn);
     prevEl.appendChild(thumb);
   });
   // The "+" plus-thumb defaults to camera. Library remains accessible via the
@@ -687,28 +706,39 @@ function removePhoto(type, idx) {
 
 async function uploadPhoto(file, path) {
   var hdrs = apiHeaders();
-  hdrs['Content-Type'] = file.type;
+  // file.type is empty or wrong for CSVs from several pickers (Windows+Excel
+  // reports application/vnd.ms-excel). Storing the wrong Content-Type makes the
+  // browser download the file instead of viewing it. resolveMime() falls back
+  // to the extension.
+  hdrs['Content-Type'] = pcAttach.resolveMime(file);
   var res = await fetch(SUPA_URL + '/storage/v1/object/sale-photos/' + path, { method:'POST', headers:hdrs, body:file });
   if (!res.ok) return null;
   return SUPA_URL + '/storage/v1/object/public/sale-photos/' + path;
 }
 
+// Returns [{ url, mime, name }] — mime is persisted to sale_photos.mime_type
+// so the render path never has to guess from a URL.
 async function uploadPhotoQueue(saleId, type, files) {
-  var urls = [];
+  var out = [];
   for (var i = 0; i < files.length; i++) {
-    var ext = files[i].name.split('.').pop();
+    var ext = pcAttach.fileExt(files[i].name) || 'bin';
     var path = saleId + '/' + type + '_' + Date.now() + '_' + i + '.' + ext;
     var url = await uploadPhoto(files[i], path);
-    if (url) urls.push(url);
+    if (url) out.push({ url: url, mime: pcAttach.resolveMime(files[i]), name: files[i].name });
   }
-  return urls;
+  return out;
 }
 
-async function writeSalePhotos(saleId, type, urls) {
-  if (!urls.length) return;
+// Accepts either ['url', ...] or [{ url, mime, name }, ...]. The string form is
+// kept working so older call sites don't all have to change at once.
+async function writeSalePhotos(saleId, type, uploads) {
+  if (!uploads || !uploads.length) return;
   var uploadedBy = pcAuth.getUser() ? pcAuth.getUser().display_name : null;
-  var rows = urls.map(function(url, i) {
-    return { sale_id: saleId, photo_type: type, photo_url: url, sort_order: i, uploaded_by: uploadedBy };
+  var rows = uploads.map(function(u, i) {
+    var url = (typeof u === 'string') ? u : u.url;
+    var mime = (typeof u === 'string') ? null : (u.mime || null);
+    return { sale_id: saleId, photo_type: type, photo_url: url, sort_order: i,
+             uploaded_by: uploadedBy, mime_type: mime };
   });
   var hdrs = apiHeaders();
   hdrs['Content-Type'] = 'application/json';
@@ -837,10 +867,8 @@ async function handleSigninRetakeSelect(input) {
   if (!saleId) return;
   var file = input.files[0];
 
-  if (isBlockedFile(file)) {
-    alert('HEIC not supported — use JPG or PNG.');
-    return;
-  }
+  var retakeErr = pcAttach.validate(file, 'image');
+  if (retakeErr) { alert(retakeErr); return; }
 
   var detailEl = document.getElementById('sd-' + saleId);
   if (detailEl) {
@@ -853,12 +881,12 @@ async function handleSigninRetakeSelect(input) {
     if (!Array.isArray(sRows) || !sRows.length) throw new Error('Sale not found');
     var sale = sRows[0];
 
-    var ext = file.name.split('.').pop();
+    var ext = pcAttach.fileExt(file.name) || 'jpg';
     var path = saleId + '/signin_retake_' + Date.now() + '.' + ext;
     var newUrl = await uploadPhoto(file, path);
     if (!newUrl) throw new Error('Upload failed');
 
-    await writeSalePhotos(saleId, 'signin', [newUrl]);
+    await writeSalePhotos(saleId, 'signin', [{ url: newUrl, mime: pcAttach.resolveMime(file), name: file.name }]);
 
     delete sbAssignments[saleId];
 
@@ -958,8 +986,8 @@ async function submitSale() {
         id: saleId, event_date: date, event_name: evtName || null,
         venue: venue, stand: stand, amount: amount, tip_amount: tipAmount,
         staff_count: staffCount,
-        photo_url: registerUrls[0] || null,
-        units_photo_url: unitsUrls[0] || null,
+        photo_url: firstImageUrl(registerUrls),
+        units_photo_url: firstImageUrl(unitsUrls),
         submitted_by: pcAuth.getUser() ? pcAuth.getUser().display_name : null
       })
     });
@@ -974,8 +1002,8 @@ async function submitSale() {
     lastSubmittedSaleId = saleId;
     document.getElementById('success-edit-btn').style.display = 'inline-block';
     var photoSummary = [];
-    if (registerUrls.length) photoSummary.push(registerUrls.length + ' register photo' + (registerUrls.length > 1 ? 's' : ''));
-    if (unitsUrls.length) photoSummary.push(unitsUrls.length + ' units photo' + (unitsUrls.length > 1 ? 's' : ''));
+    if (registerUrls.length) photoSummary.push(registerUrls.length + ' register file' + (registerUrls.length > 1 ? 's' : ''));
+    if (unitsUrls.length) photoSummary.push(unitsUrls.length + ' units file' + (unitsUrls.length > 1 ? 's' : ''));
     if (signinUrls.length) photoSummary.push('sign-in sheet');
     var photoNote = photoSummary.length ? ' — ' + photoSummary.join(', ') : '';
     document.getElementById('success-detail').textContent = stand + ' at ' + (VENUE_LABELS[venue] || venue) + ' — $' + amount.toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 }) + photoNote;
@@ -983,7 +1011,7 @@ async function submitSale() {
     if (signinUrls.length > 0) {
       var aiEl = document.getElementById('ai-status');
       aiEl.textContent = 'Reading sign-in sheet...';
-      parseSigninSheet(saleId, signinUrls[0], venue, tipAmount, staffCount, date, stand).then(function() {
+      parseSigninSheet(saleId, signinUrls[0].url, venue, tipAmount, staffCount, date, stand).then(function() {
         var status = signinStatus[saleId];
         if (aiEl && status) {
           aiEl.textContent = status.level === 'success'
@@ -2362,7 +2390,7 @@ function boardSelectStand(stand) {
 
       <!-- Register photos — dual capture -->
       <div class="photo-section">
-        <div class="photo-section-label">Register total photos <span>JPG or PNG only</span></div>
+        <div class="photo-section-label">Register total <span>Photo, PDF, or CSV &middot; max 15MB</span></div>
         <div class="em-photos-existing" id="em-photos-register"></div>
         <div class="capture-row">
           <button type="button" class="capture-btn capture-btn-camera" onclick="document.getElementById('em-file-register-camera').click()">
@@ -2374,12 +2402,12 @@ function boardSelectStand(stand) {
         </div>
         <div class="photo-error-msg" id="em-err-register"></div>
         <input type="file" id="em-file-register-camera" accept="image/*" capture="environment" multiple style="display:none;" onchange="emHandlePhotoSelect(this,'register')">
-        <input type="file" id="em-file-register-library" accept="image/*" multiple style="display:none;" onchange="emHandlePhotoSelect(this,'register')">
+        <input type="file" id="em-file-register-library" accept="image/*,application/pdf,.pdf,text/csv,.csv" multiple style="display:none;" onchange="emHandlePhotoSelect(this,'register')">
       </div>
 
       <!-- Units photos — dual capture -->
       <div class="photo-section">
-        <div class="photo-section-label">Units sold photos <span>Optional</span></div>
+        <div class="photo-section-label">Units sold <span>Optional &middot; photo, PDF, or CSV</span></div>
         <div class="em-photos-existing" id="em-photos-units"></div>
         <div class="capture-row">
           <button type="button" class="capture-btn capture-btn-camera" onclick="document.getElementById('em-file-units-camera').click()">
@@ -2391,7 +2419,7 @@ function boardSelectStand(stand) {
         </div>
         <div class="photo-error-msg" id="em-err-units"></div>
         <input type="file" id="em-file-units-camera" accept="image/*" capture="environment" multiple style="display:none;" onchange="emHandlePhotoSelect(this,'units')">
-        <input type="file" id="em-file-units-library" accept="image/*" multiple style="display:none;" onchange="emHandlePhotoSelect(this,'units')">
+        <input type="file" id="em-file-units-library" accept="image/*,application/pdf,.pdf,text/csv,.csv" multiple style="display:none;" onchange="emHandlePhotoSelect(this,'units')">
       </div>
 
       <!-- Sign-in photos — dual capture -->
@@ -2540,8 +2568,12 @@ function emRenderPhotos() {
     var html = '';
     emState.originalPhotos[type].forEach(function(p) {
       var marked = !!emState.photosToDelete[p.id];
-      html += '<div class="em-photo-thumb' + (marked ? ' marked-delete' : '') + '">';
-      html += '<img src="' + p.photo_url + '" alt="">';
+      // mime_type is NULL on every row created before Jul 20, 2026 —
+      // pcAttach.kindOf() treats NULL as an image, which is correct for those.
+      var pMime = p.mime_type || '';
+      html += '<div class="em-photo-thumb' + (marked ? ' marked-delete' : '') + '"' +
+              ' onclick="emViewStored(\'' + type + '\',\'' + p.id + '\')" title="Tap to view">';
+      html += pcAttach.tileInnerHtml(pMime, p.photo_url, p.photo_url);
       if (marked) {
         html += '<button class="em-remove-btn undo" onclick="emTogglePhotoDelete(\'' + type + '\',\'' + p.id + '\')" title="Undo remove">&#8635;</button>';
       } else {
@@ -2551,15 +2583,31 @@ function emRenderPhotos() {
     });
     emState.photosToAdd[type].forEach(function(file, idx) {
       var url = URL.createObjectURL(file);
-      html += '<div class="em-photo-thumb">';
-      html += '<img src="' + url + '" alt="">';
-      html += '<button class="em-remove-btn" onclick="emCancelAdd(\'' + type + '\',' + idx + ')" title="Cancel add">&times;</button>';
+      html += '<div class="em-photo-thumb" onclick="emViewPending(\'' + type + '\',' + idx + ')" title="Tap to view">';
+      html += pcAttach.tileInnerHtml(pcAttach.resolveMime(file), file.name, url);
+      html += '<button class="em-remove-btn" onclick="event.stopPropagation();emCancelAdd(\'' + type + '\',' + idx + ')" title="Cancel add">&times;</button>';
       html += '</div>';
     });
     container.innerHTML = html;
   });
   var signinChange = emState.photosToAdd.signin.length > 0;
   document.getElementById('em-signin-warn').textContent = signinChange ? 'New photo will trigger AI re-read' : '';
+}
+
+// Viewers for the edit modal's two tile sources.
+function emViewStored(type, photoId) {
+  var list = emState.originalPhotos[type] || [];
+  for (var i = 0; i < list.length; i++) {
+    if (String(list[i].id) === String(photoId)) {
+      pcAttach.viewRemote(list[i].photo_url, list[i].mime_type || '', list[i].photo_url);
+      return;
+    }
+  }
+}
+
+function emViewPending(type, idx) {
+  var f = (emState.photosToAdd[type] || [])[idx];
+  if (f) pcAttach.viewLocal(f);
 }
 
 function emTogglePhotoDelete(type, photoId) {
@@ -2577,13 +2625,15 @@ function emHandlePhotoSelect(input, type) {
   if (!input.files || !input.files.length) return;
   var errEl = document.getElementById('em-err-' + type);
   errEl.style.display = 'none';
-  var blocked = [];
+  var mode = (type === 'signin') ? 'image' : 'document';
+  var problems = [];
   Array.from(input.files).forEach(function(file) {
-    if (isBlockedFile(file)) { blocked.push(file.name); return; }
+    var err = pcAttach.validate(file, mode);
+    if (err) { problems.push(file.name + ' — ' + err); return; }
     emState.photosToAdd[type].push(file);
   });
-  if (blocked.length) {
-    errEl.textContent = 'HEIC not supported — use JPG or PNG: ' + blocked.join(', ');
+  if (problems.length) {
+    errEl.textContent = problems.join('  |  ');
     errEl.style.display = 'block';
   }
   input.value = '';
@@ -2636,10 +2686,10 @@ async function submitEdit() {
     for (var type of ['register','units','signin']) {
       var files = emState.photosToAdd[type];
       for (var i = 0; i < files.length; i++) {
-        var ext = files[i].name.split('.').pop();
+        var ext = pcAttach.fileExt(files[i].name) || 'bin';
         var path = saleId + '/' + type + '_edit_' + Date.now() + '_' + i + '.' + ext;
         var url = await uploadPhoto(files[i], path);
-        if (url) newUrlsByType[type].push(url);
+        if (url) newUrlsByType[type].push({ url: url, mime: pcAttach.resolveMime(files[i]), name: files[i].name });
       }
     }
 
@@ -2680,7 +2730,7 @@ async function submitEdit() {
 
     if (newUrlsByType.signin.length > 0) {
       delete sbAssignments[saleId];
-      parseSigninSheet(saleId, newUrlsByType.signin[0], sale.venue, tipAmount, staffCount, sale.event_date, sale.stand)
+      parseSigninSheet(saleId, newUrlsByType.signin[0].url, sale.venue, tipAmount, staffCount, sale.event_date, sale.stand)
         .catch(function() { /* swallow — UI shows status pill */ });
     }
 
