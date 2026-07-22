@@ -65,6 +65,7 @@
   }
   .field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: #1a1a1a; }
   .field input.is-error, .field select.is-error, .field textarea.is-error { border-color: #791F1F; background: #fceaea; }
+  .field input[readonly] { background: #f4f3ee; color: #333; cursor: default; }
   .field textarea { resize: vertical; min-height: 56px; }
   .field input.money {
     text-align: right; font-variant-numeric: tabular-nums;
@@ -165,6 +166,53 @@
     color: #1a1a1a; width: 120px;
   }
   .post-print-banner .pp-edit-row input:focus { outline: none; border-color: #1a1a1a; }
+
+  /* ============ AP MULTI-INVOICE ============ */
+  .ap-multi-field[hidden] { display: none; }
+  .ap-multi-list {
+    border: 1px solid #e0dfd8; border-radius: 6px;
+    overflow: hidden; margin-bottom: 6px;
+  }
+  .ap-multi-row {
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    align-items: center; gap: 8px;
+    padding: 7px 10px; border-bottom: 1px solid #f0efe8;
+    font-size: 12.5px; cursor: pointer;
+  }
+  .ap-multi-row:last-child { border-bottom: 0; }
+  .ap-multi-row.is-anchor { background: #f4f9fe; cursor: default; }
+  .ap-multi-row input { margin: 0; cursor: pointer; }
+  .ap-multi-row.is-anchor input { cursor: default; }
+  .ap-multi-row .apm-inv { font-weight: 500; color: #1a1a1a; }
+  .ap-multi-row .apm-tag {
+    font-size: 10px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.04em; color: #0C447C;
+    background: #e6f1fb; border-radius: 3px; padding: 1px 5px; margin-left: 4px;
+  }
+  .ap-multi-row .apm-due { font-size: 11px; color: #888; }
+  .ap-multi-row .apm-amt {
+    font-weight: 600; font-variant-numeric: tabular-nums;
+    color: #1a1a1a; text-align: right;
+  }
+  .ap-multi-empty { font-size: 12px; color: #888; padding: 8px 10px; }
+  .ap-multi-total {
+    font-size: 12px; font-weight: 600; color: #27500A;
+    text-align: right; padding: 2px 2px 0;
+  }
+
+  /* Stub itemized remittance */
+  .ck-stub-items .val { display: flex; flex-direction: column; gap: 1px; }
+  .ck-stub-items .it-row {
+    display: flex; justify-content: space-between; gap: 10px;
+    font-size: 9pt; line-height: 1.3;
+  }
+  .ck-stub-items .it-amt { font-variant-numeric: tabular-nums; }
+  .ck-stub-items .it-more { color: #555; font-style: italic; }
+  .ck-stub-items .it-total {
+    font-weight: 700; border-top: 1px solid #999;
+    margin-top: 2px; padding-top: 2px;
+  }
 
   .preview-wrap { position: sticky; top: 150px; }
   .preview-toolbar {
@@ -414,6 +462,13 @@
             <div class="field-hint" id="addressHint">The payee name above prints automatically above this address in the window. Leave blank if hand-addressing.</div>
           </div>
 
+          <!-- AP multi-invoice: this vendor's other open bills -->
+          <div class="field ap-multi-field" id="apMultiField" hidden>
+            <label>Also paying on this check <span class="opt">— this vendor's open bills</span></label>
+            <div class="ap-multi-list" id="apMultiList"></div>
+            <div class="ap-multi-total" id="apMultiTotal"></div>
+          </div>
+
           <div class="field-row">
             <div class="field">
               <label for="fldAmount">Amount <span class="req">*</span></label>
@@ -512,12 +567,14 @@
           <div class="ck-field ck-stub ck-stub-strong" id="ckStub1Payee"><span class="ck-label-hint">Stub 1 payee</span><span class="val"></span></div>
           <div class="ck-field ck-stub" id="ckStub1Amount"><span class="ck-label-hint">Stub 1 amount</span><span class="val"></span></div>
           <div class="ck-field ck-stub" id="ckStub1Memo"><span class="ck-label-hint">Stub 1 memo</span><span class="val"></span></div>
+          <div class="ck-field ck-stub ck-stub-items" id="ckStub1Items"><span class="ck-label-hint">Stub 1 items</span><span class="val"></span></div>
 
           <!-- STUB 2 (bottom third) -->
           <div class="ck-field ck-stub" id="ckStub2Date"><span class="ck-label-hint">Stub 2 date</span><span class="val"></span></div>
           <div class="ck-field ck-stub ck-stub-strong" id="ckStub2Payee"><span class="ck-label-hint">Stub 2 payee</span><span class="val"></span></div>
           <div class="ck-field ck-stub" id="ckStub2Amount"><span class="ck-label-hint">Stub 2 amount</span><span class="val"></span></div>
           <div class="ck-field ck-stub" id="ckStub2Memo"><span class="ck-label-hint">Stub 2 memo</span><span class="val"></span></div>
+          <div class="ck-field ck-stub ck-stub-items" id="ckStub2Items"><span class="ck-label-hint">Stub 2 items</span><span class="val"></span></div>
         </div>
       </div>
 
@@ -550,6 +607,11 @@
 
   var pcSubmitting = false;
 
+  // Multi-invoice caps
+  var STUB1_ITEM_CAP = 6;   // middle stub sits above the envelope window — tighter
+  var STUB2_ITEM_CAP = 8;   // bottom stub is roomy
+  var MEMO_INV_CAP   = 4;   // invoice numbers shown in the check-face memo summary
+
   // ---------------------------------------------------------------------
   // FIELD POSITIONS — inches from top-left of the 8.5x11 sheet.
   // ---------------------------------------------------------------------
@@ -567,11 +629,13 @@
     stub1Payee:  { top: 4.20, left: 5.20, width: 3.0, align: 'left' },
     stub1Amount: { top: 4.45, left: 5.20, width: 3.0, align: 'left' },
     stub1Memo:   { top: 4.75, left: 5.20, width: 3.0, align: 'left' },
+    stub1Items:  { top: 4.98, left: 5.20, width: 3.0, align: 'left' },
 
     stub2Date:   { top: 8.10, left: 1.00, width: 2.6, align: 'left' },
     stub2Payee:  { top: 8.10, left: 4.20, width: 4.0, align: 'left' },
     stub2Amount: { top: 8.35, left: 1.00, width: 2.6, align: 'left' },
-    stub2Memo:   { top: 8.35, left: 4.20, width: 4.0, align: 'left' }
+    stub2Memo:   { top: 8.35, left: 4.20, width: 4.0, align: 'left' },
+    stub2Items:  { top: 8.65, left: 1.00, width: 6.4, align: 'left' }
   };
 
   var POS_KEY = 'pc_check_pos_v3';
@@ -609,8 +673,11 @@
     recentChecks: [],      // recent checks list
 
     fromReport: null,      // the expense_reports row when loaded
-    fromBill: null,        // the ap_bills row when loaded
+    fromBill: null,        // the ap_bills row when loaded (anchor vendor)
     mode: 'standalone',    // 'standalone' | 'report' | 'ap_bill'
+
+    apExtra: {},           // { billId: true } extra same-vendor bills checked in AP mode
+    apAutoMemo: '',        // last auto-generated memo summary (so user edits aren't clobbered)
 
     lastPrint: null
   };
@@ -849,6 +916,14 @@
       { headers: pcAuth.headers() }
     );
   }
+  // Allocation rows for a check (multi-invoice AP checks). Empty => single/legacy.
+  function fetchCheckAllocations(registerId) {
+    return authFetch(
+      SB_REST + 'check_bill_allocations?check_register_id=eq.' + encodeURIComponent(registerId) +
+      '&select=ap_bill_id,amount_applied&limit=200',
+      { headers: pcAuth.headers() }
+    );
+  }
   function getReportIdFromUrl() {
     var m = (window.location.search || '').match(/[?&]id=([^&]+)/);
     return m ? decodeURIComponent(m[1]) : null;
@@ -868,6 +943,29 @@
       if (p.width != null) el.style.width = p.width + 'in';
       el.style.textAlign = (p.align === 'right') ? 'right' : 'left';
     });
+  }
+
+  // Build the itemized remittance HTML for a set of bills, capped.
+  function buildItemsHtml(bills, cap) {
+    if (!bills || !bills.length) return '';
+    var shown = bills.slice(0, cap);
+    var html = '';
+    shown.forEach(function (b) {
+      var inv = b.invoice_number ? ('#' + b.invoice_number) : ('Bill ' + String(b.id).substring(0, 8));
+      html += '<div class="it-row"><span class="it-inv">' + esc(inv) + '</span>' +
+              '<span class="it-amt">' + esc(fmtMoney(billBalance(b))) + '</span></div>';
+    });
+    var more = bills.length - shown.length;
+    if (more > 0) {
+      html += '<div class="it-row it-more"><span>+' + more + ' more — see attached</span><span></span></div>';
+    }
+    var total = bills.reduce(function (s, b) { return s + billBalance(b); }, 0);
+    html += '<div class="it-row it-total"><span>Total</span><span>' + esc(fmtMoney(total)) + '</span></div>';
+    return html;
+  }
+  function setItemsHtml(elId, html) {
+    var el = document.querySelector('#' + elId + ' .val');
+    if (el) el.innerHTML = html || '';
   }
 
   function renderPreview() {
@@ -904,15 +1002,37 @@
       setVal('ckWindowAddress', '');
     }
 
-    setVal('ckStub1Date',   dateShort ? 'Date: ' + dateShort : '');
-    setVal('ckStub1Payee',  payee     ? 'Pay to: ' + payee   : '');
-    setVal('ckStub1Amount', hasAmt    ? 'Amount: ' + amtStr  : '');
-    setVal('ckStub1Memo',   memo      ? 'Memo: ' + memo      : '');
+    // Multi-invoice AP: render itemized remittance on both stubs and blank the
+    // single amount/memo stub lines so they don't duplicate the total.
+    var apMulti = (state.mode === 'ap_bill' && apSelectedBills().length >= 2);
+    if (apMulti) {
+      var bills = apSelectedBills();
+      setItemsHtml('ckStub1Items', buildItemsHtml(bills, STUB1_ITEM_CAP));
+      setItemsHtml('ckStub2Items', buildItemsHtml(bills, STUB2_ITEM_CAP));
 
-    setVal('ckStub2Date',   dateShort);
-    setVal('ckStub2Payee',  payee);
-    setVal('ckStub2Amount', amtStr);
-    setVal('ckStub2Memo',   memo);
+      setVal('ckStub1Date',   dateShort ? 'Date: ' + dateShort : '');
+      setVal('ckStub1Payee',  payee     ? 'Pay to: ' + payee   : '');
+      setVal('ckStub1Amount', '');
+      setVal('ckStub1Memo',   '');
+
+      setVal('ckStub2Date',   dateShort);
+      setVal('ckStub2Payee',  payee);
+      setVal('ckStub2Amount', '');
+      setVal('ckStub2Memo',   '');
+    } else {
+      setItemsHtml('ckStub1Items', '');
+      setItemsHtml('ckStub2Items', '');
+
+      setVal('ckStub1Date',   dateShort ? 'Date: ' + dateShort : '');
+      setVal('ckStub1Payee',  payee     ? 'Pay to: ' + payee   : '');
+      setVal('ckStub1Amount', hasAmt    ? 'Amount: ' + amtStr  : '');
+      setVal('ckStub1Memo',   memo      ? 'Memo: ' + memo      : '');
+
+      setVal('ckStub2Date',   dateShort);
+      setVal('ckStub2Payee',  payee);
+      setVal('ckStub2Amount', amtStr);
+      setVal('ckStub2Memo',   memo);
+    }
   }
   function setVal(elId, text) {
     var el = document.querySelector('#' + elId + ' .val');
@@ -1090,6 +1210,112 @@
   }
 
   // =====================================================================
+  // AP MULTI-INVOICE SELECTION
+  //  - anchor bill = state.fromBill (sets the vendor)
+  //  - extras      = same-vendor open bills the user checks
+  // =====================================================================
+  function apVendorBills() {
+    if (!state.fromBill) return [];
+    var vid = String(state.fromBill.vendor_id);
+    return state.approvedBills.filter(function (b) {
+      return String(b.vendor_id) === vid;
+    });
+  }
+  function apSelectedBills() {
+    if (state.mode !== 'ap_bill' || !state.fromBill) return [];
+    var anchorId = String(state.fromBill.id);
+    var out = [state.fromBill];
+    apVendorBills().forEach(function (b) {
+      if (String(b.id) === anchorId) return;
+      if (state.apExtra[String(b.id)]) out.push(b);
+    });
+    return out;
+  }
+  function apBillRowHtml(b, checked, isAnchor) {
+    var inv = b.invoice_number ? ('#' + b.invoice_number) : ('Bill ' + String(b.id).substring(0, 8));
+    var due = b.due_date ? ('due ' + fmtDateShort(b.due_date)) : '';
+    return '<label class="ap-multi-row' + (isAnchor ? ' is-anchor' : '') + '">' +
+      '<input type="checkbox" data-ap-bill="' + esc(b.id) + '"' +
+        (checked ? ' checked' : '') + (isAnchor ? ' disabled' : '') + '>' +
+      '<span class="apm-inv">' + esc(inv) +
+        (isAnchor ? '<span class="apm-tag">payee</span>' : '') + '</span>' +
+      '<span class="apm-due">' + esc(due) + '</span>' +
+      '<span class="apm-amt">' + esc(fmtMoney(billBalance(b))) + '</span>' +
+    '</label>';
+  }
+  function renderApMultiBlock() {
+    var field = document.getElementById('apMultiField');
+    var list  = document.getElementById('apMultiList');
+    if (!field || !list) return;
+    if (state.mode !== 'ap_bill' || !state.fromBill) {
+      field.hidden = true;
+      list.innerHTML = '';
+      renderApTotal();
+      return;
+    }
+    var anchorId = String(state.fromBill.id);
+    var others = apVendorBills().filter(function (b) { return String(b.id) !== anchorId; });
+
+    field.hidden = false;
+    var html = apBillRowHtml(state.fromBill, true, true);
+    others.forEach(function (b) {
+      html += apBillRowHtml(b, !!state.apExtra[String(b.id)], false);
+    });
+    if (!others.length) {
+      html += '<div class="ap-multi-empty">No other open bills for this vendor.</div>';
+    }
+    list.innerHTML = html;
+
+    list.querySelectorAll('input[data-ap-bill]').forEach(function (cb) {
+      if (cb.disabled) return;
+      cb.addEventListener('change', function () {
+        var id = cb.getAttribute('data-ap-bill');
+        if (cb.checked) state.apExtra[id] = true;
+        else delete state.apExtra[id];
+        recomputeApAmount();
+      });
+    });
+    renderApTotal();
+  }
+  function renderApTotal() {
+    var totalEl = document.getElementById('apMultiTotal');
+    if (!totalEl) return;
+    if (state.mode !== 'ap_bill' || !state.fromBill) { totalEl.textContent = ''; return; }
+    var bills = apSelectedBills();
+    var total = bills.reduce(function (s, b) { return s + billBalance(b); }, 0);
+    var n = bills.length;
+    totalEl.textContent = n + ' invoice' + (n === 1 ? '' : 's') + ' selected · ' + fmtMoney(total);
+  }
+  function apMemoSummary(bills) {
+    var invs = bills.map(function (b) {
+      return b.invoice_number ? ('#' + b.invoice_number) : null;
+    }).filter(function (x) { return !!x; });
+    if (!invs.length) return 'AP bill payment';
+    if (invs.length <= MEMO_INV_CAP) return 'Inv ' + invs.join(', ');
+    return 'Inv ' + invs.slice(0, MEMO_INV_CAP).join(', ') + ' +' + (invs.length - MEMO_INV_CAP) + ' more';
+  }
+  function updateApMemo(bills) {
+    var memoEl = document.getElementById('fldMemo');
+    if (!memoEl) return;
+    var summary = apMemoSummary(bills);
+    // Only overwrite if the user hasn't hand-edited the memo away from our last auto value.
+    if (!memoEl.value || memoEl.value === state.apAutoMemo) {
+      memoEl.value = summary;
+      state.apAutoMemo = summary;
+    }
+  }
+  function recomputeApAmount() {
+    var bills = apSelectedBills();
+    var total = bills.reduce(function (s, b) { return s + billBalance(b); }, 0);
+    var amtEl = document.getElementById('fldAmount');
+    if (amtEl) amtEl.value = String(Math.round(total * 100) / 100);
+    updateApMemo(bills);
+    renderApTotal();
+    renderPreview();
+    updatePrintEnabled();
+  }
+
+  // =====================================================================
   // DUPLICATE CHECK-NUMBER WARNING
   // =====================================================================
   var dupTimer = null;
@@ -1145,7 +1371,9 @@
   // PRINT + LOG
   //  - standalone: optional expense row + register row
   //  - report:     expense fan-out + register row + mark report paid
-  //  - ap_bill:    register row + mark bill paid + save address back to vendor
+  //  - ap_bill (1 bill):  register row + mark bill paid + save address back to vendor
+  //  - ap_bill (2+ bills): register row (ap_bill_id NULL) + allocation rows +
+  //                        mark every bill paid + save address back to vendor
   // =====================================================================
   function handlePrint() {
     if (pcSubmitting) return;
@@ -1162,6 +1390,9 @@
     var savePayee = document.getElementById('savePayeeCheck');
     var doSavePayee = savePayee && !savePayee.hidden && savePayee.checked && state.mode === 'standalone';
 
+    var apBills = (state.mode === 'ap_bill') ? apSelectedBills() : [];
+    var isApMulti = apBills.length >= 2;
+
     pcSubmitting = true;
     var btn = document.getElementById('btnPrint');
     if (btn) { btn.disabled = true; btn.textContent = 'Logging…'; }
@@ -1175,13 +1406,16 @@
       amount: amt, payee: payee, addr: addr, dateV: dateV,
       memo: memo, catId: catId,
       reportId: state.mode === 'report' && state.fromReport ? state.fromReport.id : null,
-      apBillId: state.mode === 'ap_bill' && state.fromBill ? state.fromBill.id : null,
-      apBillTotal: state.mode === 'ap_bill' && state.fromBill ? Number(state.fromBill.total_amount || 0) : null,
+      apBillId: (state.mode === 'ap_bill' && !isApMulti && state.fromBill) ? state.fromBill.id : null,
+      apBillTotal: (state.mode === 'ap_bill' && !isApMulti && state.fromBill) ? Number(state.fromBill.total_amount || 0) : null,
       vendorId: state.mode === 'ap_bill' && state.fromBill ? (state.fromBill.vendor_id || null) : null,
       payeeRowId: parseInt(document.getElementById('savedPayeeSelect').value, 10) || null,
       expenseFanoutIds: [],
       standaloneExpenseId: null,
-      isReprint: false
+      isReprint: false,
+      apBills: apBills,
+      apBillIds: apBills.map(function (b) { return b.id; }),
+      isApMulti: isApMulti
     };
 
     // --- STEP 1: STANDALONE expense row (if category picked) ---
@@ -1266,9 +1500,13 @@
       );
     });
 
-    // --- STEP 4b: mark AP bill paid + save address back to vendor ---
+    // --- STEP 4b: mark AP bill(s) paid + save address back to vendor ---
     var billPaidStep = reportPaidStep.then(function () {
-      if (state.mode !== 'ap_bill' || !ctx.apBillId) return;
+      if (state.mode !== 'ap_bill') return;
+      if (ctx.isApMulti) {
+        return payMultipleBills(ctx, minimalHdrs, representHdrs, actor, dateV, ckNum, addr);
+      }
+      if (!ctx.apBillId) return;
       var billPatch = authFetch(
         SB_REST + 'ap_bills?id=eq.' + encodeURIComponent(ctx.apBillId),
         {
@@ -1321,7 +1559,9 @@
         var loggedMsg = state.mode === 'report'
           ? 'Logged · report marked paid · opening print…'
           : state.mode === 'ap_bill'
-            ? 'Logged · bill marked paid · opening print…'
+            ? (ctx.isApMulti
+                ? 'Logged · ' + ctx.apBills.length + ' bills marked paid · opening print…'
+                : 'Logged · bill marked paid · opening print…')
             : 'Logged · opening print…';
         showToast(loggedMsg, 1600);
         renderPostPrintBanner();
@@ -1341,6 +1581,55 @@
         if (state.mode === 'ap_bill') refreshApprovedBills();
         refreshRecentChecks();
       });
+  }
+
+  // Multi-bill AP: insert allocation rows, mark every bill paid in full, save
+  // remit address back to the vendor. ctx.registerId is already set by STEP 3.
+  function payMultipleBills(ctx, minimalHdrs, representHdrs, actor, dateV, ckNum, addr) {
+    var allocRows = ctx.apBills.map(function (b) {
+      return {
+        check_register_id: ctx.registerId,
+        ap_bill_id: b.id,
+        amount_applied: billBalance(b),
+        created_by: actor
+      };
+    });
+    var allocStep = authFetch(SB_REST + 'check_bill_allocations', {
+      method: 'POST', headers: minimalHdrs, body: JSON.stringify(allocRows)
+    });
+
+    var billStep = allocStep.then(function () {
+      var ops = ctx.apBills.map(function (b) {
+        return authFetch(SB_REST + 'ap_bills?id=eq.' + encodeURIComponent(b.id), {
+          method: 'PATCH', headers: minimalHdrs,
+          body: JSON.stringify({
+            status: 'paid',
+            amount_paid: Number(b.total_amount || 0),
+            paid_at: dateV,
+            payment_method: 'check',
+            payment_reference: ckNum,
+            paid_by: actor,
+            updated_by: actor,
+            updated_at: new Date().toISOString()
+          })
+        });
+      });
+      return Promise.all(ops);
+    });
+
+    return billStep.then(function () {
+      if (ctx.vendorId && addr) {
+        return authFetch(
+          SB_REST + 'known_vendors?id=eq.' + encodeURIComponent(ctx.vendorId),
+          {
+            method: 'PATCH', headers: minimalHdrs,
+            body: JSON.stringify({ remit_address: addr, updated_by: actor, updated_at: new Date().toISOString() })
+          }
+        ).catch(function (e) {
+          console.warn('[checks] remit_address save-back failed:', e);
+        });
+      }
+    });
   }
 
   function buildExpenseRowFromLine(line, payeeName, checkNum, actor, reportId) {
@@ -1394,9 +1683,11 @@
     }
     banner.hidden = false;
     banner.classList.remove('is-editing');
+    var multiNote = (lp.isApMulti && lp.apBillIds && lp.apBillIds.length)
+      ? ' <em>(' + lp.apBillIds.length + ' invoices)</em>' : '';
     banner.innerHTML =
       '<div class="pp-head">' +
-        '<span>✓ Printed check #' + esc(lp.checkNumber) + ' to ' + esc(lp.payee) + ' for ' + esc(fmtMoney(lp.amount)) + (lp.isReprint ? ' <em>(reprint)</em>' : '') + '</span>' +
+        '<span>✓ Printed check #' + esc(lp.checkNumber) + ' to ' + esc(lp.payee) + ' for ' + esc(fmtMoney(lp.amount)) + multiNote + (lp.isReprint ? ' <em>(reprint)</em>' : '') + '</span>' +
       '</div>' +
       '<div>Did anything go wrong with the print? You can void this and reprint with a new number, or just correct the number if you typed it wrong.</div>' +
       '<div class="pp-actions">' +
@@ -1458,13 +1749,20 @@
       }
 
       // Reprint keeps whatever mode (report/ap_bill/standalone) is still active in
-      // state — the linked report/bill was not reversed, so re-printing simply
+      // state — the linked report/bill(s) were not reversed, so re-printing simply
       // logs a fresh register row (and re-marks paid, idempotently).
       if (lp.reportId) {
         loadFromReport(lp.reportId).then(function () {
           showToast('Voided. Enter the new check number and print again.', 3000);
         });
       } else {
+        // AP mode (single or multi): the selection is still live in state.
+        // Re-render the multi block + resum so the fresh print re-creates
+        // allocation rows against the new register row.
+        if (state.mode === 'ap_bill') {
+          renderApMultiBlock();
+          recomputeApAmount();
+        }
         showToast('Voided. Enter the new check number and print again.', 3000);
       }
 
@@ -1554,16 +1852,21 @@
       );
     });
 
-    // Also update the AP bill's payment_reference when this check paid a bill.
+    // Also update payment_reference on every AP bill this check paid (single or multi).
     var step2b = step2.then(function () {
-      if (!lp.apBillId) return;
-      return authFetch(
-        SB_REST + 'ap_bills?id=eq.' + encodeURIComponent(lp.apBillId),
-        {
-          method: 'PATCH', headers: minimalHdrs,
-          body: JSON.stringify({ payment_reference: newNum })
-        }
-      );
+      var ids = (lp.apBillIds && lp.apBillIds.length) ? lp.apBillIds
+              : (lp.apBillId ? [lp.apBillId] : []);
+      if (!ids.length) return;
+      var ops = ids.map(function (bid) {
+        return authFetch(
+          SB_REST + 'ap_bills?id=eq.' + encodeURIComponent(bid),
+          {
+            method: 'PATCH', headers: minimalHdrs,
+            body: JSON.stringify({ payment_reference: newNum })
+          }
+        );
+      });
+      return Promise.all(ops);
     });
 
     var step3 = step2b.then(function () {
@@ -1613,8 +1916,10 @@
   // Voids the check_register row, soft-deletes the expense row(s) it created,
   // and reverses the linked record:
   //   - reimbursement report → back to Approved, check number cleared
-  //   - AP bill              → back to unpaid, payment details cleared
-  // Standalone checks with no category have no expense to clean.
+  //   - AP bill(s)           → back to unpaid, payment details cleared
+  //       * multi-invoice checks are detected via check_bill_allocations
+  //       * legacy single-bill checks use check_register.ap_bill_id
+  //   - standalone with category → soft-delete the one expense row
   function voidCheck(id) {
     if (!state.isAdmin) { showToast('Only admins can void checks', 2400); return; }
 
@@ -1625,14 +1930,30 @@
     if (!chk) return;
     if (chk.voided) { showToast('That check is already voided', 2000); return; }
 
+    // Look up allocation rows first so we know whether this is a multi-bill check.
+    fetchCheckAllocations(chk.id)
+      .then(function (allocs) { proceedVoid(chk, allocs || []); })
+      .catch(function (e) {
+        if (e && e.authFailed) { handleAuthFailure(); return; }
+        console.error('[checks] alloc fetch for void failed:', e);
+        showToast('Could not check linked bills — void aborted', 3200);
+      });
+  }
+
+  function proceedVoid(chk, allocs) {
+    var isMultiBill = allocs.length > 0;
     var isReport = chk.source === 'expense_report' && !!chk.expense_report_id;
-    var isApBill = chk.source === 'ap_bill' && !!chk.ap_bill_id;
+    var isApBill = chk.source === 'ap_bill' && !!chk.ap_bill_id;  // legacy single-bill
 
     var promptMsg = 'Void check #' + chk.check_number + ' — ' +
       (chk.payee_name || '—') + ' for ' + fmtMoney(Number(chk.amount || 0)) + '.\n\n';
     if (isReport) {
       promptMsg += 'Reimbursement check: voiding also removes the expense rows it ' +
         'created AND flips the report back to Approved (unpaid).\n\n';
+    } else if (isMultiBill) {
+      promptMsg += 'This check paid ' + allocs.length + ' Accounts Payable bills: ' +
+        'voiding flips all ' + allocs.length + ' back to unpaid and clears the ' +
+        'check number from AP.\n\n';
     } else if (isApBill) {
       promptMsg += 'This check paid an Accounts Payable bill: voiding flips that bill ' +
         'back to unpaid and clears the check number from AP.\n\n';
@@ -1686,7 +2007,7 @@
       return null;
     });
 
-    // Step 3 — reverse the linked record
+    // Step 3 — reverse the linked record(s)
     var step3 = step2.then(function () {
       if (isReport) {
         return authFetch(
@@ -1696,6 +2017,22 @@
             body: JSON.stringify({ status: 'approved', paid_at: null, paid_by: null, check_number: null })
           }
         );
+      }
+      if (isMultiBill) {
+        var ops = allocs.map(function (a) {
+          return authFetch(
+            SB_REST + 'ap_bills?id=eq.' + encodeURIComponent(a.ap_bill_id),
+            {
+              method: 'PATCH', headers: minimalHdrs,
+              body: JSON.stringify({
+                status: 'unpaid', amount_paid: 0,
+                paid_at: null, payment_method: null, payment_reference: null, paid_by: null,
+                updated_by: actor, updated_at: nowIso
+              })
+            }
+          );
+        });
+        return Promise.all(ops);
       }
       if (isApBill) {
         return authFetch(
@@ -1722,7 +2059,7 @@
         }
         refreshRecentChecks();
         if (isReport) refreshApprovedReports();
-        if (isApBill) refreshApprovedBills();
+        if (isApBill || isMultiBill) refreshApprovedBills();
       })
       .catch(function (e) {
         if (e && e.authFailed) { handleAuthFailure(); return; }
@@ -1849,6 +2186,15 @@
     if (sub) sub.textContent = 'Enter the info, then print onto your check stock';
     var addrHint = document.getElementById('addressHint');
     if (addrHint) addrHint.textContent = 'The payee name above prints automatically above this address in the window. Leave blank if hand-addressing.';
+    // AP-multi affordances off; amount editable again
+    var amtEl = document.getElementById('fldAmount');
+    if (amtEl) amtEl.readOnly = false;
+    var apField = document.getElementById('apMultiField');
+    if (apField) { apField.hidden = true; }
+    var apList = document.getElementById('apMultiList');
+    if (apList) apList.innerHTML = '';
+    var apTotal = document.getElementById('apMultiTotal');
+    if (apTotal) apTotal.textContent = '';
   }
 
   // =====================================================================
@@ -1857,6 +2203,8 @@
   function loadFromReport(reportId) {
     // Leaving AP mode if we were in it
     state.fromBill = null;
+    state.apExtra = {};
+    state.apAutoMemo = '';
     var als = document.getElementById('apLoaderSelect');
     if (als) als.value = '';
 
@@ -1885,6 +2233,12 @@
         if (savedField) savedField.style.display = 'none';
         var saveRow = document.getElementById('savePayeeRow');
         if (saveRow) saveRow.hidden = true;
+
+        // AP-multi block is irrelevant in report mode
+        var apField = document.getElementById('apMultiField');
+        if (apField) apField.hidden = true;
+        var amtEl = document.getElementById('fldAmount');
+        if (amtEl) amtEl.readOnly = false;
 
         var rls = document.getElementById('reportLoaderSelect');
         if (rls && state.isAdmin) {
@@ -1940,7 +2294,7 @@
   }
 
   // =====================================================================
-  // LOAD FROM AP BILL
+  // LOAD FROM AP BILL  (anchor vendor + multi-invoice select)
   // =====================================================================
   function loadFromBill(billId) {
     var bill = billById(billId);
@@ -1953,14 +2307,16 @@
 
     state.fromBill = bill;
     state.mode = 'ap_bill';
+    state.apExtra = {};        // fresh selection each time an anchor is loaded
+    state.apAutoMemo = '';
 
-    var bal = billBalance(bill);
     document.getElementById('fldPayee').value   = bill.vendor_name || '';
-    document.getElementById('fldAmount').value  = bal != null ? String(Math.round(bal * 100) / 100) : '';
     document.getElementById('fldDate').value    = todayIso();
-    document.getElementById('fldMemo').value    = bill.invoice_number
-      ? ('Inv #' + bill.invoice_number)
-      : ('AP bill ' + String(bill.id).substring(0, 8));
+    document.getElementById('fldMemo').value    = '';   // recomputeApAmount fills the summary
+
+    // Amount becomes read-only in AP mode (derived from the selected bills).
+    var amtEl = document.getElementById('fldAmount');
+    if (amtEl) amtEl.readOnly = true;
 
     // Address: blank until the vendor lookup returns
     document.getElementById('fldAddress').value = '';
@@ -1968,7 +2324,7 @@
     var catStar = document.getElementById('categoryReqStar');
     var catHint = document.getElementById('categoryHint');
     if (catStar) catStar.style.display = 'none';
-    if (catHint) catHint.textContent = 'Not needed — the cost was already recorded when the invoice was logged. Printing marks the bill paid in Accounts Payable.';
+    if (catHint) catHint.textContent = 'Not needed — the cost was already recorded when the invoice was logged. Printing marks the bill(s) paid in Accounts Payable.';
     var catSel = document.getElementById('fldCategory');
     if (catSel) { catSel.value = ''; catSel.disabled = true; }
 
@@ -1986,10 +2342,10 @@
     if (banner) {
       banner.hidden = false;
       banner.innerHTML = '<strong>Loaded from Accounts Payable.</strong> ' +
-        'Paying ' + esc(bill.vendor_name || 'vendor') + ' ' + esc(fmtMoney(bal)) +
-        (bill.invoice_number ? ' on invoice #' + esc(bill.invoice_number) : '') +
-        '. Enter the check number, then print. Printing marks this bill paid and ' +
-        'writes the check number back to AP.' +
+        'Paying ' + esc(bill.vendor_name || 'vendor') +
+        '. Add any of this vendor\'s other open bills below to pay them on one ' +
+        'check — the amount totals automatically and each invoice is itemized on ' +
+        'the stub. Enter the check number, then print.' +
         '<button type="button" class="clear-link" id="fromBillClear">Cancel — write a standalone check instead</button>';
       var clr = document.getElementById('fromBillClear');
       if (clr) clr.addEventListener('click', function () {
@@ -2000,8 +2356,9 @@
     var sub = document.getElementById('formSubtitle');
     if (sub) sub.textContent = 'Bill payment from Accounts Payable';
 
-    renderPreview();
-    updatePrintEnabled();
+    // Render the multi-select block and derive the amount/memo/total from it.
+    renderApMultiBlock();
+    recomputeApAmount();
 
     // Fetch the vendor's remit address and drop it in.
     if (bill.vendor_id) {
@@ -2023,6 +2380,8 @@
 
   function exitBillMode() {
     state.fromBill = null;
+    state.apExtra = {};
+    state.apAutoMemo = '';
     state.mode = 'standalone';
     restoreStandaloneUI();
     var als = document.getElementById('apLoaderSelect');
@@ -2044,8 +2403,10 @@
       windowName: 'Window · Payee name', windowAddress: 'Window · Address',
       stub1Date: 'Stub 1 · Date', stub1Payee: 'Stub 1 · Payee',
       stub1Amount: 'Stub 1 · Amount', stub1Memo: 'Stub 1 · Memo',
+      stub1Items: 'Stub 1 · Itemized invoices',
       stub2Date: 'Stub 2 · Date', stub2Payee: 'Stub 2 · Payee',
-      stub2Amount: 'Stub 2 · Amount', stub2Memo: 'Stub 2 · Memo'
+      stub2Amount: 'Stub 2 · Amount', stub2Memo: 'Stub 2 · Memo',
+      stub2Items: 'Stub 2 · Itemized invoices'
     };
     var html = '';
     Object.keys(POS).forEach(function (key) {
