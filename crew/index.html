@@ -2561,6 +2561,18 @@ body {
   }
   function formatDate(ts) {
     if (!ts) return '';
+    var s = String(ts);
+    // Date-only values (YYYY-MM-DD, no time part) must be parsed as a LOCAL
+    // date. new Date('2010-04-06') parses as UTC midnight, which renders as
+    // the PREVIOUS day in Eastern — every DOB, start date, and cert expiry
+    // label displayed a day early. Timestamps keep the old path, where
+    // new Date() correctly converts the instant to local time.
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+      var p = s.split('-');
+      var ld = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10));
+      if (isNaN(ld.getTime())) return '';
+      return ld.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
     var d = new Date(ts);
     if (isNaN(d.getTime())) return '';
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
