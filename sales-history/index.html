@@ -149,6 +149,39 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
 .dos-sh-kv { font-size: 12px; color: #444; margin: 1px 0; }
 .dos-sh-kv .k { font-weight: 600; color: #777; }
 .dos-sh-meta { font-size: 11px; color: #999; margin-top: 8px; }
+
+/* ============================================================
+ * DAY-OF-SHOW SHEET — PRINT / SAVE PDF (added Jul 23, 2026)
+ * Renders the same frozen snapshot into a hidden host and prints
+ * only that. The browser print dialog's "Save as PDF" destination
+ * is the shareable file — no PDF library on this page. Gated on
+ * body.dos-printing so a plain Ctrl+P still prints the sales list.
+ * ============================================================ */
+#dosPrintHost { display: none; }
+.dos-print-head { margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid #1a1a1a; }
+.dos-print-title { font-size: 20pt; font-weight: 700; line-height: 1.15; letter-spacing: -0.01em; color: #1a1a1a; }
+.dos-print-meta { font-size: 11pt; color: #444; font-weight: 500; margin-top: 3px; }
+.dos-print-img { max-width: 100%; max-height: 5in; border: 1px solid #ccc; border-radius: 6px; margin-top: 8px; display: block; }
+.dos-sh-printbtn { font-size: 11px; background: #E6F1FB; color: #0C447C; padding: 4px 11px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; font-family: inherit; margin-left: 10px; }
+
+@media print {
+  body.dos-printing { background: #fff; }
+  body.dos-printing > *:not(#dosPrintHost) { display: none !important; }
+  body.dos-printing #pc-nav-root,
+  body.dos-printing .pc-nav-header,
+  body.dos-printing .pc-nav-ribbon,
+  body.dos-printing .pc-nav-totop { display: none !important; }
+  body.dos-printing #dosPrintHost { display: block !important; }
+  body.dos-printing .dos-sh-sec { page-break-inside: avoid; }
+  body.dos-printing .dos-sh-logi { font-size: 12pt; }
+  body.dos-printing .dos-sh-crew { font-size: 13pt; }
+  body.dos-printing .dos-sh-text,
+  body.dos-printing .dos-sh-pop,
+  body.dos-printing .dos-sh-kv,
+  body.dos-printing .dos-sh-list li { font-size: 11pt; }
+  body.dos-printing .dos-sh-imglink,
+  body.dos-printing .dos-sh-printbtn { display: none !important; }
+}
 </style>
 </head>
 <body>
@@ -286,6 +319,9 @@ select:focus, input:focus { outline: none; border-color: #1a1a1a; background: wh
     </div>
   </div>
 </div>
+
+<!-- Print host for day-of-show sheets — filled on demand, cleared after print -->
+<div id="dosPrintHost"></div>
 
 <script src="/pc-auth.js"></script>
 <script src="/pc-nav.js"></script>
@@ -612,7 +648,7 @@ async function searchHistory() {
 
     // Day-of-show sheets for these events — frozen snapshots, rendered from
     // saved values only (no live weather/prep re-pull).
-    dosSheetsByEventId = {}; dosPopcornBySheetId = {}; venueDefaultsByCode = {};
+    dosSheetsByEventId = {}; dosPopcornBySheetId = {}; venueDefaultsByCode = {}; dosHeaderByEventId = {}; dosHeaderByEventId = {};
     try {
       var evIds = Object.keys(eventInfoByKey).map(function(k){ return eventInfoByKey[k].id; }).filter(Boolean);
       if (evIds.length) {
@@ -740,6 +776,7 @@ async function searchHistory() {
 
       // Day-of-show sheet row — only when a saved sheet exists for this event
       if (eventInfo && dosSheetsByEventId[eventInfo.id]) {
+        dosHeaderByEventId[eventInfo.id] = { name: evtName, venue: venueLabel, date: dateStr };
         html += renderDosSheetRow(dosSheetsByEventId[eventInfo.id], eventInfo, i);
       }
 
@@ -800,6 +837,8 @@ var currentEventInfoByKey = {}; // populated by searchHistory(), keyed by "date|
 var dosSheetsByEventId = {};    // event_id -> event_show_sheets row (frozen snapshot)
 var dosPopcornBySheetId = {};   // sheet_id -> [popcorn child rows]
 var venueDefaultsByCode = {};   // venue_code -> venue_show_defaults row
+
+var dosHeaderByEventId = {};    // event_id -> {name, venue, date} for the print header
 
 function dosPrettyTime(t) {
   if (!t) return '';
@@ -895,11 +934,65 @@ function renderDosSheetContent(sheet, ev) {
   var who = sheet.last_saved_by || 'someone';
   var when = sheet.last_saved_at ? new Date(sheet.last_saved_at) : null;
   var whenStr = when ? when.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
-  h += '<div class="dos-sh-meta">Sheet saved by ' + escapeHtml(who) + (whenStr ? ' \u00b7 ' + whenStr : '') + '</div>';
+  h += '<div class="dos-sh-meta">Sheet saved by ' + escapeHtml(who) + (whenStr ? ' \u00b7 ' + whenStr : '') +
+       '<button class="dos-sh-printbtn" onclick="event.stopPropagation();printDosSheet(\'' + ev.id + '\')">Print / Save PDF</button></div>';
 
   h += '</div>';
   return h;
 }
+
+/* Print / Save PDF for a saved day-of-show sheet (added Jul 23, 2026).
+   Reuses renderDosSheetContent — the same block the history row already
+   shows — into a hidden host, then hands it to the browser print dialog.
+   "Save as PDF" in that dialog is the shareable file; no PDF library. */
+function printDosSheet(eventId) {
+  var sheet = dosSheetsByEventId[eventId];
+  if (!sheet) return;
+
+  var ev = null;
+  for (var k in currentEventInfoByKey) {
+    if (currentEventInfoByKey[k].id === eventId) { ev = currentEventInfoByKey[k]; break; }
+  }
+  if (!ev) return;
+
+  var hd = dosHeaderByEventId[eventId] || {};
+  var host = document.getElementById('dosPrintHost');
+  if (!host) return;
+
+  var h = '<div class="dos-print-head">';
+  h += '<div class="dos-print-title">' + escapeHtml(hd.name || 'Day-of-show sheet') + '</div>';
+  h += '<div class="dos-print-meta">' + escapeHtml([hd.venue, hd.date].filter(Boolean).join(' \u00b7 ')) + '</div>';
+  h += '</div>';
+  h += renderDosSheetContent(sheet, ev);
+  if (sheet.run_of_show_image_path) {
+    h += '<img class="dos-print-img" src="' + SUPA_URL + '/storage/v1/object/public/show-sheet-images/' +
+         sheet.run_of_show_image_path + '" alt="Run of show">';
+  }
+  host.innerHTML = h;
+
+  var go = function () {
+    document.body.classList.add('dos-printing');
+    window.print();
+  };
+
+  // Wait on the run-of-show image so it isn't missing from the printout.
+  var img = host.querySelector('.dos-print-img');
+  if (img && !img.complete) {
+    var fired = false;
+    var once = function () { if (fired) return; fired = true; go(); };
+    img.onload = once;
+    img.onerror = once;
+    setTimeout(once, 3000);
+  } else {
+    go();
+  }
+}
+
+window.addEventListener('afterprint', function () {
+  document.body.classList.remove('dos-printing');
+  var host = document.getElementById('dosPrintHost');
+  if (host) host.innerHTML = '';
+});
 
 function weatherIconFor(cond) {
   if (!cond) return '\u2601\ufe0f';
