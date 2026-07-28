@@ -36,7 +36,7 @@
       { label: 'Crew',                           href: '/crew/',                   slug: 'crew' },
       { label: 'Referrals',                      href: '/referrals/',              slug: 'referrals' },
       { label: 'Certifications',                 href: '/certifications/',         slug: 'certifications' },
-      { label: 'Handbook signatures',            href: '/handbook-signatures/',    slug: 'handbook-signatures' },
+      { label: 'Handbook signatures',            href: '/handbook-signatures/',    slug: 'handbook-signatures' }, { label: 'Text consent', href: '/sms-consent/', slug: 'sms-consent' },
       { label: 'Schedule assistant',             href: '/schedule-assistant-beta/', slug: 'schedule-assistant-beta' },
       { label: 'Hiring snapshot',                href: '/hiring-snapshot/',        slug: 'hiring-snapshot' }
     ],
