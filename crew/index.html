@@ -768,6 +768,33 @@ body {
   cursor: not-allowed;
 }
 
+/* ============================================================
+   SMS / TEXT CONSENT CELL — Contact & basics.
+   Display only. /sms-consent/ is the editor and the audit trail.
+   ============================================================ */
+.sms-pill {
+  display: inline-block;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+  padding: 2px 9px; border-radius: 999px;
+  white-space: nowrap;
+}
+.sms-pill.green { background: var(--green-50); color: var(--green-800); }
+.sms-pill.amber { background: var(--amber-100); color: var(--amber-800); }
+.sms-pill.red   { background: var(--red-50); color: var(--red-600); }
+.sms-pill.grey  { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
+.sms-pill.muted { background: var(--bg); color: var(--muted); }
+.sms-note {
+  font-size: 11px; color: var(--muted);
+  margin-top: 3px; line-height: 1.45;
+}
+.sms-note.warn { color: var(--amber-800); }
+.sms-link {
+  font-size: 11px; font-weight: 600;
+  color: var(--blue-600); text-decoration: none;
+  margin-left: 6px;
+}
+.sms-link:hover { text-decoration: underline; }
+
 /* Questions text from onboarding submission, shown above Internal Notes */
 .onboarding-questions-block {
   background: var(--blue-50);
@@ -2224,6 +2251,11 @@ body {
     var url = SUPABASE_URL +
       '/rest/v1/employees' +
       '?select=id,first_name,last_name,punch_id,phone,is_active,home_venue,shirt_size,' +
+      // SMS consent columns (Jul 27). Read-only here — /sms-consent/ is the
+      // editor and the audit trail. These drive the Contact & basics pill and
+      // the phone-edit guard in saveContactSection(). No extra round trip.
+      'sms_consent,sms_consent_at,sms_consent_source,sms_consent_phone,' +
+      'sms_opt_out,sms_opt_out_at,' +
       'team_training_requested,team_training_requested_at,team_training_contacted,' +
       'team_training_contacted_at,team_training_contacted_by,team_training_notes,' +
       'team_self_reported_cert,team_eligible_at,' +
@@ -4143,6 +4175,7 @@ body {
         renderDisplayField('Phone', emp.phone
           ? '<a href="tel:' + escapeHtml(emp.phone) + '">' + escapeHtml(formatPhone(emp.phone)) + '</a>'
           : null) +
+        renderSmsCell(emp) +
         renderDisplayField('Punch ID', emp.punch_id
           ? '<span style="font-family:monospace;letter-spacing:0.1em;">' + escapeHtml(emp.punch_id) + '</span>'
           : null) +
@@ -4691,6 +4724,90 @@ body {
     });
   }
 
+  // ============================================================
+  // SMS / TEXT CONSENT — display only.
+  //
+  // The Text Consent page (/sms-consent/) is the editor and the audit
+  // trail. This card SHOWS state and warns before the one action that
+  // silently breaks it: changing a consented employee's phone number.
+  //
+  // Consent can NEVER be granted here. It is captured by the employee on
+  // the availability page after punch-ID verification, and that is exactly
+  // what makes it provable to a carrier. A manager ticking a box on
+  // someone's behalf would not be, and it would contradict the opt-in
+  // description registered with the A2P campaign.
+  // ============================================================
+
+  // MIRROR of normPhone() in the my-shifts edge function and of
+  // pc_norm_phone() in the database. Strip to digits, drop a leading 1,
+  // require exactly 10. If one of the three changes, change all three.
+  //
+  // Load-bearing, not defensive: employees.phone is FREE-FORM — 111 rows
+  // store bare 10 digits, 116 store formatted values with parens and
+  // dashes (audited Jul 27). A raw string comparison would report a false
+  // mismatch for up to half the roster.
+  function normPhoneJs(p) {
+    var d = String(p == null ? '' : p).replace(/\D/g, '');
+    if (d.length === 11 && d.charAt(0) === '1') d = d.slice(1);
+    if (d.length !== 10) return null;
+    return d;
+  }
+
+  // MIRROR of smsStateFor() in my-shifts, refined exactly the way
+  // v_sms_consent_state refines it: that function's 'none' splits into
+  // no_phone / not_consented so the chase list can tell them apart.
+  // Everywhere my-shifts has an opinion, this agrees with it.
+  //
+  // Order is load-bearing. opted_out outranks everything (a carrier STOP
+  // is a fact about the network, not a preference), and the two null
+  // guards stop a consented-but-unreachable row from reading as sendable.
+  function smsStateForEmp(emp) {
+    if (emp.sms_opt_out === true) return 'opted_out';
+    if (emp.sms_consent === true) {
+      var cur = normPhoneJs(emp.phone);
+      var con = normPhoneJs(emp.sms_consent_phone);
+      if (!cur) return 'recheck';
+      if (!con) return 'recheck';
+      if (cur !== con) return 'recheck';
+      return 'consented';
+    }
+    if (!normPhoneJs(emp.phone)) return 'no_phone';
+    return 'not_consented';
+  }
+
+  var SMS_STATE_META = {
+    consented:     { label: 'Texts on',      cls: 'green' },
+    recheck:       { label: 'Needs recheck', cls: 'amber' },
+    opted_out:     { label: 'Opted out',     cls: 'red' },
+    no_phone:      { label: 'No phone',      cls: 'grey' },
+    not_consented: { label: 'Not set up',    cls: 'muted' }
+  };
+
+  // The Contact & basics cell. Pill, a one-line explanation for the two
+  // states a manager can actually act on, and a deep link into the Text
+  // Consent page for the full timeline and the printable record.
+  function renderSmsCell(emp) {
+    var st = smsStateForEmp(emp);
+    var meta = SMS_STATE_META[st] || SMS_STATE_META.not_consented;
+    var note = '';
+    if (st === 'consented' && emp.sms_consent_at) {
+      note = '<div class="sms-note">Consented ' + escapeHtml(formatDate(emp.sms_consent_at)) + '</div>';
+    } else if (st === 'recheck') {
+      note = '<div class="sms-note warn">Number changed since they consented &mdash; ' +
+        'texts are paused until they re-consent on the availability page.</div>';
+    } else if (st === 'opted_out') {
+      note = '<div class="sms-note warn">Replied STOP. Only texting START from their ' +
+        'own phone can undo this &mdash; no manager action can.</div>';
+    }
+    var link = '<a class="sms-link" href="/sms-consent/?employee=' +
+      encodeURIComponent(emp.id) + '">History &rarr;</a>';
+    return '<div class="detail-item">' +
+      '<div class="detail-label">Text messages</div>' +
+      '<div><span class="sms-pill ' + meta.cls + '">' + escapeHtml(meta.label) + '</span>' + link + '</div>' +
+      note +
+    '</div>';
+  }
+
   // ---- Internal notes ----
   function renderNotesSection(emp, cand) {
     var c = cand || {};
@@ -5044,6 +5161,7 @@ body {
   // Field-name display labels. Add entries here as new fields get logged.
   var HISTORY_FIELD_LABELS = {
     home_venue: 'Home venue',
+    phone: 'Phone',
     shirt_size: 'Uniform shirt size',
     candidate_record: 'Candidate record'
   };
@@ -5055,6 +5173,9 @@ body {
       return isNaN(n) ? value : '$' + n.toFixed(2);
     }
     if (value == null || value === '') return '(unset)';
+    if (fieldName === 'phone') {
+      return formatPhone(value) || value;
+    }
     if (fieldName === 'home_venue') {
       if (value === 'NA') return "Doesn't apply";
       return VENUE_LABELS[value] || value;
@@ -5656,6 +5777,29 @@ body {
   // a "No changes to save" toast instead of silently closing — protects
   // against future silent-fail bug surfaces (per fail-loud principle).
   function saveContactSection(emp, cand, draft, errEl) {
+    // PHONE-EDIT GUARD. Consent attaches to a NUMBER, not a person: the
+    // send rule requires employees.phone to equal sms_consent_phone
+    // exactly, so changing a consented employee's number silently stops
+    // their texts at the next send and nobody finds out until they miss a
+    // shift they were never told about.
+    //
+    // Warn, do NOT block, and do NOT clear consent. Blocking would make
+    // the wrong thing impossible instead of making the right thing
+    // obvious; clearing consent would destroy the evidence that they once
+    // agreed. Leaving it puts them in 'recheck', which the Text Consent
+    // page counts and which they can heal themselves by re-ticking the box.
+    var oldPhone = emp.phone || '';
+    var newPhone = draft.phone || '';
+    if (newPhone !== oldPhone && emp.sms_consent === true && emp.sms_opt_out !== true) {
+      var consentedTo = normPhoneJs(emp.sms_consent_phone);
+      if (consentedTo && normPhoneJs(newPhone) !== consentedTo) {
+        var who = emp.first_name || 'This employee';
+        var warnMsg = who + ' consented to texts on \u2022\u2022\u2022 ' + consentedTo.slice(-4) + '.\n\n' +
+          'Changing the number will pause their texts until they re-consent on the ' +
+          'availability page. Their consent record is kept either way.\n\nSave anyway?';
+        if (!window.confirm(warnMsg)) return;
+      }
+    }
     var oldPunch = emp.punch_id;
     var newPunch = draft.punch_id || null;
     var oldShirt = emp.shirt_size || null;
@@ -5731,6 +5875,16 @@ body {
         }
         if (newShirt !== oldShirt) {
           logCardChange(emp.id, 'shirt_size', oldShirt, newShirt);
+        }
+        // Phone edits were previously unaudited ANYWHERE in the toolkit —
+        // logCardChange fired for home_venue, shirt_size and
+        // candidate_record but never for phone. It is the single edit most
+        // likely to break SMS consent, so it needs a trail:
+        // employee_card_changes records who changed it and when,
+        // sms_consent_log records the consent that preceded it, and the two
+        // join on timestamp.
+        if (empBody.hasOwnProperty('phone')) {
+          logCardChange(emp.id, 'phone', oldPhone || null, empBody.phone);
         }
         state.modalSection = null;
         state.modalEditDraft = null;
