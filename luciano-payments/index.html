@@ -241,6 +241,76 @@
   .luc-signoff-btn.is-resign { background: #854F0B; }
   .luc-signoff-btn.is-resign:hover { background: #633806; }
 
+  /* Payment-due card is a toggle for the history panel */
+  .luc-card--due { cursor: pointer; position: relative; }
+  .luc-card--due:hover { border-color: #7fb0dd; }
+  .luc-card--due .luc-card-label::after {
+    content: '▾'; margin-left: 6px; font-size: 10px; opacity: 0.6;
+    display: inline-block; transition: transform 0.15s ease;
+  }
+  .luc-card--due.is-open .luc-card-label::after { transform: rotate(180deg); }
+
+  /* Payment history panel */
+  .luc-history {
+    background: #fff; border: 0.5px solid #e0dfd8; border-radius: 10px;
+    padding: 12px 16px; margin: -10px 0 22px;
+  }
+  .luc-history[hidden] { display: none; }
+  .luc-history-head {
+    font-size: 10px; font-weight: 600; letter-spacing: 0.06em;
+    text-transform: uppercase; color: #999; padding-bottom: 6px;
+  }
+  .luc-history-empty { font-size: 13px; color: #999; }
+  .luc-history-row {
+    display: grid; grid-template-columns: 90px 110px 1fr auto;
+    gap: 12px; align-items: baseline;
+    padding: 7px 0; border-top: 1px solid #f0efe8; font-size: 13px;
+  }
+  .luc-history-q { font-weight: 600; }
+  .luc-history-amt { font-variant-numeric: tabular-nums; text-align: right; }
+  .luc-history-when { color: #777; font-size: 12px; }
+  .luc-history-when.is-open { color: #854F0B; font-weight: 500; }
+  .luc-history-inv { color: #0C447C; font-size: 12px; text-decoration: none; }
+  .luc-history-inv:hover { text-decoration: underline; }
+
+  /* Bill state in the quarter band */
+  .luc-bill-pill {
+    font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 10px;
+    white-space: nowrap; text-decoration: none; display: inline-block;
+  }
+  .luc-bill-pill.is-paid { background: #eaf3de; color: #27500A; }
+  .luc-bill-pill.is-billed { background: #fef6ec; color: #854F0B; }
+  .luc-bill-pill.is-billed:hover { background: #fbe9cf; }
+  .luc-bill-btn {
+    background: #0C447C; color: #fff; border: 0; font-family: inherit; font-size: 12px;
+    font-weight: 500; padding: 5px 12px; border-radius: 6px; cursor: pointer; white-space: nowrap;
+  }
+  .luc-bill-btn:hover { background: #0a3a68; }
+  .luc-bill-btn:disabled { background: #b4b2a9; cursor: not-allowed; }
+
+  /* Already-paid block in the create-bill modal */
+  .luc-bill-figs { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
+  .luc-bill-figs td { padding: 7px 0; font-size: 13px; border-bottom: 1px solid #f0efe8; }
+  .luc-bill-figs td:last-child { text-align: right; font-weight: 500; font-variant-numeric: tabular-nums; }
+  .luc-bill-figs tr.is-strong td { font-weight: 700; color: #0C447C; border-bottom: 0; padding-top: 10px; font-size: 15px; }
+  .luc-paid-toggle {
+    display: flex; align-items: flex-start; gap: 9px; font-size: 13px;
+    background: #faf9f6; border: 1px solid #e8e8e4; border-radius: 8px; padding: 11px 13px;
+  }
+  .luc-paid-toggle input { margin-top: 3px; }
+  .luc-paid-toggle .hint { display: block; font-size: 11px; color: #999; margin-top: 2px; }
+  .luc-paid-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+  .luc-paid-fields[hidden] { display: none; }
+  .luc-paid-fields label {
+    display: block; font-size: 11px; font-weight: 500; letter-spacing: 0.04em;
+    text-transform: uppercase; color: #666; margin-bottom: 4px;
+  }
+  .luc-paid-fields input, .luc-paid-fields select {
+    width: 100%; font-family: inherit; font-size: 13px; padding: 7px 9px;
+    border: 1px solid #e0dfd8; border-radius: 6px; background: #fff; color: #1a1a1a;
+  }
+  .luc-paid-fields .is-full { grid-column: 1 / -1; }
+
   /* Sign-off modal */
   .luc-modal-backdrop {
     position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 1500;
@@ -310,6 +380,9 @@
     <!-- Metric cards -->
     <div class="luc-cards" id="lucCards"></div>
 
+    <!-- Payment history (toggled by the Payment due card) -->
+    <div class="luc-history" id="lucHistory" hidden></div>
+
     <!-- Loading / empty states -->
     <div class="luc-state" id="lucLoading">Loading Luciano's sales from A/R…</div>
     <div class="luc-state" id="lucEmpty" hidden>
@@ -348,6 +421,12 @@
   // server-side; the constant only governs whether the control is shown.
   var KEITH_AUTH_ID = 'c5b26231-43a6-496b-9c63-e174905a6f89';
 
+  // ---- Royalty → Accounts Payable (spec v1) ----
+  var AP_SOURCE           = 'luciano_royalty';
+  var KBC_VENDOR_ID       = 'ce52f8ae-699f-4632-bc2b-0a7597f77560';
+  var KBC_VENDOR_NAME     = 'KBC Concessions LLC';
+  var ROYALTY_CATEGORY_ID = '012249e5-fdd1-473f-9c76-bc0c178b8f43';
+
   // Statuses that do NOT accrue a royalty (spec §3, §10.1).
   var EXCLUDED_STATUS = { 'voided': true, 'disputed': true };
 
@@ -369,6 +448,9 @@
     statements: {},   // invoice_id -> [luciano_statements rows] (§8 attachments)
     signoffs: {},     // 'year:q:scope' -> latest luciano_royalty_signoffs row (§7)
     ready: {},        // 'year:q:scope' -> active luciano_quarter_ready row (admin gate)
+    signoffById: {},  // signoff_id -> {year, q, scope} — INCLUDES superseded rows
+    bills: {},        // signoff_id -> ap_bills row (source='luciano_royalty')
+    historyOpen: false,
     feeIssues: [],    // in-scope invoices with sales but no Luciano CC fee (mislabel guard)
     filters: { venue: 'all', period: '' }  // period = 'YYYY:all' | 'YYYY:1'..':4'
   };
@@ -800,21 +882,72 @@
       sales = round2(sales + q.sales);
       fees = round2(fees + q.fees);
       base = round2(base + q.base);
-      due = round2(due + q.due);
+      due = round2(due + quarterOutstanding(q));
     });
 
+    var dueCls = 'luc-card--due' + (state.historyOpen ? ' is-open' : '');
     host.innerHTML =
       card('Luciano sales', fmtMoney(sales), '') +
       card('Less CC fees', fmtMoney(fees), 'luc-card--fees') +
       card('Commissionable', fmtMoney(base), '') +
-      card('Payment due', fmtMoney(due), 'luc-card--due');
+      card('Payment due', fmtMoney(due), dueCls, 'data-action="toggle-history"');
+
+    renderHistory();
   }
 
-  function card(label, value, cls) {
-    return '<div class="luc-card ' + cls + '">' +
+  function card(label, value, cls, attrs) {
+    return '<div class="luc-card ' + cls + '" ' + (attrs || '') + '>' +
       '<div class="luc-card-label">' + esc(label) + '</div>' +
       '<div class="luc-card-value">' + esc(value) + '</div>' +
     '</div>';
+  }
+
+  /** Payment history — every royalty bill for the current venue scope, all
+      periods (deliberately NOT period-filtered; a paid Q2 must stay visible
+      while the filter sits on Q3). */
+  function renderHistory() {
+    var host = document.getElementById('lucHistory');
+    if (!host) return;
+    if (!state.historyOpen) { host.hidden = true; host.innerHTML = ''; return; }
+
+    var scope = state.filters.venue;
+    var rows = [];
+    Object.keys(state.bills).forEach(function (sid) {
+      var ref = state.signoffById[sid];
+      if (!ref || ref.scope !== scope) return;
+      rows.push({ ref: ref, bill: state.bills[sid] });
+    });
+    rows.sort(function (a, b) {
+      if (a.ref.year !== b.ref.year) return b.ref.year - a.ref.year;
+      return b.ref.q - a.ref.q;
+    });
+
+    host.hidden = false;
+
+    if (!rows.length) {
+      host.innerHTML = '<div class="luc-history-empty">No royalty bills yet' +
+        (scope !== 'all' ? ' for ' + esc(scope) : '') + '.</div>';
+      return;
+    }
+
+    host.innerHTML = '<div class="luc-history-head">Payment history</div>' +
+      rows.map(function (r) {
+        var b = r.bill;
+        var isPaid = b.status === 'paid';
+        var refTxt = b.payment_reference
+          ? ((b.payment_method === 'check' ? ' \u00b7 check #' : ' \u00b7 ') + esc(b.payment_reference))
+          : '';
+        var right = isPaid
+          ? 'paid ' + esc(fmtDateLong(String(b.paid_at || '').substring(0, 10))) + refTxt
+          : 'unpaid \u00b7 due ' + esc(fmtDateLong(b.due_date));
+        return '<div class="luc-history-row">' +
+          '<span class="luc-history-q">Q' + r.ref.q + ' ' + r.ref.year + '</span>' +
+          '<span class="luc-history-amt">' + fmtMoney(Number(b.total_amount)) + '</span>' +
+          '<span class="luc-history-when' + (isPaid ? '' : ' is-open') + '">' + right + '</span>' +
+          '<a class="luc-history-inv" href="/accounts-payable/" target="_blank" rel="noopener">' +
+            esc(b.invoice_number || '') + '</a>' +
+        '</div>';
+      }).join('');
   }
 
   function renderQuarters() {
@@ -1160,9 +1293,14 @@
       { headers: pcAuth.headers() }
     ).then(function (rows) {
       var map = {};
+      state.signoffById = {};
       (rows || []).forEach(function (r) {
         // asc order → last write wins = the latest sign-off for that key.
         map[signoffKey(r.period_year, r.period_quarter, r.venue_scope)] = r;
+        // EVERY row, superseded included — bills resolve to quarters through this.
+        state.signoffById[r.id] = {
+          year: r.period_year, q: r.period_quarter, scope: r.venue_scope || 'all'
+        };
       });
       return map;
     });
@@ -1182,6 +1320,59 @@
   }
 
   function signoffKey(year, q, scope) { return year + ':' + q + ':' + (scope || 'all'); }
+
+  // ---- Royalty bills in AP (spec §6.1) ----
+  function fetchRoyaltyBills() {
+    return authFetch(
+      SB_REST + 'ap_bills?source=eq.' + AP_SOURCE + '&deleted_at=is.null' +
+      '&select=id,invoice_number,bill_date,due_date,total_amount,amount_paid,status,' +
+      'paid_at,payment_method,payment_reference,source_id' +
+      '&order=bill_date.asc&limit=1000',
+      { headers: pcAuth.headers() }
+    ).then(function (rows) {
+      var map = {};
+      (rows || []).forEach(function (r) { if (r && r.source_id) map[r.source_id] = r; });
+      return map;
+    });
+  }
+
+  /** Every non-deleted royalty bill resolving to this quarter + current scope.
+      Resolution runs through signoffById so superseded sign-offs are included. */
+  function billsForQuarter(q) {
+    var scope = state.filters.venue;
+    var out = [];
+    Object.keys(state.bills).forEach(function (sid) {
+      var ref = state.signoffById[sid];
+      if (!ref) return;
+      if (ref.year === q.year && ref.q === q.q && ref.scope === scope) out.push(state.bills[sid]);
+    });
+    return out;
+  }
+
+  function quarterPaid(q) {
+    var paid = 0;
+    billsForQuarter(q).forEach(function (b) { paid = round2(paid + (Number(b.amount_paid) || 0)); });
+    return paid;
+  }
+
+  function quarterBilled(q) {
+    var t = 0;
+    billsForQuarter(q).forEach(function (b) { t = round2(t + (Number(b.total_amount) || 0)); });
+    return t;
+  }
+
+  /** outstanding = live due − everything actually paid (spec §6.3). Deliberately
+      NOT clamped: a negative value is a real credit, and hiding it is worse. */
+  function quarterOutstanding(q) {
+    return round2(q.due - quarterPaid(q));
+  }
+
+  /** The bill against the CURRENT (non-superseded) sign-off for this quarter+scope. */
+  function currentBill(q) {
+    var so = state.signoffs[signoffKey(q.year, q.q, state.filters.venue)];
+    if (!so) return null;
+    return state.bills[so.id] || null;
+  }
 
   /** Identity gate. Server RLS is the real enforcement; this only governs
       whether the interactive control is shown. */
@@ -1401,6 +1592,7 @@
             'data-year="' + q.year + '" data-quarter="' + q.q + '" data-supersede="' + esc(so.id) + '">Re-sign</button>';
         }
       }
+      html += renderBillSlotHtml(q);
       return html;
     }
 
@@ -1452,6 +1644,221 @@
     // Non-Keith, non-signed, not ready → plain status.
     return '<span class="luc-signoff-pill is-unsigned">Not ready</span>' +
       '<span class="luc-signoff-meta">in progress</span>';
+  }
+
+  // =====================================================================
+  // ROYALTY → ACCOUNTS PAYABLE (spec v1 §6.5–6.7)
+  //
+  // A signed quarter becomes an ap_bills row. AP owns "paid" — this page
+  // only reads it back. The create button is gated on: Keith + scope 'all'
+  // + signed + no bill against the CURRENT sign-off. A re-sign produces a
+  // new sign-off id, which is what legitimately re-opens the button for an
+  // adjustment without colliding with the (source, source_id) unique index.
+  // =====================================================================
+  function renderBillSlotHtml(q) {
+    var scope = state.filters.venue;
+    var keith = isKeith();
+    var bills = billsForQuarter(q);
+    var cur = currentBill(q);
+    var billed = quarterBilled(q);
+    var paid = quarterPaid(q);
+    var out = '';
+
+    if (bills.length) {
+      var latest = bills[bills.length - 1];
+      if (round2(billed - paid) < 0.005) {
+        var refTxt = latest.payment_reference
+          ? ((latest.payment_method === 'check' ? ' \u00b7 check #' : ' \u00b7 ') + esc(latest.payment_reference))
+          : '';
+        out += '<span class="luc-bill-pill is-paid">Paid</span>' +
+          '<span class="luc-signoff-meta">' +
+          esc(fmtDateLong(String(latest.paid_at || '').substring(0, 10))) + refTxt + '</span>';
+      } else {
+        out += '<a class="luc-bill-pill is-billed" href="/accounts-payable/" target="_blank" ' +
+          'rel="noopener">Billed</a>' +
+          '<span class="luc-signoff-meta">' + esc(latest.invoice_number || '') +
+          ' \u00b7 due ' + esc(fmtDateShort(latest.due_date)) + '</span>';
+      }
+    }
+
+    if (!cur && keith) {
+      if (scope !== 'all') {
+        out += '<span class="luc-signoff-meta">switch to All venues to bill</span>';
+      } else {
+        var amt = round2(q.due - billed);
+        if (amt > 0.005) {
+          out += '<button type="button" class="luc-bill-btn" data-action="create-bill" ' +
+            'data-year="' + q.year + '" data-quarter="' + q.q + '">' +
+            (bills.length ? 'Create adjustment bill' : 'Create AP bill') + '</button>';
+        } else if (bills.length && amt < -0.005) {
+          out += '<span class="luc-signoff-changed">figures fell ' + fmtMoney(Math.abs(amt)) +
+            ' below billed \u2014 settle the credit with KBC directly</span>';
+        }
+      }
+    }
+
+    return out;
+  }
+
+  function closeBillModal() {
+    var m = document.getElementById('lucBillModal');
+    if (m && m.parentNode) m.parentNode.removeChild(m);
+  }
+
+  function openBillModal(q) {
+    var scope = state.filters.venue;
+    if (scope !== 'all') { showToast('Switch to All venues to bill', 2600); return; }
+
+    var so = state.signoffs[signoffKey(q.year, q.q, scope)];
+    if (!so) { showToast('Quarter must be signed first', 2600); return; }
+    if (state.bills[so.id]) { showToast('Already billed', 2200); return; }
+
+    var prior = billsForQuarter(q);
+    var amount = round2(q.due - quarterBilled(q));
+    if (amount <= 0.005) { showToast('Nothing further to bill', 2600); return; }
+
+    var invNo = 'KBC-' + q.year + '-Q' + q.q + (prior.length ? '-A' + (prior.length + 1) : '');
+    var today = new Date();
+    var todayIso = today.getFullYear() + '-' + pad2(today.getMonth() + 1) + '-' + pad2(today.getDate());
+
+    var backdrop = document.createElement('div');
+    backdrop.className = 'luc-modal-backdrop';
+    backdrop.id = 'lucBillModal';
+    backdrop.innerHTML =
+      '<div class="luc-modal-card" role="dialog" aria-labelledby="lucBillTitle">' +
+        '<div class="luc-modal-head">' +
+          '<div class="luc-modal-title" id="lucBillTitle">' +
+            (prior.length ? 'Adjustment bill' : 'Create AP bill') +
+            ' \u00b7 Q' + q.q + ' ' + q.year + '</div>' +
+          '<button type="button" class="luc-modal-close" data-action="close-bill" aria-label="Close">\u00d7</button>' +
+        '</div>' +
+        '<div class="luc-modal-body">' +
+          '<table class="luc-bill-figs"><tbody>' +
+            '<tr><td>Vendor</td><td>' + esc(KBC_VENDOR_NAME) + '</td></tr>' +
+            '<tr><td>Invoice #</td><td>' + esc(invNo) + '</td></tr>' +
+            '<tr><td>Bill date</td><td>' + esc(fmtDateLong(q.meta.endIso)) + '</td></tr>' +
+            '<tr><td>Due</td><td>' + esc(q.meta.dueLabel) + '</td></tr>' +
+            '<tr><td>Category</td><td>Royalties</td></tr>' +
+            '<tr class="is-strong"><td>Amount</td><td>' + fmtMoney(amount) + '</td></tr>' +
+          '</tbody></table>' +
+          '<div class="luc-paid-toggle">' +
+            '<input type="checkbox" id="lucBillPaid">' +
+            '<label for="lucBillPaid">This was already paid outside Accounts Payable' +
+              '<span class="hint">Tick only if the money has actually gone out. Otherwise the ' +
+              'bill lands unpaid and you pay it through the Check Writer.</span></label>' +
+          '</div>' +
+          '<div class="luc-paid-fields" id="lucPaidFields" hidden>' +
+            '<div><label for="lucBillMethod">Method</label>' +
+              '<select id="lucBillMethod">' +
+                '<option value="check">Check</option>' +
+                '<option value="ach">ACH</option>' +
+                '<option value="wire">Wire</option>' +
+                '<option value="card">Card</option>' +
+                '<option value="cash">Cash</option>' +
+                '<option value="other">Other</option>' +
+              '</select></div>' +
+            '<div><label for="lucBillDate">Payment date</label>' +
+              '<input type="date" id="lucBillDate" value="' + esc(todayIso) + '" max="' + esc(todayIso) + '"></div>' +
+            '<div class="is-full"><label for="lucBillRef">Reference</label>' +
+              '<input type="text" id="lucBillRef" placeholder="check # / confirmation" autocomplete="off"></div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="luc-modal-foot">' +
+          '<button type="button" class="luc-btn luc-btn-secondary" data-action="close-bill">Cancel</button>' +
+          '<button type="button" class="luc-btn luc-btn-primary" id="lucBillConfirm">Create bill</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(backdrop);
+
+    backdrop.addEventListener('click', function (ev) {
+      if (ev.target === backdrop) { closeBillModal(); return; }
+      if (ev.target.closest && ev.target.closest('[data-action="close-bill"]')) closeBillModal();
+    });
+    var chk = document.getElementById('lucBillPaid');
+    var fields = document.getElementById('lucPaidFields');
+    if (chk && fields) chk.addEventListener('change', function () { fields.hidden = !chk.checked; });
+    var confirmBtn = document.getElementById('lucBillConfirm');
+    if (confirmBtn) confirmBtn.addEventListener('click', function () {
+      submitBill(q, so, amount, invNo, confirmBtn);
+    });
+  }
+
+  function submitBill(q, so, amount, invNo, btn) {
+    var chk = document.getElementById('lucBillPaid');
+    var isPaid = !!(chk && chk.checked);
+    var method = null, payDate = null, ref = null;
+
+    if (isPaid) {
+      var mEl = document.getElementById('lucBillMethod');
+      var dEl = document.getElementById('lucBillDate');
+      var rEl = document.getElementById('lucBillRef');
+      method = mEl ? (mEl.value || null) : null;
+      payDate = dEl ? dEl.value : '';
+      ref = rEl ? (rEl.value || '').trim() : '';
+      if (!payDate) { showToast('Pick a payment date', 2200); return; }
+    }
+
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving\u2026'; }
+    var actor = currentActor();
+
+    // House rule (Jul 20 RLS incident): client-side id + return=minimal, so the
+    // write never depends on the SELECT policy staying admin-readable.
+    var body = {
+      vendor_id: KBC_VENDOR_ID,
+      vendor_name: KBC_VENDOR_NAME,
+      invoice_number: invNo,
+      bill_date: q.meta.endIso,
+      due_date: q.meta.dueIso,
+      total_amount: amount,
+      amount_paid: isPaid ? amount : 0,
+      status: isPaid ? 'paid' : 'unpaid',
+      venue: null,
+      source: AP_SOURCE,
+      source_id: so.id,
+      category_id: ROYALTY_CATEGORY_ID,
+      paid_at: isPaid ? payDate : null,
+      payment_method: isPaid ? method : null,
+      payment_reference: isPaid ? (ref || null) : null,
+      paid_by: isPaid ? actor : null,
+      notes: 'Q' + q.q + ' ' + q.year + ' royalty \u00b7 signed by ' +
+        (so.agreed_by_name || 'KBC') + ' ' +
+        fmtDateLong(String(so.agreed_at || '').substring(0, 10)) + ' \u00b7 ' +
+        (so.rate_note || buildRateNote(q.events)),
+      created_by: actor
+    };
+    // `balance` is GENERATED ALWAYS (total_amount - amount_paid) — never send it.
+    if (window.crypto && crypto.randomUUID) body.id = crypto.randomUUID();
+
+    var hdrs = Object.assign({}, pcAuth.headers(), {
+      'Content-Type': 'application/json', 'Prefer': 'return=minimal'
+    });
+
+    authFetch(SB_REST + 'ap_bills', { method: 'POST', headers: hdrs, body: JSON.stringify(body) })
+      .then(function () { return fetchRoyaltyBills(); })
+      .then(function (map) {
+        state.bills = map;
+        closeBillModal();
+        rerender();
+        showToast(isPaid
+          ? 'Bill created and marked paid \u00b7 ' + fmtMoney(amount)
+          : 'Bill created \u00b7 ' + fmtMoney(amount) + ' to KBC', 2800);
+      })
+      .catch(function (e) {
+        if (e && e.authFailed) { handleAuthFailure(); return; }
+        var msg = (e && e.message) ? e.message : '';
+        if (msg.indexOf('duplicate') !== -1 || msg.indexOf('23505') !== -1) {
+          showToast('Already billed \u2014 refreshing', 2400);
+          fetchRoyaltyBills().then(function (m) { state.bills = m; closeBillModal(); rerender(); });
+          return;
+        }
+        if (msg.indexOf('row-level security') !== -1 || msg.indexOf('42501') !== -1) {
+          showToast('Admins only \u2014 bill not created', 3200);
+        } else {
+          showToast('Could not create bill', 3000);
+        }
+        console.error('[Luciano] createBill failed:', e);
+        if (btn) { btn.disabled = false; btn.textContent = 'Create bill'; }
+      });
   }
 
   function findVisibleQuarter(year, q) {
@@ -1595,6 +2002,19 @@
     });
   }
 
+  function wireCards() {
+    var host = document.getElementById('lucCards');
+    if (!host) return;
+    host.addEventListener('click', function (ev) {
+      var t = ev.target;
+      if (!t || !t.closest) return;
+      if (t.closest('[data-action="toggle-history"]')) {
+        state.historyOpen = !state.historyOpen;
+        renderCards();
+      }
+    });
+  }
+
   function wirePrint() {
     var btn = document.getElementById('btnPrintQuarter');
     if (btn) btn.addEventListener('click', function () {
@@ -1625,6 +2045,11 @@
           var qn = parseInt(actionEl.getAttribute('data-quarter'), 10);
           var qObj = findVisibleQuarter(year, qn);
           if (qObj) openSignoffModal(qObj, action === 'resign' ? actionEl.getAttribute('data-supersede') : null);
+        } else if (action === 'create-bill') {
+          var by = parseInt(actionEl.getAttribute('data-year'), 10);
+          var bq = parseInt(actionEl.getAttribute('data-quarter'), 10);
+          var bObj = findVisibleQuarter(by, bq);
+          if (bObj) openBillModal(bObj);
         } else if (action === 'mark-ready' || action === 'unmark-ready') {
           var ry = parseInt(actionEl.getAttribute('data-year'), 10);
           var rq = parseInt(actionEl.getAttribute('data-quarter'), 10);
@@ -1653,6 +2078,7 @@
     document.body.classList.remove('pre-auth');
 
     wireFilters();
+    wireCards();
     wirePrint();
     wireExpand();
 
@@ -1666,12 +2092,14 @@
           fetchEventNames(collectEventIds(lines)),
           fetchStatements(collectInvoiceIds(lines)),
           fetchSignoffs(),
-          fetchReady()
+          fetchReady(),
+          fetchRoyaltyBills()
         ]).then(function (r2) {
           state.eventNames = r2[0];
           state.statements = r2[1];
           state.signoffs = r2[2];
           state.ready = r2[3];
+          state.bills = r2[4];
           buildModel(lines);
           renderFilters();
           renderWarning();
