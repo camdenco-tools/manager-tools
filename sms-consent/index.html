@@ -1,0 +1,1295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Text Consent | Camden Co. Manager Tools</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #F4F3EF;
+  --surface: #FFFFFF;
+  --text: #1a1a1a;
+  --muted: #888;
+  --light: #bbb;
+  --border: #E8E8E4;
+  --border-lt: #F0F0EC;
+  --green-50: #EAF3DE;
+  --green-600: #3B6D11;
+  --green-800: #27500A;
+  --amber-50: #fffbeb;
+  --amber-100: #fef3c7;
+  --amber-400: #BA7517;
+  --amber-700: #92400e;
+  --amber-800: #633806;
+  --red-50: #fef2f2;
+  --red-600: #c0392b;
+  --red-800: #8f2a1f;
+  --blue-600: #185fa5;
+  --blue-50: #e6f1fb;
+  --blue-100: #b5d4f4;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- Page head ---------- */
+.page-head { max-width: 1080px; margin: 0 auto; padding: 24px 20px 10px; }
+.page-title { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 4px; }
+.page-sub { font-size: 13px; color: var(--muted); line-height: 1.5; }
+
+/* ---------- Reach headline ----------
+   The number the page exists to move. Deliberately large and deliberately
+   unflattering: raw phone reach is far higher than consented reach, and the
+   gap between them IS the work. */
+.reach-strip { max-width: 1080px; margin: 0 auto 14px; padding: 0 20px; }
+.reach-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--green-600);
+  border-radius: 12px;
+  padding: 14px 18px;
+  display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+}
+.reach-num { font-size: 30px; font-weight: 800; letter-spacing: -0.02em; line-height: 1; }
+.reach-of { font-size: 14px; color: var(--muted); font-weight: 500; }
+.reach-pct {
+  font-size: 12px; font-weight: 700;
+  padding: 3px 10px; border-radius: 999px;
+  background: var(--green-50); color: var(--green-800);
+}
+.reach-pct.low { background: var(--amber-50); color: var(--amber-800); }
+.reach-note { font-size: 12px; color: var(--muted); margin-left: auto; text-align: right; line-height: 1.5; }
+
+/* ---------- Sub bar ---------- */
+.sub-bar {
+  max-width: 1080px; margin: 0 auto 14px; padding: 0 20px;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.search-wrap { position: relative; flex: 1; min-width: 200px; }
+.search-input {
+  width: 100%; padding: 9px 12px 9px 34px;
+  font-family: inherit; font-size: 13px;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface); color: var(--text);
+}
+.search-input:focus { outline: none; border-color: #999; }
+.search-icon {
+  position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+  color: var(--muted); pointer-events: none;
+}
+.venue-select {
+  appearance: none; -webkit-appearance: none;
+  font-family: inherit; font-size: 12px; font-weight: 600;
+  padding: 9px 28px 9px 12px;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface); color: var(--text);
+  cursor: pointer; flex-shrink: 0;
+}
+.venue-select:focus { outline: none; border-color: #999; }
+.venue-wrap { position: relative; flex-shrink: 0; }
+.venue-wrap .caret {
+  position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+  font-size: 9px; color: var(--muted); pointer-events: none;
+}
+
+/* ---------- Filter pills (6 — Opted out is its own pill, per decision C) ---------- */
+.filter-row {
+  max-width: 1080px; margin: 0 auto 14px; padding: 0 20px;
+  display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+}
+.filter-pill {
+  padding: 6px 13px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; font-family: inherit;
+  border: 1px solid var(--border); background: var(--surface);
+  color: var(--muted); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.filter-pill:hover { border-color: var(--muted); color: var(--text); }
+.filter-pill.active { background: var(--text); color: var(--surface); border-color: var(--text); }
+.filter-pill .fp-count {
+  font-size: 10px; font-weight: 700; opacity: 0.75;
+}
+.filter-pill.tone-green.active { background: var(--green-800); border-color: var(--green-800); }
+.filter-pill.tone-red.active   { background: var(--red-600);   border-color: var(--red-600); }
+.filter-pill.tone-amber.active { background: var(--amber-800); border-color: var(--amber-800); }
+.export-group { margin-left: auto; display: flex; gap: 6px; }
+
+/* ---------- Table ---------- */
+.canvas { max-width: 1080px; margin: 0 auto; padding: 0 20px 60px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+table { width: 100%; border-collapse: collapse; }
+thead th {
+  text-align: left; padding: 10px 16px;
+  font-size: 11px; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.07em;
+  background: #fafaf8; border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+tbody td { padding: 10px 16px; font-size: 13px; border-bottom: 1px solid var(--border-lt); }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr.row-click { cursor: pointer; }
+tbody tr.row-click:hover { background: #fafaf8; }
+.td-name { font-weight: 600; }
+.td-venue { color: var(--muted); font-size: 12px; }
+.td-dim { color: var(--muted); font-size: 12px; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; letter-spacing: 0.02em; }
+
+/* Raw (non-normalising) phone values are shown verbatim rather than masked.
+   A blank cell reads "get a number"; "856-555-28" reads "fix this". Two very
+   different jobs that both hide behind a masked last-4. */
+.phone-bad { color: var(--red-600); font-weight: 600; }
+.phone-none { color: var(--light); font-style: italic; }
+
+.state-pill {
+  display: inline-block; white-space: nowrap;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.03em;
+  padding: 3px 10px; border-radius: 999px;
+}
+.state-pill.green { background: var(--green-50); color: var(--green-800); }
+.state-pill.amber { background: var(--amber-100); color: var(--amber-800); }
+.state-pill.red   { background: var(--red-50); color: var(--red-600); }
+.state-pill.grey  { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
+.state-pill.muted { background: var(--bg); color: var(--muted); }
+
+.empty-state { text-align: center; padding: 50px 20px; color: var(--muted); font-size: 13px; }
+
+/* ---------- Buttons ---------- */
+.btn {
+  font-size: 12px; font-weight: 600; font-family: inherit;
+  padding: 7px 13px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--surface);
+  color: var(--text); cursor: pointer;
+}
+.btn:hover { background: var(--bg); border-color: var(--muted); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary { background: var(--text); color: var(--surface); border-color: var(--text); }
+.btn-primary:hover { background: #333; }
+
+/* ---------- Modal ---------- */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+  display: flex; align-items: flex-start; justify-content: center;
+  z-index: 1000; padding: 24px 16px; overflow-y: auto;
+}
+.modal-box {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; width: 100%; max-width: 620px; overflow: hidden;
+}
+.modal-head {
+  padding: 16px 18px; border-bottom: 1px solid var(--border-lt);
+  display: flex; align-items: flex-start; gap: 12px;
+}
+.modal-head-info { flex: 1; min-width: 0; }
+.modal-name { font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }
+.modal-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.modal-close {
+  background: none; border: none; font-size: 22px; color: var(--muted);
+  cursor: pointer; padding: 0 6px; line-height: 1;
+}
+.modal-close:hover { color: var(--text); }
+.modal-section { padding: 14px 18px; border-bottom: 1px solid var(--border-lt); }
+.modal-section:last-of-type { border-bottom: none; }
+.section-title {
+  font-size: 11px; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px;
+}
+.kv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+@media (max-width: 520px) { .kv-grid { grid-template-columns: 1fr; } }
+.kv-label { font-size: 11px; color: var(--muted); margin-bottom: 2px; }
+.kv-value { font-size: 13px; font-weight: 500; word-break: break-word; }
+.kv-value.empty { color: var(--light); font-style: italic; font-weight: 400; }
+.kv-value.warn { color: var(--amber-800); font-weight: 700; }
+
+.mismatch-note {
+  background: var(--amber-50); border: 1px solid var(--amber-100);
+  border-radius: 8px; padding: 10px 12px; margin-top: 10px;
+  font-size: 12px; color: var(--amber-800); line-height: 1.5;
+}
+.stop-note {
+  background: var(--red-50); border: 1px solid #f3c9c3;
+  border-radius: 8px; padding: 10px 12px;
+  font-size: 12px; color: var(--red-800); line-height: 1.5;
+}
+
+/* ---------- Timeline ---------- */
+.tl-list { max-height: 320px; overflow-y: auto; }
+.tl-row {
+  display: flex; gap: 10px; padding: 9px 0;
+  border-bottom: 1px solid var(--border-lt);
+}
+.tl-row:last-child { border-bottom: none; }
+.tl-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  margin-top: 5px; flex-shrink: 0; background: var(--muted);
+}
+.tl-dot.in { background: var(--green-600); }
+.tl-dot.out { background: var(--amber-400); }
+.tl-dot.carrier { background: var(--red-600); }
+.tl-body { flex: 1; min-width: 0; }
+.tl-line { font-size: 12px; color: var(--text); line-height: 1.45; }
+.tl-line strong { font-weight: 700; }
+.tl-meta { font-size: 11px; color: var(--muted); margin-top: 2px; line-height: 1.45; }
+/* Carrier events are facts reported TO us by Twilio, not actions taken by us.
+   Different provenance, different treatment. */
+.tl-row.is-carrier .tl-line strong { color: var(--red-600); }
+.tl-tag {
+  display: inline-block; font-size: 9px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  padding: 1px 5px; border-radius: 3px; margin-left: 5px;
+  background: var(--red-50); color: var(--red-600);
+}
+.tl-empty { font-size: 12px; color: var(--muted); font-style: italic; padding: 8px 0; }
+.tl-loading { font-size: 12px; color: var(--muted); font-style: italic; padding: 8px 0; }
+
+.modal-foot {
+  padding: 13px 18px; background: #fafaf8;
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+}
+
+/* ---------- Toast ---------- */
+.toast {
+  position: fixed; bottom: 24px; left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  background: var(--text); color: #fff;
+  font-size: 13px; font-weight: 600;
+  padding: 10px 18px; border-radius: 24px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.18);
+  z-index: 2000; opacity: 0; pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.success { background: var(--green-800); }
+.toast.error { background: var(--red-600); }
+
+/* ---------- Print record ----------
+   Hidden on screen. On print, everything else is hidden and only this shows.
+   Generated on demand rather than stored: there is no signature image to
+   capture, and an on-demand render always reflects the current log. */
+#printRoot { display: none; }
+@media print {
+  body { background: #fff; }
+  .page-head, .reach-strip, .sub-bar, .filter-row, .canvas,
+  .modal-overlay, .toast, #pcNavHeader, #pcNavRibbon, header, nav { display: none !important; }
+  #printRoot { display: block !important; padding: 0; }
+  .pr-wrap { font-size: 11pt; color: #000; }
+  .pr-title { font-size: 16pt; font-weight: 700; margin-bottom: 2px; }
+  .pr-org { font-size: 10pt; color: #444; margin-bottom: 16px; }
+  .pr-sec { margin-bottom: 16px; page-break-inside: avoid; }
+  .pr-sec h3 {
+    font-size: 9pt; text-transform: uppercase; letter-spacing: 0.08em;
+    color: #444; margin-bottom: 6px; border-bottom: 1px solid #ccc; padding-bottom: 3px;
+  }
+  .pr-kv { font-size: 10pt; margin-bottom: 3px; }
+  .pr-kv b { display: inline-block; min-width: 160px; }
+  .pr-table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+  .pr-table th, .pr-table td {
+    border: 1px solid #bbb; padding: 4px 6px; text-align: left; vertical-align: top;
+  }
+  .pr-table th { background: #f0f0f0; font-weight: 700; }
+  .pr-copy {
+    font-size: 9.5pt; line-height: 1.5; border: 1px solid #bbb;
+    padding: 8px 10px; background: #fafafa; white-space: pre-wrap;
+  }
+  .pr-foot { font-size: 8.5pt; color: #555; margin-top: 20px; border-top: 1px solid #ccc; padding-top: 6px; }
+}
+
+@media (max-width: 700px) {
+  .page-head { padding: 18px 14px 8px; }
+  .reach-strip, .sub-bar, .filter-row { padding: 0 14px; }
+  .canvas { padding: 0 14px 40px; }
+  .reach-note { margin-left: 0; text-align: left; width: 100%; }
+  .export-group { margin-left: 0; width: 100%; }
+  thead th:nth-child(2), tbody td:nth-child(2) { display: none; }
+  thead th, tbody td { padding: 9px 12px; }
+}
+</style>
+</head>
+<body>
+
+<!-- Header + ribbon + back-to-top injected by pc-nav.js -->
+<!-- Activity tracking handled by pc-activity.js -->
+
+<div class="page-head">
+  <h1 class="page-title">Text consent</h1>
+  <p class="page-sub">
+    Who has agreed to receive scheduling texts, who is still missing, and the audit
+    trail behind each one. Consent is captured by the employee on the availability
+    page &mdash; it is never recorded here on their behalf.
+  </p>
+</div>
+
+<div class="reach-strip">
+  <div class="reach-card" id="reachCard">
+    <span class="reach-num" id="reachNum">&mdash;</span>
+    <span class="reach-of" id="reachOf">loading&hellip;</span>
+  </div>
+</div>
+
+<div class="sub-bar">
+  <div class="search-wrap">
+    <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="11" cy="11" r="7"></circle>
+      <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+    </svg>
+    <input type="text" id="searchInput" class="search-input" placeholder="Search by name&hellip;" autocomplete="off">
+  </div>
+  <div class="venue-wrap">
+    <select id="venueSelect" class="venue-select" aria-label="Filter by home venue">
+      <option value="">All venues</option>
+    </select>
+    <span class="caret">&#9662;</span>
+  </div>
+</div>
+
+<div class="filter-row" id="filterRow"></div>
+
+<div class="canvas">
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>Employee</th>
+          <th>Venue</th>
+          <th>State</th>
+          <th>Phone</th>
+          <th>Consented</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody">
+        <tr><td colspan="5" class="empty-state">Loading&hellip;</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div id="modalRoot"></div>
+<div id="printRoot"></div>
+<div class="toast" id="toast"></div>
+
+<script src="/pc-auth.js"></script>
+<script src="/pc-nav.js"></script>
+<script src="/pc-activity.js"></script>
+<script>
+(function() {
+  'use strict';
+
+  // ==========================================================================
+  // TEXT CONSENT  --  manager view
+  //   spec: sms-consent-page-spec-v1.md
+  // --------------------------------------------------------------------------
+  // Reads v_sms_consent_state, which is the SINGLE DEFINITION of who can be
+  // texted. This page does not recompute sendability, and neither may the send
+  // function when it is built. The view's state logic mirrors smsStateFor() in
+  // the my-shifts edge function; if one changes, change both.
+  //
+  // WHY THE VIEW AND NOT employees:
+  //   employees.phone is FREE-FORM -- 111 rows store bare 10 digits, 116 store
+  //   formatted values with parens and dashes (audited Jul 27). A raw
+  //   phone = sms_consent_phone comparison would produce false mismatches for
+  //   up to 116 people, marking reachable employees unreachable. pc_norm_phone
+  //   is load-bearing, not tidiness.
+  //
+  // WHAT THIS PAGE DELIBERATELY CANNOT DO:
+  //   1. Grant consent. Consent must be self-service and identity-verified or
+  //      it is not provable. A manager ticking a box produces a record that
+  //      says "someone says he said yes", which fails a carrier audit and
+  //      contradicts the registered A2P opt-in description.
+  //   2. Clear sms_opt_out. A carrier STOP is only reversible by texting START
+  //      from the handset. A button that appears to undo it would mark somebody
+  //      sendable and then silently deliver nothing, forever.
+  //   3. Revoke consent. That ships with the revoke-sms-consent edge function
+  //      (build step 9). sms_consent_log has REVOKE INSERT FROM authenticated
+  //      -- only the service role writes it, which is what makes it usable as
+  //      evidence. A dead button today would be worse than no button.
+  // ==========================================================================
+
+  var SUPABASE_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
+
+  // The consent wording currently in force.
+  //
+  // TEMPORARY HOME. This belongs in the sms_consent_versions table (migration
+  // 2) -- a constant can be edited and redeployed with no trace, which is the
+  // one property evidence must not have. It lives here so the printed record is
+  // useful TODAY, because a log row reading "opt_in v2026-07-27" proves nothing
+  // to a third party without the text of what was agreed to.
+  //
+  // MIRRORED ON FOUR SURFACES: the availability card, popcornchez.com/#policy,
+  // the A2P campaign opt-in description, and here. Carriers compare them. Drift
+  // is a rejection risk and a rejected campaign restarts a 10-15 day queue.
+  // Do not edit this wording to tidy it. Bump the version instead.
+  var CONSENT_VERSION_CURRENT = '2026-07-27';
+  var CONSENT_COPY = {
+    '2026-07-27': {
+      body:
+        'Text me about my shifts.\n\n' +
+        'By checking this box I agree to receive text messages from Popcorn Chez ' +
+        'about scheduling \u2014 new shifts to confirm, availability reminders, and ' +
+        'assignment changes. Message frequency varies. Message and data rates may ' +
+        'apply. Reply STOP to opt out at any time, or HELP for help. Consent is not ' +
+        'a condition of employment. See our Privacy & SMS Policy.',
+      minor:
+        'If this is a parent or guardian\u2019s phone, please make sure they are okay with it.'
+    }
+  };
+
+  // State config. Severity drives the default sort: the work floats to the top,
+  // which is the opposite of the handbook page's signed-first default and
+  // correct for a chase list.
+  var STATES = {
+    opted_out:     { label: 'Opted out',     severity: 1, cls: 'red',   tone: 'tone-red' },
+    recheck:       { label: 'Needs recheck', severity: 2, cls: 'amber', tone: 'tone-amber' },
+    no_phone:      { label: 'No phone',      severity: 3, cls: 'grey',  tone: '' },
+    not_consented: { label: 'Not consented', severity: 4, cls: 'muted', tone: '' },
+    consented:     { label: 'Sendable',      severity: 5, cls: 'green', tone: 'tone-green' }
+  };
+
+  // Filter pills, in display order. 'all' is synthetic.
+  var FILTERS = [
+    { key: 'not_consented', label: 'Not consented' },
+    { key: 'consented',     label: 'Sendable' },
+    { key: 'recheck',       label: 'Needs recheck' },
+    { key: 'no_phone',      label: 'No phone' },
+    { key: 'opted_out',     label: 'Opted out' },
+    { key: 'all',           label: 'All' }
+  ];
+
+  var ACTION_LABELS = {
+    opt_in:         'Opted in',
+    opt_out:        'Opted out',
+    stop_received:  'STOP received',
+    start_received: 'START received',
+    help_received:  'HELP received',
+    phone_added:    'Phone added'
+  };
+
+  // Carrier-reported events. Facts told TO us by Twilio rather than actions
+  // taken by us or by the employee on our site.
+  var CARRIER_ACTIONS = ['stop_received', 'start_received', 'help_received'];
+
+  var SOURCE_LABELS = {
+    availability:  'Availability page',
+    shift_confirm: 'Shift confirmation',
+    apply:         'Application form',
+    onboarding:    'Onboarding form',
+    handbook:      'Handbook',
+    manager:       'Manager',
+    import:        'Import',
+    carrier:       'Carrier (Twilio)'
+  };
+
+  // --------------------------------------------------------------------------
+  // STATE
+  // --------------------------------------------------------------------------
+  var state = {
+    rows: [],              // v_sms_consent_state
+    filter: 'not_consented',
+    search: '',
+    venue: '',
+    modalEmpId: null,
+    logByEmpId: {},        // employee_id -> array | 'loading' | 'error'
+    isAdmin: false
+  };
+
+  // --------------------------------------------------------------------------
+  // FETCH
+  // --------------------------------------------------------------------------
+  function handleAuthFailure() {
+    try {
+      localStorage.removeItem('sb_access_token');
+      localStorage.removeItem('sb_refresh_token');
+    } catch (e) {}
+    showToast('Session expired. Reloading to sign in again\u2026', 'error');
+    setTimeout(function() { window.location.reload(); }, 1800);
+  }
+
+  function authFetch(url, options) {
+    return fetch(url, options).then(function(r) {
+      if (r.status === 401) {
+        var e401 = new Error('Unauthorized');
+        e401.authFailed = true;
+        throw e401;
+      }
+      if (!r.ok) {
+        return r.text().then(function(t) {
+          if (t && t.indexOf('JWT expired') !== -1) {
+            var eJwt = new Error('JWT expired');
+            eJwt.authFailed = true;
+            throw eJwt;
+          }
+          throw new Error(t || ('HTTP ' + r.status));
+        });
+      }
+      return r.text().then(function(t) {
+        if (!t) return [];
+        try { return JSON.parse(t); } catch (e) { return []; }
+      });
+    });
+  }
+
+  function loadStates() {
+    var url = SUPABASE_URL + '/rest/v1/v_sms_consent_state' +
+      '?select=*' +
+      '&order=last_name.asc,first_name.asc' +
+      '&limit=1000';
+    return authFetch(url, { method: 'GET', headers: pcAuth.headers() });
+  }
+
+  // Lazy, per employee, on modal open. Never at boot.
+  //
+  // select=* on purpose: migration 1 adds consent_version, actor and note to
+  // this table, and select=* picks them up with no code change here. The render
+  // below treats all three as optional.
+  function loadLogFor(empId) {
+    var url = SUPABASE_URL + '/rest/v1/sms_consent_log' +
+      '?select=*' +
+      '&employee_id=eq.' + encodeURIComponent(empId) +
+      '&order=occurred_at.desc' +
+      '&limit=200';
+    return authFetch(url, { method: 'GET', headers: pcAuth.headers() });
+  }
+
+  function loadFullLog() {
+    var url = SUPABASE_URL + '/rest/v1/sms_consent_log' +
+      '?select=*' +
+      '&order=occurred_at.desc' +
+      '&limit=10000';
+    return authFetch(url, { method: 'GET', headers: pcAuth.headers() });
+  }
+
+  // --------------------------------------------------------------------------
+  // HELPERS
+  // --------------------------------------------------------------------------
+  function escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function fullName(r) {
+    return ((r.first_name || '') + ' ' + (r.last_name || '')).trim();
+  }
+
+  function fmtDate(ts) {
+    if (!ts) return '';
+    var d = new Date(ts);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  function fmtDateTime(ts) {
+    if (!ts) return '';
+    var d = new Date(ts);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) +
+      ' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  }
+
+  // Long form with timezone, for the printed record only. A consent timestamp
+  // without a zone is ambiguous to anyone reading it later.
+  function fmtDateTimeFull(ts) {
+    if (!ts) return '';
+    var d = new Date(ts);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleString('en-US', {
+      year: 'numeric', month: 'short', day: 'numeric',
+      hour: 'numeric', minute: '2-digit', second: '2-digit',
+      timeZoneName: 'short'
+    });
+  }
+
+  function mask4(last4) {
+    if (!last4) return '';
+    return '\u2022\u2022\u2022 ' + last4;
+  }
+
+  function actionLabel(a) { return ACTION_LABELS[a] || a || '\u2014'; }
+
+  function sourceLabel(s) {
+    if (!s) return '\u2014';
+    return SOURCE_LABELS[s] || s;
+  }
+
+  function isCarrierAction(a) {
+    return CARRIER_ACTIONS.indexOf(a) !== -1;
+  }
+
+  var toastTimer = null;
+  function showToast(msg, kind) {
+    var el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = 'toast show' + (kind ? ' ' + kind : '');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function() {
+      el.className = el.className.replace(' show', '');
+    }, 2400);
+  }
+
+  function countBy(stateKey) {
+    var n = 0;
+    for (var i = 0; i < state.rows.length; i++) {
+      if (state.rows[i].state === stateKey) n++;
+    }
+    return n;
+  }
+
+  // --------------------------------------------------------------------------
+  // RENDER  --  reach headline
+  // --------------------------------------------------------------------------
+  function renderReach() {
+    var total = state.rows.length;
+    var sendable = 0;
+    var withPhone = 0;
+    for (var i = 0; i < state.rows.length; i++) {
+      if (state.rows[i].is_sendable === true) sendable++;
+      if (state.rows[i].phone_norm) withPhone++;
+    }
+    var pct = total > 0 ? Math.round((sendable / total) * 1000) / 10 : 0;
+    var lowClass = pct < 50 ? ' low' : '';
+
+    document.getElementById('reachNum').textContent = String(sendable);
+    var of = document.getElementById('reachOf');
+    of.innerHTML = 'of ' + total + ' active employees are textable ' +
+      '<span class="reach-pct' + lowClass + '">' + pct.toFixed(1) + '% reach</span>';
+
+    var card = document.getElementById('reachCard');
+    var existingNote = card.querySelector('.reach-note');
+    if (existingNote) card.removeChild(existingNote);
+    var note = document.createElement('div');
+    note.className = 'reach-note';
+    // The gap between usable-phone reach and consented reach is the whole job.
+    note.innerHTML = withPhone + ' have a usable phone number.<br>' +
+      '<strong>' + (withPhone - sendable) + '</strong> of those have not consented yet.';
+    card.appendChild(note);
+  }
+
+  // --------------------------------------------------------------------------
+  // RENDER  --  filter pills
+  // --------------------------------------------------------------------------
+  function renderFilters() {
+    var html = '';
+    for (var i = 0; i < FILTERS.length; i++) {
+      var f = FILTERS[i];
+      var n = (f.key === 'all') ? state.rows.length : countBy(f.key);
+      var cfg = STATES[f.key];
+      var tone = cfg ? cfg.tone : '';
+      var active = (state.filter === f.key) ? ' active' : '';
+      html += '<button class="filter-pill ' + tone + active + '" data-filter="' + f.key + '">' +
+        escapeHtml(f.label) +
+        '<span class="fp-count">' + n + '</span>' +
+      '</button>';
+    }
+
+    html += '<span class="export-group">' +
+      '<button class="btn" id="btnExportRoster">Export list (CSV)</button>' +
+      (state.isAdmin ? '<button class="btn" id="btnExportLog">Export full log (CSV)</button>' : '') +
+    '</span>';
+
+    var row = document.getElementById('filterRow');
+    row.innerHTML = html;
+
+    var pills = row.querySelectorAll('[data-filter]');
+    for (var p = 0; p < pills.length; p++) {
+      pills[p].addEventListener('click', function(ev) {
+        state.filter = ev.currentTarget.getAttribute('data-filter');
+        renderFilters();
+        renderTable();
+      });
+    }
+    var br = document.getElementById('btnExportRoster');
+    if (br) br.addEventListener('click', exportRosterCsv);
+    var bl = document.getElementById('btnExportLog');
+    if (bl) bl.addEventListener('click', exportLogCsv);
+  }
+
+  // --------------------------------------------------------------------------
+  // RENDER  --  venue dropdown
+  // --------------------------------------------------------------------------
+  function renderVenueOptions() {
+    var seen = {};
+    var hasUnset = false;
+    for (var i = 0; i < state.rows.length; i++) {
+      var v = state.rows[i].home_venue;
+      if (v) { seen[v] = true; } else { hasUnset = true; }
+    }
+    var codes = Object.keys(seen).sort();
+    var html = '<option value="">All venues</option>';
+    for (var c = 0; c < codes.length; c++) {
+      html += '<option value="' + escapeHtml(codes[c]) + '">' + escapeHtml(codes[c]) + '</option>';
+    }
+    if (hasUnset) html += '<option value="__unset">(no home venue)</option>';
+    var sel = document.getElementById('venueSelect');
+    sel.innerHTML = html;
+    sel.value = state.venue;
+  }
+
+  // --------------------------------------------------------------------------
+  // RENDER  --  table
+  // --------------------------------------------------------------------------
+  function visibleRows() {
+    var out = state.rows.filter(function(r) {
+      if (state.filter !== 'all' && r.state !== state.filter) return false;
+      if (state.venue === '__unset') {
+        if (r.home_venue) return false;
+      } else if (state.venue) {
+        if (r.home_venue !== state.venue) return false;
+      }
+      if (state.search) {
+        if (fullName(r).toLowerCase().indexOf(state.search) === -1) return false;
+      }
+      return true;
+    });
+    out.sort(function(a, b) {
+      var sa = STATES[a.state] ? STATES[a.state].severity : 99;
+      var sb = STATES[b.state] ? STATES[b.state].severity : 99;
+      if (sa !== sb) return sa - sb;
+      var la = (a.last_name || '') + (a.first_name || '');
+      var lb = (b.last_name || '') + (b.first_name || '');
+      return la.localeCompare(lb);
+    });
+    return out;
+  }
+
+  // Phone cell. Normalising numbers are masked to last four. Non-normalising
+  // values are shown VERBATIM -- that is the only way to tell "no number on
+  // file" apart from "a broken value that looks fine on every other screen".
+  function phoneCell(r) {
+    if (r.phone_norm) {
+      return '<span class="mono">' + escapeHtml(mask4(r.phone_last4)) + '</span>';
+    }
+    var raw = String(r.phone == null ? '' : r.phone).trim();
+    if (!raw) {
+      return '<span class="phone-none">none on file</span>';
+    }
+    return '<span class="mono phone-bad" title="This value is not a usable phone number">' +
+      escapeHtml(raw) + '</span>';
+  }
+
+  function renderTable() {
+    var rows = visibleRows();
+    var tbody = document.getElementById('tableBody');
+
+    if (state.rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No active employees found.</td></tr>';
+      return;
+    }
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No employees match this filter.</td></tr>';
+      return;
+    }
+
+    var html = '';
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      var cfg = STATES[r.state] || { label: r.state, cls: 'muted' };
+      var consentedCell = r.sms_consent_at ? escapeHtml(fmtDate(r.sms_consent_at)) : '<span class="td-dim">&mdash;</span>';
+
+      // A recheck row is the one case where the two numbers differ and the
+      // difference is the entire point, so surface it in the list rather than
+      // burying it in the modal.
+      var stateExtra = '';
+      if (r.state === 'recheck') {
+        stateExtra = '<div class="td-dim" style="margin-top:3px;">consented to ' +
+          escapeHtml(r.consent_phone_last4 ? mask4(r.consent_phone_last4) : 'a number now missing') +
+        '</div>';
+      }
+
+      html += '<tr class="row-click" data-emp="' + escapeHtml(r.employee_id) + '">' +
+        '<td class="td-name">' + escapeHtml(fullName(r)) + '</td>' +
+        '<td class="td-venue">' + escapeHtml(r.home_venue || '\u2014') + '</td>' +
+        '<td><span class="state-pill ' + cfg.cls + '">' + escapeHtml(cfg.label) + '</span>' + stateExtra + '</td>' +
+        '<td>' + phoneCell(r) + '</td>' +
+        '<td class="td-dim">' + consentedCell + '</td>' +
+      '</tr>';
+    }
+    tbody.innerHTML = html;
+
+    var trs = tbody.querySelectorAll('[data-emp]');
+    for (var t = 0; t < trs.length; t++) {
+      trs[t].addEventListener('click', function(ev) {
+        openModal(ev.currentTarget.getAttribute('data-emp'));
+      });
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // MODAL
+  // --------------------------------------------------------------------------
+  function rowById(empId) {
+    for (var i = 0; i < state.rows.length; i++) {
+      if (state.rows[i].employee_id === empId) return state.rows[i];
+    }
+    return null;
+  }
+
+  function openModal(empId) {
+    state.modalEmpId = empId;
+    renderModal();
+
+    if (!state.logByEmpId.hasOwnProperty(empId)) {
+      state.logByEmpId[empId] = 'loading';
+      loadLogFor(empId).then(function(rows) {
+        state.logByEmpId[empId] = rows || [];
+        if (state.modalEmpId === empId) renderModal();
+      }).catch(function(err) {
+        if (err && err.authFailed) { handleAuthFailure(); return; }
+        console.warn('Consent log fetch failed (non-blocking):', err);
+        state.logByEmpId[empId] = 'error';
+        if (state.modalEmpId === empId) renderModal();
+      });
+    }
+  }
+
+  function closeModal() {
+    state.modalEmpId = null;
+    document.getElementById('modalRoot').innerHTML = '';
+  }
+
+  function renderModal() {
+    var root = document.getElementById('modalRoot');
+    if (!state.modalEmpId) { root.innerHTML = ''; return; }
+    var r = rowById(state.modalEmpId);
+    if (!r) { closeModal(); return; }
+
+    var cfg = STATES[r.state] || { label: r.state, cls: 'muted' };
+    var log = state.logByEmpId[r.employee_id];
+
+    // ---- current state block ----
+    var kv = '';
+    kv += kvItem('Phone on file', r.phone_norm
+      ? '<span class="mono">' + escapeHtml(mask4(r.phone_last4)) + '</span>'
+      : (String(r.phone || '').trim()
+          ? '<span class="mono phone-bad">' + escapeHtml(r.phone) + '</span>'
+          : null));
+    kv += kvItem('Phone consented to', r.consent_phone_last4
+      ? '<span class="mono">' + escapeHtml(mask4(r.consent_phone_last4)) + '</span>'
+      : null);
+    kv += kvItem('Consented at', r.sms_consent_at ? escapeHtml(fmtDateTime(r.sms_consent_at)) : null);
+    kv += kvItem('Source', r.sms_consent_source ? escapeHtml(sourceLabel(r.sms_consent_source)) : null);
+    if (r.sms_opt_out) {
+      kv += kvItem('STOP received', r.sms_opt_out_at ? escapeHtml(fmtDateTime(r.sms_opt_out_at)) : 'yes');
+    }
+
+    var notes = '';
+    if (r.state === 'recheck') {
+      notes += '<div class="mismatch-note">' +
+        '<strong>The number on file is not the number they consented to.</strong> ' +
+        'Texts will not be sent until this is resolved &mdash; the send rule requires an exact match. ' +
+        'They can re-consent on the availability page, which re-attaches consent to the current number.' +
+      '</div>';
+    }
+    if (r.state === 'opted_out') {
+      notes += '<div class="stop-note">' +
+        '<strong>This person replied STOP.</strong> Their carrier has blocked delivery at the ' +
+        'network level. It cannot be reversed from this page or by any manager action &mdash; ' +
+        'only by texting START to (856) 454-8949 from their own handset.' +
+      '</div>';
+    }
+    if (r.phone_norm && r.phone_nanp_ok === false) {
+      notes += '<div class="mismatch-note">' +
+        'This number has ten digits but does not look like a valid US mobile number. ' +
+        'It would be rejected if they tried to consent with it.' +
+      '</div>';
+    }
+
+    // ---- timeline ----
+    var tlHtml;
+    if (log === 'loading') {
+      tlHtml = '<div class="tl-loading">Loading history\u2026</div>';
+    } else if (log === 'error') {
+      tlHtml = '<div class="tl-empty">History could not be loaded.</div>';
+    } else if (!log || log.length === 0) {
+      tlHtml = '<div class="tl-empty">No consent activity recorded for this person.</div>';
+    } else {
+      tlHtml = '<div class="tl-list">' + log.map(renderLogRow).join('') + '</div>';
+    }
+
+    var canPrint = (log && log !== 'loading' && log !== 'error' && log.length > 0);
+
+    var html =
+      '<div class="modal-overlay" data-modal-bg>' +
+        '<div class="modal-box">' +
+          '<div class="modal-head">' +
+            '<div class="modal-head-info">' +
+              '<div class="modal-name">' + escapeHtml(fullName(r)) + '</div>' +
+              '<div class="modal-sub">Punch ' + escapeHtml(r.punch_id || '\u2014') +
+                ' &middot; ' + escapeHtml(r.home_venue || 'no home venue') + '</div>' +
+            '</div>' +
+            '<span class="state-pill ' + cfg.cls + '">' + escapeHtml(cfg.label) + '</span>' +
+            '<button class="modal-close" data-close title="Close">&times;</button>' +
+          '</div>' +
+
+          '<div class="modal-section">' +
+            '<div class="section-title">Current state</div>' +
+            '<div class="kv-grid">' + kv + '</div>' +
+            notes +
+          '</div>' +
+
+          '<div class="modal-section">' +
+            '<div class="section-title">Consent history</div>' +
+            tlHtml +
+          '</div>' +
+
+          '<div class="modal-foot">' +
+            '<button class="btn btn-primary" data-print' + (canPrint ? '' : ' disabled') + '>' +
+              'Print consent record' +
+            '</button>' +
+            '<button class="btn" data-close>Close</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+    root.innerHTML = html;
+
+    var bg = root.querySelector('[data-modal-bg]');
+    if (bg) {
+      bg.addEventListener('click', function(ev) {
+        if (ev.target === bg) closeModal();
+      });
+    }
+    var closes = root.querySelectorAll('[data-close]');
+    for (var c = 0; c < closes.length; c++) {
+      closes[c].addEventListener('click', closeModal);
+    }
+    var pr = root.querySelector('[data-print]');
+    if (pr && canPrint) {
+      pr.addEventListener('click', function() { printRecord(r, log); });
+    }
+  }
+
+  function kvItem(label, valHtml) {
+    if (!valHtml) {
+      return '<div><div class="kv-label">' + escapeHtml(label) + '</div>' +
+        '<div class="kv-value empty">not on file</div></div>';
+    }
+    return '<div><div class="kv-label">' + escapeHtml(label) + '</div>' +
+      '<div class="kv-value">' + valHtml + '</div></div>';
+  }
+
+  function renderLogRow(e) {
+    var carrier = isCarrierAction(e.action);
+    var dotCls = carrier ? 'carrier' : (e.action === 'opt_in' ? 'in' : 'out');
+    if (e.action === 'phone_added') dotCls = 'in';
+
+    var bits = [];
+    bits.push(fmtDateTime(e.occurred_at));
+    if (!carrier) bits.push(sourceLabel(e.source));
+    if (e.phone_digits) bits.push(mask4(String(e.phone_digits).slice(-4)));
+    // Optional columns -- present only after migration 1. Absent is normal.
+    if (e.consent_version) bits.push('v' + e.consent_version);
+    if (e.actor) bits.push('by ' + e.actor);
+
+    var noteHtml = e.note
+      ? '<div class="tl-meta">' + escapeHtml(e.note) + '</div>'
+      : '';
+
+    return '<div class="tl-row' + (carrier ? ' is-carrier' : '') + '">' +
+      '<span class="tl-dot ' + dotCls + '"></span>' +
+      '<div class="tl-body">' +
+        '<div class="tl-line"><strong>' + escapeHtml(actionLabel(e.action)) + '</strong>' +
+          (carrier ? '<span class="tl-tag">carrier</span>' : '') +
+        '</div>' +
+        '<div class="tl-meta">' + escapeHtml(bits.join(' \u00b7 ')) + '</div>' +
+        noteHtml +
+      '</div>' +
+    '</div>';
+  }
+
+  // --------------------------------------------------------------------------
+  // PRINTED CONSENT RECORD
+  //
+  // The artifact a third party actually asks for. Generated on demand rather
+  // than stored: nothing is captured at consent time that needs preserving as
+  // an image, and an on-demand render always reflects the current log.
+  //
+  // The full phone number appears here unmasked, deliberately. This is the
+  // company's own record about its own employee, produced by a signed-in
+  // manager. Masking it would defeat the purpose of the document.
+  // --------------------------------------------------------------------------
+  function printRecord(r, log) {
+    var user = (pcAuth.getUser && pcAuth.getUser()) || null;
+    var who = user ? (user.display_name || user.email || 'Unknown') : 'Unknown';
+
+    var stateProse = {
+      consented:     'Consent on file. The number on record matches the number consented to. This person is currently sendable.',
+      recheck:       'Consent on file, but the phone number currently on the employee record does not match the number that was consented to. Messages are NOT being sent.',
+      not_consented: 'No consent on file. This person has not agreed to receive text messages.',
+      no_phone:      'No usable phone number on file, and no consent on record.',
+      opted_out:     'This person replied STOP to a message. Their carrier blocks delivery at the network level. This cannot be reversed except by the employee texting START from their own handset.'
+    }[r.state] || r.state;
+
+    var rowsHtml = log.map(function(e) {
+      return '<tr>' +
+        '<td>' + escapeHtml(fmtDateTimeFull(e.occurred_at)) + '</td>' +
+        '<td>' + escapeHtml(actionLabel(e.action)) + '</td>' +
+        '<td>' + escapeHtml(sourceLabel(e.source)) + '</td>' +
+        '<td>' + escapeHtml(e.phone_digits || '\u2014') + '</td>' +
+        '<td>' + escapeHtml(e.actor || (isCarrierAction(e.action) ? 'Carrier' : 'Employee')) + '</td>' +
+        '<td>' + escapeHtml(e.consent_version || '\u2014') + '</td>' +
+        '<td>' + escapeHtml(e.user_agent || '\u2014') + '</td>' +
+      '</tr>';
+    }).join('');
+
+    // Every version referenced anywhere in this person's log, reproduced in
+    // full. A log entry naming a version is not evidence without the wording.
+    var versions = {};
+    for (var i = 0; i < log.length; i++) {
+      var v = log[i].consent_version;
+      if (v) versions[v] = true;
+    }
+    // Pre-migration-1 rows carry no version. They predate versioning and the
+    // wording in force at the time was the current one; say so rather than
+    // silently printing nothing.
+    var anyUnversioned = log.some(function(e) {
+      return (e.action === 'opt_in') && !e.consent_version;
+    });
+    if (anyUnversioned) versions[CONSENT_VERSION_CURRENT] = true;
+
+    var copyHtml = '';
+    var vkeys = Object.keys(versions).sort();
+    for (var k = 0; k < vkeys.length; k++) {
+      var vk = vkeys[k];
+      var copy = CONSENT_COPY[vk];
+      copyHtml += '<div class="pr-sec">' +
+        '<h3>Consent wording &mdash; version ' + escapeHtml(vk) + '</h3>' +
+        (copy
+          ? '<div class="pr-copy">' + escapeHtml(copy.body) + '\n\n' +
+              escapeHtml('For employees under 18, the following line was appended: ' + copy.minor) +
+            '</div>'
+          : '<div class="pr-copy">Wording for this version is not on file in this system.</div>') +
+      '</div>';
+    }
+    if (anyUnversioned) {
+      copyHtml += '<div class="pr-sec"><div class="pr-kv" style="font-size:9pt;color:#555;">' +
+        'Note: entries recorded before consent-version tracking was introduced do not carry a ' +
+        'version stamp. The wording shown above was the wording in force on the availability ' +
+        'page throughout that period.' +
+      '</div></div>';
+    }
+
+    var html =
+      '<div class="pr-wrap">' +
+        '<div class="pr-title">SMS Consent Record</div>' +
+        '<div class="pr-org">Popcorn Chez, LLC</div>' +
+
+        '<div class="pr-sec">' +
+          '<h3>Employee</h3>' +
+          '<div class="pr-kv"><b>Name</b>' + escapeHtml(fullName(r)) + '</div>' +
+          '<div class="pr-kv"><b>Punch ID</b>' + escapeHtml(r.punch_id || '\u2014') + '</div>' +
+          '<div class="pr-kv"><b>Home venue</b>' + escapeHtml(r.home_venue || '\u2014') + '</div>' +
+        '</div>' +
+
+        '<div class="pr-sec">' +
+          '<h3>Current status</h3>' +
+          '<div class="pr-kv" style="margin-bottom:8px;">' + escapeHtml(stateProse) + '</div>' +
+          '<div class="pr-kv"><b>Phone on record</b>' + escapeHtml(r.phone || '\u2014') + '</div>' +
+          '<div class="pr-kv"><b>Phone consented to</b>' + escapeHtml(r.sms_consent_phone || '\u2014') + '</div>' +
+          '<div class="pr-kv"><b>Consent recorded</b>' + escapeHtml(r.sms_consent_at ? fmtDateTimeFull(r.sms_consent_at) : '\u2014') + '</div>' +
+          '<div class="pr-kv"><b>Consent source</b>' + escapeHtml(sourceLabel(r.sms_consent_source)) + '</div>' +
+          '<div class="pr-kv"><b>Carrier STOP</b>' + (r.sms_opt_out ? escapeHtml(fmtDateTimeFull(r.sms_opt_out_at) || 'yes') : 'No') + '</div>' +
+        '</div>' +
+
+        '<div class="pr-sec">' +
+          '<h3>Complete activity log (' + log.length + ' ' + (log.length === 1 ? 'entry' : 'entries') + ')</h3>' +
+          '<table class="pr-table">' +
+            '<thead><tr>' +
+              '<th>Timestamp</th><th>Action</th><th>Source</th><th>Phone</th>' +
+              '<th>Recorded by</th><th>Version</th><th>Device</th>' +
+            '</tr></thead>' +
+            '<tbody>' + rowsHtml + '</tbody>' +
+          '</table>' +
+        '</div>' +
+
+        copyHtml +
+
+        '<div class="pr-foot">' +
+          'Generated ' + escapeHtml(fmtDateTimeFull(new Date().toISOString())) +
+          ' by ' + escapeHtml(who) + ' &middot; Camden Co. Manager Tools' +
+        '</div>' +
+      '</div>';
+
+    document.getElementById('printRoot').innerHTML = html;
+    window.print();
+  }
+
+  // --------------------------------------------------------------------------
+  // CSV EXPORT
+  // --------------------------------------------------------------------------
+  function csvCell(v) {
+    var s = (v === null || v === undefined) ? '' : String(v);
+    if (s.indexOf('"') !== -1 || s.indexOf(',') !== -1 || s.indexOf('\n') !== -1 || s.indexOf('\r') !== -1) {
+      return '"' + s.replace(/"/g, '""') + '"';
+    }
+    return s;
+  }
+
+  function downloadCsv(filename, rows) {
+    var body = rows.map(function(r) {
+      return r.map(csvCell).join(',');
+    }).join('\r\n');
+    // BOM so Excel reads UTF-8 correctly on open.
+    var blob = new Blob(['\ufeff' + body], { type: 'text/csv;charset=utf-8;' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function() { URL.revokeObjectURL(url); }, 4000);
+  }
+
+  function stamp() {
+    var d = new Date();
+    function p(n) { return n < 10 ? '0' + n : String(n); }
+    return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate());
+  }
+
+  // Exports exactly what is on screen, including the active filter. If a
+  // manager filtered to "No phone" and hits export, they want that list, not
+  // all 231 rows.
+  function exportRosterCsv() {
+    var rows = visibleRows();
+    var out = [[
+      'Last name', 'First name', 'Punch ID', 'Home venue', 'State', 'Sendable',
+      'Phone on file', 'Phone consented to', 'Consented at', 'Source', 'Opted out at'
+    ]];
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      var cfg = STATES[r.state] || { label: r.state };
+      out.push([
+        r.last_name, r.first_name, r.punch_id, r.home_venue || '',
+        cfg.label, r.is_sendable ? 'yes' : 'no',
+        r.phone || '', r.sms_consent_phone || '',
+        r.sms_consent_at ? fmtDateTimeFull(r.sms_consent_at) : '',
+        r.sms_consent_source || '',
+        r.sms_opt_out_at ? fmtDateTimeFull(r.sms_opt_out_at) : ''
+      ]);
+    }
+    downloadCsv('text-consent-list-' + stamp() + '.csv', out);
+    showToast('Exported ' + rows.length + ' rows', 'success');
+  }
+
+  // Admin only. This is a bulk extract of every person's consent history, which
+  // is a different act from viewing one person's timeline -- hence the extra
+  // gate. Note this is a policy choice, not a security boundary: the underlying
+  // RLS policy permits any active manager to read the table.
+  function exportLogCsv() {
+    var btn = document.getElementById('btnExportLog');
+    if (btn) { btn.disabled = true; btn.textContent = 'Building\u2026'; }
+
+    // Name lookup so the CSV is readable without a join.
+    var nameByEmp = {};
+    for (var i = 0; i < state.rows.length; i++) {
+      nameByEmp[state.rows[i].employee_id] = fullName(state.rows[i]);
+    }
+
+    loadFullLog().then(function(rows) {
+      rows = rows || [];
+      var out = [[
+        'Occurred at', 'Employee', 'Punch ID', 'Action', 'Source',
+        'Phone digits', 'Recorded by', 'Consent version', 'Note', 'User agent', 'Employee ID'
+      ]];
+      for (var j = 0; j < rows.length; j++) {
+        var e = rows[j];
+        out.push([
+          fmtDateTimeFull(e.occurred_at),
+          nameByEmp[e.employee_id] || '',
+          e.punch_id || '',
+          actionLabel(e.action),
+          e.source || '',
+          e.phone_digits || '',
+          e.actor || '',
+          e.consent_version || '',
+          e.note || '',
+          e.user_agent || '',
+          e.employee_id
+        ]);
+      }
+      downloadCsv('text-consent-log-' + stamp() + '.csv', out);
+      showToast('Exported ' + rows.length + ' log entries', 'success');
+    }).catch(function(err) {
+      if (err && err.authFailed) { handleAuthFailure(); return; }
+      console.error('Log export failed:', err);
+      showToast('Export failed \u2014 try again', 'error');
+    }).then(function() {
+      if (btn) { btn.disabled = false; btn.textContent = 'Export full log (CSV)'; }
+    });
+  }
+
+  // --------------------------------------------------------------------------
+  // DEEP LINK  --  /sms-consent/?employee=<uuid>
+  // Used by the crew card's "view history" link. Same pattern the crew card
+  // already uses to hand off to /certifications/.
+  // --------------------------------------------------------------------------
+  function applyDeepLink() {
+    var q = window.location.search || '';
+    var m = q.match(/[?&]employee=([^&]+)/);
+    if (!m) return;
+    var empId = decodeURIComponent(m[1]);
+    if (rowById(empId)) {
+      // Widen the filter so the row is reachable behind the modal.
+      state.filter = 'all';
+      renderFilters();
+      renderTable();
+      openModal(empId);
+    } else {
+      showToast('That employee is not on the active roster.', 'error');
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // BOOT
+  // --------------------------------------------------------------------------
+  pcAuth.require({
+    pageSlug: 'sms-consent',
+    onReady: function(user) {
+      pcActivity.init('sms-consent');
+
+      try {
+        state.isAdmin = (pcAuth.isAdmin && pcAuth.isAdmin()) === true;
+      } catch (e) {
+        state.isAdmin = false;
+      }
+
+      document.getElementById('searchInput').addEventListener('input', function(ev) {
+        state.search = (ev.target.value || '').toLowerCase().trim();
+        renderTable();
+      });
+
+      document.getElementById('venueSelect').addEventListener('change', function(ev) {
+        state.venue = ev.target.value || '';
+        renderTable();
+      });
+
+      document.addEventListener('keydown', function(ev) {
+        if (ev.key === 'Escape' && state.modalEmpId) closeModal();
+      });
+
+      loadStates().then(function(rows) {
+        state.rows = rows || [];
+        renderReach();
+        renderVenueOptions();
+        renderFilters();
+        renderTable();
+        applyDeepLink();
+      }).catch(function(err) {
+        if (err && err.authFailed) { handleAuthFailure(); return; }
+        console.error('Load failed:', err);
+        document.getElementById('tableBody').innerHTML =
+          '<tr><td colspan="5" class="empty-state">Couldn\'t load consent data. ' +
+          escapeHtml(err.message || '') + '</td></tr>';
+        document.getElementById('reachOf').textContent = 'Error loading';
+      });
+    }
+  });
+})();
+</script>
+</body>
+</html>
