@@ -323,6 +323,17 @@
     min-width: 200px;
   }
 
+  .ar-search-hint {
+    background: #e6f1fb;
+    border: 1px solid #b9d6f0;
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin-bottom: 12px;
+    font-size: 12px;
+    color: #0C447C;
+  }
+  .ar-search-hint[hidden] { display: none; }
+
   /* Invoice list */
   .invoice-list-wrap {
     background: #fff;
@@ -1307,6 +1318,10 @@
         <input type="text" id="filterSearch" placeholder="Search invoice #, client ref, stand, amount…">
       </div>
 
+      <div class="ar-search-hint" id="searchScopeHint" hidden>
+        Searching <strong>all invoices</strong> — status and date filters are ignored while a search is active. Clear the box to return to the default view.
+      </div>
+
       <!-- Invoice list -->
       <div class="invoice-list-wrap" id="invoiceListWrap">
         <table class="invoice-table">
@@ -1398,6 +1413,11 @@
     dateBoundActive: true,
 
     initialFetchDone: false, // gate against concurrent re-fetches during boot
+
+    // True while a search term is long enough that the SERVER applied it.
+    // When set, the status filter and 12-month bound are bypassed so paid,
+    // voided, and older invoices are findable — the whole point of the fix.
+    searchServerActive: false,
 
     // Aging-matrix drill-down state. When a cell is clicked:
     //   - drilldown.clientId is set (or 'all' for total-row clicks)
@@ -1739,6 +1759,31 @@
       ? 'period_start=gte.' + monthsAgoIso(12)
       : '';
 
+    // Server-side search. Values are double-quoted so dots, dashes, and
+    // spaces inside a term ("MANN-07.17.26-CS") don't break PostgREST's
+    // or= parsing, and encodeURIComponent protects commas and ampersands.
+    // A term that parses as a number also matches net_amount_due exactly —
+    // remittance reconciliation is usually amount-first.
+    var qTerm = (state.filters.search || '').trim();
+    var searchActive = qTerm.length >= 2;
+    var searchClause = '';
+    if (searchActive) {
+      var safe = encodeURIComponent(qTerm.replace(/["\\]/g, ''));
+      var ors = [
+        'internal_invoice_number.ilike."*' + safe + '*"',
+        'client_reference.ilike."*' + safe + '*"',
+        'venue_code.ilike."*' + safe + '*"',
+        'notes.ilike."*' + safe + '*"',
+        'invoice_notes.ilike."*' + safe + '*"'
+      ];
+      var bare = qTerm.replace(/[\$,\s]/g, '');
+      var numeric = Number(bare);
+      if (bare !== '' && isFinite(numeric)) {
+        ors.push('net_amount_due.eq.' + numeric);
+      }
+      searchClause = 'or=(' + ors.join(',') + ')';
+    }
+
     // Embedded select for client name + stand name.
     var selectClause = 'select=' + [
       'id',
@@ -1762,10 +1807,20 @@
     ].join(',');
 
     var parts = [selectClause];
-    if (statusClause) parts.push(statusClause);
-    if (clientClause) parts.push(clientClause);
-    if (venueClause)  parts.push(venueClause);
-    if (dateClause)   parts.push(dateClause);
+    if (searchActive) {
+      // Search deliberately overrides status + date. Client and venue
+      // dropdowns still apply — those are scope, not visibility.
+      parts.push(searchClause);
+      if (clientClause) parts.push(clientClause);
+      if (venueClause)  parts.push(venueClause);
+      parts.push('limit=500');
+    } else {
+      if (statusClause) parts.push(statusClause);
+      if (clientClause) parts.push(clientClause);
+      if (venueClause)  parts.push(venueClause);
+      if (dateClause)   parts.push(dateClause);
+      parts.push('limit=1000');
+    }
     parts.push('order=period_start.desc');
 
     var url = SB_REST + 'ar_invoices?' + parts.join('&');
@@ -1848,6 +1903,9 @@
         if (inv._bucket !== dd.bucket) return false;
       }
       if (!q) return true;
+      // Server already applied this term — re-filtering here would drop rows
+      // that matched on notes or invoice_notes (not in the local haystack).
+      if (state.searchServerActive) return true;
       // Multi-field search: internal #, client ref, stand, venue, client name, amount partial.
       var hay = [
         inv.internal_invoice_number,
@@ -1956,6 +2014,15 @@
     var empty = document.getElementById('agingMatrixEmpty');
     var sub = document.getElementById('agingMatrixSubtitle');
     if (!body) return;
+
+    // Aging is an open/partial concept — meaningless over a search result
+    // set that deliberately includes paid and voided invoices.
+    var wrap = document.getElementById('agingMatrixWrap');
+    if (state.searchServerActive) {
+      if (wrap) wrap.hidden = true;
+      return;
+    }
+    if (wrap) wrap.hidden = false;
 
     var data = buildAgingMatrix();
     var rows = data.rows;
@@ -2122,6 +2189,13 @@
     if (bucketLbl) bucketLbl.textContent = state.drilldown.bucketLabel;
   }
 
+  /** Show a note when search has bypassed the status + date filters. */
+  function renderSearchHint() {
+    var el = document.getElementById('searchScopeHint');
+    if (!el) return;
+    el.hidden = !state.searchServerActive;
+  }
+
   /** Toggle the loading state on the list. */
   function setLoading(on) {
     var l = document.getElementById('invoiceListLoading');
@@ -2275,11 +2349,36 @@
       reloadInvoices();
     });
 
-    // Search is a client-side re-render only; no DB call.
+    // Search hits the server (debounced 350ms) once the term is 2+ chars.
+    // Shorter terms stay client-side so single keystrokes don't hammer the API.
+    var searchTimer = null;
     if (srch) {
       srch.addEventListener('input', function () {
         state.filters.search = srch.value || '';
-        renderInvoiceTable();
+        var isLong = (state.filters.search || '').trim().length >= 2;
+
+        if (searchTimer) { clearTimeout(searchTimer); searchTimer = null; }
+
+        if (!isLong) {
+          renderSearchHint();
+          renderInvoiceTable();
+          if (state.searchServerActive) {
+            state.searchServerActive = false;
+            reloadInvoices();
+          }
+          return;
+        }
+
+        if (state.drilldown.active) {
+          state.drilldown.active = false;
+          renderDrilldownPill();
+        }
+        searchTimer = setTimeout(function () {
+          searchTimer = null;
+          state.searchServerActive = true;
+          renderSearchHint();
+          reloadInvoices();
+        }, 350);
       });
     }
   }
