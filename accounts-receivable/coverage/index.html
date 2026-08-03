@@ -465,8 +465,17 @@
     return authFetch(url, { headers: pcAuth.headers() });
   }
   function fetchEvents() {
+    // deleted_at IS NULL — soft-deleted events must never enter the
+    // venue-day lookup. evByVD keeps the FIRST event per venue||date, so a
+    // trashed duplicate can win the key from the live event and orphan every
+    // coverage lookup on that day. FMP 2026-07-22 did exactly that: a trashed
+    // "TBA" shadowed "Chicago & Styx" and falsely flagged 9 covered stands.
+    // Cancelled events are deliberately NOT excluded — a cancelled show can
+    // still have logged sales that are genuinely owed.
     var url = SB_REST + 'events?select=id,venue,event_date,event_name' +
+      '&deleted_at=is.null' +
       '&event_date=lte.' + todayIso();
+
     if (state.dateFloorActive && state.fyStartIso) {
       url += '&event_date=gte.' + state.fyStartIso;
     }
