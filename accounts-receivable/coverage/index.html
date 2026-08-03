@@ -310,6 +310,16 @@
   // null to disable. "Show older" bypasses it.
   var COVERAGE_START = '2026-05-15';
 
+  // Lump-invoice suppression cutoff. Before this date, ANY non-voided invoice
+  // on an event was taken as "one statement covered the whole event" and every
+  // stand at that event was hidden. From this date forward, per-stand coverage
+  // rows are the ONLY thing that clears a stand — because a small ancillary
+  // invoice (cart fee, staffing charge) on an event would otherwise suppress
+  // every genuinely-uncovered stand alongside it. That is exactly what hid
+  // $6,464 of FMP 2026-07-20 behind $673 of fee invoices.
+  // Set to null to disable the lump rule entirely.
+  var LUMP_RULE_UNTIL = '2026-05-24';
+
   // SATB: own POS, we keep the money, never an AR — excluded from CSR entirely.
   var EXCLUDE_VENUES = { SATB: true };
   // DE (Chase Fieldhouse): settles as one end-of-month lump, not the per-stand
@@ -559,8 +569,11 @@
       //    (no ar_invoice_stands rows) but DOES have a non-voided invoice,
       //    one statement covered the whole event -> drop. This clears the
       //    paid historical flood (event-level invoices, no per-stand rows).
+      //    Applies only to events before LUMP_RULE_UNTIL — see the constant.
       var eventIsPerStand = eventId && state.perStandEventSet[eventId];
-      if (!eventIsPerStand && state.invoicedEventKeys[g.venue + '||' + g.date]) return;
+      var lumpRuleApplies = !LUMP_RULE_UNTIL || g.date < LUMP_RULE_UNTIL;
+      if (lumpRuleApplies && !eventIsPerStand &&
+          state.invoicedEventKeys[g.venue + '||' + g.date]) return;
 
       // 3. Pre-ledger floor: an event before COVERAGE_START that survived 1 & 2
       //    was never invoiced -> settled off-book, hide it. "Show older" bypasses.
