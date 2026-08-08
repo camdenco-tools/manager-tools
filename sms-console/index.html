@@ -1,0 +1,2602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Text Messages — Popcorn Chez</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #f6f6f3; color: #1a1a1a; font-size: 14px;
+}
+
+/* ---- Page title bar (pc-nav owns the header + ribbon) ---- */
+.page-title-bar {
+  background: #fff; border-bottom: 1px solid #e8e8e4;
+  padding: 18px 22px 16px;
+}
+.page-title-bar h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+.page-title-bar p { color: #7a7a72; font-size: 13px; margin-top: 4px; max-width: 760px; line-height: 1.5; }
+
+.wrap { max-width: 1180px; margin: 0 auto; padding: 20px 22px 80px; }
+
+/* ---- Tabs ---- */
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid #e0e0da; margin-bottom: 20px; flex-wrap: wrap; }
+.tab {
+  background: none; border: none; font-family: inherit; font-size: 14px; font-weight: 500;
+  color: #7a7a72; padding: 10px 16px; cursor: pointer; border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.tab:hover { color: #1a1a1a; }
+.tab.active { color: #1a1a1a; border-bottom-color: #1a1a1a; }
+.tab.locked { color: #b4b2a9; cursor: not-allowed; }
+.tab .soon {
+  font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em;
+  background: #ecebe5; color: #8a887e; padding: 2px 6px; border-radius: 10px; margin-left: 6px;
+}
+.panel { display: none; }
+.panel.active { display: block; }
+
+/* ---- Cards ---- */
+.card {
+  background: #fff; border: 1px solid #e8e8e4; border-radius: 10px;
+  margin-bottom: 18px; overflow: hidden;
+}
+.card-head {
+  padding: 14px 18px; border-bottom: 1px solid #f0efea;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+}
+.card-head h2 { font-size: 15px; font-weight: 700; }
+.card-head .sub { font-size: 12px; color: #8a887e; margin-top: 2px; }
+.card-body { padding: 6px 0; }
+.card-body.pad { padding: 18px; }
+
+/* ---- Filter pills ---- */
+.pills { display: flex; gap: 6px; flex-wrap: wrap; }
+.pill {
+  background: #fff; border: 1px solid #ddddd6; border-radius: 20px;
+  padding: 5px 12px; font-size: 12px; font-weight: 500; font-family: inherit;
+  color: #4a4a44; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+}
+.pill:hover { background: #f6f6f3; }
+.pill.active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+.pill .n { font-weight: 700; opacity: 0.65; }
+
+select.range {
+  font-family: inherit; font-size: 12px; padding: 5px 10px;
+  border: 1px solid #ddddd6; border-radius: 20px; background: #fff; color: #4a4a44; cursor: pointer;
+}
+
+/* ---- Rows ---- */
+.row {
+  padding: 14px 18px; border-bottom: 1px solid #f4f3ee;
+  display: grid; grid-template-columns: 150px 1fr auto; gap: 14px; align-items: start;
+}
+.row:last-child { border-bottom: none; }
+.row-when { font-size: 12px; color: #8a887e; line-height: 1.5; }
+.row-who { font-weight: 500; font-size: 13px; }
+.row-who .unknown { color: #B45309; font-style: italic; font-weight: 400; }
+.row-body {
+  margin-top: 4px; font-size: 14px; line-height: 1.5; color: #2a2a26;
+  white-space: pre-wrap; word-break: break-word;
+}
+.row-meta { margin-top: 6px; font-size: 11px; color: #a3a199; }
+.row-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+
+.tag {
+  display: inline-block; font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.05em; padding: 2px 7px; border-radius: 4px;
+}
+.tag-other   { background: #EEF2FF; color: #4338CA; }
+.tag-null    { background: #FEF3C7; color: #92400E; }
+.tag-stop    { background: #FEE2E2; color: #B91C1C; }
+.tag-start   { background: #DCFCE7; color: #15803D; }
+.tag-help    { background: #F1F5F9; color: #475569; }
+.tag-handled { background: #F1F1EC; color: #7a7a72; }
+
+.btn {
+  font-family: inherit; font-size: 12px; font-weight: 500; padding: 6px 12px;
+  border-radius: 6px; border: 1px solid #ddddd6; background: #fff; color: #1a1a1a; cursor: pointer;
+  white-space: nowrap;
+}
+.btn:hover { background: #f6f6f3; }
+.btn-dark { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+.btn-dark:hover { background: #333; }
+.btn-danger { background: #B91C1C; color: #fff; border-color: #B91C1C; }
+.btn-danger:hover { background: #991B1B; }
+.btn-big { font-size: 14px; padding: 10px 20px; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ---- Batch (sent history) ---- */
+.batch { border-bottom: 1px solid #f4f3ee; }
+.batch:last-child { border-bottom: none; }
+.batch-head { padding: 14px 18px; cursor: pointer; display: flex; gap: 14px; align-items: flex-start; }
+.batch-head:hover { background: #fafaf7; }
+.batch-caret { color: #b4b2a9; font-size: 11px; margin-top: 3px; width: 10px; flex: none; }
+.batch-main { flex: 1; min-width: 0; }
+.batch-title { font-size: 13px; font-weight: 500; }
+.batch-title .by { color: #8a887e; font-weight: 400; }
+.batch-title .robot { color: #185FA5; font-weight: 500; }
+.batch-msg {
+  margin-top: 5px; font-size: 13px; color: #4a4a44; line-height: 1.45;
+  overflow: hidden; text-overflow: ellipsis; display: -webkit-box;
+  -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.batch-stats { margin-top: 7px; font-size: 11px; color: #8a887e; display: flex; gap: 12px; flex-wrap: wrap; }
+.batch-stats b { color: #1a1a1a; font-weight: 700; }
+.batch-detail { padding: 0 18px 16px 42px; display: none; }
+.batch.open .batch-detail { display: block; }
+.recip {
+  display: flex; justify-content: space-between; gap: 12px;
+  padding: 6px 0; border-bottom: 1px solid #f7f6f2; font-size: 12px;
+}
+.recip:last-child { border-bottom: none; }
+.recip .st { font-weight: 500; }
+.st-delivered   { color: #15803D; }
+.st-sent        { color: #185FA5; }
+.st-queued      { color: #8a887e; }
+.st-failed      { color: #B91C1C; }
+.st-undelivered { color: #B91C1C; }
+.st-dry_run     { color: #92400E; }
+.errnote { font-size: 11px; color: #B45309; margin-top: 8px; line-height: 1.5; }
+
+/* ---- Settings ---- */
+.settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
+.field label { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #8a887e; margin-bottom: 5px; }
+.field input {
+  width: 100%; font-family: inherit; font-size: 14px; padding: 8px 10px;
+  border: 1px solid #ddddd6; border-radius: 6px; background: #fff;
+}
+.field input:disabled { background: #f6f6f3; color: #8a887e; }
+.field .hint { font-size: 11px; color: #a3a199; margin-top: 4px; line-height: 1.4; }
+.settings-actions { margin-top: 16px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.settings-actions input.reason {
+  flex: 1; min-width: 200px; font-family: inherit; font-size: 13px;
+  padding: 8px 10px; border: 1px solid #ddddd6; border-radius: 6px;
+}
+
+/* ---- Reach ---- */
+select.wide {
+  width: 100%; font-family: inherit; font-size: 14px; padding: 8px 10px;
+  border: 1px solid #ddddd6; border-radius: 6px; background: #fff; color: #1a1a1a;
+}
+select.wide:disabled { background: #f6f6f3; color: #a3a199; }
+
+.reach-hero { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.reach-big { font-size: 34px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
+.reach-of { font-size: 14px; color: #7a7a72; }
+.reach-pct { font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 20px; }
+.pct-good { background: #DCFCE7; color: #15803D; }
+.pct-mid  { background: #FEF3C7; color: #92400E; }
+.pct-low  { background: #FEE2E2; color: #B91C1C; }
+
+.reach-bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: #f0efea; }
+.reach-bar span { display: block; height: 100%; }
+.bar-send { background: #15803D; }
+.bar-no   { background: #d8d6cd; }
+
+.bucket { border-bottom: 1px solid #f4f3ee; }
+.bucket:last-child { border-bottom: none; }
+.bucket-head {
+  padding: 12px 18px; cursor: pointer; display: flex; gap: 12px;
+  align-items: center; justify-content: space-between;
+}
+.bucket-head:hover { background: #fafaf7; }
+.bucket-name { font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 9px; }
+.bucket-name .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.bucket-count { font-size: 13px; font-weight: 700; }
+.bucket-why { font-size: 11px; color: #a3a199; margin-top: 3px; font-weight: 400; }
+.bucket-list { display: none; padding: 0 18px 14px 39px; }
+.bucket.open .bucket-list { display: block; }
+.bucket-person {
+  display: flex; justify-content: space-between; gap: 12px;
+  padding: 5px 0; border-bottom: 1px solid #f7f6f2; font-size: 12px;
+}
+.bucket-person:last-child { border-bottom: none; }
+.bucket-person .meta { color: #a3a199; }
+
+.today-row {
+  padding: 12px 18px; border-bottom: 1px solid #f4f3ee; cursor: pointer;
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+}
+.today-row:last-child { border-bottom: none; }
+.today-row:hover { background: #fafaf7; }
+.today-name { font-size: 13px; font-weight: 500; }
+.today-meta { font-size: 11px; color: #8a887e; margin-top: 3px; }
+.today-reach { font-size: 13px; font-weight: 700; white-space: nowrap; }
+
+/* ---- Compose ---- */
+.notice {
+  padding: 11px 14px; border-radius: 8px; font-size: 12px; line-height: 1.55;
+  margin-bottom: 12px; border: 1px solid transparent;
+}
+.notice:last-child { margin-bottom: 0; }
+.notice b { font-weight: 700; }
+.notice-warn   { background: #FEF3C7; border-color: #FDE68A; color: #92400E; }
+.notice-stop   { background: #FEE2E2; border-color: #FECACA; color: #B91C1C; }
+.notice-info   { background: #EEF2FF; border-color: #E0E7FF; color: #3730A3; }
+.notice-quiet  { background: #f6f6f3; border-color: #e8e8e4; color: #6a6a62; }
+.notice-good   { background: #DCFCE7; border-color: #BBF7D0; color: #15803D; }
+
+.cmp-msg {
+  width: 100%; font-family: inherit; font-size: 15px; line-height: 1.5;
+  padding: 12px 13px; border: 1px solid #ddddd6; border-radius: 8px;
+  background: #fff; color: #1a1a1a; resize: vertical; min-height: 104px;
+}
+.cmp-msg:disabled { background: #f6f6f3; color: #a3a199; }
+.cmp-counter {
+  margin-top: 7px; font-size: 12px; color: #8a887e;
+  display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+}
+.cmp-counter b { color: #1a1a1a; font-weight: 700; }
+.cmp-counter.over b, .cmp-counter.over { color: #B91C1C; }
+.cmp-counter.multi b { color: #92400E; }
+
+.cmp-preview {
+  margin-top: 14px; border: 1px solid #e8e8e4; border-radius: 8px;
+  background: #fafaf7; padding: 13px 14px;
+}
+.cmp-preview .lbl {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.05em; color: #a3a199; margin-bottom: 7px;
+}
+.cmp-bubble {
+  background: #fff; border: 1px solid #e2e1da; border-radius: 14px;
+  padding: 10px 13px; font-size: 14px; line-height: 1.5; color: #2a2a26;
+  white-space: pre-wrap; word-break: break-word; max-width: 460px;
+}
+.cmp-bubble .fixed { color: #8a887e; }
+
+.cmp-actions {
+  margin-top: 18px; padding-top: 16px; border-top: 1px solid #f0efea;
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+}
+.cmp-actions .spacer { flex: 1; }
+.cmp-note { font-size: 11px; color: #a3a199; line-height: 1.5; margin-top: 8px; }
+
+.confirm-body { padding: 18px; }
+.confirm-big {
+  font-size: 22px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.35; margin-bottom: 14px;
+}
+.confirm-list { font-size: 13px; line-height: 1.9; color: #4a4a44; margin-bottom: 16px; }
+.confirm-list b { color: #1a1a1a; }
+.confirm-type {
+  width: 190px; font-family: inherit; font-size: 16px; font-weight: 700;
+  padding: 9px 11px; border: 2px solid #1a1a1a; border-radius: 6px; text-align: center;
+}
+
+.tpl-row { padding: 16px 18px; border-bottom: 1px solid #f4f3ee; }
+.tpl-row:last-child { border-bottom: none; }
+.tpl-row.inactive { background: #fafaf7; }
+.tpl-top { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 10px; }
+.tpl-top .field { flex: 1; min-width: 170px; }
+.tpl-top .field input, .tpl-top .field select {
+  width: 100%; font-family: inherit; font-size: 13px; padding: 7px 9px;
+  border: 1px solid #ddddd6; border-radius: 6px; background: #fff;
+}
+.tpl-body {
+  width: 100%; font-family: inherit; font-size: 14px; line-height: 1.5;
+  padding: 10px 11px; border: 1px solid #ddddd6; border-radius: 6px; resize: vertical; min-height: 74px;
+}
+.tpl-foot { margin-top: 9px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-size: 12px; color: #8a887e; }
+.tpl-foot .spacer { flex: 1; }
+.tpl-foot label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+
+.empty { padding: 34px 18px; text-align: center; color: #a3a199; font-size: 13px; line-height: 1.6; }
+.empty b { color: #7a7a72; display: block; font-size: 14px; margin-bottom: 4px; }
+.soon-panel { padding: 46px 22px; text-align: center; color: #8a887e; line-height: 1.7; }
+.soon-panel b { display: block; font-size: 16px; color: #1a1a1a; margin-bottom: 8px; }
+.soon-panel span { display: block; max-width: 520px; margin: 0 auto; font-size: 13px; }
+
+.linkish {
+  background: none; border: none; font-family: inherit; font-size: 12px;
+  color: #185FA5; cursor: pointer; padding: 0; text-decoration: underline;
+}
+
+.toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: #1a1a1a; color: #fff; padding: 11px 22px; border-radius: 8px;
+  font-size: 13px; font-weight: 500; z-index: 300; opacity: 0;
+  transition: opacity 0.25s; pointer-events: none; max-width: 90vw; text-align: center;
+}
+.toast.visible { opacity: 1; }
+
+@media (max-width: 700px) {
+  .row { grid-template-columns: 1fr; }
+  .row-actions { flex-direction: row; align-items: center; }
+}
+</style>
+</head>
+<body>
+
+<div class="page-title-bar">
+  <h1>Text messages</h1>
+  <p>Send targeted texts to crew, see what came back, and check who actually received the last message. Replies arrive on the Twilio line, which still tells senders it is not monitored.</p>
+</div>
+
+<div class="wrap" id="wrap" style="display:none;">
+
+  <div class="tabs" id="tabs">
+    <button class="tab active" data-tab="compose" type="button">Compose</button>
+    <button class="tab" data-tab="inbox" type="button">Inbox</button>
+  </div>
+
+  <!-- ================= COMPOSE ================= -->
+  <div class="panel active" id="panel-compose">
+
+    <div class="card" id="todayCard" style="display:none;">
+      <div class="card-head">
+        <div>
+          <h2>Happening today</h2>
+          <div class="sub" id="todaySub"></div>
+        </div>
+      </div>
+      <div class="card-body" id="todayList"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <h2>Pick an audience</h2>
+          <div class="sub" id="pickerSub">Choose who this message is for. Nothing sends until you confirm it twice.</div>
+        </div>
+        <div class="pills" id="modePills">
+          <button class="pill active" type="button" data-mode="event">One event</button>
+          <button class="pill" type="button" data-mode="roster">Whole roster</button>
+        </div>
+      </div>
+      <div class="card-body pad">
+
+        <div id="eventPickers" class="settings-grid">
+          <div class="field">
+            <label for="reachVenue">Venue</label>
+            <select id="reachVenue" class="wide"></select>
+          </div>
+          <div class="field">
+            <label for="reachEvent">Event</label>
+            <select id="reachEvent" class="wide"></select>
+          </div>
+          <div class="field">
+            <label for="reachRole">Role</label>
+            <select id="reachRole" class="wide"><option value="">All roles</option></select>
+          </div>
+          <div class="field">
+            <label for="reachStand">Stand</label>
+            <select id="reachStand" class="wide"><option value="">All stands</option></select>
+          </div>
+        </div>
+
+        <div id="rosterPickers" class="settings-grid" style="display:none;">
+          <div class="field">
+            <label for="reachHomeVenue">Home venue</label>
+            <select id="reachHomeVenue" class="wide"></select>
+            <div class="hint">Where someone is based, not where they happen to be working.</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="card" id="composeAudienceCard" style="display:none;">
+      <div class="card-head">
+        <div>
+          <h2 id="cmpAudTitle">Who gets this</h2>
+          <div class="sub" id="cmpAudSub"></div>
+        </div>
+        <div class="pills">
+          <button class="btn" type="button" id="reachExportBtn">Export who to call</button>
+        </div>
+      </div>
+      <div class="card-body pad" id="cmpAudBody"></div>
+      <div class="card-body" id="cmpExclusions"></div>
+    </div>
+
+    <div class="card" id="composeCard" style="display:none;">
+      <div class="card-head">
+        <div>
+          <h2>Write the message</h2>
+          <div class="sub" id="cmpLimitsSub">Checking send limits…</div>
+        </div>
+      </div>
+      <div class="card-body pad">
+
+        <div id="cmpNotices"></div>
+
+        <div class="settings-grid" style="margin-bottom:14px;">
+          <div class="field">
+            <label for="cmpTemplate">Start from a standard message</label>
+            <select id="cmpTemplate" class="wide"><option value="">Write it from scratch</option></select>
+            <div class="hint">Fills the box below. Edit it freely — changes here do not alter the stored wording.</div>
+          </div>
+          <div class="field">
+            <label for="cmpType">What kind of message</label>
+            <select id="cmpType" class="wide"></select>
+            <div class="hint">Recorded on every row so the history reads properly later.</div>
+          </div>
+        </div>
+
+        <label for="cmpBody" style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:#8a887e;margin-bottom:5px;">Your message</label>
+        <textarea id="cmpMsg" class="cmp-msg" placeholder="Door time has moved to 5:30. Same stand, same uniform."></textarea>
+        <div class="cmp-counter" id="cmpCounter"><span>&nbsp;</span></div>
+
+        <div class="cmp-preview">
+          <div class="lbl">Exactly what lands on the handset</div>
+          <div class="cmp-bubble" id="cmpPreview"><span class="fixed">Loading the wrapper…</span></div>
+        </div>
+
+        <div class="cmp-actions">
+          <button class="btn" type="button" id="cmpTestBtn" disabled>Test send to me</button>
+          <span id="cmpTestWhoWrap" style="display:none;">
+            <select id="cmpTestWho" class="range" style="max-width:230px;"></select>
+          </span>
+          <span class="spacer"></span>
+          <button class="btn btn-dark btn-big" type="button" id="cmpSendBtn" disabled>Send</button>
+        </div>
+        <div class="cmp-note" id="cmpTestNote"></div>
+        <div class="cmp-note" id="cmpBlockNote"></div>
+
+      </div>
+    </div>
+
+    <div class="card" id="composeConfirmCard" style="display:none;">
+      <div class="card-head">
+        <div>
+          <h2>Confirm before this goes out</h2>
+          <div class="sub">Nothing has been sent yet.</div>
+        </div>
+      </div>
+      <div class="confirm-body" id="cmpConfirmBody"></div>
+    </div>
+
+  </div>
+
+  <!-- ================= INBOX ================= -->
+  <div class="panel" id="panel-inbox">
+
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <h2>Replies</h2>
+          <div class="sub" id="replySub">Loading…</div>
+        </div>
+        <div class="pills" id="replyPills"></div>
+      </div>
+      <div class="card-body" id="replyList"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <h2>Sent history</h2>
+          <div class="sub" id="sentSub">Loading…</div>
+        </div>
+        <div class="pills">
+          <select class="range" id="sentRange">
+            <option value="10">Last 10 days</option>
+            <option value="30">Last 30 days</option>
+            <option value="90">Last 90 days</option>
+            <option value="0">All time</option>
+          </select>
+        </div>
+      </div>
+      <div class="card-body" id="sentList"></div>
+    </div>
+
+    <div class="card" id="templatesCard" style="display:none;">
+      <div class="card-head">
+        <div>
+          <h2>Standard messages</h2>
+          <div class="sub">Admin only. These are the wordings offered on the Compose tab.</div>
+        </div>
+        <div class="pills">
+          <button class="btn" type="button" id="tplAddBtn">Add a message</button>
+        </div>
+      </div>
+      <div class="card-body" id="tplList"></div>
+    </div>
+
+    <div class="card" id="settingsCard" style="display:none;">
+      <div class="card-head">
+        <div>
+          <h2>Send limits</h2>
+          <div class="sub">Admin only. Every change is recorded with who made it.</div>
+        </div>
+      </div>
+      <div class="card-body pad">
+        <div class="settings-grid">
+          <div class="field">
+            <label for="setRoster">Roster sends per day</label>
+            <input type="number" id="setRoster" min="0" max="20">
+            <div class="hint">Blasts to a roster segment rather than one event. Counted across the whole company.</div>
+          </div>
+          <div class="field">
+            <label for="setEvent">Event sends per event, per day</label>
+            <input type="number" id="setEvent" min="0" max="50">
+            <div class="hint">Each event gets its own allowance. Three shows the same night do not share a pool.</div>
+          </div>
+          <div class="field">
+            <label for="setQStart">Send window opens (ET)</label>
+            <input type="number" id="setQStart" min="0" max="23">
+            <div class="hint">Hour of day, 24-hour clock.</div>
+          </div>
+          <div class="field">
+            <label for="setQEnd">Send window closes (ET)</label>
+            <input type="number" id="setQEnd" min="0" max="23">
+            <div class="hint">Nothing sends outside this window.</div>
+          </div>
+        </div>
+        <div class="settings-actions">
+          <input type="text" class="reason" id="setReason" placeholder="Reason (optional)">
+          <button class="btn btn-dark" type="button" id="setSaveBtn">Save limits</button>
+          <button class="btn" type="button" id="setResetBtn">Reset</button>
+        </div>
+        <div class="hint" style="margin-top:10px;">
+          These limits are a guardrail, not a security control. The send function enforces them; this is where the number lives.
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/pc-auth.js"></script>
+<script src="/pc-nav.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var SUPABASE_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
+  var REST = SUPABASE_URL + '/rest/v1/';
+  var FUNCTIONS = SUPABASE_URL + '/functions/v1/';
+
+  var COST_PER_SEGMENT = 0.013;
+  var REPLY_WINDOW_DAYS = 10;
+  var OVERLAP_HOURS = 24;
+
+  var ERROR_NOTES = {
+    '21610': 'Recipient replied STOP. Consent is already switched off automatically.',
+    '21614': 'Not a mobile number. Needs a phone call and a corrected number on the crew card.',
+    '21211': 'Number is not valid. Needs a corrected number on the crew card.',
+    '30007': 'Carrier filtered this as spam. Do not retry — check message wording before sending again.'
+  };
+
+  var state = {
+    user: null,
+    isAdmin: false,
+    replyFilter: 'open',
+    inbound: [],
+    sends: [],
+    names: {},
+    settings: null,
+    activeTab: 'compose'
+  };
+
+  // ==================================================================
+  // Auth-resilient fetch (standard toolkit pattern)
+  // ==================================================================
+  function handleAuthFailure() {
+    try {
+      localStorage.removeItem('sb_access_token');
+      localStorage.removeItem('sb_refresh_token');
+    } catch (e) {}
+    showToast('Session expired. Reloading to sign in again…');
+    setTimeout(function () { window.location.reload(); }, 1800);
+  }
+
+  function checkAuthError(res, text) {
+    if (res.status === 401 || (text && text.indexOf('JWT expired') !== -1)) {
+      var err = new Error('JWT expired');
+      err.authFailed = true;
+      return err;
+    }
+    return null;
+  }
+
+  function authFetch(url, options) {
+    return fetch(url, options).then(function (r) {
+      if (!r.ok) {
+        return r.text().then(function (t) {
+          var ae = checkAuthError(r, t);
+          if (ae) throw ae;
+          throw new Error(t || ('HTTP ' + r.status));
+        });
+      }
+      return r.text().then(function (t) {
+        if (!t) return [];
+        try { return JSON.parse(t); } catch (e) { return []; }
+      });
+    });
+  }
+
+  function jsonHeaders(extra) {
+    var h = Object.assign({}, pcAuth.headers(), { 'Content-Type': 'application/json' });
+    if (extra) Object.assign(h, extra);
+    return h;
+  }
+
+  // Every call into the send function goes through here.
+  function callSendFn(payload) {
+    return authFetch(FUNCTIONS + 'sms-send', {
+      method: 'POST',
+      headers: jsonHeaders(),
+      body: JSON.stringify(payload)
+    });
+  }
+
+  // ==================================================================
+  // Helpers
+  // ==================================================================
+  function esc(s) {
+    var d = document.createElement('div');
+    d.textContent = (s == null ? '' : String(s));
+    return d.innerHTML;
+  }
+
+  function showToast(msg) {
+    var t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('visible');
+    setTimeout(function () { t.classList.remove('visible'); }, 3200);
+  }
+
+  function daysAgoISO(days) {
+    var d = new Date();
+    d.setDate(d.getDate() - days);
+    return d.toISOString();
+  }
+
+  function hoursAgoISO(hours) {
+    var d = new Date();
+    d.setTime(d.getTime() - (hours * 3600 * 1000));
+    return d.toISOString();
+  }
+
+  function fmtWhen(iso) {
+    if (!iso) return '—';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleString('en-US', {
+      month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+    });
+  }
+
+  function fmtAgo(iso) {
+    if (!iso) return 'at some point';
+    var then = new Date(iso).getTime();
+    if (isNaN(then)) return 'at some point';
+    var mins = Math.round((Date.now() - then) / 60000);
+    if (mins < 1) return 'just now';
+    if (mins === 1) return '1 minute ago';
+    if (mins < 60) return mins + ' minutes ago';
+    var hrs = Math.round(mins / 60);
+    if (hrs === 1) return 'an hour ago';
+    if (hrs < 24) return hrs + ' hours ago';
+    return 'yesterday';
+  }
+
+  function fmtPhone(digits) {
+    if (!digits) return 'unknown number';
+    var s = String(digits).replace(/\D/g, '');
+    if (s.length === 11 && s.charAt(0) === '1') s = s.slice(1);
+    if (s.length !== 10) return digits;
+    return '(' + s.slice(0, 3) + ') ' + s.slice(3, 6) + '-' + s.slice(6);
+  }
+
+  function money(n) {
+    return '$' + (Math.round(n * 100) / 100).toFixed(2);
+  }
+
+  function hourLabel(h) {
+    var n = parseInt(h, 10);
+    if (isNaN(n)) return '—';
+    var suffix = n < 12 ? 'am' : 'pm';
+    var display = n % 12;
+    if (display === 0) display = 12;
+    return display + suffix;
+  }
+
+  function personLabel(employeeId, punchId, fallbackDigits) {
+    if (employeeId && state.names[employeeId]) {
+      return esc(state.names[employeeId]) + (punchId ? ' <span style="color:#a3a199;">#' + esc(punchId) + '</span>' : '');
+    }
+    return '<span class="unknown">Unrecognised — ' + esc(fmtPhone(fallbackDigits)) + '</span>';
+  }
+
+  // ==================================================================
+  // Name lookup — resolve employee_id to a display name in one call
+  // ==================================================================
+  function loadNames(ids) {
+    var unique = [];
+    ids.forEach(function (id) {
+      if (id && unique.indexOf(id) === -1 && !state.names[id]) unique.push(id);
+    });
+    if (!unique.length) return Promise.resolve();
+
+    var url = REST + 'employees?select=id,first_name,last_name&id=in.(' + unique.join(',') + ')&limit=500';
+    return authFetch(url, { headers: pcAuth.headers() }).then(function (rows) {
+      (rows || []).forEach(function (r) {
+        state.names[r.id] = ((r.first_name || '') + ' ' + (r.last_name || '')).trim() || 'Unnamed';
+      });
+    });
+  }
+
+  // ==================================================================
+  // INBOX — replies
+  // ==================================================================
+  function loadReplies() {
+    var url = REST + 'sms_inbound_log'
+      + '?select=*'
+      + '&occurred_at=gte.' + encodeURIComponent(daysAgoISO(REPLY_WINDOW_DAYS))
+      + '&order=occurred_at.desc'
+      + '&limit=300';
+
+    return authFetch(url, { headers: pcAuth.headers() }).then(function (rows) {
+      state.inbound = rows || [];
+      return loadNames(state.inbound.map(function (r) { return r.employee_id; }));
+    }).then(function () {
+      renderReplies();
+    }).catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      document.getElementById('replyList').innerHTML =
+        '<div class="empty"><b>Could not load replies</b>' + esc(e.message || 'Unknown error') + '</div>';
+    });
+  }
+
+  function isKeyword(row) {
+    return row.classified_as === 'stop' || row.classified_as === 'start' || row.classified_as === 'help';
+  }
+
+  function replyBuckets() {
+    var open = [], all = [], keywords = [];
+    state.inbound.forEach(function (r) {
+      if (isKeyword(r)) { keywords.push(r); return; }
+      all.push(r);
+      if (!r.handled_at) open.push(r);
+    });
+    return { open: open, all: all, keywords: keywords };
+  }
+
+  function renderReplies() {
+    var b = replyBuckets();
+    var pills = [
+      { key: 'open',     label: 'Needs a look', n: b.open.length },
+      { key: 'all',      label: 'All replies',  n: b.all.length },
+      { key: 'keywords', label: 'STOP / START / HELP', n: b.keywords.length }
+    ];
+
+    document.getElementById('replyPills').innerHTML = pills.map(function (p) {
+      return '<button class="pill' + (state.replyFilter === p.key ? ' active' : '') +
+        '" type="button" data-filter="' + p.key + '">' + esc(p.label) +
+        ' <span class="n">' + p.n + '</span></button>';
+    }).join('');
+
+    document.getElementById('replySub').textContent =
+      'Last ' + REPLY_WINDOW_DAYS + ' days · ' + state.inbound.length +
+      (state.inbound.length === 1 ? ' message received' : ' messages received');
+
+    var rows = b[state.replyFilter] || [];
+    var host = document.getElementById('replyList');
+
+    if (!rows.length) {
+      host.innerHTML = '<div class="empty"><b>Nothing here</b>' +
+        (state.replyFilter === 'open'
+          ? 'No unanswered replies in the last ' + REPLY_WINDOW_DAYS + ' days. Anything new will show up here.'
+          : 'No messages in this view for the last ' + REPLY_WINDOW_DAYS + ' days.') +
+        '</div>';
+      return;
+    }
+
+    host.innerHTML = rows.map(function (r) {
+      var cls = r.classified_as || 'null';
+      var tagLabel = r.classified_as ? r.classified_as.toUpperCase() : 'UNCLASSIFIED';
+      var handled = !!r.handled_at;
+
+      return '<div class="row">' +
+        '<div class="row-when">' + esc(fmtWhen(r.occurred_at)) + '</div>' +
+        '<div>' +
+          '<div class="row-who">' + personLabel(r.employee_id, r.punch_id, r.from_digits) + '</div>' +
+          '<div class="row-body">' + esc(r.body || '(no text — media only)') + '</div>' +
+          '<div class="row-meta">' +
+            '<span class="tag tag-' + esc(cls) + '">' + esc(tagLabel) + '</span> ' +
+            esc(fmtPhone(r.from_digits)) +
+            (r.num_media ? ' · ' + r.num_media + ' attachment(s) not shown' : '') +
+            (handled ? ' · handled by ' + esc(r.handled_by || 'someone') + ' ' + esc(fmtWhen(r.handled_at)) : '') +
+          '</div>' +
+        '</div>' +
+        '<div class="row-actions">' +
+          (handled
+            ? '<span class="tag tag-handled">Handled</span>'
+            : '<button class="btn" type="button" data-handle="' + esc(r.id) + '">Mark handled</button>') +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  function markHandled(id) {
+    var who = (state.user && (state.user.display_name || state.user.email)) || 'Unknown';
+    var url = REST + 'sms_inbound_log?id=eq.' + encodeURIComponent(id);
+
+    authFetch(url, {
+      method: 'PATCH',
+      headers: jsonHeaders({ 'Prefer': 'return=representation' }),
+      body: JSON.stringify({ handled_at: new Date().toISOString(), handled_by: who })
+    }).then(function (rows) {
+      if (!rows || !rows.length) {
+        showToast('Nothing was updated — the row may have been changed elsewhere.');
+        return;
+      }
+      var updated = rows[0];
+      for (var i = 0; i < state.inbound.length; i++) {
+        if (state.inbound[i].id === updated.id) {
+          state.inbound[i] = updated;
+          break;
+        }
+      }
+      renderReplies();
+      showToast('Marked handled.');
+    }).catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      showToast('Could not mark handled: ' + (e.message || 'unknown error'));
+    });
+  }
+
+  // ==================================================================
+  // INBOX — sent history
+  // ==================================================================
+  function loadSends() {
+    var days = parseInt(document.getElementById('sentRange').value, 10);
+    var url = REST + 'sms_send_log?select=*&order=queued_at.desc&limit=500';
+    if (days > 0) url += '&queued_at=gte.' + encodeURIComponent(daysAgoISO(days));
+
+    return authFetch(url, { headers: pcAuth.headers() }).then(function (rows) {
+      state.sends = rows || [];
+      return loadNames(state.sends.map(function (r) { return r.employee_id; }));
+    }).then(function () {
+      renderSends();
+    }).catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      document.getElementById('sentList').innerHTML =
+        '<div class="empty"><b>Could not load sent history</b>' + esc(e.message || 'Unknown error') + '</div>';
+    });
+  }
+
+  // Rows written before batch_id existed are grouped by minute + body,
+  // which is honest for history but is never used for the daily cap.
+  function batchKey(r) {
+    if (r.batch_id) return r.batch_id;
+    var stamp = (r.queued_at || '').slice(0, 16);
+    return 'legacy:' + r.message_type + ':' + stamp + ':' + (r.body || '').slice(0, 40);
+  }
+
+  function groupSends() {
+    var map = {};
+    var order = [];
+    state.sends.forEach(function (r) {
+      var k = batchKey(r);
+      if (!map[k]) {
+        map[k] = {
+          key: k,
+          legacy: !r.batch_id,
+          messageType: r.message_type,
+          body: r.body,
+          sentBy: r.sent_by,
+          queuedAt: r.queued_at,
+          targetCriteria: r.target_criteria,
+          rows: []
+        };
+        order.push(k);
+      }
+      map[k].rows.push(r);
+      if (r.queued_at && r.queued_at < map[k].queuedAt) map[k].queuedAt = r.queued_at;
+    });
+    return order.map(function (k) { return map[k]; });
+  }
+
+  var TYPE_LABEL = {
+    shift_digest: 'Shift confirmations',
+    manual_alert: 'Manual alert',
+    availability_reminder: 'Availability reminder',
+    shift_change: 'Shift change'
+  };
+
+  function typeLabel(t) {
+    return TYPE_LABEL[t] || String(t || 'Message');
+  }
+
+  function renderSends() {
+    var batches = groupSends();
+    var host = document.getElementById('sentList');
+
+    var totalSegments = 0;
+    state.sends.forEach(function (r) {
+      if (r.status !== 'dry_run') totalSegments += (r.segments || 0);
+    });
+
+    document.getElementById('sentSub').textContent =
+      batches.length + (batches.length === 1 ? ' send · ' : ' sends · ') +
+      state.sends.length + ' messages · ' + money(totalSegments * COST_PER_SEGMENT) + ' estimated';
+
+    if (!batches.length) {
+      host.innerHTML = '<div class="empty"><b>Nothing sent in this period</b>Pick a wider range, or send something from the Compose tab.</div>';
+      return;
+    }
+
+    host.innerHTML = batches.map(function (b) {
+      var counts = { delivered: 0, sent: 0, queued: 0, failed: 0, undelivered: 0, dry_run: 0 };
+      var segs = 0;
+      b.rows.forEach(function (r) {
+        if (counts[r.status] !== undefined) counts[r.status]++;
+        if (r.status !== 'dry_run') segs += (r.segments || 0);
+      });
+
+      var byLabel = b.sentBy
+        ? '<span class="by">by</span> ' + esc(b.sentBy)
+        : '<span class="robot">sent automatically</span>';
+
+      var stats = [
+        '<span><b>' + b.rows.length + '</b> recipients</span>',
+        '<span><b>' + counts.delivered + '</b> delivered</span>'
+      ];
+      if (counts.sent) stats.push('<span>' + counts.sent + ' sent, awaiting receipt</span>');
+      if (counts.queued) stats.push('<span>' + counts.queued + ' queued</span>');
+      if (counts.failed + counts.undelivered) {
+        stats.push('<span style="color:#B91C1C;"><b>' + (counts.failed + counts.undelivered) + '</b> failed</span>');
+      }
+      if (counts.dry_run) stats.push('<span style="color:#92400E;">' + counts.dry_run + ' dry run</span>');
+      stats.push('<span>' + segs + ' segments · ' + money(segs * COST_PER_SEGMENT) + '</span>');
+
+      var errCodes = {};
+      b.rows.forEach(function (r) { if (r.error_code) errCodes[r.error_code] = true; });
+      var errHtml = Object.keys(errCodes).map(function (code) {
+        return '<div class="errnote"><b>' + esc(code) + '</b> — ' +
+          esc(ERROR_NOTES[code] || 'Unrecognised Twilio error code.') + '</div>';
+      }).join('');
+
+      var recips = b.rows.map(function (r) {
+        return '<div class="recip">' +
+          '<span>' + personLabel(r.employee_id, r.punch_id, r.phone_digits) + '</span>' +
+          '<span class="st st-' + esc(r.status) + '">' + esc(r.status.replace('_', ' ')) +
+            (r.error_code ? ' (' + esc(r.error_code) + ')' : '') + '</span>' +
+        '</div>';
+      }).join('');
+
+      var crit = b.targetCriteria
+        ? '<div class="row-meta" style="margin-bottom:8px;">Targeted: ' +
+            esc(JSON.stringify(b.targetCriteria)) + '</div>'
+        : '';
+
+      var legacyNote = b.legacy
+        ? '<div class="errnote">Grouped by timestamp — this send predates batch tracking.</div>'
+        : '';
+
+      return '<div class="batch" data-batch="' + esc(b.key) + '">' +
+        '<div class="batch-head" data-toggle="' + esc(b.key) + '">' +
+          '<span class="batch-caret">▶</span>' +
+          '<div class="batch-main">' +
+            '<div class="batch-title">' + esc(fmtWhen(b.queuedAt)) + ' · ' +
+              esc(typeLabel(b.messageType)) + ' ' + byLabel + '</div>' +
+            '<div class="batch-msg">' + esc(b.body) + '</div>' +
+            '<div class="batch-stats">' + stats.join('') + '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="batch-detail">' + crit + recips + errHtml + legacyNote + '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  // ==================================================================
+  // Settings
+  // ==================================================================
+  function loadSettings() {
+    return authFetch(REST + 'sms_settings?id=eq.1&select=*&limit=1', { headers: pcAuth.headers() })
+      .then(function (rows) {
+        state.settings = (rows && rows[0]) || null;
+        fillSettings();
+      })
+      .catch(function (e) {
+        if (e && e.authFailed) { handleAuthFailure(); return; }
+      });
+  }
+
+  function fillSettings() {
+    if (!state.settings) return;
+    document.getElementById('setRoster').value = state.settings.roster_sends_per_day;
+    document.getElementById('setEvent').value = state.settings.event_sends_per_day;
+    document.getElementById('setQStart').value = state.settings.quiet_hours_start_et;
+    document.getElementById('setQEnd').value = state.settings.quiet_hours_end_et;
+    document.getElementById('setReason').value = '';
+  }
+
+  var SETTING_FIELDS = [
+    { col: 'roster_sends_per_day',  el: 'setRoster', min: 0, max: 20 },
+    { col: 'event_sends_per_day',   el: 'setEvent',  min: 0, max: 50 },
+    { col: 'quiet_hours_start_et',  el: 'setQStart', min: 0, max: 23 },
+    { col: 'quiet_hours_end_et',    el: 'setQEnd',   min: 0, max: 23 }
+  ];
+
+  function saveSettings() {
+    if (!state.settings) return;
+
+    var patch = {};
+    var changes = [];
+    var bad = null;
+
+    SETTING_FIELDS.forEach(function (f) {
+      var raw = document.getElementById(f.el).value;
+      var val = parseInt(raw, 10);
+      if (isNaN(val) || val < f.min || val > f.max) {
+        if (!bad) bad = f.col + ' must be between ' + f.min + ' and ' + f.max + '.';
+        return;
+      }
+      if (val !== state.settings[f.col]) {
+        patch[f.col] = val;
+        changes.push({
+          field: f.col,
+          old_value: String(state.settings[f.col]),
+          new_value: String(val)
+        });
+      }
+    });
+
+    if (bad) { showToast(bad); return; }
+    if (!changes.length) { showToast('Nothing changed.'); return; }
+
+    var who = (state.user && (state.user.display_name || state.user.email)) || 'Unknown';
+    var reason = document.getElementById('setReason').value.trim();
+    patch.updated_at = new Date().toISOString();
+    patch.updated_by = who;
+
+    var btn = document.getElementById('setSaveBtn');
+    btn.disabled = true;
+
+    authFetch(REST + 'sms_settings?id=eq.1', {
+      method: 'PATCH',
+      headers: jsonHeaders({ 'Prefer': 'return=representation' }),
+      body: JSON.stringify(patch)
+    }).then(function (rows) {
+      if (!rows || !rows.length) throw new Error('Update was refused — admin access is required.');
+      state.settings = rows[0];
+
+      var logRows = changes.map(function (c) {
+        return {
+          field: c.field,
+          old_value: c.old_value,
+          new_value: c.new_value,
+          changed_by: who,
+          reason: reason || null
+        };
+      });
+
+      return authFetch(REST + 'sms_settings_log', {
+        method: 'POST',
+        headers: jsonHeaders({ 'Prefer': 'return=representation' }),
+        body: JSON.stringify(logRows)
+      });
+    }).then(function () {
+      fillSettings();
+      showToast('Limits saved.');
+      // The composer reads its cap from describe(), not from this row, so
+      // refresh it rather than leaving a stale ceiling on screen.
+      refreshDescribe(true);
+    }).catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      showToast('Could not save: ' + (e.message || 'unknown error'));
+      loadSettings();
+    }).then(function () {
+      btn.disabled = false;
+    });
+  }
+
+  // ==================================================================
+  // REACH — audience resolution (shared with Compose)
+  // ==================================================================
+
+  // How far back the event picker looks. Recent shows stay selectable because a
+  // message often follows an event, and because they are the only thing to test
+  // against when nothing is on the books.
+  var EVENT_LOOKBACK_DAYS = 14;
+
+  // Reasons a person will not receive a message, in the order they are shown.
+  // 'unmatched' is last and loudest -- it is the only one that indicates a
+  // problem rather than a normal state.
+  var REASONS = [
+    { key: 'not_consented', label: 'Never consented',   color: '#B45309',
+      why: 'Has a number on file but has never agreed to texts. Send them the consent card.' },
+    { key: 'opted_out',     label: 'Replied STOP',      color: '#B91C1C',
+      why: 'Opted out. Only they can reverse this, by texting START.' },
+    { key: 'no_phone',      label: 'No phone on file',  color: '#8a887e',
+      why: 'No number to text. Needs one adding on the crew card.' },
+    { key: 'bad_phone',     label: 'Unusable number',   color: '#8a887e',
+      why: 'The number on file is not a valid US mobile.' },
+    { key: 'deactivated',   label: 'Deactivated',       color: '#a3a199',
+      why: 'On the schedule but not an active employee. Correctly excluded.' },
+    { key: 'no_crew_record',label: 'No crew record',    color: '#7C2D12',
+      why: 'A name on the schedule that matches nobody in the crew list.' }
+  ];
+
+  var reach = {
+    mode: 'event',
+    events: [],
+    rows: [],
+    lastLabel: ''
+  };
+
+  function reasonFor(r) {
+    if (r.match_status === 'unmatched') return 'no_crew_record';
+    if (r.match_status === 'inactive') return 'deactivated';
+    var s = String(r.state || '').toLowerCase();
+    if (s.indexOf('opt') !== -1 && s.indexOf('out') !== -1) return 'opted_out';
+    if (s.indexOf('no_phone') !== -1 || s.indexOf('missing') !== -1) return 'no_phone';
+    if (s.indexOf('invalid') !== -1 || s.indexOf('bad') !== -1) return 'bad_phone';
+    return 'not_consented';
+  }
+
+  function rpcAudience(params) {
+    return authFetch(REST + 'rpc/pc_sms_audience', {
+      method: 'POST',
+      headers: jsonHeaders(),
+      body: JSON.stringify(params)
+    });
+  }
+
+  function sendableRows() {
+    return reach.rows.filter(function (r) { return r.is_sendable && r.employee_id; });
+  }
+
+  function selectedEventId() {
+    return reach.mode === 'event' ? document.getElementById('reachEvent').value : '';
+  }
+
+  function selectedEvent() {
+    var id = selectedEventId();
+    if (!id) return null;
+    for (var i = 0; i < reach.events.length; i++) {
+      if (reach.events[i].id === id) return reach.events[i];
+    }
+    return null;
+  }
+
+  // --- Event list -----------------------------------------------------
+
+  function loadEvents() {
+    var since = new Date();
+    since.setDate(since.getDate() - EVENT_LOOKBACK_DAYS);
+    var sinceStr = since.toISOString().slice(0, 10);
+
+    var url = REST + 'events'
+      + '?select=id,venue,event_name,event_date,show_time'
+      + '&cancelled_at=is.null&deleted_at=is.null'
+      + '&event_date=gte.' + sinceStr
+      + '&order=event_date.asc'
+      + '&limit=400';
+
+    return authFetch(url, { headers: pcAuth.headers() }).then(function (rows) {
+      reach.events = rows || [];
+      buildVenueOptions();
+      buildTodayStrip();
+    }).catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      showToast('Could not load events: ' + (e.message || 'unknown error'));
+    });
+  }
+
+  function todayStr() {
+    var d = new Date();
+    return d.getFullYear() + '-' +
+      String(d.getMonth() + 1).padStart(2, '0') + '-' +
+      String(d.getDate()).padStart(2, '0');
+  }
+
+  function venueList() {
+    var seen = {};
+    var out = [];
+    reach.events.forEach(function (e) {
+      if (e.venue && !seen[e.venue]) { seen[e.venue] = true; out.push(e.venue); }
+    });
+    out.sort();
+    return out;
+  }
+
+  function buildVenueOptions() {
+    var venues = venueList();
+    var today = todayStr();
+
+    var vSel = document.getElementById('reachVenue');
+    vSel.innerHTML = '<option value="">Choose a venue…</option>' +
+      venues.map(function (v) { return '<option value="' + esc(v) + '">' + esc(v) + '</option>'; }).join('');
+
+    var hSel = document.getElementById('reachHomeVenue');
+    hSel.innerHTML = '<option value="">Everyone, all venues</option>' +
+      venues.map(function (v) { return '<option value="' + esc(v) + '">' + esc(v) + '</option>'; }).join('');
+
+    // Default to a venue with something on today, if there is one.
+    for (var i = 0; i < reach.events.length; i++) {
+      if (reach.events[i].event_date === today) {
+        vSel.value = reach.events[i].venue;
+        break;
+      }
+    }
+    buildEventOptions();
+  }
+
+  function buildEventOptions() {
+    var venue = document.getElementById('reachVenue').value;
+    var sel = document.getElementById('reachEvent');
+    if (!venue) {
+      sel.innerHTML = '<option value="">Pick a venue first</option>';
+      sel.disabled = true;
+      return;
+    }
+    sel.disabled = false;
+
+    var today = todayStr();
+    var mine = reach.events.filter(function (e) { return e.venue === venue; });
+
+    var upcoming = mine.filter(function (e) { return e.event_date >= today; });
+    var past = mine.filter(function (e) { return e.event_date < today; });
+    // Last two that already happened, nearest first.
+    past.sort(function (a, b) { return a.event_date < b.event_date ? 1 : -1; });
+    past = past.slice(0, 2);
+
+    var opts = ['<option value="">Choose an event…</option>'];
+    upcoming.forEach(function (e) {
+      opts.push('<option value="' + esc(e.id) + '">' +
+        esc(e.event_name) + ' \u00b7 ' + esc(fmtDay(e.event_date)) +
+        (e.event_date === today ? ' (today)' : '') + '</option>');
+    });
+    past.forEach(function (e) {
+      opts.push('<option value="' + esc(e.id) + '">' +
+        esc(e.event_name) + ' \u00b7 ' + esc(fmtDay(e.event_date)) + ' (past)</option>');
+    });
+    sel.innerHTML = opts.join('');
+  }
+
+  function fmtDay(dateStr) {
+    if (!dateStr) return '';
+    var p = String(dateStr).split('-');
+    if (p.length !== 3) return dateStr;
+    // Constructed as local parts on purpose. new Date('2026-08-09') parses as
+    // UTC midnight and renders a day early in Eastern -- the same bug already
+    // logged against the Crew page's date columns.
+    var d = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10));
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+
+  // --- Today strip ----------------------------------------------------
+
+  function buildTodayStrip() {
+    var today = todayStr();
+    var list = reach.events.filter(function (e) { return e.event_date === today; });
+    if (!list.length) return;
+
+    document.getElementById('todayCard').style.display = 'block';
+    document.getElementById('todaySub').textContent =
+      list.length + (list.length === 1 ? ' event' : ' events') + ' \u00b7 tap one to see its reach';
+
+    document.getElementById('todayList').innerHTML = list.map(function (e) {
+      return '<div class="today-row" data-event="' + esc(e.id) + '" data-venue="' + esc(e.venue) + '">' +
+        '<div>' +
+          '<div class="today-name">' + esc(e.event_name) + '</div>' +
+          '<div class="today-meta">' + esc(e.venue) + '</div>' +
+        '</div>' +
+        '<div class="today-reach" data-reachfor="' + esc(e.id) + '">\u2014</div>' +
+      '</div>';
+    }).join('');
+
+    // Fill each row's reach one at a time rather than in parallel, so a busy
+    // day cannot fire eight simultaneous queries.
+    var i = 0;
+    function next() {
+      if (i >= list.length) return;
+      var ev = list[i];
+      i = i + 1;
+      rpcAudience({ p_event_id: ev.id }).then(function (rows) {
+        var send = (rows || []).filter(function (r) { return r.is_sendable; }).length;
+        var cell = document.querySelector('[data-reachfor="' + ev.id + '"]');
+        if (cell) cell.textContent = send + ' of ' + (rows || []).length;
+      }).catch(function () {
+        var cell = document.querySelector('[data-reachfor="' + ev.id + '"]');
+        if (cell) cell.textContent = '?';
+      }).then(next);
+    }
+    next();
+  }
+
+  // --- Run + render ---------------------------------------------------
+
+  function runReach() {
+    var params = {};
+    var label = '';
+
+    if (reach.mode === 'event') {
+      var eventId = document.getElementById('reachEvent').value;
+      if (!eventId) {
+        reach.rows = [];
+        resetCompose();
+        return;
+      }
+      params.p_event_id = eventId;
+      var role = document.getElementById('reachRole').value;
+      var stand = document.getElementById('reachStand').value;
+      if (role) params.p_role = role;
+      if (stand) params.p_stand = stand;
+
+      var ev = selectedEvent();
+      label = ev ? (ev.venue + ' \u2014 ' + ev.event_name + ' \u00b7 ' + fmtDay(ev.event_date)) : 'Event';
+      if (role) label += ' \u00b7 ' + role;
+      if (stand) label += ' \u00b7 ' + stand;
+    } else {
+      var hv = document.getElementById('reachHomeVenue').value;
+      if (hv) params.p_home_venue = hv;
+      label = hv ? ('Roster \u2014 home venue ' + hv) : 'Roster \u2014 everyone';
+    }
+
+    reach.lastLabel = label;
+    setComposeBusy('Working out who this reaches…');
+
+    rpcAudience(params).then(function (rows) {
+      reach.rows = rows || [];
+      if (reach.mode === 'event') fillRoleStandOptions();
+      onAudienceResolved();
+      renderExclusions();
+    }).catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      reach.rows = [];
+      resetCompose();
+      showToast('Could not work out the audience.');
+    });
+  }
+
+  // Role and stand choices come from the placements actually on this event, so
+  // the pickers never offer a combination that resolves to nobody.
+  function fillRoleStandOptions() {
+    var roleSel = document.getElementById('reachRole');
+    var standSel = document.getElementById('reachStand');
+    var keepRole = roleSel.value;
+    var keepStand = standSel.value;
+
+    // Only rebuild from an unfiltered result, or the options collapse to the
+    // single value already selected.
+    if (keepRole || keepStand) return;
+
+    var roles = {}, stands = {};
+    reach.rows.forEach(function (r) {
+      if (r.assign_role) roles[r.assign_role] = (roles[r.assign_role] || 0) + 1;
+      if (r.assign_stand) stands[r.assign_stand] = (stands[r.assign_stand] || 0) + 1;
+    });
+
+    roleSel.innerHTML = '<option value="">All roles</option>' +
+      Object.keys(roles).sort().map(function (k) {
+        return '<option value="' + esc(k) + '">' + esc(k) + ' (' + roles[k] + ')</option>';
+      }).join('');
+
+    standSel.innerHTML = '<option value="">All stands</option>' +
+      Object.keys(stands).sort().map(function (k) {
+        return '<option value="' + esc(k) + '">' + esc(k) + ' (' + stands[k] + ')</option>';
+      }).join('');
+  }
+
+  // The audience hero lives in onAudienceResolved. This renders only the part
+  // that used to be the Reach tab: who is excluded and why, collapsed by
+  // default so the common case is not a wall of names.
+  function renderExclusions() {
+    var host = document.getElementById('cmpExclusions');
+    var exportBtn = document.getElementById('reachExportBtn');
+    var rows = reach.rows;
+    var missing = rows.filter(function (r) { return !r.is_sendable; });
+
+    if (!rows.length || !missing.length) {
+      host.innerHTML = '';
+      exportBtn.style.display = 'none';
+      return;
+    }
+    exportBtn.style.display = 'inline-block';
+
+    var groups = {};
+    missing.forEach(function (r) {
+      var k = reasonFor(r);
+      if (!groups[k]) groups[k] = [];
+      groups[k].push(r);
+    });
+
+    var buckets = REASONS.map(function (reason) {
+      var people = groups[reason.key];
+      if (!people || !people.length) return '';
+      people.sort(function (a, b) {
+        return String(a.full_name || '') < String(b.full_name || '') ? -1 : 1;
+      });
+
+      return '<div class="bucket" data-bucket="' + esc(reason.key) + '">' +
+        '<div class="bucket-head" data-bucket-toggle="' + esc(reason.key) + '">' +
+          '<div>' +
+            '<div class="bucket-name">' +
+              '<span class="dot" style="background:' + reason.color + '"></span>' +
+              esc(reason.label) +
+            '</div>' +
+            '<div class="bucket-why">' + esc(reason.why) + '</div>' +
+          '</div>' +
+          '<div class="bucket-count">' + people.length + '</div>' +
+        '</div>' +
+        '<div class="bucket-list">' +
+          people.map(function (p) {
+            var meta = [];
+            if (p.punch_id) meta.push('#' + p.punch_id);
+            if (p.assign_role) meta.push(p.assign_role);
+            if (p.assign_stand) meta.push(p.assign_stand);
+            if (p.phone_last4) meta.push('\u2022\u2022\u2022' + p.phone_last4);
+            return '<div class="bucket-person">' +
+              '<span>' + esc(p.full_name || p.source_name || 'Unnamed') + '</span>' +
+              '<span class="meta">' + esc(meta.join(' \u00b7 ')) + '</span>' +
+            '</div>';
+          }).join('') +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    host.innerHTML =
+      '<div class="bucket-head" id="cmpExclToggle" style="border-top:1px solid #f0efea;">' +
+        '<div class="bucket-name">' + missing.length +
+          (missing.length === 1 ? ' person will not get this' : ' people will not get this') +
+        '</div>' +
+        '<div class="bucket-count" id="cmpExclCaret">\u25b6</div>' +
+      '</div>' +
+      '<div id="cmpExclBody" style="display:none;">' + buckets + '</div>';
+  }
+
+  // --- Export ---------------------------------------------------------
+
+  function exportUnreachable() {
+    var rows = reach.rows.filter(function (r) { return !r.is_sendable; });
+    if (!rows.length) { showToast('Everyone can receive a text — nothing to export.'); return; }
+
+    var labelFor = {};
+    REASONS.forEach(function (x) { labelFor[x.key] = x.label; });
+
+    var lines = ['Name,Punch ID,Reason,Role,Stand,Phone last 4'];
+    rows.forEach(function (r) {
+      var cells = [
+        r.full_name || r.source_name || '',
+        r.punch_id || '',
+        labelFor[reasonFor(r)] || reasonFor(r),
+        r.assign_role || '',
+        r.assign_stand || '',
+        r.phone_last4 || ''
+      ];
+      lines.push(cells.map(function (c) {
+        return '"' + String(c).replace(/"/g, '""') + '"';
+      }).join(','));
+    });
+
+    var blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'who-to-call-' + todayStr() + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast(rows.length + ' people exported.');
+  }
+
+  function setReachMode(mode) {
+    reach.mode = mode;
+    var pills = document.querySelectorAll('#modePills .pill');
+    for (var i = 0; i < pills.length; i++) {
+      pills[i].classList.toggle('active', pills[i].getAttribute('data-mode') === mode);
+    }
+    document.getElementById('eventPickers').style.display = (mode === 'event') ? 'grid' : 'none';
+    document.getElementById('rosterPickers').style.display = (mode === 'roster') ? 'grid' : 'none';
+    reach.rows = [];
+    resetCompose();
+    if (mode === 'roster') runReach();
+  }
+
+  function wireReach() {
+    document.getElementById('modePills').addEventListener('click', function (e) {
+      var p = e.target.closest('.pill');
+      if (!p) return;
+      setReachMode(p.getAttribute('data-mode'));
+    });
+
+    document.getElementById('reachVenue').addEventListener('change', function () {
+      buildEventOptions();
+      reach.rows = [];
+      resetCompose();
+    });
+
+    document.getElementById('reachEvent').addEventListener('change', function () {
+      document.getElementById('reachRole').value = '';
+      document.getElementById('reachStand').value = '';
+      runReach();
+    });
+
+    document.getElementById('reachRole').addEventListener('change', runReach);
+    document.getElementById('reachStand').addEventListener('change', runReach);
+    document.getElementById('reachHomeVenue').addEventListener('change', runReach);
+    document.getElementById('reachExportBtn').addEventListener('click', exportUnreachable);
+
+    document.getElementById('cmpExclusions').addEventListener('click', function (e) {
+      var top = e.target.closest('#cmpExclToggle');
+      if (top) {
+        var body = document.getElementById('cmpExclBody');
+        var caret = document.getElementById('cmpExclCaret');
+        var open = body.style.display !== 'none';
+        body.style.display = open ? 'none' : 'block';
+        if (caret) caret.innerHTML = open ? '\u25b6' : '\u25bc';
+        return;
+      }
+      var h = e.target.closest('[data-bucket-toggle]');
+      if (!h) return;
+      h.parentNode.classList.toggle('open');
+    });
+
+    document.getElementById('todayList').addEventListener('click', function (e) {
+      var row = e.target.closest('[data-event]');
+      if (!row) return;
+      setReachMode('event');
+      document.getElementById('reachVenue').value = row.getAttribute('data-venue');
+      buildEventOptions();
+      document.getElementById('reachEvent').value = row.getAttribute('data-event');
+      document.getElementById('reachRole').value = '';
+      document.getElementById('reachStand').value = '';
+      runReach();
+    });
+  }
+
+  // ==================================================================
+  // COMPOSE
+  // ==================================================================
+
+  var compose = {
+    desc: null,          // last describe() response
+    descKey: '',         // scope + event the description was fetched for
+    descLoading: false,
+    overlap: [],         // batches inside OVERLAP_HOURS touching this audience
+    overlapLoading: false,
+    testTarget: null,    // { id: uuid, name: string }
+    testResolved: false,
+    testArmed: false,
+    rosterCache: null,   // full roster audience, fetched once, for self-match
+    confirmOpen: false,
+    sending: false,
+    templates: [],
+    appliedText: null   // what a template produced, to detect an untouched box
+  };
+
+  // ---- Standard messages (templates) ---------------------------------
+
+  // Placeholders are filled from the selected event at the moment a template is
+  // applied, so the box always holds the literal text that will ship. There is
+  // no substitution at send time and therefore no way for a token to survive
+  // into a real message unnoticed -- canSend() blocks on any that remain.
+  var TOKENS = ['venue', 'event', 'date'];
+
+  function tokenValues() {
+    var ev = selectedEvent();
+    if (!ev) return null;
+    return {
+      venue: ev.venue || '',
+      event: ev.event_name || '',
+      date: fmtDay(ev.event_date)
+    };
+  }
+
+  function fillTokens(text) {
+    var vals = tokenValues();
+    if (!vals) return text;
+    var out = String(text == null ? '' : text);
+    TOKENS.forEach(function (t) {
+      if (vals[t]) out = out.split('{' + t + '}').join(vals[t]);
+    });
+    return out;
+  }
+
+  function unresolvedTokens(text) {
+    var found = [];
+    TOKENS.forEach(function (t) {
+      if (String(text).indexOf('{' + t + '}') !== -1) found.push('{' + t + '}');
+    });
+    return found;
+  }
+
+  function loadTemplates() {
+    var url = REST + 'sms_templates'
+      + '?select=id,label,message_type,body,sort_order,is_active'
+      + '&order=sort_order.asc'
+      + '&limit=100';
+
+    return authFetch(url, { headers: pcAuth.headers() }).then(function (rows) {
+      compose.templates = rows || [];
+      buildTemplateOptions();
+      if (state.isAdmin) renderTemplateEditor();
+    }).catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      compose.templates = [];
+      buildTemplateOptions();
+    });
+  }
+
+  function buildTemplateOptions() {
+    var sel = document.getElementById('cmpTemplate');
+    var keep = sel.value;
+    var active = compose.templates.filter(function (t) { return t.is_active; });
+    sel.innerHTML = '<option value="">Write it from scratch</option>' +
+      active.map(function (t) {
+        return '<option value="' + esc(t.id) + '">' + esc(t.label) + '</option>';
+      }).join('');
+    if (keep) sel.value = keep;
+  }
+
+  function templateById(id) {
+    for (var i = 0; i < compose.templates.length; i++) {
+      if (compose.templates[i].id === id) return compose.templates[i];
+    }
+    return null;
+  }
+
+  function applyTemplate() {
+    var id = document.getElementById('cmpTemplate').value;
+    var box = document.getElementById('cmpMsg');
+
+    if (!id) { compose.appliedText = null; renderMessageState(); return; }
+
+    var t = templateById(id);
+    if (!t) return;
+
+    // Only overwrite an empty box, or one still holding an untouched template.
+    var current = box.value;
+    var untouched = (current === '' || current === compose.appliedText);
+    if (!untouched) {
+      var keep = window.confirm(
+        'Replace what you have typed with the standard "' + t.label + '" wording?');
+      if (!keep) { document.getElementById('cmpTemplate').value = ''; return; }
+    }
+
+    var filled = fillTokens(t.body);
+    box.value = filled;
+    compose.appliedText = filled;
+
+    var typeSel = document.getElementById('cmpType');
+    var opts = typeSel.options;
+    for (var i = 0; i < opts.length; i++) {
+      if (opts[i].value === t.message_type) { typeSel.value = t.message_type; break; }
+    }
+    renderMessageState();
+  }
+
+  // If the event changes while an untouched template is in the box, refill it
+  // so the venue name follows the selection. An edited message is left alone.
+  function refreshAppliedTemplate() {
+    if (!compose.appliedText) return;
+    var box = document.getElementById('cmpMsg');
+    if (box.value !== compose.appliedText) return;
+    var id = document.getElementById('cmpTemplate').value;
+    var t = templateById(id);
+    if (!t) return;
+    var filled = fillTokens(t.body);
+    box.value = filled;
+    compose.appliedText = filled;
+  }
+
+  // ---- GSM-7 / segment counting -------------------------------------
+  // Advisory only. sms-send counts again and is the authority; this exists so
+  // the countdown on screen matches what the sender is about to spend.
+  var GSM_BASIC = "@\u00a3$\u00a5\u00e8\u00e9\u00f9\u00ec\u00f2\u00c7\n\u00d8\u00f8\r\u00c5\u00e5\u0394_\u03a6\u0393\u039b\u03a9\u03a0\u03a8\u03a3\u0398\u039e\u00c6\u00e6\u00df\u00c9 !\"#\u00a4%&'()*+,-./0123456789:;<=>?\u00a1ABCDEFGHIJKLMNOPQRSTUVWXYZ\u00c4\u00d6\u00d1\u00dc\u00a7\u00bfabcdefghijklmnopqrstuvwxyz\u00e4\u00f6\u00f1\u00fc\u00e0";
+  var GSM_EXT = "^{}\\[~]|\u20ac";
+
+  function gsmUnits(s) {
+    var n = 0;
+    for (var i = 0; i < s.length; i++) {
+      var c = s.charAt(i);
+      if (GSM_BASIC.indexOf(c) !== -1) { n += 1; continue; }
+      if (GSM_EXT.indexOf(c) !== -1) { n += 2; continue; }
+      return -1;
+    }
+    return n;
+  }
+
+  function countSegments(s) {
+    var g = gsmUnits(s);
+    if (g >= 0) {
+      if (g <= 160) return { segments: g === 0 ? 0 : 1, encoding: 'GSM-7', units: g, per: 160 };
+      return { segments: Math.ceil(g / 153), encoding: 'GSM-7', units: g, per: 153 };
+    }
+    var u = s.length;
+    if (u <= 70) return { segments: u === 0 ? 0 : 1, encoding: 'UCS-2', units: u, per: 70 };
+    return { segments: Math.ceil(u / 67), encoding: 'UCS-2', units: u, per: 67 };
+  }
+
+  // Mirrors the substitutions sms-send makes so the preview is the real body.
+  // If sanitize() there ever changes, this must change with it.
+  var SANITIZE_MAP = [
+    [/[\u2018\u2019\u201A\u201B]/g, "'"],
+    [/[\u201C\u201D\u201E\u201F]/g, '"'],
+    [/[\u2010\u2011\u2012\u2013\u2014\u2015]/g, '-'],
+    [/\u2026/g, '...'],
+    [/[\u00A0\u2007\u202F\u2009\u200A]/g, ' '],
+    [/[\u2022\u00B7]/g, '-'],
+    [/\u2122/g, 'TM'],
+    [/\u00AE/g, '(R)'],
+    [/\u00A9/g, '(C)']
+  ];
+
+  function sanitizeLocal(s) {
+    var out = String(s == null ? '' : s);
+    SANITIZE_MAP.forEach(function (m) { out = out.replace(m[0], m[1]); });
+    return out.replace(/[ \t]+/g, ' ').trim();
+  }
+
+  function wrapperPrefix() { return (compose.desc && compose.desc.prefix) || ''; }
+  function wrapperSuffix() { return (compose.desc && compose.desc.suffix) || ''; }
+  function maxSegments()   { return (compose.desc && compose.desc.max_segments) || 1; }
+  function maxRecipients() { return (compose.desc && compose.desc.max_recipients) || 0; }
+
+  function fullBody() {
+    return wrapperPrefix() + sanitizeLocal(document.getElementById('cmpMsg').value) + wrapperSuffix();
+  }
+
+  // ---- describe() ----------------------------------------------------
+
+  function describeKey() {
+    return reach.mode + ':' + (selectedEventId() || '');
+  }
+
+  function refreshDescribe(force) {
+    var key = describeKey();
+    if (!force && compose.desc && compose.descKey === key) {
+      renderComposeLimits();
+      return Promise.resolve();
+    }
+    compose.descLoading = true;
+    var payload = { action: 'describe', scope: reach.mode };
+    var evId = selectedEventId();
+    if (evId) payload.event_id = evId;
+
+    return callSendFn(payload).then(function (d) {
+      compose.descLoading = false;
+      if (!d || d.ok === false) throw new Error((d && d.error) || 'describe was refused');
+      compose.desc = d;
+      compose.descKey = key;
+      buildTypeOptions();
+      renderComposeLimits();
+      renderMessageState();
+    }).catch(function (e) {
+      compose.descLoading = false;
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      compose.desc = null;
+      document.getElementById('cmpLimitsSub').textContent =
+        'Could not read the send rules: ' + (e.message || 'unknown error');
+      renderMessageState();
+    });
+  }
+
+  function buildTypeOptions() {
+    var sel = document.getElementById('cmpType');
+    var types = (compose.desc && compose.desc.message_types) || [];
+    var keep = sel.value;
+    sel.innerHTML = types.map(function (t) {
+      return '<option value="' + esc(t) + '">' + esc(typeLabel(t)) + '</option>';
+    }).join('');
+    if (keep && types.indexOf(keep) !== -1) sel.value = keep;
+  }
+
+  // ---- Audience summary on the Compose tab ---------------------------
+
+  function setComposeBusy(msg) {
+    document.getElementById('composeAudienceCard').style.display = 'block';
+    document.getElementById('cmpAudSub').textContent = '';
+    document.getElementById('cmpExclusions').innerHTML = '';
+    document.getElementById('reachExportBtn').style.display = 'none';
+    document.getElementById('cmpAudBody').innerHTML = '<div class="empty">' + esc(msg) + '</div>';
+    document.getElementById('composeCard').style.display = 'none';
+    closeConfirm();
+  }
+
+  function resetCompose() {
+    compose.overlap = [];
+    compose.testArmed = false;
+    document.getElementById('cmpExclusions').innerHTML = '';
+    document.getElementById('reachExportBtn').style.display = 'none';
+    document.getElementById('composeAudienceCard').style.display = 'none';
+    document.getElementById('composeCard').style.display = 'none';
+    closeConfirm();
+  }
+
+  function onAudienceResolved() {
+    var sendable = sendableRows();
+
+    document.getElementById('composeAudienceCard').style.display = 'block';
+    document.getElementById('cmpAudTitle').textContent = reach.lastLabel || 'Who gets this';
+    document.getElementById('cmpAudSub').textContent =
+      reach.rows.length + (reach.rows.length === 1 ? ' person in this audience' : ' people in this audience');
+
+    if (!sendable.length) {
+      document.getElementById('cmpAudBody').innerHTML =
+        '<div class="notice notice-stop"><b>Nobody in this audience can be texted.</b> ' +
+        'Either nothing matches the filters, or none of the people who match have consented. ' +
+        'The Reach tab shows exactly who and why.</div>';
+      document.getElementById('composeCard').style.display = 'none';
+      closeConfirm();
+      renderExclusions();
+      return;
+    }
+
+    var total = reach.rows.length;
+    var pct = Math.round((sendable.length / total) * 100);
+    var pctCls = pct >= 60 ? 'pct-good' : (pct >= 40 ? 'pct-mid' : 'pct-low');
+
+    document.getElementById('cmpAudBody').innerHTML =
+      '<div class="reach-hero">' +
+        '<span class="reach-big">' + sendable.length + '</span>' +
+        '<span class="reach-of">of ' + total + ' will receive this</span>' +
+        '<span class="reach-pct ' + pctCls + '">' + pct + '%</span>' +
+      '</div>' +
+      '<div class="reach-bar">' +
+        '<span class="bar-send" style="width:' + pct + '%"></span>' +
+        '<span class="bar-no" style="width:' + (100 - pct) + '%"></span>' +
+      '</div>' +
+      '<div id="cmpOverlapHost" style="margin-top:14px;"></div>';
+
+    document.getElementById('composeCard').style.display = 'block';
+    closeConfirm();
+
+    refreshDescribe(false);
+    loadOverlap();
+    resolveTestTarget();
+    refreshAppliedTemplate();
+    renderMessageState();
+  }
+
+  // ---- Overlap warning ------------------------------------------------
+
+  function loadOverlap() {
+    var ids = sendableRows().map(function (r) { return r.employee_id; });
+    compose.overlap = [];
+    if (!ids.length) { renderOverlap(); return Promise.resolve(); }
+
+    compose.overlapLoading = true;
+    renderOverlap();
+
+    var url = REST + 'sms_send_log'
+      + '?select=employee_id,batch_id,queued_at,message_type,body,sent_by,status'
+      + '&queued_at=gte.' + encodeURIComponent(hoursAgoISO(OVERLAP_HOURS))
+      + '&order=queued_at.desc'
+      + '&limit=1000';
+
+    return authFetch(url, { headers: pcAuth.headers() }).then(function (rows) {
+      compose.overlapLoading = false;
+
+      var inAudience = {};
+      ids.forEach(function (id) { inAudience[id] = true; });
+
+      var map = {};
+      var order = [];
+      (rows || []).forEach(function (r) {
+        if (r.status === 'dry_run') return;
+        if (!r.employee_id || !inAudience[r.employee_id]) return;
+        var k = batchKey(r);
+        if (!map[k]) {
+          map[k] = {
+            key: k,
+            when: r.queued_at,
+            messageType: r.message_type,
+            body: r.body,
+            sentBy: r.sent_by,
+            people: {}
+          };
+          order.push(k);
+        }
+        map[k].people[r.employee_id] = true;
+        if (r.queued_at && r.queued_at > map[k].when) map[k].when = r.queued_at;
+      });
+
+      compose.overlap = order.map(function (k) {
+        var b = map[k];
+        b.count = Object.keys(b.people).length;
+        return b;
+      }).sort(function (a, b) { return a.when < b.when ? 1 : -1; });
+
+      renderOverlap();
+      renderMessageState();
+    }).catch(function (e) {
+      compose.overlapLoading = false;
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      compose.overlap = [];
+      renderOverlap('Could not check what these people were sent recently.');
+    });
+  }
+
+  function overlapSentences() {
+    var audienceSize = sendableRows().length;
+    return compose.overlap.slice(0, 3).map(function (b) {
+      return 'You texted ' + b.count + ' of these ' + audienceSize +
+        (audienceSize === 1 ? ' person ' : ' people ') + fmtAgo(b.when) +
+        ' — ' + typeLabel(b.messageType) +
+        (b.sentBy ? ', by ' + b.sentBy : ', sent automatically') + '.';
+    });
+  }
+
+  function renderOverlap(errMsg) {
+    var host = document.getElementById('cmpOverlapHost');
+    if (!host) return;
+
+    if (errMsg) {
+      host.innerHTML = '<div class="notice notice-quiet">' + esc(errMsg) + '</div>';
+      return;
+    }
+    if (compose.overlapLoading) {
+      host.innerHTML = '<div class="notice notice-quiet">Checking what these people have already been sent…</div>';
+      return;
+    }
+    if (!compose.overlap.length) {
+      host.innerHTML = '<div class="notice notice-quiet">Nobody in this audience has been texted in the last ' +
+        OVERLAP_HOURS + ' hours.</div>';
+      return;
+    }
+
+    host.innerHTML = '<div class="notice notice-warn"><b>These people have heard from us already.</b><br>' +
+      overlapSentences().map(function (s) { return esc(s); }).join('<br>') +
+      '</div>';
+  }
+
+  // ---- Test send target ----------------------------------------------
+
+  function nameKeyJs(s) {
+    return String(s == null ? '' : s).toLowerCase().replace(/[^a-z]/g, '');
+  }
+
+  function resolveTestTarget() {
+    if (compose.testResolved) { renderTestState(); return Promise.resolve(); }
+
+    var me = state.user || {};
+    var myName = me.display_name || me.full_name || '';
+
+    // The whole-roster audience is the proven "everyone" call and already
+    // carries sendability, so it answers both questions in one request.
+    return rpcAudience({}).then(function (rows) {
+      compose.rosterCache = rows || [];
+      compose.testResolved = true;
+
+      var key = nameKeyJs(myName);
+      var hits = compose.rosterCache.filter(function (r) {
+        return r.employee_id && r.is_sendable && nameKeyJs(r.full_name) === key;
+      });
+      if (key && hits.length === 1) {
+        compose.testTarget = { id: hits[0].employee_id, name: hits[0].full_name };
+      }
+      renderTestState();
+    }).catch(function (e) {
+      compose.testResolved = true;
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      renderTestState();
+    });
+  }
+
+  function renderTestState() {
+    var btn = document.getElementById('cmpTestBtn');
+    var wrap = document.getElementById('cmpTestWhoWrap');
+    var sel = document.getElementById('cmpTestWho');
+    var note = document.getElementById('cmpTestNote');
+
+    if (compose.testTarget) {
+      wrap.style.display = 'none';
+      btn.textContent = compose.testArmed ? 'Yes — text me this now' : 'Test send to me';
+      btn.className = compose.testArmed ? 'btn btn-dark' : 'btn';
+      note.innerHTML = 'Goes to ' + esc(compose.testTarget.name) +
+        '. A test is a real send: it costs a segment and uses one of this ' +
+        (reach.mode === 'event' ? 'event\u2019s' : 'day\u2019s') + ' allowance.';
+      btn.disabled = !canSend().testOk;
+      return;
+    }
+
+    if (!compose.testResolved) {
+      wrap.style.display = 'none';
+      btn.disabled = true;
+      note.textContent = 'Finding your crew record…';
+      return;
+    }
+
+    // No unique self-match. Offer an explicit pick rather than silently
+    // disabling, because the usual cause is a nickname on the crew card.
+    var candidates = (compose.rosterCache || []).filter(function (r) {
+      return r.employee_id && r.is_sendable;
+    }).sort(function (a, b) {
+      return String(a.full_name || '') < String(b.full_name || '') ? -1 : 1;
+    });
+
+    if (!candidates.length) {
+      wrap.style.display = 'none';
+      btn.disabled = true;
+      note.textContent = 'No test send available — nobody on the roster can currently receive a text.';
+      return;
+    }
+
+    if (sel.options.length !== candidates.length + 1) {
+      sel.innerHTML = '<option value="">Who are you on the crew list?</option>' +
+        candidates.map(function (r) {
+          return '<option value="' + esc(r.employee_id) + '">' + esc(r.full_name) + '</option>';
+        }).join('');
+    }
+    wrap.style.display = 'inline';
+    btn.textContent = compose.testArmed ? 'Yes — text me this now' : 'Test send to me';
+    btn.disabled = !canSend().testOk;
+    note.innerHTML = 'Could not match your sign-in to a crew record, so pick yourself once. ' +
+      'A test is a real send: it costs a segment and uses one of this ' +
+      (reach.mode === 'event' ? 'event\u2019s' : 'day\u2019s') + ' allowance.';
+  }
+
+  function currentTestId() {
+    if (compose.testTarget) return compose.testTarget.id;
+    return document.getElementById('cmpTestWho').value || '';
+  }
+
+  // ---- Limits, notices, gating ---------------------------------------
+
+  function capState() {
+    var d = compose.desc;
+    if (!d || !d.caps) return { known: false, limit: null, used: null, atCap: false };
+    var limit = d.caps.limit;
+    var used = d.caps.used_today;
+    var known = (typeof used === 'number');
+    return {
+      known: known,
+      limit: (typeof limit === 'number') ? limit : null,
+      used: known ? used : null,
+      atCap: known && (typeof limit === 'number') && used >= limit
+    };
+  }
+
+  function windowOpen() {
+    var d = compose.desc;
+    if (!d || !d.window) return false;
+    return !!d.window.open_now;
+  }
+
+  function renderComposeLimits() {
+    var d = compose.desc;
+    var sub = document.getElementById('cmpLimitsSub');
+    var notices = document.getElementById('cmpNotices');
+
+    if (!d) {
+      sub.textContent = compose.descLoading ? 'Checking send limits…' : 'Send rules unavailable.';
+      notices.innerHTML = '';
+      return;
+    }
+
+    var cap = capState();
+    var bits = [];
+
+    if (cap.limit !== null) {
+      var scopeWords = reach.mode === 'event' ? 'for this event today' : 'across the whole roster today';
+      bits.push(cap.known
+        ? (cap.used + ' of ' + cap.limit + ' sends used ' + scopeWords)
+        : ('Limit ' + cap.limit + ' ' + scopeWords + ', usage not reported'));
+    }
+    if (d.window) {
+      bits.push(d.window.open_now
+        ? ('Window open until ' + hourLabel(d.window.end_et) + ' ET')
+        : ('Window closed — opens ' + hourLabel(d.window.start_et) + ' ET'));
+    }
+    sub.textContent = bits.join(' \u00b7 ');
+
+    var html = '';
+
+    if (d.dry_run) {
+      html += '<div class="notice notice-info"><b>Dry run is switched on.</b> ' +
+        'Nothing will reach a handset. Rows are still written to the send log, marked dry run.</div>';
+    }
+    if (d.allowlist_active) {
+      html += '<div class="notice notice-info"><b>An allowlist is active.</b> ' +
+        'Only numbers on that list will actually be texted, whoever you pick here.</div>';
+    }
+    if (d.window && !d.window.open_now) {
+      html += '<div class="notice notice-stop"><b>Outside the send window.</b> ' +
+        'It is ' + hourLabel(d.et_hour) + ' ET. Sending resumes at ' + hourLabel(d.window.start_et) + '.' +
+        (state.isAdmin
+          ? ' <label style="display:block;margin-top:8px;font-weight:700;cursor:pointer;">' +
+            '<input type="checkbox" id="cmpOverride"> Send anyway — this is urgent</label>'
+          : ' An admin can override this.') +
+        '</div>';
+    }
+    if (cap.atCap) {
+      html += '<div class="notice notice-stop"><b>This ' + (reach.mode === 'event' ? 'event' : 'day') +
+        ' is at its limit.</b> ' + cap.used + ' of ' + cap.limit +
+        ' already sent. Raise the limit on the Inbox tab, or wait.</div>';
+    }
+    if (!cap.known && cap.limit !== null) {
+      html += '<div class="notice notice-quiet">Today\u2019s usage was not reported for this scope, so the ' +
+        'count above cannot be shown. The send function still enforces the limit of ' + cap.limit + '.</div>';
+    }
+
+    notices.innerHTML = html;
+
+    var ov = document.getElementById('cmpOverride');
+    if (ov) ov.addEventListener('change', renderMessageState);
+  }
+
+  function overrideChecked() {
+    var ov = document.getElementById('cmpOverride');
+    return !!(ov && ov.checked);
+  }
+
+  // One place decides whether anything may be sent.
+  function canSend() {
+    var msg = sanitizeLocal(document.getElementById('cmpMsg').value);
+    var seg = countSegments(fullBody());
+    var cap = capState();
+    var people = sendableRows().length;
+    var reasons = [];
+
+    if (!compose.desc) reasons.push('The send rules have not loaded.');
+    if (!people) reasons.push('There is nobody to send to.');
+    if (compose.desc && maxRecipients() && people > maxRecipients()) {
+      reasons.push('This audience is ' + people + ' people, over the ' + maxRecipients() + ' allowed in one send.');
+    }
+    if (!windowOpen() && !overrideChecked()) reasons.push('It is outside the send window.');
+    if (cap.atCap) reasons.push('This scope has used its sends for today.');
+    if (compose.sending) reasons.push('A send is already in progress.');
+
+    var msgReasons = reasons.slice(0);
+    if (!msg) msgReasons.push('The message is empty.');
+    var stray = unresolvedTokens(msg);
+    if (stray.length) {
+      msgReasons.push('The message still contains ' + stray.join(' and ') +
+        '. Pick an event so it can be filled in, or delete it — it would be sent literally.');
+    }
+    if (compose.desc && seg.segments > maxSegments()) {
+      msgReasons.push('The message is ' + seg.segments + ' segments, over the limit of ' + maxSegments() + '.');
+    }
+
+    return {
+      ok: msgReasons.length === 0,
+      testOk: msgReasons.length === 0 && !!compose.desc,
+      reasons: msgReasons,
+      segments: seg,
+      people: people
+    };
+  }
+
+  function renderMessageState() {
+    var raw = document.getElementById('cmpMsg').value;
+    var clean = sanitizeLocal(raw);
+    var counter = document.getElementById('cmpCounter');
+    var preview = document.getElementById('cmpPreview');
+
+    if (!compose.desc) {
+      counter.className = 'cmp-counter';
+      counter.innerHTML = '<span>Waiting on the send rules…</span>';
+      preview.innerHTML = '<span class="fixed">Waiting on the send rules…</span>';
+    } else {
+      var body = fullBody();
+      var seg = countSegments(body);
+      // Counted in encoding units, not raw characters, so an emoji flipping
+      // the message to UCS-2 shows the real remaining room rather than 123.
+      var left = seg.per - seg.units;
+      var cls = 'cmp-counter';
+      var leftTxt;
+
+      if (seg.segments > maxSegments()) {
+        cls += ' over';
+        leftTxt = '<b>Too long.</b> ' + seg.segments + ' segments, and the limit is ' + maxSegments() + '.';
+      } else if (seg.segments > 1) {
+        cls += ' multi';
+        leftTxt = '<b>' + seg.segments + ' segments</b> — this costs ' + seg.segments + ' times as much per person.';
+      } else {
+        leftTxt = '<b>' + left + '</b> character' + (left === 1 ? '' : 's') + ' left in one text.';
+      }
+
+      counter.className = cls;
+      counter.innerHTML = '<span>' + leftTxt + '</span><span>' +
+        esc(seg.encoding) + ' \u00b7 ' + body.length + ' characters with the wrapper' +
+        (seg.segments && sendableRows().length
+          ? ' \u00b7 about ' + money(seg.segments * sendableRows().length * COST_PER_SEGMENT)
+          : '') +
+        '</span>';
+
+      preview.innerHTML = '<span class="fixed">' + esc(wrapperPrefix()) + '</span>' +
+        esc(clean || '…') +
+        '<span class="fixed">' + esc(wrapperSuffix()) + '</span>';
+    }
+
+    var gate = canSend();
+    var sendBtn = document.getElementById('cmpSendBtn');
+    sendBtn.disabled = !gate.ok || compose.confirmOpen;
+    sendBtn.textContent = gate.people ? ('Send to ' + gate.people) : 'Send';
+
+    document.getElementById('cmpBlockNote').innerHTML = gate.ok
+      ? ''
+      : gate.reasons.map(function (r) { return esc(r); }).join(' ');
+
+    var testBtn = document.getElementById('cmpTestBtn');
+    if (compose.testResolved) testBtn.disabled = !gate.testOk || !currentTestId();
+  }
+
+  // ---- Sending --------------------------------------------------------
+
+  // Every call to send_manual is built here, so there is one place to correct
+  // if a parameter name turns out to be different.
+  function buildSendPayload(recipients) {
+    var payload = {
+      action: 'send_manual',
+      scope: reach.mode,
+      message: sanitizeLocal(document.getElementById('cmpMsg').value),
+      message_type: document.getElementById('cmpType').value,
+      recipients: recipients
+    };
+    var evId = selectedEventId();
+    if (evId) payload.event_id = evId;
+    if (reach.mode === 'roster') {
+      var hv = document.getElementById('reachHomeVenue').value;
+      if (hv) payload.home_venue = hv;
+    }
+    if (!windowOpen() && overrideChecked()) payload.window_override = true;
+    return payload;
+  }
+
+  function describeSendResult(d, fallbackCount) {
+    if (!d) return fallbackCount + ' queued.';
+    var n = (typeof d.sent === 'number') ? d.sent
+          : (typeof d.queued === 'number') ? d.queued
+          : (typeof d.recipients === 'number') ? d.recipients
+          : fallbackCount;
+    return n + (n === 1 ? ' message queued.' : ' messages queued.');
+  }
+
+  function doTestSend() {
+    var id = currentTestId();
+    if (!id) { showToast('Pick which crew record is you first.'); return; }
+
+    if (!compose.testArmed) {
+      compose.testArmed = true;
+      renderTestState();
+      setTimeout(function () {
+        if (compose.testArmed) { compose.testArmed = false; renderTestState(); }
+      }, 6000);
+      return;
+    }
+
+    compose.testArmed = false;
+    compose.sending = true;
+    renderMessageState();
+    renderTestState();
+
+    callSendFn(buildSendPayload([id])).then(function (d) {
+      compose.sending = false;
+      if (d && d.ok === false) throw new Error(d.error || 'The send was refused.');
+      showToast('Test sent. Check your phone.');
+      afterSend();
+    }).catch(function (e) {
+      compose.sending = false;
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      showToast('Test send failed: ' + (e.message || 'unknown error'));
+      renderMessageState();
+      renderTestState();
+    });
+  }
+
+  function openConfirm() {
+    var gate = canSend();
+    if (!gate.ok) { showToast('Not ready to send yet.'); return; }
+
+    var people = sendableRows();
+    var seg = countSegments(fullBody());
+    var cap = capState();
+    var needsTyped = (reach.mode === 'roster');
+
+    compose.confirmOpen = true;
+
+    var lines = [];
+    lines.push('<b>' + people.length + '</b> ' + (people.length === 1 ? 'person' : 'people') +
+      ' \u00b7 ' + esc(reach.lastLabel));
+    lines.push('<b>' + seg.segments + '</b> segment' + (seg.segments === 1 ? '' : 's') +
+      ' each \u00b7 about <b>' + money(seg.segments * people.length * COST_PER_SEGMENT) + '</b>');
+    lines.push('Recorded as <b>' + esc(typeLabel(document.getElementById('cmpType').value)) + '</b>');
+    if (cap.known && cap.limit !== null) {
+      lines.push('This uses <b>' + (cap.used + 1) + ' of ' + cap.limit + '</b> ' +
+        (reach.mode === 'event' ? 'sends for this event today' : 'roster sends today'));
+    }
+    if (!windowOpen() && overrideChecked()) {
+      lines.push('<b>Overriding the send window.</b> This will be recorded.');
+    }
+
+    var overlapHtml = compose.overlap.length
+      ? '<div class="notice notice-warn"><b>Read this before confirming.</b><br>' +
+        overlapSentences().map(function (s) { return esc(s); }).join('<br>') + '</div>'
+      : '';
+
+    document.getElementById('cmpConfirmBody').innerHTML =
+      '<div class="confirm-big">Text ' + people.length + ' ' +
+        (people.length === 1 ? 'person' : 'people') + '?</div>' +
+      overlapHtml +
+      '<div class="cmp-bubble" style="margin-bottom:16px;">' + esc(fullBody()) + '</div>' +
+      '<div class="confirm-list">' + lines.map(function (l) { return '<div>' + l + '</div>'; }).join('') + '</div>' +
+      (needsTyped
+        ? '<div class="field" style="margin-bottom:16px;">' +
+            '<label for="cmpTyped">Type ' + people.length + ' to confirm</label>' +
+            '<input class="confirm-type" id="cmpTyped" inputmode="numeric" autocomplete="off">' +
+            '<div class="hint">A roster blast goes to people who are not working tonight. ' +
+            'Typing the number is the last check that it is the number you meant.</div>' +
+          '</div>'
+        : '') +
+      '<div class="cmp-actions" style="border-top:none;padding-top:0;margin-top:0;">' +
+        '<button class="btn" type="button" id="cmpCancelBtn">Cancel</button>' +
+        '<span class="spacer"></span>' +
+        '<button class="btn btn-danger btn-big" type="button" id="cmpConfirmBtn"' +
+          (needsTyped ? ' disabled' : '') + '>Send it</button>' +
+      '</div>';
+
+    document.getElementById('composeConfirmCard').style.display = 'block';
+    document.getElementById('cmpCancelBtn').addEventListener('click', closeConfirm);
+    document.getElementById('cmpConfirmBtn').addEventListener('click', doSend);
+
+    if (needsTyped) {
+      var typed = document.getElementById('cmpTyped');
+      typed.addEventListener('input', function () {
+        document.getElementById('cmpConfirmBtn').disabled =
+          (typed.value.trim() !== String(people.length));
+      });
+      typed.focus();
+    }
+
+    document.getElementById('composeConfirmCard').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    renderMessageState();
+  }
+
+  function closeConfirm() {
+    compose.confirmOpen = false;
+    var card = document.getElementById('composeConfirmCard');
+    if (card) {
+      card.style.display = 'none';
+      document.getElementById('cmpConfirmBody').innerHTML = '';
+    }
+    if (document.getElementById('cmpMsg')) renderMessageState();
+  }
+
+  function doSend() {
+    var gate = canSend();
+    if (!gate.ok) { showToast('Not ready to send.'); closeConfirm(); return; }
+
+    var recipients = sendableRows().map(function (r) { return r.employee_id; });
+    if (!recipients.length) { showToast('Nobody to send to.'); closeConfirm(); return; }
+
+    compose.sending = true;
+    var btn = document.getElementById('cmpConfirmBtn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+
+    callSendFn(buildSendPayload(recipients)).then(function (d) {
+      compose.sending = false;
+      if (d && d.ok === false) throw new Error(d.error || 'The send was refused.');
+      closeConfirm();
+      document.getElementById('cmpMsg').value = '';
+      showToast(describeSendResult(d, recipients.length));
+      afterSend();
+    }).catch(function (e) {
+      compose.sending = false;
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      if (btn) { btn.disabled = false; btn.textContent = 'Send it'; }
+      showToast('Send failed: ' + (e.message || 'unknown error'));
+    });
+  }
+
+  // After anything actually sends, the cap and the overlap picture have both
+  // moved. Re-read them rather than leaving stale numbers on screen.
+  function afterSend() {
+    refreshDescribe(true);
+    loadOverlap();
+    loadSends();
+    renderMessageState();
+    renderTestState();
+  }
+
+  // ---- Templates admin editor (Inbox tab) ----------------------------
+
+  function renderTemplateEditor() {
+    var host = document.getElementById('tplList');
+    if (!compose.templates.length) {
+      host.innerHTML = '<div class="empty"><b>No standard messages yet</b>' +
+        'Add one and it becomes available on the Compose tab.</div>';
+      return;
+    }
+
+    var types = (compose.desc && compose.desc.message_types) ||
+      ['manual_alert', 'availability_reminder', 'shift_change'];
+
+    host.innerHTML = compose.templates.map(function (t) {
+      return '<div class="tpl-row' + (t.is_active ? '' : ' inactive') + '" data-tpl="' + esc(t.id) + '">' +
+        '<div class="tpl-top">' +
+          '<div class="field"><label>Label</label>' +
+            '<input type="text" data-tpl-label value="' + esc(t.label) + '"></div>' +
+          '<div class="field"><label>Type</label><select data-tpl-type>' +
+            types.map(function (ty) {
+              return '<option value="' + esc(ty) + '"' +
+                (ty === t.message_type ? ' selected' : '') + '>' + esc(typeLabel(ty)) + '</option>';
+            }).join('') +
+          '</select></div>' +
+          '<div class="field" style="max-width:110px;"><label>Order</label>' +
+            '<input type="number" data-tpl-sort value="' + esc(t.sort_order) + '"></div>' +
+        '</div>' +
+        '<textarea class="tpl-body" data-tpl-body>' + esc(t.body) + '</textarea>' +
+        '<div class="tpl-foot">' +
+          '<span data-tpl-count>' + t.body.length + ' characters</span>' +
+          '<label><input type="checkbox" data-tpl-active' + (t.is_active ? ' checked' : '') +
+            '> Offered on Compose</label>' +
+          '<span class="spacer"></span>' +
+          '<button class="btn" type="button" data-tpl-save="' + esc(t.id) + '">Save</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  function tplRowValues(id) {
+    var row = document.querySelector('[data-tpl="' + id + '"]');
+    if (!row) return null;
+    return {
+      label: row.querySelector('[data-tpl-label]').value.trim(),
+      message_type: row.querySelector('[data-tpl-type]').value,
+      body: row.querySelector('[data-tpl-body]').value.trim(),
+      sort_order: parseInt(row.querySelector('[data-tpl-sort]').value, 10),
+      is_active: row.querySelector('[data-tpl-active]').checked
+    };
+  }
+
+  function saveTemplate(id) {
+    var vals = tplRowValues(id);
+    if (!vals) return;
+    if (!vals.label) { showToast('A standard message needs a label.'); return; }
+    if (!vals.body) { showToast('The wording cannot be empty.'); return; }
+    if (isNaN(vals.sort_order)) vals.sort_order = 100;
+
+    vals.updated_at = new Date().toISOString();
+    vals.updated_by = (state.user && (state.user.display_name || state.user.email)) || 'Unknown';
+
+    authFetch(REST + 'sms_templates?id=eq.' + encodeURIComponent(id), {
+      method: 'PATCH',
+      headers: jsonHeaders({ 'Prefer': 'return=representation' }),
+      body: JSON.stringify(vals)
+    }).then(function (rows) {
+      if (!rows || !rows.length) throw new Error('Update was refused — admin access is required.');
+      showToast('Saved.');
+      return loadTemplates();
+    }).catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      showToast('Could not save: ' + (e.message || 'unknown error'));
+      loadTemplates();
+    });
+  }
+
+  function addTemplate() {
+    var row = {
+      label: 'New message',
+      message_type: 'manual_alert',
+      body: 'Write the wording here.',
+      sort_order: 100,
+      updated_by: (state.user && (state.user.display_name || state.user.email)) || 'Unknown'
+    };
+    authFetch(REST + 'sms_templates', {
+      method: 'POST',
+      headers: jsonHeaders({ 'Prefer': 'return=representation' }),
+      body: JSON.stringify([row])
+    }).then(function (rows) {
+      if (!rows || !rows.length) throw new Error('Insert was refused — admin access is required.');
+      showToast('Added. Edit the wording, then Save.');
+      return loadTemplates();
+    }).catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      showToast('Could not add: ' + (e.message || 'unknown error'));
+    });
+  }
+
+  function wireCompose() {
+    document.getElementById('cmpMsg').addEventListener('input', renderMessageState);
+    document.getElementById('cmpType').addEventListener('change', renderMessageState);
+    document.getElementById('cmpTestBtn').addEventListener('click', doTestSend);
+    document.getElementById('cmpTestWho').addEventListener('change', function () {
+      compose.testArmed = false;
+      renderTestState();
+      renderMessageState();
+    });
+    document.getElementById('cmpSendBtn').addEventListener('click', openConfirm);
+    document.getElementById('cmpTemplate').addEventListener('change', applyTemplate);
+    document.getElementById('tplAddBtn').addEventListener('click', addTemplate);
+    document.getElementById('tplList').addEventListener('click', function (e) {
+      var save = e.target.closest('[data-tpl-save]');
+      if (save) { saveTemplate(save.getAttribute('data-tpl-save')); return; }
+    });
+  }
+
+  // ==================================================================
+  // Tabs + wiring
+  // ==================================================================
+
+  function switchTab(key) {
+    state.activeTab = key;
+    var tabs = document.querySelectorAll('.tab');
+    for (var i = 0; i < tabs.length; i++) {
+      tabs[i].classList.toggle('active', tabs[i].getAttribute('data-tab') === key);
+    }
+    var panels = document.querySelectorAll('.panel');
+    for (var j = 0; j < panels.length; j++) {
+      panels[j].classList.toggle('active', panels[j].id === 'panel-' + key);
+    }
+  }
+
+  function wire() {
+    document.getElementById('tabs').addEventListener('click', function (e) {
+      var t = e.target.closest('.tab');
+      if (!t) return;
+      switchTab(t.getAttribute('data-tab'));
+    });
+
+    document.getElementById('replyPills').addEventListener('click', function (e) {
+      var p = e.target.closest('.pill');
+      if (!p) return;
+      state.replyFilter = p.getAttribute('data-filter');
+      renderReplies();
+    });
+
+    document.getElementById('replyList').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-handle]');
+      if (!b) return;
+      markHandled(b.getAttribute('data-handle'));
+    });
+
+    document.getElementById('sentList').addEventListener('click', function (e) {
+      var h = e.target.closest('[data-toggle]');
+      if (!h) return;
+      var batch = h.parentNode;
+      batch.classList.toggle('open');
+      var caret = h.querySelector('.batch-caret');
+      if (caret) caret.textContent = batch.classList.contains('open') ? '▼' : '▶';
+    });
+
+    document.getElementById('sentRange').addEventListener('change', function () {
+      document.getElementById('sentList').innerHTML = '<div class="empty">Loading…</div>';
+      loadSends();
+    });
+
+    document.getElementById('setSaveBtn').addEventListener('click', saveSettings);
+    document.getElementById('setResetBtn').addEventListener('click', fillSettings);
+  }
+
+  // ==================================================================
+  // Boot
+  // ==================================================================
+  pcAuth.require({
+    pageSlug: 'sms-console',
+    onReady: function () {
+      state.user = pcAuth.getUser();
+      state.isAdmin = pcAuth.isAdmin();
+
+      document.getElementById('wrap').style.display = 'block';
+      wire();
+      wireReach();
+      wireCompose();
+      switchTab('compose');
+
+      if (state.isAdmin) {
+        document.getElementById('settingsCard').style.display = 'block';
+        document.getElementById('templatesCard').style.display = 'block';
+        loadSettings();
+      }
+
+      document.getElementById('replyList').innerHTML = '<div class="empty">Loading…</div>';
+      document.getElementById('sentList').innerHTML = '<div class="empty">Loading…</div>';
+
+      loadReplies();
+      loadSends();
+      loadEvents();
+      loadTemplates();
+    }
+  });
+
+})();
+</script>
+</body>
+</html>
