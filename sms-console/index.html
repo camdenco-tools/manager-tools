@@ -269,6 +269,22 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
   padding: 9px 11px; border: 2px solid #1a1a1a; border-radius: 6px; text-align: center;
 }
 
+.chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: #1a1a1a; color: #fff; border-radius: 18px;
+  padding: 6px 8px 6px 13px; font-size: 12px; font-weight: 500;
+}
+.chip .x {
+  background: rgba(255,255,255,0.18); border: none; color: #fff; cursor: pointer;
+  width: 18px; height: 18px; border-radius: 50%; font-size: 12px; line-height: 1;
+  font-family: inherit; padding: 0;
+}
+.chip .x:hover { background: rgba(255,255,255,0.34); }
+.chips-none { font-size: 12px; color: #a3a199; margin-top: 14px; }
+.today-row.picked { background: #f0f6f0; }
+.today-row.picked .today-name:before { content: '\2713 '; color: #15803D; font-weight: 700; }
+
 .tpl-row { padding: 16px 18px; border-bottom: 1px solid #f4f3ee; }
 .tpl-row:last-child { border-bottom: none; }
 .tpl-row.inactive { background: #fafaf7; }
@@ -369,6 +385,8 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
             <select id="reachStand" class="wide"><option value="">All stands</option></select>
           </div>
         </div>
+
+        <div id="pickedHost"></div>
 
         <div id="rosterPickers" class="settings-grid" style="display:none;">
           <div class="field">
@@ -574,7 +592,8 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
     sends: [],
     names: {},
     settings: null,
-    activeTab: 'compose'
+    activeTab: 'compose',
+    eventsById: {}
   };
 
   // ==================================================================
@@ -858,11 +877,35 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
       state.sends = rows || [];
       return loadNames(state.sends.map(function (r) { return r.employee_id; }));
     }).then(function () {
+      return loadHistoryEvents();
+    }).then(function () {
       renderSends();
     }).catch(function (e) {
       if (e && e.authFailed) { handleAuthFailure(); return; }
       document.getElementById('sentList').innerHTML =
         '<div class="empty"><b>Could not load sent history</b>' + esc(e.message || 'Unknown error') + '</div>';
+    });
+  }
+
+  // The history can reference events older than the picker's 14-day window,
+  // so the ones it mentions are fetched by id rather than assumed present.
+  function loadHistoryEvents() {
+    var want = [];
+    state.sends.forEach(function (r) {
+      var tc = r.target_criteria;
+      if (tc && tc.event_id && !state.eventsById[tc.event_id] && want.indexOf(tc.event_id) === -1) {
+        want.push(tc.event_id);
+      }
+    });
+    if (!want.length) return Promise.resolve();
+
+    var url = REST + 'events?select=id,venue,event_name,event_date&id=in.('
+      + want.slice(0, 100).join(',') + ')&limit=100';
+
+    return authFetch(url, { headers: pcAuth.headers() }).then(function (rows) {
+      (rows || []).forEach(function (e) { state.eventsById[e.id] = e; });
+    }).catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
     });
   }
 
@@ -907,6 +950,55 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
 
   function typeLabel(t) {
     return TYPE_LABEL[t] || String(t || 'Message');
+  }
+
+  // Turns the stored target_criteria into a sentence. Anything the send
+  // function did not record cannot be shown here -- said plainly rather than
+  // guessed at, because "all roles" and "not recorded" are different claims.
+  function describeCriteria(tc) {
+    if (!tc) return '';
+    var parts = [];
+    var notes = [];
+
+    if (tc.scope === 'event') {
+      var ev = tc.event_id ? state.eventsById[tc.event_id] : null;
+      if (ev) {
+        parts.push(esc(ev.venue) + ' \u2014 ' + esc(ev.event_name) + ' \u00b7 ' + esc(fmtDay(ev.event_date)));
+      } else if (tc.event_id) {
+        parts.push('An event no longer in the recent list');
+      } else {
+        parts.push('One event');
+      }
+    } else if (tc.scope === 'roster') {
+      parts.push(tc.picker && tc.picker.home_venue
+        ? ('Whole roster \u00b7 home venue ' + esc(tc.picker.home_venue))
+        : 'Whole roster, every venue');
+    }
+
+    if (tc.picker && (tc.picker.role || tc.picker.stand)) {
+      var f = [];
+      if (tc.picker.role) f.push('role ' + esc(tc.picker.role));
+      if (tc.picker.stand) f.push('stand ' + esc(tc.picker.stand));
+      parts.push(f.join(', '));
+    } else if (tc.scope === 'event' && !tc.picker) {
+      notes.push('Role and stand filters were not recorded for this send.');
+    } else if (tc.scope === 'event' && tc.picker) {
+      parts.push('all roles, all stands');
+    }
+
+    if (typeof tc.requested === 'number') {
+      parts.push(tc.requested + ' requested' +
+        (typeof tc.excluded === 'number' && tc.excluded > 0
+          ? ', ' + tc.excluded + ' dropped on the consent re-check'
+          : ''));
+    }
+    if (tc.window_override) notes.push('Sent outside the normal window on an admin override.');
+
+    return '<div class="row-meta" style="margin-bottom:8px;">Sent to: ' + parts.join(' \u00b7 ') +
+      (notes.length
+        ? '<br><span style="color:#B45309;">' + notes.map(function (n) { return esc(n); }).join(' ') + '</span>'
+        : '') +
+      '</div>';
   }
 
   function renderSends() {
@@ -966,10 +1058,7 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
         '</div>';
       }).join('');
 
-      var crit = b.targetCriteria
-        ? '<div class="row-meta" style="margin-bottom:8px;">Targeted: ' +
-            esc(JSON.stringify(b.targetCriteria)) + '</div>'
-        : '';
+      var crit = describeCriteria(b.targetCriteria);
 
       var legacyNote = b.legacy
         ? '<div class="errnote">Grouped by timestamp — this send predates batch tracking.</div>'
@@ -1124,6 +1213,7 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
     mode: 'event',
     events: [],
     rows: [],
+    picked: [],      // event ids, in the order they were added
     lastLabel: ''
   };
 
@@ -1149,17 +1239,90 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
     return reach.rows.filter(function (r) { return r.is_sendable && r.employee_id; });
   }
 
+  function eventById(id) {
+    for (var i = 0; i < reach.events.length; i++) {
+      if (reach.events[i].id === id) return reach.events[i];
+    }
+    return state.eventsById[id] || null;
+  }
+
+  // The single id still used for anything that can only carry one: token
+  // substitution and the legacy single-event describe call.
   function selectedEventId() {
-    return reach.mode === 'event' ? document.getElementById('reachEvent').value : '';
+    return (reach.mode === 'event' && reach.picked.length) ? reach.picked[0] : '';
   }
 
   function selectedEvent() {
     var id = selectedEventId();
-    if (!id) return null;
-    for (var i = 0; i < reach.events.length; i++) {
-      if (reach.events[i].id === id) return reach.events[i];
+    return id ? eventById(id) : null;
+  }
+
+  function multiEvent() {
+    return reach.mode === 'event' && reach.picked.length > 1;
+  }
+
+  // ---- Event selection ------------------------------------------------
+
+  function addPickedEvent(id) {
+    if (!id) return;
+    if (reach.picked.indexOf(id) !== -1) return;
+    reach.picked.push(id);
+    afterPickChange();
+  }
+
+  function removePickedEvent(id) {
+    var i = reach.picked.indexOf(id);
+    if (i === -1) return;
+    reach.picked.splice(i, 1);
+    afterPickChange();
+  }
+
+  // Role and stand are per-event constructs. A role string that matches at one
+  // venue and not another would filter silently and wrongly, so above one event
+  // the filters are switched off rather than applied optimistically.
+  function afterPickChange() {
+    var multi = multiEvent();
+    var roleSel = document.getElementById('reachRole');
+    var standSel = document.getElementById('reachStand');
+    if (multi) {
+      roleSel.value = '';
+      standSel.value = '';
     }
-    return null;
+    roleSel.disabled = multi;
+    standSel.disabled = multi;
+    renderPickedChips();
+    markTodayStrip();
+    runReach();
+  }
+
+  function renderPickedChips() {
+    var host = document.getElementById('pickedHost');
+    if (reach.mode !== 'event') { host.innerHTML = ''; return; }
+
+    if (!reach.picked.length) {
+      host.innerHTML = '<div class="chips-none">No events chosen yet. ' +
+        'Pick one above, or tap any number of them in Happening today.</div>';
+      return;
+    }
+
+    host.innerHTML = '<div class="chips">' + reach.picked.map(function (id) {
+      var ev = eventById(id);
+      var label = ev ? (ev.venue + ' \u00b7 ' + ev.event_name) : 'Event';
+      return '<span class="chip">' + esc(label) +
+        '<button class="x" type="button" data-unpick="' + esc(id) + '" title="Remove">\u00d7</button></span>';
+    }).join('') + '</div>' +
+    (multiEvent()
+      ? '<div class="chips-none">Role and stand filters are off while more than one event is chosen. ' +
+        'Anyone working both is texted once.</div>'
+      : '');
+  }
+
+  function markTodayStrip() {
+    var rows = document.querySelectorAll('#todayList [data-event]');
+    for (var i = 0; i < rows.length; i++) {
+      rows[i].classList.toggle('picked',
+        reach.picked.indexOf(rows[i].getAttribute('data-event')) !== -1);
+    }
   }
 
   // --- Event list -----------------------------------------------------
@@ -1178,7 +1341,9 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
 
     return authFetch(url, { headers: pcAuth.headers() }).then(function (rows) {
       reach.events = rows || [];
+      reach.events.forEach(function (e) { state.eventsById[e.id] = e; });
       buildVenueOptions();
+      renderPickedChips();
       buildTodayStrip();
     }).catch(function (e) {
       if (e && e.authFailed) { handleAuthFailure(); return; }
@@ -1289,6 +1454,8 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
       '</div>';
     }).join('');
 
+    markTodayStrip();
+
     // Fill each row's reach one at a time rather than in parallel, so a busy
     // day cannot fire eight simultaneous queries.
     var i = 0;
@@ -1311,46 +1478,98 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
   // --- Run + render ---------------------------------------------------
 
   function runReach() {
-    var params = {};
-    var label = '';
-
-    if (reach.mode === 'event') {
-      var eventId = document.getElementById('reachEvent').value;
-      if (!eventId) {
-        reach.rows = [];
-        resetCompose();
-        return;
-      }
-      params.p_event_id = eventId;
-      var role = document.getElementById('reachRole').value;
-      var stand = document.getElementById('reachStand').value;
-      if (role) params.p_role = role;
-      if (stand) params.p_stand = stand;
-
-      var ev = selectedEvent();
-      label = ev ? (ev.venue + ' \u2014 ' + ev.event_name + ' \u00b7 ' + fmtDay(ev.event_date)) : 'Event';
-      if (role) label += ' \u00b7 ' + role;
-      if (stand) label += ' \u00b7 ' + stand;
-    } else {
+    if (reach.mode === 'roster') {
+      var params = {};
       var hv = document.getElementById('reachHomeVenue').value;
       if (hv) params.p_home_venue = hv;
-      label = hv ? ('Roster \u2014 home venue ' + hv) : 'Roster \u2014 everyone';
+      reach.lastLabel = hv ? ('Roster \u2014 home venue ' + hv) : 'Roster \u2014 everyone';
+      setComposeBusy('Working out who this reaches\u2026');
+
+      rpcAudience(params).then(function (rows) {
+        reach.rows = (rows || []).map(function (r) { r._event_id = null; return r; });
+        onAudienceResolved();
+        renderExclusions();
+      }).catch(audienceFailed);
+      return;
     }
 
-    reach.lastLabel = label;
-    setComposeBusy('Working out who this reaches…');
-
-    rpcAudience(params).then(function (rows) {
-      reach.rows = rows || [];
-      if (reach.mode === 'event') fillRoleStandOptions();
-      onAudienceResolved();
-      renderExclusions();
-    }).catch(function (e) {
-      if (e && e.authFailed) { handleAuthFailure(); return; }
+    if (!reach.picked.length) {
       reach.rows = [];
       resetCompose();
-      showToast('Could not work out the audience.');
+      return;
+    }
+
+    var role = document.getElementById('reachRole').value;
+    var stand = document.getElementById('reachStand').value;
+    var single = reach.picked.length === 1;
+
+    if (single) {
+      var ev = eventById(reach.picked[0]);
+      reach.lastLabel = ev
+        ? (ev.venue + ' \u2014 ' + ev.event_name + ' \u00b7 ' + fmtDay(ev.event_date))
+        : 'Event';
+      if (role) reach.lastLabel += ' \u00b7 ' + role;
+      if (stand) reach.lastLabel += ' \u00b7 ' + stand;
+    } else {
+      reach.lastLabel = reach.picked.length + ' events \u2014 ' +
+        reach.picked.map(function (id) {
+          var e = eventById(id);
+          return e ? e.venue : '?';
+        }).join(', ');
+    }
+
+    setComposeBusy('Working out who this reaches\u2026');
+
+    // One event at a time rather than in parallel, matching the today strip,
+    // so choosing four venues cannot fire four simultaneous queries.
+    var collected = [];
+    var idx = 0;
+    var ids = reach.picked.slice(0);
+
+    function step() {
+      if (idx >= ids.length) return Promise.resolve(collected);
+      var id = ids[idx];
+      idx = idx + 1;
+      var params = { p_event_id: id };
+      if (single && role) params.p_role = role;
+      if (single && stand) params.p_stand = stand;
+      return rpcAudience(params).then(function (rows) {
+        (rows || []).forEach(function (r) {
+          r._event_id = id;
+          collected.push(r);
+        });
+        return step();
+      });
+    }
+
+    step().then(function (all) {
+      reach.rows = dedupeAudience(all);
+      if (single) fillRoleStandOptions();
+      onAudienceResolved();
+      renderExclusions();
+    }).catch(audienceFailed);
+  }
+
+  function audienceFailed(e) {
+    if (e && e.authFailed) { handleAuthFailure(); return; }
+    reach.rows = [];
+    resetCompose();
+    showToast('Could not work out the audience.');
+  }
+
+  // Someone working two of the chosen shows is one person, not two. The first
+  // event they appear on keeps them, which is also the event whose allowance
+  // pays for their message.
+  function dedupeAudience(rows) {
+    var seen = {};
+    var out = [];
+    rows.forEach(function (r) {
+      if (!r.employee_id) { out.push(r); return; }
+      if (seen[r.employee_id]) return;
+      seen[r.employee_id] = true;
+      out.push(r);
     });
+    return out;
   }
 
   // Role and stand choices come from the placements actually on this event, so
@@ -1493,6 +1712,11 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
     }
     document.getElementById('eventPickers').style.display = (mode === 'event') ? 'grid' : 'none';
     document.getElementById('rosterPickers').style.display = (mode === 'roster') ? 'grid' : 'none';
+    reach.picked = [];
+    document.getElementById('reachRole').disabled = false;
+    document.getElementById('reachStand').disabled = false;
+    renderPickedChips();
+    markTodayStrip();
     reach.rows = [];
     resetCompose();
     if (mode === 'roster') runReach();
@@ -1507,14 +1731,22 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
 
     document.getElementById('reachVenue').addEventListener('change', function () {
       buildEventOptions();
-      reach.rows = [];
-      resetCompose();
     });
 
     document.getElementById('reachEvent').addEventListener('change', function () {
+      var sel = document.getElementById('reachEvent');
+      var id = sel.value;
+      sel.value = '';
+      if (!id) return;
       document.getElementById('reachRole').value = '';
       document.getElementById('reachStand').value = '';
-      runReach();
+      addPickedEvent(id);
+    });
+
+    document.getElementById('pickedHost').addEventListener('click', function (e) {
+      var x = e.target.closest('[data-unpick]');
+      if (!x) return;
+      removePickedEvent(x.getAttribute('data-unpick'));
     });
 
     document.getElementById('reachRole').addEventListener('change', runReach);
@@ -1540,13 +1772,10 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
     document.getElementById('todayList').addEventListener('click', function (e) {
       var row = e.target.closest('[data-event]');
       if (!row) return;
-      setReachMode('event');
-      document.getElementById('reachVenue').value = row.getAttribute('data-venue');
-      buildEventOptions();
-      document.getElementById('reachEvent').value = row.getAttribute('data-event');
-      document.getElementById('reachRole').value = '';
-      document.getElementById('reachStand').value = '';
-      runReach();
+      var id = row.getAttribute('data-event');
+      if (reach.mode !== 'event') setReachMode('event');
+      if (reach.picked.indexOf(id) !== -1) removePickedEvent(id);
+      else addPickedEvent(id);
     });
   }
 
@@ -1567,7 +1796,9 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
     confirmOpen: false,
     sending: false,
     templates: [],
-    appliedText: null   // what a template produced, to detect an untouched box
+    appliedText: null,  // what a template produced, to detect an untouched box
+    capsByEvent: {},    // eventId -> { limit, used_today }
+    lastResult: null
   };
 
   // ---- Standard messages (templates) ---------------------------------
@@ -1745,7 +1976,7 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
   // ---- describe() ----------------------------------------------------
 
   function describeKey() {
-    return reach.mode + ':' + (selectedEventId() || '');
+    return reach.mode + ':' + (reach.mode === 'event' ? reach.picked.join(',') : '');
   }
 
   function refreshDescribe(force) {
@@ -1755,14 +1986,39 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
       return Promise.resolve();
     }
     compose.descLoading = true;
-    var payload = { action: 'describe', scope: reach.mode };
-    var evId = selectedEventId();
-    if (evId) payload.event_id = evId;
+    compose.capsByEvent = {};
 
-    return callSendFn(payload).then(function (d) {
+    // The wrapper, ceilings, types and window are identical whatever the scope.
+    // Only the cap differs, so each chosen event is asked for its own.
+    var targets = (reach.mode === 'event' && reach.picked.length)
+      ? reach.picked.slice(0)
+      : [null];
+
+    var idx = 0;
+    var first = null;
+
+    function step() {
+      if (idx >= targets.length) return Promise.resolve();
+      var evId = targets[idx];
+      idx = idx + 1;
+      var payload = { action: 'describe', scope: reach.mode };
+      if (evId) payload.event_id = evId;
+      return callSendFn(payload).then(function (d) {
+        if (!d || d.ok === false) throw new Error((d && d.error) || 'describe was refused');
+        if (!first) first = d;
+        if (evId && d.caps) {
+          compose.capsByEvent[evId] = {
+            limit: d.caps.limit,
+            used_today: d.caps.used_today
+          };
+        }
+        return step();
+      });
+    }
+
+    return step().then(function () {
       compose.descLoading = false;
-      if (!d || d.ok === false) throw new Error((d && d.error) || 'describe was refused');
-      compose.desc = d;
+      compose.desc = first;
       compose.descKey = key;
       buildTypeOptions();
       renderComposeLimits();
@@ -2039,17 +2295,51 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
 
   // ---- Limits, notices, gating ---------------------------------------
 
+  // For a multi-event send this reports the worst case across every chosen
+  // event, and blockedEvents names the ones standing in the way. A send that
+  // reached one venue and not the other would be worse than not sending.
   function capState() {
     var d = compose.desc;
-    if (!d || !d.caps) return { known: false, limit: null, used: null, atCap: false };
-    var limit = d.caps.limit;
-    var used = d.caps.used_today;
-    var known = (typeof used === 'number');
+    if (!d || !d.caps) return { known: false, limit: null, used: null, atCap: false, blocked: [] };
+
+    if (reach.mode === 'event' && reach.picked.length) {
+      var blocked = [];
+      var anyKnown = false;
+      var limit = null;
+      var worstUsed = null;
+
+      reach.picked.forEach(function (id) {
+        var c = compose.capsByEvent[id];
+        if (!c) return;
+        if (typeof c.limit === 'number') limit = c.limit;
+        if (typeof c.used_today === 'number') {
+          anyKnown = true;
+          if (worstUsed === null || c.used_today > worstUsed) worstUsed = c.used_today;
+          if (typeof c.limit === 'number' && c.used_today >= c.limit) {
+            var ev = eventById(id);
+            blocked.push(ev ? ev.venue : 'an event');
+          }
+        }
+      });
+
+      return {
+        known: anyKnown,
+        limit: limit,
+        used: worstUsed,
+        atCap: blocked.length > 0,
+        blocked: blocked
+      };
+    }
+
+    var rl = d.caps.limit;
+    var ru = d.caps.used_today;
+    var rknown = (typeof ru === 'number');
     return {
-      known: known,
-      limit: (typeof limit === 'number') ? limit : null,
-      used: known ? used : null,
-      atCap: known && (typeof limit === 'number') && used >= limit
+      known: rknown,
+      limit: (typeof rl === 'number') ? rl : null,
+      used: rknown ? ru : null,
+      atCap: rknown && (typeof rl === 'number') && ru >= rl,
+      blocked: []
     };
   }
 
@@ -2073,7 +2363,15 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
     var cap = capState();
     var bits = [];
 
-    if (cap.limit !== null) {
+    if (reach.mode === 'event' && reach.picked.length > 1) {
+      bits.push(reach.picked.map(function (id) {
+        var c = compose.capsByEvent[id];
+        var ev = eventById(id);
+        var vn = ev ? ev.venue : '?';
+        if (!c || typeof c.used_today !== 'number') return vn + ' usage unknown';
+        return vn + ' ' + c.used_today + '/' + c.limit;
+      }).join(' \u00b7 '));
+    } else if (cap.limit !== null) {
       var scopeWords = reach.mode === 'event' ? 'for this event today' : 'across the whole roster today';
       bits.push(cap.known
         ? (cap.used + ' of ' + cap.limit + ' sends used ' + scopeWords)
@@ -2106,9 +2404,13 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
         '</div>';
     }
     if (cap.atCap) {
-      html += '<div class="notice notice-stop"><b>This ' + (reach.mode === 'event' ? 'event' : 'day') +
-        ' is at its limit.</b> ' + cap.used + ' of ' + cap.limit +
-        ' already sent. Raise the limit on the Inbox tab, or wait.</div>';
+      html += '<div class="notice notice-stop"><b>' +
+        (cap.blocked.length
+          ? (cap.blocked.join(' and ') + ' ' + (cap.blocked.length === 1 ? 'is' : 'are') + ' at the limit.')
+          : 'This day is at its limit.') +
+        '</b> Nothing will be sent to any of the chosen events until that clears \u2014 ' +
+        'a message that reached one venue and not the other is worse than one nobody got. ' +
+        'Raise the limit on the Inbox tab, or remove that event.</div>';
     }
     if (!cap.known && cap.limit !== null) {
       html += '<div class="notice notice-quiet">Today\u2019s usage was not reported for this scope, so the ' +
@@ -2222,7 +2524,7 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
 
   // Every call to send_manual is built here, so there is one place to correct
   // if a parameter name turns out to be different.
-  function buildSendPayload(recipients) {
+  function buildSendPayload(recipients, eventId) {
     var payload = {
       action: 'send_manual',
       scope: reach.mode,
@@ -2230,23 +2532,39 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
       message_type: document.getElementById('cmpType').value,
       recipients: recipients
     };
-    var evId = selectedEventId();
-    if (evId) payload.event_id = evId;
-    if (reach.mode === 'roster') {
+    if (eventId) payload.event_id = eventId;
+
+    // target_criteria already carries a "picker" key that nothing was filling,
+    // which is why older sends cannot say whether a role filter was applied.
+    var picker = { label: reach.lastLabel || '' };
+    if (reach.mode === 'event') {
+      picker.role = multiEvent() ? null : (document.getElementById('reachRole').value || null);
+      picker.stand = multiEvent() ? null : (document.getElementById('reachStand').value || null);
+      if (reach.picked.length > 1) picker.events_in_message = reach.picked.length;
+    } else {
       var hv = document.getElementById('reachHomeVenue').value;
+      picker.home_venue = hv || null;
       if (hv) payload.home_venue = hv;
     }
-    if (!windowOpen() && overrideChecked()) payload.window_override = true;
+    payload.picker = picker;
     return payload;
   }
 
-  function describeSendResult(d, fallbackCount) {
-    if (!d) return fallbackCount + ' queued.';
-    var n = (typeof d.sent === 'number') ? d.sent
-          : (typeof d.queued === 'number') ? d.queued
-          : (typeof d.recipients === 'number') ? d.recipients
-          : fallbackCount;
-    return n + (n === 1 ? ' message queued.' : ' messages queued.');
+  // Recipients grouped by the event whose allowance pays for them. Dedupe has
+  // already run, so nobody appears in two groups.
+  function sendGroups() {
+    if (reach.mode === 'roster') {
+      return [{ eventId: null, venue: 'Roster', ids: sendableRows().map(function (r) { return r.employee_id; }) }];
+    }
+    return reach.picked.map(function (id) {
+      var ev = eventById(id);
+      return {
+        eventId: id,
+        venue: ev ? ev.venue : 'Event',
+        ids: sendableRows().filter(function (r) { return r._event_id === id; })
+               .map(function (r) { return r.employee_id; })
+      };
+    }).filter(function (g) { return g.ids.length > 0; });
   }
 
   function doTestSend() {
@@ -2267,7 +2585,7 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
     renderMessageState();
     renderTestState();
 
-    callSendFn(buildSendPayload([id])).then(function (d) {
+    callSendFn(buildSendPayload([id], selectedEventId())).then(function (d) {
       compose.sending = false;
       if (d && d.ok === false) throw new Error(d.error || 'The send was refused.');
       showToast('Test sent. Check your phone.');
@@ -2292,9 +2610,15 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
 
     compose.confirmOpen = true;
 
+    var groups = sendGroups();
     var lines = [];
     lines.push('<b>' + people.length + '</b> ' + (people.length === 1 ? 'person' : 'people') +
       ' \u00b7 ' + esc(reach.lastLabel));
+    if (groups.length > 1) {
+      lines.push('Goes out as <b>' + groups.length + ' separate sends</b>, one per event: ' +
+        groups.map(function (g) { return esc(g.venue) + ' ' + g.ids.length; }).join(', ') +
+        ' \u2014 each uses one of that event\u2019s allowance');
+    }
     lines.push('<b>' + seg.segments + '</b> segment' + (seg.segments === 1 ? '' : 's') +
       ' each \u00b7 about <b>' + money(seg.segments * people.length * COST_PER_SEGMENT) + '</b>');
     lines.push('Recorded as <b>' + esc(typeLabel(document.getElementById('cmpType').value)) + '</b>');
@@ -2363,19 +2687,47 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
     var gate = canSend();
     if (!gate.ok) { showToast('Not ready to send.'); closeConfirm(); return; }
 
-    var recipients = sendableRows().map(function (r) { return r.employee_id; });
-    if (!recipients.length) { showToast('Nobody to send to.'); closeConfirm(); return; }
+    var groups = sendGroups();
+    if (!groups.length) { showToast('Nobody to send to.'); closeConfirm(); return; }
 
     compose.sending = true;
     var btn = document.getElementById('cmpConfirmBtn');
-    if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+    if (btn) { btn.disabled = true; btn.textContent = 'Sending\u2026'; }
 
-    callSendFn(buildSendPayload(recipients)).then(function (d) {
+    var done = [];
+    var failed = [];
+    var idx = 0;
+
+    function step() {
+      if (idx >= groups.length) return Promise.resolve();
+      var g = groups[idx];
+      idx = idx + 1;
+      return callSendFn(buildSendPayload(g.ids, g.eventId)).then(function (d) {
+        if (d && d.ok === false) throw new Error(d.error || 'refused');
+        done.push(g.venue + ' (' + g.ids.length + ')');
+        return step();
+      }).catch(function (e) {
+        if (e && e.authFailed) throw e;
+        failed.push(g.venue + ': ' + (e.message || 'unknown error'));
+        return step();   // keep going; a stalled venue must not hide the rest
+      });
+    }
+
+    step().then(function () {
       compose.sending = false;
-      if (d && d.ok === false) throw new Error(d.error || 'The send was refused.');
       closeConfirm();
-      document.getElementById('cmpMsg').value = '';
-      showToast(describeSendResult(d, recipients.length));
+
+      if (!failed.length) {
+        document.getElementById('cmpMsg').value = '';
+        compose.appliedText = null;
+        showToast('Sent \u2014 ' + done.join(', ') + '.');
+      } else {
+        // The message is deliberately left in the box so a partial send can be
+        // finished by removing what already went and sending again.
+        showToast(done.length
+          ? ('Partly sent. Went: ' + done.join(', ') + '. Failed: ' + failed.join('; '))
+          : ('Nothing sent. ' + failed.join('; ')));
+      }
       afterSend();
     }).catch(function (e) {
       compose.sending = false;
