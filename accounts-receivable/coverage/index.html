@@ -123,6 +123,19 @@
   .csr-table tr.total-row { background: #f6f6f3; border-top: 2px solid #1a1a1a; }
   .csr-table tr.total-row td { font-weight: 700; }
 
+  /* Dismiss column — quiet until the row is hovered. */
+  .csr-table th.col-x, .csr-table td.col-x { width: 40px; padding-left: 0; padding-right: 12px; text-align: right; }
+  .csr-dismiss {
+    background: transparent; border: 0; cursor: pointer;
+    font-family: inherit; font-size: 14px; line-height: 1;
+    color: #c9c8c2; padding: 3px 6px; border-radius: 5px;
+    opacity: 0; transition: opacity 0.12s ease, color 0.12s ease, background 0.12s ease;
+  }
+  .csr-table tbody tr:hover .csr-dismiss { opacity: 1; }
+  .csr-dismiss:focus { opacity: 1; outline: none; color: #791F1F; }
+  .csr-dismiss:hover { color: #791F1F; background: #fceaea; }
+  .csr-dismiss[disabled] { opacity: 1; color: #ccc; cursor: default; background: transparent; }
+
   .venue-chip {
     display: inline-block; font-size: 10px; font-weight: 600; letter-spacing: 0.04em;
     padding: 2px 7px; border-radius: 5px; background: #f1f0eb; color: #444441; margin-right: 6px;
@@ -154,14 +167,53 @@
   .csr-loading { padding: 50px 20px; text-align: center; color: #aaa; font-size: 13px; }
   .csr-empty { padding: 44px 20px; text-align: center; color: #888; font-size: 13px; }
 
+  /* Dismissed / recovery list — deliberately quiet. No dollar figures here;
+     this is a scratch-pad checklist, not a ledger. */
+  .csr-recovery { margin-top: -6px; }
+  .csr-recovery[hidden] { display: none; }
+  .csr-recovery-toggle {
+    background: transparent; border: 0; color: #999; font-family: inherit;
+    font-size: 12px; cursor: pointer; padding: 4px 2px;
+  }
+  .csr-recovery-toggle:hover { color: #1a1a1a; text-decoration: underline; }
+  .csr-recovery-list {
+    margin-top: 10px; background: #fff; border: 0.5px solid #e0dfd8;
+    border-radius: 10px; overflow: hidden;
+  }
+  .csr-recovery-list[hidden] { display: none; }
+  .csr-recovery-row {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 10px 16px; border-bottom: 1px solid #f0efe8; font-size: 13px;
+  }
+  .csr-recovery-row:last-child { border-bottom: 0; }
+  .csr-recovery-date { font-variant-numeric: tabular-nums; white-space: nowrap; color: #555; min-width: 96px; }
+  .csr-recovery-stand { flex: 1; min-width: 160px; }
+  .csr-recovery-meta { font-size: 11px; color: #999; }
+  .csr-recovery-empty { padding: 18px 16px; font-size: 12px; color: #999; }
+  .btn-restore {
+    background: #fff; border: 1px solid #e0dfd8; border-radius: 6px;
+    font-family: inherit; font-size: 12px; color: #555;
+    padding: 4px 12px; cursor: pointer;
+  }
+  .btn-restore:hover { border-color: #1a1a1a; color: #1a1a1a; }
+  .btn-restore[disabled] { opacity: 0.5; cursor: default; }
+
   /* Toast */
   .pc-toast-host { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 2000; pointer-events: none; }
   .pc-toast {
     background: #1a1a1a; color: #fff; font-size: 13px; font-weight: 500;
     padding: 11px 18px; border-radius: 24px; box-shadow: 0 4px 14px rgba(0,0,0,0.18);
     opacity: 0; transform: translateY(8px); transition: opacity 0.18s ease, transform 0.18s ease;
+    display: flex; align-items: center; gap: 14px;
   }
   .pc-toast.is-shown { opacity: 1; transform: translateY(0); }
+  .pc-toast.has-action { pointer-events: auto; }
+  .pc-toast-action {
+    background: transparent; border: 0; color: #8fd0ff; font-family: inherit;
+    font-size: 13px; font-weight: 600; cursor: pointer; padding: 0;
+    text-decoration: underline;
+  }
+  .pc-toast-action:hover { color: #bfe4ff; }
 
   body.pre-auth .page-body, body.pre-auth .page-title-row { display: none; }
 </style>
@@ -243,6 +295,7 @@
             <th>Stand</th>
             <th>Deal</th>
             <th class="r">Est. commission</th>
+            <th class="col-x" aria-label="Dismiss row"></th>
           </tr>
         </thead>
         <tbody id="mainBody"></tbody>
@@ -270,10 +323,17 @@
             <th>Stand</th>
             <th>Flag</th>
             <th class="r">Logged sales</th>
+            <th class="col-x" aria-label="Dismiss row"></th>
           </tr>
         </thead>
         <tbody id="redBody"></tbody>
       </table>
+    </div>
+
+    <!-- Dismissed rows — quiet recovery affordance, no dollar figures. -->
+    <div class="csr-recovery" id="csrRecovery" hidden>
+      <button type="button" class="csr-recovery-toggle" id="btnToggleDismissed" aria-expanded="false"><span id="dismissedCountLabel">0 dismissed</span> — <span id="dismissedToggleWord">show</span></button>
+      <div class="csr-recovery-list" id="dismissedList" hidden></div>
     </div>
 
   </main>
@@ -327,6 +387,9 @@
   // kept OUT of the main "awaiting statement" total.
   var SETTLEMENT_VENUES = { DE: true };
 
+  // How long the undo affordance stays on screen after a dismissal.
+  var UNDO_TOAST_MS = 6000;
+
   var state = {
     sales: [],
     events: [],
@@ -336,6 +399,10 @@
     standAliases: {},    // 'venue||alias' -> canonical stand
     venueAliases: {},    // raw venue -> canonical venue
     arOpen: [],          // [{ net, venue_code }] open/partial invoices
+    dismissedMap: {},    // 'venue||date||stand' -> dismissal row (active only)
+    dismissedRows: [],   // active dismissal rows, for the recovery list
+    dismissedOpen: false,
+    userName: '',
     fyStartIso: null,
     dateFloorActive: true,
     filters: { venue: 'all' },
@@ -373,6 +440,14 @@
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
+  // Canonical dismissal key. MUST be built from the post-alias venue and
+  // stand (what compute() produces), never the raw sales strings — otherwise
+  // adding a stand alias later would resurrect rows already dismissed under
+  // the old name.
+  function dismissKey(venue, dateIso, stand) {
+    return venue + '||' + dateIso + '||' + stand;
+  }
+
   function showToast(msg, ms) {
     ms = ms || 2400;
     var host = document.getElementById('pcToastHost');
@@ -386,6 +461,40 @@
       el.classList.remove('is-shown');
       setTimeout(function () { el.remove(); }, 260);
     }, ms);
+  }
+
+  // Toast with a single inline action (the undo affordance). The host is
+  // pointer-events:none so the toast itself opts back in via .has-action.
+  function showActionToast(msg, actionLabel, onAction, ms) {
+    ms = ms || UNDO_TOAST_MS;
+    var host = document.getElementById('pcToastHost');
+    if (!host) return;
+    var el = document.createElement('div');
+    el.className = 'pc-toast has-action';
+    var span = document.createElement('span');
+    span.textContent = msg;
+    el.appendChild(span);
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'pc-toast-action';
+    btn.textContent = actionLabel;
+    el.appendChild(btn);
+    host.appendChild(el);
+
+    var closed = false;
+    function close() {
+      if (closed) return;
+      closed = true;
+      el.classList.remove('is-shown');
+      setTimeout(function () { el.remove(); }, 260);
+    }
+    btn.addEventListener('click', function () {
+      close();
+      if (onAction) onAction();
+    });
+
+    requestAnimationFrame(function () { el.classList.add('is-shown'); });
+    setTimeout(close, ms);
   }
 
   // =====================================================================
@@ -414,6 +523,23 @@
         try { return JSON.parse(t); } catch (e) { return []; }
       });
     });
+  }
+
+  // pcAuth.headers() may return a plain object or a Headers instance
+  // depending on build; normalize to a plain object so we can add
+  // Content-Type / Prefer for writes without mutating shared state.
+  function writeHeaders(prefer) {
+    var out = {};
+    var h = null;
+    try { h = pcAuth.headers(); } catch (e) { h = null; }
+    if (h && typeof h.forEach === 'function' && typeof h.get === 'function') {
+      h.forEach(function (v, k) { out[k] = v; });
+    } else if (h) {
+      Object.keys(h).forEach(function (k) { out[k] = h[k]; });
+    }
+    out['Content-Type'] = 'application/json';
+    if (prefer) out['Prefer'] = prefer;
+    return out;
   }
 
   // =====================================================================
@@ -513,6 +639,25 @@
       { headers: pcAuth.headers() }
     );
   }
+  // Active dismissals only. Deliberately NOT date-bounded: a dismissal must
+  // suppress its row whenever that row appears, including in "show older"
+  // mode after the FY floor drops.
+  function fetchDismissals() {
+    return authFetch(
+      SB_REST + 'ar_coverage_dismissals?select=id,venue_code,event_date,stand_name,note,dismissed_by,dismissed_at' +
+      '&restored_at=is.null&order=event_date.desc&limit=5000',
+      { headers: pcAuth.headers() }
+    );
+  }
+
+  function applyDismissalRows(rows) {
+    state.dismissedRows = rows || [];
+    state.dismissedMap = {};
+    state.dismissedRows.forEach(function (row) {
+      if (!row.venue_code || !row.event_date || !row.stand_name) return;
+      state.dismissedMap[dismissKey(row.venue_code, row.event_date, row.stand_name)] = row;
+    });
+  }
 
   // =====================================================================
   // RESOLUTION
@@ -563,6 +708,14 @@
     Object.keys(agg).forEach(function (k) {
       var g = agg[k];
       if (Math.abs(g.gross) < 0.005) return;       // no real sales -> nothing to estimate
+
+      // 0. Manually dismissed. This page is a checklist, not a ledger — a
+      //    dismissed line is one you've eyeballed and ruled out (a cart used
+      //    to report a hawker's cash, a labor-rate stand whose logged sales
+      //    aren't what we bill on, a residual few dollars). It leaves the
+      //    list and every total. Reversible from the recovery list below.
+      //    Checked before classification so it applies to main AND red rows.
+      if (state.dismissedMap[dismissKey(g.venue, g.date, g.stand)]) return;
 
       var ev = evByVD[g.venue + '||' + g.date];
       var eventId = ev ? ev.id : null;
@@ -627,6 +780,84 @@
   }
 
   // =====================================================================
+  // DISMISS / RESTORE
+  // =====================================================================
+
+  // Fires immediately — no confirm dialog. The undo toast is the safety net,
+  // and restore stays available indefinitely from the recovery list.
+  function dismissRow(venue, dateIso, stand, btn) {
+    var key = dismissKey(venue, dateIso, stand);
+    if (state.dismissedMap[key]) return;             // already gone
+    if (btn) { btn.disabled = true; btn.textContent = '…'; }
+
+    var body = {
+      venue_code: venue,
+      event_date: dateIso,
+      stand_name: stand,
+      dismissed_by: state.userName || null
+    };
+
+    authFetch(SB_REST + 'ar_coverage_dismissals', {
+      method: 'POST',
+      headers: writeHeaders('return=representation'),
+      body: JSON.stringify(body)
+    }).then(function (rows) {
+      var row = (rows && rows[0]) ? rows[0] : {
+        id: null, venue_code: venue, event_date: dateIso, stand_name: stand,
+        dismissed_by: state.userName || null, dismissed_at: new Date().toISOString()
+      };
+      state.dismissedRows.unshift(row);
+      state.dismissedMap[key] = row;
+      compute();
+      render();
+      showActionToast(stand + ' · ' + fmtDate(dateIso) + ' dismissed', 'Undo', function () {
+        restoreRow(row.id, key);
+      });
+    }).catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      console.error('[CSR] dismiss failed:', e);
+      if (btn) { btn.disabled = false; btn.textContent = '✕'; }
+      showToast('Could not dismiss that row');
+    });
+  }
+
+  // Restore = clear restored_at's null, i.e. stamp it. The partial unique
+  // index only covers restored_at IS NULL, so a restored row releases its
+  // slot and the same line can be dismissed again later.
+  function restoreRow(id, key, btn) {
+    if (!id) {
+      // No id came back from the insert (shouldn't happen with
+      // return=representation, but don't strand the user) — reload instead.
+      showToast('Reloading to restore…', 1400);
+      setTimeout(function () { window.location.reload(); }, 1400);
+      return;
+    }
+    if (btn) { btn.disabled = true; btn.textContent = 'Restoring…'; }
+
+    authFetch(SB_REST + 'ar_coverage_dismissals?id=eq.' + encodeURIComponent(id), {
+      method: 'PATCH',
+      headers: writeHeaders('return=minimal'),
+      body: JSON.stringify({
+        restored_at: new Date().toISOString(),
+        restored_by: state.userName || null
+      })
+    }).then(function () {
+      if (key) delete state.dismissedMap[key];
+      state.dismissedRows = state.dismissedRows.filter(function (r) { return r.id !== id; });
+      // Rebuild the map from the surviving rows so a stale key can't linger.
+      applyDismissalRows(state.dismissedRows);
+      compute();
+      render();
+      showToast('Restored to the list');
+    }).catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      console.error('[CSR] restore failed:', e);
+      if (btn) { btn.disabled = false; btn.textContent = 'Restore'; }
+      showToast('Could not restore that row');
+    });
+  }
+
+  // =====================================================================
   // RENDER
   // =====================================================================
   function populateVenueFilter() {
@@ -638,6 +869,60 @@
         return '<option value="' + esc(v.code) + '">' + esc(v.full_name || v.code) + '</option>';
       }).join('');
     sel.value = state.filters.venue;
+  }
+
+  function dismissCell(r) {
+    return '<td class="col-x">' +
+      '<button type="button" class="csr-dismiss" title="Not a real receivable — remove from this list" ' +
+      'aria-label="Dismiss this row" ' +
+      'data-venue="' + esc(r.venue) + '" data-date="' + esc(r.date) + '" data-stand="' + esc(r.stand) + '">✕</button>' +
+    '</td>';
+  }
+
+  function renderDismissed() {
+    var wrap = document.getElementById('csrRecovery');
+    var listEl = document.getElementById('dismissedList');
+    var label = document.getElementById('dismissedCountLabel');
+    var toggle = document.getElementById('btnToggleDismissed');
+    var word = document.getElementById('dismissedToggleWord');
+    if (!wrap || !listEl || !label || !toggle || !word) return;
+
+    var vf = state.filters.venue;
+    var rows = state.dismissedRows.filter(function (r) {
+      return vf === 'all' || r.venue_code === vf;
+    });
+
+    if (rows.length === 0) {
+      wrap.hidden = true;
+      listEl.hidden = true;
+      listEl.innerHTML = '';
+      state.dismissedOpen = false;
+      toggle.setAttribute('aria-expanded', 'false');
+      return;
+    }
+
+    wrap.hidden = false;
+    label.textContent = rows.length + ' dismissed';
+    word.textContent = state.dismissedOpen ? 'hide' : 'show';
+    toggle.setAttribute('aria-expanded', state.dismissedOpen ? 'true' : 'false');
+    listEl.hidden = !state.dismissedOpen;
+    if (!state.dismissedOpen) return;
+
+    listEl.innerHTML = rows.map(function (r) {
+      var label2 = pcCatalog.getVenueLabel(r.venue_code) || r.venue_code;
+      var who = r.dismissed_by ? esc(r.dismissed_by) : 'Unknown';
+      var when = r.dismissed_at ? esc(fmtDate(String(r.dismissed_at).slice(0, 10))) : '';
+      return '<div class="csr-recovery-row">' +
+        '<span class="csr-recovery-date">' + esc(fmtDate(r.event_date)) + '</span>' +
+        '<span class="csr-recovery-stand">' +
+          '<span class="venue-chip">' + esc(r.venue_code) + '</span>' +
+          esc(r.stand_name) +
+          '<span class="csr-recovery-meta"> · ' + esc(label2) + '</span>' +
+        '</span>' +
+        '<span class="csr-recovery-meta">' + who + (when ? ' · ' + when : '') + '</span>' +
+        '<button type="button" class="btn-restore" data-restore-id="' + esc(r.id) + '">Restore</button>' +
+      '</div>';
+    }).join('');
   }
 
   function render() {
@@ -729,11 +1014,13 @@
             (r.eventName ? ' <span class="col-event">· ' + esc(r.eventName) + '</span>' : '') + '</td>' +
           '<td>' + dealChip + '</td>' +
           '<td class="r">' + esc(fmtMoney(r.commission)) + '</td>' +
+          dismissCell(r) +
         '</tr>';
       }).join('');
       rowsHtml += '<tr class="total-row">' +
         '<td colspan="4">Total awaiting statement</td>' +
         '<td class="r">' + esc(fmtMoney(csrTotal)) + '</td>' +
+        '<td class="col-x"></td>' +
       '</tr>';
       mainBody.innerHTML = rowsHtml;
     }
@@ -762,14 +1049,18 @@
             (r.eventName ? ' <span class="col-event">· ' + esc(r.eventName) + '</span>' : '') + '</td>' +
           '<td>' + flag + '</td>' +
           '<td class="r">' + esc(fmtMoney(r.gross)) + '</td>' +
+          dismissCell(r) +
         '</tr>';
       }).join('');
       redHtml += '<tr class="total-row">' +
         '<td colspan="4">Total logged sales (no deal — not in estimate)</td>' +
         '<td class="r">' + esc(fmtMoney(redTotal)) + '</td>' +
+        '<td class="col-x"></td>' +
       '</tr>';
       redBody.innerHTML = redHtml;
     }
+
+    renderDismissed();
   }
 
   // =====================================================================
@@ -789,6 +1080,40 @@
       reload();
     });
   }
+  // Delegated so it survives every innerHTML rebuild of either tbody.
+  function wireDismiss() {
+    ['mainWrap', 'redWrap'].forEach(function (id) {
+      var host = document.getElementById(id);
+      if (!host) return;
+      host.addEventListener('click', function (ev) {
+        var btn = ev.target && ev.target.closest ? ev.target.closest('.csr-dismiss') : null;
+        if (!btn || btn.disabled) return;
+        dismissRow(
+          btn.getAttribute('data-venue'),
+          btn.getAttribute('data-date'),
+          btn.getAttribute('data-stand'),
+          btn
+        );
+      });
+    });
+  }
+  function wireRecovery() {
+    var toggle = document.getElementById('btnToggleDismissed');
+    if (toggle) toggle.addEventListener('click', function () {
+      state.dismissedOpen = !state.dismissedOpen;
+      renderDismissed();
+    });
+    var listEl = document.getElementById('dismissedList');
+    if (listEl) listEl.addEventListener('click', function (ev) {
+      var btn = ev.target && ev.target.closest ? ev.target.closest('.btn-restore') : null;
+      if (!btn || btn.disabled) return;
+      var id = btn.getAttribute('data-restore-id');
+      var row = null;
+      state.dismissedRows.forEach(function (r) { if (String(r.id) === String(id)) row = r; });
+      var key = row ? dismissKey(row.venue_code, row.event_date, row.stand_name) : null;
+      restoreRow(row ? row.id : id, key, btn);
+    });
+  }
 
   function setLoading(on) {
     var l = document.getElementById('mainLoading');
@@ -800,8 +1125,8 @@
   }
 
   // Re-fetch the date-bounded data (sales + events) and recompute. Coverage,
-  // aliases, and AR-open don't depend on the date floor, so they're fetched
-  // once at boot and reused.
+  // aliases, AR-open, and dismissals don't depend on the date floor, so
+  // they're fetched once at boot and reused.
   function reload() {
     setLoading(true);
     return Promise.all([fetchSales(), fetchEvents()])
@@ -826,10 +1151,13 @@
     if (typeof pcActivity !== 'undefined' && pcActivity.init) pcActivity.init('accounts-receivable');
     document.body.classList.remove('pre-auth');
 
+    state.userName = (user && (user.display_name || user.name || user.full_name || user.email)) || '';
     state.fyStartIso = resolveFiscalYearStart();
 
     wireFilter();
     wireShowOlder();
+    wireDismiss();
+    wireRecovery();
     setLoading(true);
 
     Promise.all([
@@ -841,7 +1169,8 @@
       fetchArOpen(),
       fetchSales(),
       fetchEvents(),
-      fetchInvoicedEventKeys()
+      fetchInvoicedEventKeys(),
+      fetchDismissals()
     ]).then(function (res) {
       // res[0], res[1] = ready() (undefined)
       (res[2] || []).forEach(function (row) {
@@ -864,6 +1193,7 @@
           state.invoicedEventKeys[row.venue_code + '||' + row.period_start] = true;
         }
       });
+      applyDismissalRows(res[9] || []);
 
       populateVenueFilter();
       compute();
@@ -874,8 +1204,6 @@
       showToast('Could not load page data');
       setLoading(false);
     });
-
-    void user;
   }
 
   if (typeof pcAuth === 'undefined' || !pcAuth.require) {
