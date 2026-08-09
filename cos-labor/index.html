@@ -1002,6 +1002,24 @@ function renderReport() {
   html+='<hr class="divider"><div class="sec-head">Labor</div>';
   if(p.start<PLACEMENT_ERA_START){html+='<div class="inv-callout partial"><div class="inv-callout-icon">!</div><div>Estimate uses the retired staffing-request model.<div class="inv-callout-detail">Placement records begin '+PLACEMENT_ERA_START+'. Periods before that keep their original numbers and are not recalculated.</div></div></div>';}
   html+=buildUnpricedCallout(codes);
+  /* Venues with real payroll but zero placements aren't over budget — they
+     just aren't planned in the Event Workspace. Without this, a $0 estimate
+     against real payroll renders as a 100% overage. */
+  var unplannedVenues=[];
+  if(p.start>=PLACEMENT_ERA_START){
+    codes.forEach(function(c){
+      var hasPlan=cachedPlacements.some(function(pa){return resolveVenueCode(pa.venue)===c;});
+      var hasActual=cachedPayroll.some(function(pr){return pr.venue===c&&parseFloat(pr.amount||0)>0;});
+      if(!hasPlan&&hasActual){var vv=VENUES.filter(function(x){return x.code===c;})[0];unplannedVenues.push(vv?vv.label:c);}
+    });
+  }
+  var unplannedAll=unplannedVenues.length>0&&unplannedVenues.length===codes.length;
+  if(unplannedVenues.length){
+    html+='<div class="inv-callout partial"><div class="inv-callout-icon">!</div><div>'+
+      (unplannedAll?'No placement records this period — estimate unavailable.':'No placement records for '+unplannedVenues.join(', ')+'.')+
+      '<div class="inv-callout-detail">'+unplannedVenues.join(', ')+' '+(unplannedVenues.length===1?'is':'are')+
+      ' not staffed through the Event Workspace, so there is nothing to estimate against. Actual payroll is unaffected.</div></div></div>';
+  }
   html+='<div class="lg"><div class="lg-header"><div>Week</div><div>Estimated</div><div>Actual</div></div>';
   for(var li=0;li<weeks.length;li++){html+='<div class="lg-row"><div class="lg-wk">'+weeks[li].label+'</div><div class="lg-est">'+fmtMoney(data.estPayrollWeeks[li])+'</div>';if(isSingleVenue&&!isLocked){var actVal=data.actPayrollWeeks[li]!==null?data.actPayrollWeeks[li]:'';html+='<div><input class="lg-act-input" type="number" step="0.01" id="payroll-'+li+'" value="'+actVal+'" placeholder="$0" data-week="'+weeks[li].start+'" data-end="'+weeks[li].end+'"></div>';}else{html+='<div class="lg-act">'+(data.actPayrollWeeks[li]!==null?fmtMoney(data.actPayrollWeeks[li]):'--')+'</div>';}html+='</div>';}
   html+='<div class="lg-row lg-tot"><div>Total</div><div>'+fmtMoney(data.estPayrollTotal)+'</div><div>'+fmtMoney(data.actPayrollTotal)+'</div></div></div>';
@@ -1009,8 +1027,14 @@ function renderReport() {
   if(isSingleVenue&&!isLocked){html+='<div class="save-row"><button class="btn-dark" onclick="savePayroll(\''+venueCode+'\')">Save payroll</button>';var prEntry=cachedPayroll.filter(function(pr){return pr.venue===venueCode;});if(prEntry.length>0){var lastSaved=prEntry[prEntry.length-1];html+='<button class="btn-outline" onclick="editPayroll(\''+venueCode+'\')">Edit (admin)</button><div class="save-ts">Last saved by '+(lastSaved.entered_by||'unknown')+'</div>';}html+='</div>';}
 
   html+='<div class="met-row c2"><div class="met"><div class="met-label">Labor %</div><div class="met-val">'+fmtPct(data.laborPercent)+'</div><div class="met-note">actual payroll / total sales</div></div>';
-  var varColor=data.payrollVariance>0?'warn':data.payrollVariance<0?'good':'';var varSign=data.payrollVariance>0?'+':'';
-  html+='<div class="met"><div class="met-label">Variance from estimate</div><div class="met-val '+varColor+'">'+varSign+fmtMoney(data.payrollVariance)+'</div>';if(data.estPayrollTotal>0){var varPct=Math.abs(data.payrollVariance/data.estPayrollTotal*100).toFixed(1);html+='<div class="met-note">'+varPct+'% '+(data.payrollVariance>0?'over':'under')+' estimate</div>';}html+='</div></div>';
+  if(unplannedAll){
+    html+='<div class="met"><div class="met-label">Variance from estimate</div><div class="met-val" style="color:#ccc;font-size:15px;font-weight:400;">Not available</div><div class="met-note">No plan to compare against</div></div></div>';
+  } else {
+    var varColor=data.payrollVariance>0?'warn':data.payrollVariance<0?'good':'';var varSign=data.payrollVariance>0?'+':'';
+    html+='<div class="met"><div class="met-label">Variance from estimate</div><div class="met-val '+varColor+'">'+varSign+fmtMoney(data.payrollVariance)+'</div>';
+    if(data.estPayrollTotal>0){var varPct=Math.abs(data.payrollVariance/data.estPayrollTotal*100).toFixed(1);html+='<div class="met-note">'+varPct+'% '+(data.payrollVariance>0?'over':'under')+' estimate'+(unplannedVenues.length?' &middot; excludes '+unplannedVenues.join(', '):'')+'</div>';}
+    html+='</div></div>';
+  }
 
   html+='<div class="lc-box"><div class="lc-top"><div class="lc-label">Labor credit (client staffing)</div>';if(isSingleVenue&&!isLocked){html+='<button class="btn-outline" style="padding:4px 10px;font-size:11px;" onclick="overrideLaborCredit(\''+venueCode+'\')">Override (admin)</button>';}html+='</div>';
   html+='<div class="lc-row"><div class="lc-k">System estimate</div><div class="lc-v dim">'+fmtMoney(data.estLaborCredit)+'</div></div>';
