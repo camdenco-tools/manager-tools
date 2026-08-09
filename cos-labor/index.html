@@ -297,6 +297,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 <script src="/pc-nav.js"></script>
 <script src="/pc-activity.js"></script>
 <script src="/pc-fiscal.js"></script>
+<script src="/pc-roles.js"></script>
 <script>
 var SUPA_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
 
@@ -337,6 +338,21 @@ var isLocked = false;
 
 var cachedSales=[],cachedPurchases=[],cachedInventory={},cachedPriorInventory={},cachedStaffing=[],cachedPayRates=[],cachedDealTemplates=[],cachedStandDeals=[],cachedBillingRates=[],cachedPayroll=[],cachedManual=[],cachedSnapshot=null,cachedEvents=[],cachedArLines=[],cachedInventoryRows=[];
 var arActualsByVenue={};
+
+/* ---- Labor estimate v2 (Aug 2026) ----------------------------------
+   Estimated labor now prices REAL placements at the REAL person's rate:
+     position_assignments  ->  employee_venue_roles.pay_rate_override
+                           ->  venue_roles.pay_rate  (fallback)
+                           ->  unpriced (0, flagged on page)
+   Replaces the old staffing_requests x pay_rates(state,role) model, which
+   priced requested headcount at a flat state rate and silently produced $0
+   for any role whose name had been canonicalised (Cashier, Lead, Cook,
+   Warehouse) — 50% of July's headcount.
+   The cutoff is fixed: position_assignments began recording 2026-04-30.
+   Periods starting before that keep the old numbers (legacyEstimatedLabor). */
+var PLACEMENT_ERA_START = '2026-04-30';
+var cachedPlacements=[], empIdByNameKey={}, evrRateByKey={};
+var _unpricedAcc = {};
 
 function apiHeaders() {
   return pcAuth.headers();
@@ -505,7 +521,9 @@ async function loadAllData() {
       supa('eom_manual_entries?select=*&fiscal_period=eq.'+pk),supa('eom_snapshots?select=*&fiscal_period=eq.'+pk),
       supa('events?select=*&event_date=gte.'+p.start+'&event_date=lte.'+p.end),
       supa('staffing_requests?select=*&submitted_at=gte.'+p.start+'T00:00:00&submitted_at=lte.'+p.end+'T23:59:59'),
-      supa('ar_invoice_lines?select=amount,ar_items!inner(cos_class),ar_invoices!inner(id,venue_code,period_start,status)&ar_invoices.status=neq.voided&ar_invoices.period_start=gte.'+p.start+'&ar_invoices.period_start=lte.'+p.end+'&limit=50000').catch(function(e){console.warn('[cos-labor] AR actuals fetch failed (non-fatal):',e);return [];})
+      supa('ar_invoice_lines?select=amount,ar_items!inner(cos_class),ar_invoices!inner(id,venue_code,period_start,status)&ar_invoices.status=neq.voided&ar_invoices.period_start=gte.'+p.start+'&ar_invoices.period_start=lte.'+p.end+'&limit=50000').catch(function(e){console.warn('[cos-labor] AR actuals fetch failed (non-fatal):',e);return [];}),
+      supa('employees?select=id,first_name,last_name&limit=2000'),
+      supa('employee_venue_roles?select=employee_id,pay_rate_override,is_active,venues(code),roles(name)&is_active=eq.true&limit=5000')
     ]);
     cachedSales=Array.isArray(results[0])?results[0]:[];cachedPurchases=Array.isArray(results[1])?results[1]:[];
     var currentInv=Array.isArray(results[2])?results[2]:[];cachedInventoryRows=currentInv;cachedDealTemplates=Array.isArray(results[3])?results[3]:[];
@@ -515,6 +533,8 @@ async function loadAllData() {
     cachedSnapshot=snapshots.length>0?snapshots[0]:null;cachedEvents=Array.isArray(results[10])?results[10]:[];
     cachedStaffing=Array.isArray(results[11])?results[11]:[];
     cachedArLines=Array.isArray(results[12])?results[12]:[];
+    buildLaborIndexes(Array.isArray(results[13])?results[13]:[], Array.isArray(results[14])?results[14]:[]);
+    await loadPlacements(p);
     arActualsByVenue=buildArActuals(); logArActuals(p);
     isLocked=!!cachedSnapshot;
     cachedInventory={};currentInv.forEach(function(row){var vc=resolveVenueCode(row.venue);if(!cachedInventory[vc])cachedInventory[vc]=0;cachedInventory[vc]+=parseFloat(row.value_on_hand||0);});
@@ -586,15 +606,183 @@ function calcRevenue(sale) {
   return {cosRelatable:cosRelatable,otherSales:otherSales,reason:'matched'};
 }
 
-/* Estimated labor */
-function calcEstimatedLabor(venueCode,weekStart,weekEnd) {
-  var total=0;var eventsInWeek=cachedEvents.filter(function(e){return e.event_date>=weekStart&&e.event_date<=weekEnd;});
-  eventsInWeek.forEach(function(evt){var requests=cachedStaffing.filter(function(sr){return sr.event_id===evt.id&&resolveVenueCode(sr.venue)===venueCode;});
-    requests.forEach(function(sr){var headcount=sr.headcount||0;if(headcount<=0)return;var reportTime=evt.report_time||evt.gates_open;var endTime=evt.estimated_end_time;var hours=6;
-      if(reportTime){var startParts=reportTime.split(':');var startH=parseInt(startParts[0]);var startM=parseInt(startParts[1]||0);if(!evt.report_time&&evt.gates_open){startH=startH-1;if(startH<0)startH=0;}var endH=23;var endM=0;if(endTime){var endParts=endTime.split(':');endH=parseInt(endParts[0]);endM=parseInt(endParts[1]||0);}hours=(endH+endM/60)-(startH+startM/60);if(hours<=0)hours=6;}
-      var state=VENUE_STATE[venueCode]||'NJ';var rate=0;for(var k=0;k<cachedPayRates.length;k++){if(cachedPayRates[k].state===state&&cachedPayRates[k].role===sr.role){rate=parseFloat(cachedPayRates[k].base_rate||0);break;}}
-      total+=headcount*hours*rate;});});
+/* ==================== ESTIMATED LABOR (v2, Aug 2026) ==================== */
+
+/* Client-side approximation of the DB's pc_name_key(). Strips the legacy
+   "- U" minor suffix, collapses whitespace, lowercases. NOT guaranteed
+   byte-identical to pc_name_key() — any placement whose name fails to
+   resolve is counted and surfaced on the page, never silently priced at 0. */
+function laborNameKey(n) {
+  return String(n == null ? '' : n)
+    .replace(/\s*-\s*U\s*$/i, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function buildLaborIndexes(employees, evrRows) {
+  empIdByNameKey = {};
+  (employees || []).forEach(function(e) {
+    var k = laborNameKey((e.first_name || '') + ' ' + (e.last_name || ''));
+    if (k) empIdByNameKey[k] = e.id;
+  });
+  evrRateByKey = {};
+  (evrRows || []).forEach(function(r) {
+    if (r.pay_rate_override == null) return;
+    var code = (r.venues || {}).code;
+    var role = (r.roles || {}).name;
+    if (!code || !role) return;
+    evrRateByKey[r.employee_id + '||' + code + '||' + role] = Number(r.pay_rate_override);
+  });
+}
+
+/* Stage-two fetch: placements for the events already loaded. position_assignments
+   carries no event_date, so it must be scoped by event_id. Skipped entirely for
+   pre-cutoff periods, where the table has no rows anyway. */
+async function loadPlacements(p) {
+  cachedPlacements = [];
+  if (p.start < PLACEMENT_ERA_START) return;
+  var ids = cachedEvents.map(function(e) { return '"' + e.id + '"'; });
+  if (!ids.length) return;
+  var inList = '(' + ids.join(',') + ')';
+  var rows = await supa('position_assignments?event_id=in.' + encodeURIComponent(inList) +
+    '&removed_at=is.null&select=id,event_id,venue,stand,role,staff_name&limit=20000');
+  cachedPlacements = Array.isArray(rows) ? rows : [];
+}
+
+/* Event hours — carried over UNCHANGED from the original estimator. Known gaps:
+   no post-show breakdown time, a null estimated_end_time defaults to 23:00, and
+   any show ending past midnight yields a negative span that falls back to a flat
+   6 hours. Deliberately untouched — the hours model is a separate pass. */
+function eventHours(evt) {
+  var reportTime = evt.report_time || evt.gates_open;
+  var endTime = evt.estimated_end_time;
+  var hours = 6;
+  if (reportTime) {
+    var sp = reportTime.split(':');
+    var startH = parseInt(sp[0]);
+    var startM = parseInt(sp[1] || 0);
+    if (!evt.report_time && evt.gates_open) { startH = startH - 1; if (startH < 0) startH = 0; }
+    var endH = 23, endM = 0;
+    if (endTime) {
+      var ep = endTime.split(':');
+      endH = parseInt(ep[0]);
+      endM = parseInt(ep[1] || 0);
+    }
+    hours = (endH + endM / 60) - (startH + startM / 60);
+    if (hours <= 0) hours = 6;
+  }
+  return hours;
+}
+
+function noteUnpriced(venueCode, label) {
+  if (!_unpricedAcc[venueCode]) _unpricedAcc[venueCode] = { count: 0, pairs: {} };
+  _unpricedAcc[venueCode].count++;
+  _unpricedAcc[venueCode].pairs[label] = (_unpricedAcc[venueCode].pairs[label] || 0) + 1;
+}
+
+/* Rate for ONE placement. Resolution order:
+     1. that person's own pay_rate_override for (venue, role)
+     2. the venue's rate for that role (venue_roles.pay_rate)
+     3. unpriced -> contributes 0 AND is counted for the on-page callout
+   A 0 that came from a real row (Hawker commission, salaried Venue Manager)
+   is a legitimate answer and is NOT flagged. Only a missing row is. */
+function placementRate(staffName, venueCode, rawRole) {
+  var role = pcRoles.legacyToCanonical(rawRole);
+  if (!role || role === '__MULTI__') {
+    noteUnpriced(venueCode, venueCode + ' / ' + (rawRole || '(blank)') + ' \u2014 unmapped role');
+    return 0;
+  }
+  var empId = empIdByNameKey[laborNameKey(staffName)];
+  if (empId) {
+    var ov = evrRateByKey[empId + '||' + venueCode + '||' + role];
+    if (ov !== undefined && ov !== null && !isNaN(ov)) return ov;
+  }
+  var def = null;
+  try { def = pcRoles.getPayRate(venueCode, role); } catch (e) { def = null; }
+  if (def === null || def === undefined) {
+    noteUnpriced(venueCode, venueCode + ' / ' + role + (empId ? '' : ' \u2014 name not matched'));
+    return 0;
+  }
+  return def;
+}
+
+/* Estimated labor for one venue-week.
+   Post-2026-04-30: real placements x per-person effective rate.
+   Pre-cutoff:      frozen legacy path (see legacyEstimatedLabor).
+   The cutoff never moves — position_assignments did not exist before it. */
+function calcEstimatedLabor(venueCode, weekStart, weekEnd) {
+  var p = pcFiscal.getPeriods()[currentPeriodIdx];
+  if (p.start < PLACEMENT_ERA_START) return legacyEstimatedLabor(venueCode, weekStart, weekEnd);
+  var total = 0;
+  var eventsInWeek = cachedEvents.filter(function(e) {
+    return e.event_date >= weekStart && e.event_date <= weekEnd;
+  });
+  eventsInWeek.forEach(function(evt) {
+    var hours = eventHours(evt);
+    cachedPlacements.forEach(function(pa) {
+      if (pa.event_id !== evt.id) return;
+      if (resolveVenueCode(pa.venue) !== venueCode) return;
+      total += hours * placementRate(pa.staff_name, venueCode, pa.role);
+    });
+  });
   return total;
+}
+
+/* FROZEN — serves fiscal periods starting before 2026-04-30 ONLY.
+   Reads staffing_requests (requested headcount) x pay_rates (flat state/role).
+   Both inputs are superseded and known to be wrong for current data; this
+   exists solely so historical periods keep the numbers they already showed.
+   DO NOT MAINTAIN. DO NOT EXTEND. No new rows can land on this side. */
+function legacyEstimatedLabor(venueCode, weekStart, weekEnd) {
+  var total = 0;
+  var eventsInWeek = cachedEvents.filter(function(e) {
+    return e.event_date >= weekStart && e.event_date <= weekEnd;
+  });
+  eventsInWeek.forEach(function(evt) {
+    var requests = cachedStaffing.filter(function(sr) {
+      return sr.event_id === evt.id && resolveVenueCode(sr.venue) === venueCode;
+    });
+    requests.forEach(function(sr) {
+      var headcount = sr.headcount || 0;
+      if (headcount <= 0) return;
+      var hours = eventHours(evt);
+      var st = VENUE_STATE[venueCode] || 'NJ';
+      var rate = 0;
+      for (var k = 0; k < cachedPayRates.length; k++) {
+        if (cachedPayRates[k].state === st && cachedPayRates[k].role === sr.role) {
+          rate = parseFloat(cachedPayRates[k].base_rate || 0);
+          break;
+        }
+      }
+      total += headcount * hours * rate;
+    });
+  });
+  return total;
+}
+
+/* Builds the unpriced-placement callout for the currently selected venue(s).
+   Returns '' when everything priced. */
+function buildUnpricedCallout(codes) {
+  var total = 0, pairs = {};
+  codes.forEach(function(c) {
+    var u = _unpricedAcc[c];
+    if (!u) return;
+    total += u.count;
+    Object.keys(u.pairs).forEach(function(k) { pairs[k] = (pairs[k] || 0) + u.pairs[k]; });
+  });
+  if (total <= 0) return '';
+  var list = Object.keys(pairs).sort(function(a, b) { return pairs[b] - pairs[a]; })
+    .map(function(k) { return k + ' (' + pairs[k] + ')'; });
+  try {
+    console.warn('[cos-labor] ' + total + ' placement(s) had no rate and contributed $0 to the estimate.');
+    console.table(Object.keys(pairs).map(function(k) { return { pair: k, placements: pairs[k] }; }));
+  } catch (e) {}
+  return '<div class="inv-callout partial"><div class="inv-callout-icon">!</div><div>' +
+    total + ' placement' + (total !== 1 ? 's' : '') + ' could not be priced and added $0 to the estimate.' +
+    '<div class="inv-callout-detail">Each needs a rate: either a venue_roles row for that (venue, role), ' +
+    'or a per-person rate on the employee\'s Crew card. Unpriced: ' + list.join('; ') +
+    '<br>See browser console for the full breakdown.</div></div></div>';
 }
 
 /* Estimated labor credit */
@@ -663,7 +851,7 @@ function mergeVenueData(codes) {
 
 /* Render report */
 function renderReport() {
-  var codes=getSelectedVenueCodes();var data=mergeVenueData(codes);var p=pcFiscal.getPeriods()[currentPeriodIdx];var pk=p.key;var isSingleVenue=codes.length===1;var venueCode=isSingleVenue?codes[0]:null;var weeks=data.weeks;
+  var codes=getSelectedVenueCodes();_unpricedAcc={};var data=mergeVenueData(codes);var p=pcFiscal.getPeriods()[currentPeriodIdx];var pk=p.key;var isSingleVenue=codes.length===1;var venueCode=isSingleVenue?codes[0]:null;var weeks=data.weeks;
   var html='';
 
   /* COS SECTION */
@@ -812,6 +1000,8 @@ function renderReport() {
 
   /* LABOR SECTION */
   html+='<hr class="divider"><div class="sec-head">Labor</div>';
+  if(p.start<PLACEMENT_ERA_START){html+='<div class="inv-callout partial"><div class="inv-callout-icon">!</div><div>Estimate uses the retired staffing-request model.<div class="inv-callout-detail">Placement records begin '+PLACEMENT_ERA_START+'. Periods before that keep their original numbers and are not recalculated.</div></div></div>';}
+  html+=buildUnpricedCallout(codes);
   html+='<div class="lg"><div class="lg-header"><div>Week</div><div>Estimated</div><div>Actual</div></div>';
   for(var li=0;li<weeks.length;li++){html+='<div class="lg-row"><div class="lg-wk">'+weeks[li].label+'</div><div class="lg-est">'+fmtMoney(data.estPayrollWeeks[li])+'</div>';if(isSingleVenue&&!isLocked){var actVal=data.actPayrollWeeks[li]!==null?data.actPayrollWeeks[li]:'';html+='<div><input class="lg-act-input" type="number" step="0.01" id="payroll-'+li+'" value="'+actVal+'" placeholder="$0" data-week="'+weeks[li].start+'" data-end="'+weeks[li].end+'"></div>';}else{html+='<div class="lg-act">'+(data.actPayrollWeeks[li]!==null?fmtMoney(data.actPayrollWeeks[li]):'--')+'</div>';}html+='</div>';}
   html+='<div class="lg-row lg-tot"><div>Total</div><div>'+fmtMoney(data.estPayrollTotal)+'</div><div>'+fmtMoney(data.actPayrollTotal)+'</div></div></div>';
@@ -986,7 +1176,15 @@ pcAuth.require({
     currentPeriodIdx = pcFiscal.getCurrentPeriodIndex();
     renderPills();
     updatePeriodDisplay();
-    loadAllData();
+    // pcRoles.ready() must resolve before the first render — placementRate()
+    // calls getPayRate(), which throws if the catalog cache is cold.
+    pcRoles.ready().then(function() {
+      loadAllData();
+    }).catch(function(e) {
+      console.error('[cos-labor] role catalog failed to load:', e);
+      document.getElementById('report-content').innerHTML =
+        '<div class="loading" style="color:#A32D2D;">Role catalog failed to load. Labor estimates cannot be computed. Reload the page.</div>';
+    });
   }
 });
 </script>
