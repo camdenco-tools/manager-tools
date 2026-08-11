@@ -669,6 +669,7 @@ function renderSections() {
       var countUnit = getCountUnit(it);
       var countCost = getCountCost(it);
       var hasVal = currCount > 0;
+      var hasEntry = !!curr;
       var isFlagged = priorCount !== null && priorCount > 0 && (currCount / priorCount) < 0.3;
       var priorDisplay = priorCount !== null ? (priorCount > 0 ? priorCount + ' ' + countUnit : '0') : '--';
 
@@ -683,7 +684,7 @@ function renderSections() {
       sectionsHtml += '</td>';
       sectionsHtml += '<td class="prior-td' + (isFlagged ? ' flag' : '') + '">' + priorDisplay + '</td>';
       sectionsHtml += '<td style="text-align:center;"><span class="count-unit-label">' + countUnit + '</span></td>';
-      sectionsHtml += '<td><input class="count-input' + (hasVal ? ' has-val' : '') + (isFlagged ? ' flagged' : '') + '" type="number" min="0" step="0.01" value="' + (hasVal ? currCount : '') + '" placeholder="0" ' + (locked ? 'disabled' : '') + ' data-item="' + it.id + '" oninput="onCountInput(this)"></td>';
+      sectionsHtml += '<td><input class="count-input' + (hasVal ? ' has-val' : '') + (isFlagged ? ' flagged' : '') + '" type="number" min="0" step="0.01" value="' + (hasEntry ? currCount : '') + '" placeholder="0" ' + (locked ? 'disabled' : '') + ' data-item="' + it.id + '" oninput="onCountInput(this)"></td>';
       sectionsHtml += '<td style="text-align:right;font-size:12px;color:#bbb;">' + fmt(countCost) + '</td>';
       sectionsHtml += '<td class="val-td' + (hasVal ? '' : ' empty') + '" id="val-' + it.id.replace(/-/g, '') + '">' + (hasVal ? fmt(currVal) : '--') + '</td>';
       sectionsHtml += '</tr>';
@@ -741,8 +742,22 @@ function toggleCat(sid, tid) {
 
 function onCountInput(input) {
   var itemId = input.getAttribute('data-item');
-  var val = parseFloat(input.value) || 0;
+  // A blank field means "not counted yet". A typed 0 means "counted, none on
+  // hand". These are different facts and must not collapse into each other —
+  // a stored 0 is what makes next month's sheet show "0" instead of "--".
+  var raw = (input.value == null ? '' : String(input.value)).trim();
+  var isBlank = (raw === '');
+  var val = isBlank ? 0 : (parseFloat(raw) || 0);
   input.classList.toggle('has-val', val > 0);
+  if (isBlank) {
+    removeCurrentCount(itemId);
+    var blankCell = document.getElementById('val-' + itemId.replace(/-/g, ''));
+    if (blankCell) { blankCell.textContent = '--'; blankCell.classList.add('empty'); }
+    recalcCatSubtotals();
+    recalcGrandTotal();
+    recalcProgress();
+    return;
+  }
   var item = getItemById(itemId);
   if (!item) return;
   var countCost = getCountCost(item);
@@ -756,6 +771,12 @@ function onCountInput(input) {
   recalcCatSubtotals();
   recalcGrandTotal();
   recalcProgress();
+}
+
+function removeCurrentCount(itemId) {
+  for (var i = 0; i < pcCurrentCounts.length; i++) {
+    if (pcCurrentCounts[i].item_id === itemId) { pcCurrentCounts.splice(i, 1); return; }
+  }
 }
 
 function updateCurrentCount(itemId, countVal, value) {
@@ -853,7 +874,6 @@ async function submitCount() {
       var item = getItemById(c.item_id);
       if (!item) continue;
       var countVal = parseFloat(c.case_count) || 0;
-      if (countVal === 0) continue;
       var countCost = getCountCost(item);
       var value = countVal * countCost;
       rows.push({id:crypto.randomUUID(), venue:currentVenue, item_id:c.item_id, count_month:monthDate, case_count:countVal, loose_count:0, total_units:countVal, value_on_hand:Math.round(value * 10000) / 10000, submitted_by:name, submitted_at:new Date().toISOString()});
