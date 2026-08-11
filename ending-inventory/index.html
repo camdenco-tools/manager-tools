@@ -846,9 +846,6 @@ async function submitCount() {
   if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
   var hdrs = apiHeaders();
   try {
-    if (isResubmit) {
-      await fetch(SUPA_URL + '/rest/v1/inventory_counts?venue=eq.' + currentVenue + '&count_month=eq.' + monthDate + '&item_id=neq.' + SENTINEL_ID, {method:'DELETE', headers:hdrs});
-    }
     var rows = [];
     for (var i = 0; i < pcCurrentCounts.length; i++) {
       var c = pcCurrentCounts[i];
@@ -881,13 +878,34 @@ async function submitCount() {
         return;
       }
     }
+    // Write-then-prune. Every row is upserted on the natural key first; only
+    // after ALL chunks land do we remove rows that are no longer part of this
+    // submission. Nothing is destroyed until the replacement is confirmed
+    // written, so a mid-flight failure leaves the prior count intact.
     var CHUNK = 50;
     for (var start = 0; start < rows.length; start += CHUNK) {
       var chunk = rows.slice(start, start + CHUNK);
       var insHdrs = Object.assign({}, hdrs);
-      insHdrs['Prefer'] = 'return=minimal';
-      var res = await fetch(SUPA_URL + '/rest/v1/inventory_counts', {method:'POST', headers:insHdrs, body:JSON.stringify(chunk)});
+      insHdrs['Prefer'] = 'return=minimal,resolution=merge-duplicates';
+      var res = await fetch(SUPA_URL + '/rest/v1/inventory_counts?on_conflict=venue,item_id,count_month', {method:'POST', headers:insHdrs, body:JSON.stringify(chunk)});
       if (!res.ok) throw new Error(await res.text());
+    }
+
+    // All writes succeeded. Now prune any stored rows for this venue/month
+    // that were not part of this submission (items cleared to zero, or removed
+    // from the venue profile since the last count).
+    var keepIds = [];
+    for (var k = 0; k < rows.length; k++) keepIds.push(rows[k].item_id);
+    keepIds.push(SENTINEL_ID);
+    var pruneUrl = SUPA_URL + '/rest/v1/inventory_counts'
+      + '?venue=eq.' + currentVenue
+      + '&count_month=eq.' + monthDate
+      + '&item_id=not.in.(' + keepIds.join(',') + ')';
+    var pruneRes = await fetch(pruneUrl, {method:'DELETE', headers:hdrs});
+    if (!pruneRes.ok) {
+      // Non-fatal: the new counts are already saved correctly. A stale row
+      // left behind inflates the total, so surface it rather than swallow it.
+      console.error('[ending-inventory] prune failed:', await pruneRes.text());
     }
     var venueLabel = '';
     for (var i = 0; i < VENUES.length; i++) { if (VENUES[i].code === currentVenue) { venueLabel = VENUES[i].label; break; } }
