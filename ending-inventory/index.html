@@ -286,6 +286,7 @@ var pcCurrentCounts = [];
 var currentVenue = '';
 var currentMonth = '';
 var isResubmit = false;
+var adminUnlocked = false;
 var newItemTargetCatId = '';
 var priorRolloverMonth = '';
 var loggedInName = '';
@@ -366,6 +367,7 @@ function renderMonthTiles() {
 }
 
 function selectMonth(val) {
+  adminUnlocked = false;
   currentMonth = val;
   renderMonthTiles();
   loadCount();
@@ -516,6 +518,18 @@ function renderAlreadySubmitted() {
   el.style.display = 'block';
 }
 
+function adminUnlockPeriod() {
+  if (!confirm('Unlock this closed period for editing?\n\nThis month was locked because it ended more than 18 days ago. Any EOM snapshot already taken will NOT update automatically.')) return;
+  adminUnlocked = true;
+  isResubmit = true;
+  try {
+    if (typeof pcActivity !== 'undefined' && typeof pcActivity.log === 'function') {
+      pcActivity.log('admin_unlock_period', {venue: currentVenue, count_month: currentMonth});
+    }
+  } catch (e) { console.warn('[ending-inventory] activity log failed:', e); }
+  renderAll();
+}
+
 function enableResubmit() {
   isResubmit = true;
   renderAll();
@@ -610,7 +624,7 @@ function renderSections() {
   var items = getVenueItems();
   var submitted = isAlreadySubmitted();
   var monthLocked = isMonthLocked(currentMonth);
-  var locked = monthLocked || (submitted && !isResubmit);
+  var locked = (monthLocked && !adminUnlocked) || (submitted && !isResubmit);
   var venueLabel = '';
   for (var i = 0; i < VENUES.length; i++) { if (VENUES[i].code === currentVenue) { venueLabel = VENUES[i].label; break; } }
   var monthLabel = getMonthLabel(currentMonth);
@@ -715,8 +729,12 @@ function renderSections() {
   var html = '';
   html += '<div id="prior-banner-el"><div class="prior-banner"><div><div class="prior-label">Prior month ending inventory (' + priorLabel + ')</div><div class="prior-sub">' + priorSub + '</div></div><div class="prior-val">' + fmt(prior.total) + '</div></div></div>';
   html += '<div id="submitted-banner-el" style="display:none;"></div>';
-  if (monthLocked) {
-    html += '<div style="background:#f8f8f6;border:1px solid #ddd;border-radius:12px;padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:10px;"><div style="font-size:18px;">&#128274;</div><div><div style="font-size:13px;font-weight:700;color:#555;">This period is locked</div><div style="font-size:11px;color:#999;margin-top:2px;">Count month ended more than 18 days ago. Showing as read-only history.</div></div></div>';
+  if (monthLocked && !adminUnlocked) {
+    var canUnlock = false;
+    try { canUnlock = !!(typeof pcAuth !== 'undefined' && pcAuth.isAdmin && pcAuth.isAdmin()); } catch (e) { canUnlock = false; }
+    html += '<div style="background:#f8f8f6;border:1px solid #ddd;border-radius:12px;padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:10px;"><div style="font-size:18px;">&#128274;</div><div style="flex:1;"><div style="font-size:13px;font-weight:700;color:#555;">This period is locked</div><div style="font-size:11px;color:#999;margin-top:2px;">Count month ended more than 18 days ago. Showing as read-only history.</div></div>' + (canUnlock ? '<button onclick="adminUnlockPeriod()" style="padding:7px 14px;background:white;border:1px solid #ddd;border-radius:9px;font-size:12px;color:#555;cursor:pointer;font-family:inherit;font-weight:600;white-space:nowrap;">Unlock for editing</button>' : '') + '</div>';
+  } else if (monthLocked && adminUnlocked) {
+    html += '<div style="background:#FAEEDA;border:1px solid #EF9F27;border-radius:12px;padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:10px;"><div style="font-size:18px;">&#9888;</div><div><div style="font-size:13px;font-weight:700;color:#633806;">Editing a locked period as admin</div><div style="font-size:11px;color:#854F0B;margin-top:2px;">This month was closed. Any EOM snapshot already taken will not update automatically &mdash; reconcile manually if one exists.</div></div></div>';
   }
   html += '<div id="stats-el"></div>';
   html += '<div id="progress-el"></div>';
