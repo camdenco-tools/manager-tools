@@ -28,11 +28,14 @@
   .ref-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; align-items: center; }
   .ref-filter-btn { font-family: inherit; font-size: 13px; font-weight: 500; padding: 7px 14px; border: 1px solid #d6d6d0; border-radius: 20px; background: #fff; color: #555; cursor: pointer; }
   .ref-filter-btn.active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+  .ref-filter-btn:focus-visible { outline: 2px solid #2563EB; outline-offset: 2px; }
   .ref-count-note { margin-left: auto; font-size: 12px; color: #8a8a84; }
 
   /* Cards */
   .ref-card { background: #fff; border: 1px solid #e8e8e4; border-radius: 12px; padding: 18px 20px; margin-bottom: 14px; }
   .ref-card.is-eligible { border-color: #e7c98f; box-shadow: 0 0 0 1px #f0d9a8 inset; }
+  .ref-card.is-nothired { background: #fbfbfa; border-color: #ececea; }
+  .ref-card.is-nothired .ref-name { color: #6b6b66; }
   .ref-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
   .ref-who { flex: 1 1 280px; }
   .ref-who .ref-name { font-size: 17px; font-weight: 700; margin-bottom: 2px; }
@@ -45,25 +48,31 @@
   .badge-approved { background: #e3eefb; color: #1c5fa5; }
   .badge-paid { background: #e6f6ee; color: #167a4e; }
   .badge-void { background: #fbe9e9; color: #a33a3a; }
+  .badge-nothired { background: #f3ecec; color: #8a5757; }
 
   /* Progress */
   .ref-progress { margin: 14px 0 4px; }
   .ref-progress-meta { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
   .ref-progress-meta .pm-label { font-size: 12px; font-weight: 600; color: #6b6b66; }
-  .ref-progress-meta .pm-count { font-size: 13px; font-weight: 700; }
-  .ref-bar { height: 8px; background: #ececea; border-radius: 6px; overflow: hidden; }
-  .ref-bar-fill { height: 100%; background: #c9c9c4; border-radius: 6px; transition: width 0.2s; }
+  .ref-progress-meta .pm-count { font-size: 14px; font-weight: 700; color: #1a52c9; }
+  .ref-progress-meta .pm-count.eligible { color: #BA7517; }
+  .ref-progress-meta .pm-count.full { color: #1D9E75; }
+  .ref-bar { height: 10px; background: #e4e4e0; border-radius: 6px; overflow: hidden; }
+  .ref-bar-fill { height: 100%; background: #2563EB; border-radius: 6px; transition: width 0.2s; }
   .ref-bar-fill.full { background: #1D9E75; }
   .ref-bar-fill.eligible { background: #BA7517; }
+  .ref-bar-zero { font-size: 12px; color: #8a8a84; margin-top: 5px; }
 
   /* Money / meta line */
   .ref-meta-line { font-size: 13px; color: #6b6b66; margin-top: 10px; line-height: 1.7; }
   .ref-meta-line strong { color: #1a1a1a; font-weight: 700; }
   .ref-stamp { font-size: 12px; color: #9a9a94; margin-top: 4px; }
+  .ref-stamp.warn { color: #8a5757; }
 
   /* Actions */
   .ref-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
   .btn { font-family: inherit; font-size: 13px; font-weight: 600; padding: 8px 14px; border-radius: 8px; border: 1px solid transparent; cursor: pointer; }
+  .btn:focus-visible { outline: 2px solid #2563EB; outline-offset: 2px; }
   .btn-green { background: #1D9E75; color: #fff; }
   .btn-green:hover { background: #168760; }
   .btn-blue { background: #185FA5; color: #fff; }
@@ -89,6 +98,10 @@
 
   .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: refspin 0.7s linear infinite; vertical-align: -2px; margin-right: 6px; }
   @keyframes refspin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    .spinner { animation: none; }
+    .ref-bar-fill { transition: none; }
+  }
 
   @media (max-width: 760px) {
     .ref-tiles { grid-template-columns: repeat(2, 1fr); }
@@ -104,7 +117,7 @@
 <div class="ref-wrap">
   <div class="ref-head">
     <h1>Referrals</h1>
-    <p>Employee referral bonuses. Progress is counted from verified sign-in sheets &mdash; a referral becomes eligible once the referred hire has worked the required number of events.</p>
+    <p>Employee referral bonuses. Progress is counted from verified sign-in sheets &mdash; a referral becomes eligible once the referred hire has worked the required number of events. Candidates who were rejected in the Pipeline move to the Not hired list automatically.</p>
   </div>
   <div id="ref-root">
     <div class="ref-loading"><span class="spinner"></span>Loading referrals&hellip;</div>
@@ -119,13 +132,16 @@
   var REST = SB_URL + '/rest/v1/';
 
   var DEFAULT_EVENTS_REQUIRED = 5;
+  var REJECTED_STAGE = 'rejected';
 
   // In-memory state
   var pcUser = null;
   var pcIsAdmin = false;
   var refRows = [];            // referrals rows
+  var candById = {};           // candidate id -> { pipeline_stage, hired, punch_id, rejection_reason }
+  var empByPunch = {};         // punch_id -> employee id  (read-time bridge)
   var workedByEmp = {};        // employee_id -> count of distinct events worked
-  var activeFilter = 'all';    // all | pending | eligible | approved | paid | void
+  var activeFilter = 'all';    // all | pending | eligible | approved | paid | void | not_hired
   var editingId = null;        // id of the referral whose edit panel is open
 
   // ---- helpers ----------------------------------------------------------
@@ -165,17 +181,51 @@
     return out;
   }
 
-  // Derived status: a stored 'pending' row whose worked count has met the
-  // threshold is surfaced as "eligible" in the UI (still pending in the DB
-  // until a manager approves it).
+  // The employee this referral points at.
+  //
+  // `referrals.referred_employee_id` is only populated if something stamped it
+  // at hire time. When it's missing we resolve at read time through the
+  // candidate's punch_id, which is the same value the employee record carries.
+  // That path is self-healing: it works no matter how the employee record got
+  // created, so a referred hire counts immediately instead of sitting at 0/N
+  // until someone notices.
+  function effEmpId(row) {
+    if (row.referred_employee_id) { return row.referred_employee_id; }
+    var cand = row.referred_candidate_id ? candById[row.referred_candidate_id] : null;
+    if (cand && cand.punch_id && empByPunch[cand.punch_id]) { return empByPunch[cand.punch_id]; }
+    return null;
+  }
+
+  function candFor(row) {
+    return row.referred_candidate_id ? (candById[row.referred_candidate_id] || null) : null;
+  }
+
+  function isRejected(row) {
+    var cand = candFor(row);
+    return !!(cand && cand.pipeline_stage === REJECTED_STAGE);
+  }
+
+  function neededFor(row) {
+    return (row.events_required != null) ? row.events_required : DEFAULT_EVENTS_REQUIRED;
+  }
+
+  function workedFor(row) {
+    var emp = effEmpId(row);
+    return (emp && workedByEmp[emp] != null) ? workedByEmp[emp] : 0;
+  }
+
+  // Derived status. Two things are layered on top of the stored status:
+  //   - a rejected candidate can never be hired, so a still-pending referral
+  //     for them surfaces as "not hired" and drops out of the working list
+  //   - a pending row whose worked count has met the threshold surfaces as
+  //     "eligible" (still pending in the DB until a manager approves it)
+  // Approved and paid rows are never reclassified — a decision already made
+  // by a manager outranks anything derived here.
   function derivedStatus(row) {
-    if (row.status === 'pending') {
-      var emp = row.referred_employee_id;
-      var need = (row.events_required != null) ? row.events_required : DEFAULT_EVENTS_REQUIRED;
-      var have = (emp && workedByEmp[emp] != null) ? workedByEmp[emp] : 0;
-      if (have >= need) { return 'eligible'; }
-    }
-    return row.status;
+    if (row.status !== 'pending') { return row.status; }
+    if (isRejected(row)) { return 'not_hired'; }
+    if (workedFor(row) >= neededFor(row)) { return 'eligible'; }
+    return 'pending';
   }
 
   // ---- data loading -----------------------------------------------------
@@ -192,6 +242,67 @@
     });
   }
 
+  // Pipeline state for every referred candidate. Drives the rejected auto-drop
+  // and supplies the punch_id used by the employee bridge.
+  function loadCandidates() {
+    var ids = [];
+    var seen = {};
+    for (var i = 0; i < refRows.length; i++) {
+      var c = refRows[i].referred_candidate_id;
+      if (c && !seen[c]) { seen[c] = true; ids.push(c); }
+    }
+    candById = {};
+    if (ids.length === 0) { return Promise.resolve(); }
+    var inList = '(' + ids.join(',') + ')';
+    var url = REST + 'candidates'
+      + '?id=in.' + encodeURIComponent(inList)
+      + '&select=id,pipeline_stage,hired,punch_id,rejection_reason'
+      + '&limit=500';
+    return fetch(url, { headers: pcAuth.headers() }).then(function (r) {
+      if (!r.ok) { return []; }   // non-fatal: falls back to stamped ids only
+      return r.json();
+    }).then(function (rows) {
+      rows = rows || [];
+      for (var i = 0; i < rows.length; i++) { candById[rows[i].id] = rows[i]; }
+    }).catch(function () { /* non-fatal */ });
+  }
+
+  // Resolve candidate punch_id -> employee id for any referral that has no
+  // stamped employee. Active employees win if a punch_id somehow repeats.
+  function loadEmployeeBridge() {
+    var punches = [];
+    var seen = {};
+    for (var i = 0; i < refRows.length; i++) {
+      var row = refRows[i];
+      if (row.referred_employee_id) { continue; }
+      var cand = candFor(row);
+      if (cand && cand.punch_id && !seen[cand.punch_id]) {
+        seen[cand.punch_id] = true;
+        punches.push(cand.punch_id);
+      }
+    }
+    empByPunch = {};
+    if (punches.length === 0) { return Promise.resolve(); }
+    var quoted = [];
+    for (var p = 0; p < punches.length; p++) { quoted.push('"' + punches[p] + '"'); }
+    var inList = '(' + quoted.join(',') + ')';
+    var url = REST + 'employees'
+      + '?punch_id=in.' + encodeURIComponent(inList)
+      + '&select=id,punch_id,is_active'
+      + '&limit=500';
+    return fetch(url, { headers: pcAuth.headers() }).then(function (r) {
+      if (!r.ok) { return []; }   // non-fatal
+      return r.json();
+    }).then(function (rows) {
+      rows = rows || [];
+      for (var i = 0; i < rows.length; i++) {
+        var e = rows[i];
+        if (!e.punch_id) { continue; }
+        if (!empByPunch[e.punch_id] || e.is_active) { empByPunch[e.punch_id] = e.id; }
+      }
+    }).catch(function () { /* non-fatal */ });
+  }
+
   // Batch the worked-event count for all referred employees in one request.
   // Verified attendance lives in sale_staff_assignments -> sales. We count
   // DISTINCT (event_date|venue) per employee so multiple stands at one event
@@ -200,7 +311,7 @@
     var ids = [];
     var seen = {};
     for (var i = 0; i < refRows.length; i++) {
-      var e = refRows[i].referred_employee_id;
+      var e = effEmpId(refRows[i]);
       if (e && !seen[e]) { seen[e] = true; ids.push(e); }
     }
     workedByEmp = {};
@@ -325,7 +436,8 @@
       eligible: ['badge-eligible', 'Eligible'],
       approved: ['badge-approved', 'Approved'],
       paid: ['badge-paid', 'Paid'],
-      void: ['badge-void', 'Void']
+      void: ['badge-void', 'Void'],
+      not_hired: ['badge-nothired', 'Not hired']
     };
     var m = map[status] || map.pending;
     return '<span class="ref-badge ' + m[0] + '">' + m[1] + '</span>';
@@ -339,12 +451,16 @@
 
   function renderCard(row) {
     var dStatus = derivedStatus(row);
-    var emp = row.referred_employee_id;
-    var need = (row.events_required != null) ? row.events_required : DEFAULT_EVENTS_REQUIRED;
-    var have = (emp && workedByEmp[emp] != null) ? workedByEmp[emp] : 0;
+    var emp = effEmpId(row);
+    var cand = candFor(row);
+    var need = neededFor(row);
+    var have = workedFor(row);
     var pct = need > 0 ? Math.min(100, Math.round((have / need) * 100)) : 0;
-    var fillCls = (have >= need) ? (row.status === 'pending' ? 'eligible' : 'full') : '';
-    var cardCls = 'ref-card' + (dStatus === 'eligible' ? ' is-eligible' : '');
+    var met = (have >= need);
+    var fillCls = met ? (row.status === 'pending' ? 'eligible' : 'full') : '';
+    var cardCls = 'ref-card'
+      + (dStatus === 'eligible' ? ' is-eligible' : '')
+      + (dStatus === 'not_hired' ? ' is-nothired' : '');
 
     var html = '<div class="' + cardCls + '">';
 
@@ -359,18 +475,30 @@
     html += '<div>' + badge(dStatus) + '</div>';
     html += '</div>';
 
-    // progress (hide for void)
-    if (row.status !== 'void') {
+    // progress (hidden for void and not-hired — there's nothing to progress toward)
+    if (row.status !== 'void' && dStatus !== 'not_hired') {
+      var countCls = met ? (row.status === 'pending' ? 'eligible' : 'full') : '';
       html += '<div class="ref-progress">';
       html += '<div class="ref-progress-meta">';
       html += '<span class="pm-label">Events worked (verified sign-ins)</span>';
-      html += '<span class="pm-count">' + have + ' / ' + need + '</span>';
+      html += '<span class="pm-count ' + countCls + '">' + have + ' / ' + need + '</span>';
       html += '</div>';
       html += '<div class="ref-bar"><div class="ref-bar-fill ' + fillCls + '" style="width:' + pct + '%;"></div></div>';
+      if (have === 0 && emp) {
+        html += '<div class="ref-bar-zero">No verified sign-ins yet.</div>';
+      }
       html += '</div>';
       if (!emp) {
-        html += '<div class="ref-stamp">No linked employee record yet, so worked events can\'t be counted.</div>';
+        html += '<div class="ref-stamp warn">Not linked to an employee record yet, so worked events can\'t be counted. This links itself once they\'re hired and have a punch ID.</div>';
       }
+    }
+
+    // not-hired explanation
+    if (dStatus === 'not_hired') {
+      var why = (cand && cand.rejection_reason) ? cand.rejection_reason : '';
+      html += '<div class="ref-meta-line">Rejected in the Pipeline, so no bonus is owed.'
+        + (why ? ' Reason: ' + esc(why) : '')
+        + '</div>';
     }
 
     // money + stamps
@@ -385,7 +513,7 @@
     // actions (admin only)
     if (pcIsAdmin) {
       html += '<div class="ref-actions">';
-      if (row.status === 'pending') {
+      if (row.status === 'pending' && dStatus !== 'not_hired') {
         var approveLabel = (dStatus === 'eligible') ? 'Approve bonus' : 'Approve early';
         html += '<button class="btn btn-green" onclick="refApprove(\'' + row.id + '\', this)">' + approveLabel + '</button>';
       } else if (row.status === 'approved') {
@@ -433,12 +561,14 @@
       return;
     }
 
-    // counts
-    var counts = { all: refRows.length, pending: 0, eligible: 0, approved: 0, paid: 0, void: 0 };
+    // counts. "All" is the working list — it excludes not-hired, which lives
+    // on its own chip so nothing is silently lost.
+    var counts = { all: 0, pending: 0, eligible: 0, approved: 0, paid: 0, void: 0, not_hired: 0 };
     var outstanding = 0, paidTotal = 0;
     for (var i = 0; i < refRows.length; i++) {
       var d = derivedStatus(refRows[i]);
       counts[d] = (counts[d] || 0) + 1;
+      if (d !== 'not_hired') { counts.all++; }
       var amt = Number(refRows[i].bonus_amount) || 0;
       if (d === 'paid') { paidTotal += amt; }
       else if (d === 'eligible' || d === 'approved') { outstanding += amt; }
@@ -461,18 +591,22 @@
     html += filterBtn('approved', 'Approved', counts.approved);
     html += filterBtn('paid', 'Paid', counts.paid);
     html += filterBtn('void', 'Void', counts.void);
+    html += filterBtn('not_hired', 'Not hired', counts.not_hired);
     html += '</div>';
 
     // list
     var shown = [];
     for (var j = 0; j < refRows.length; j++) {
       var ds = derivedStatus(refRows[j]);
-      if (activeFilter === 'all' || activeFilter === ds) { shown.push(refRows[j]); }
+      var keep = (activeFilter === 'all') ? (ds !== 'not_hired') : (activeFilter === ds);
+      if (keep) { shown.push(refRows[j]); }
     }
 
     if (shown.length === 0) {
       if (refRows.length === 0) {
         html += '<div class="ref-empty">No referrals yet. When a referred candidate is hired, create the referral record from the candidate\'s card in the Pipeline and it will show up here.</div>';
+      } else if (activeFilter === 'not_hired') {
+        html += '<div class="ref-empty">No referrals for rejected candidates. Anything that lands here stopped short of a hire, so no bonus is owed.</div>';
       } else {
         html += '<div class="ref-empty">No referrals in this view.</div>';
       }
@@ -497,6 +631,8 @@
       pcIsAdmin = pcAuth.isAdmin();
       if (!pcIsAdmin) { render(); return; }
       loadReferrals()
+        .then(loadCandidates)
+        .then(loadEmployeeBridge)
         .then(loadWorkedCounts)
         .then(render)
         .catch(function (err) {
