@@ -114,6 +114,13 @@ body { background: var(--bg); font-family: var(--font); color: var(--primary); m
 .stand-usage-pill { font-size: 10px; font-weight: 700; letter-spacing: 0.02em; background: var(--amber-light); color: var(--amber-dark); border: 1px solid var(--amber-border); padding: 2px 8px; border-radius: 10px; white-space: nowrap; cursor: help; }
 .off-tag { font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; background: var(--bg); color: var(--label); padding: 2px 7px; border-radius: 5px; border: 1px solid var(--border); }
 
+/* Pool-behaviour pill — surfaces the stand_categories flags that drive tip-pool
+ * math, so a manager can see at a glance that DB2 is billed-match rather than
+ * a normal pool stand. Read-only; the flags live on the CATEGORY. */
+.stand-pool-pill { font-size: 9px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; padding: 2px 7px; border-radius: 6px; background: #eef2ff; color: #3730a3; cursor: help; }
+.stand-pool-pill.billed { background: #f3edff; color: #5b21b6; }
+.stand-pool-pill.nopool { background: #f1f1ec; color: #888; }
+
 /* iOS-style switch */
 .switch { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
 .switch input { opacity: 0; width: 0; height: 0; }
@@ -157,7 +164,7 @@ body { background: var(--bg); font-family: var(--font); color: var(--primary); m
 .stands-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 .add-stand-btn { padding: 9px 16px; background: var(--primary); color: white; border: none; border-radius: 9px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: var(--font); }
 .add-stand-btn:hover { opacity: 0.88; }
-.stand-cat-line { font-size: 11px; color: var(--label); margin-top: 3px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.stand-cat-line { font-size: 11px; color: var(--label); margin-top: 3px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .stand-cat-line b { color: #555; font-weight: 600; }
 .stand-cat-editlink { color: #185FA5; cursor: pointer; text-decoration: none; font-weight: 600; }
 .stand-cat-editlink:hover { text-decoration: underline; }
@@ -182,7 +189,7 @@ body { background: var(--bg); font-family: var(--font); color: var(--primary); m
 .cat-role-name { font-size: 13px; color: var(--primary); }
 
 /* ============================================================
- * MODAL (Add stand)
+ * MODAL (Add / Edit stand)
  * ============================================================ */
 .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
 .modal-backdrop.show { display: flex; }
@@ -195,6 +202,9 @@ body { background: var(--bg); font-family: var(--font); color: var(--primary); m
 .modal-field label { display: block; font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 5px; }
 .modal-field input, .modal-field select { width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 10px; font-size: 14px; color: var(--primary); background: #fafafa; font-family: var(--font); -webkit-appearance: none; appearance: none; }
 .modal-field input:focus, .modal-field select:focus { outline: none; border-color: var(--primary); background: white; }
+.modal-hint { font-size: 11px; color: var(--label); margin-top: 5px; line-height: 1.45; }
+.modal-warn { background: var(--amber-light); border: 1px solid var(--amber-border); border-radius: 9px; padding: 9px 11px; font-size: 11px; color: var(--amber-dark); line-height: 1.45; margin-bottom: 14px; display: none; }
+.modal-warn.show { display: block; }
 .modal-foot { padding: 14px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; align-items: center; }
 .modal-err { font-size: 12px; color: var(--red); margin-right: auto; display: none; }
 .modal-err.show { display: block; }
@@ -256,14 +266,17 @@ body { background: var(--bg); font-family: var(--font); color: var(--primary); m
   </div>
 </div>
 
-<!-- Add stand modal — admin-only. Opened from the Stands facet toolbar. -->
+<!-- Add / Edit stand modal — admin-only. Opened from the Stands facet toolbar
+     (add) or a stand row's "edit stand" link (edit). One modal, two modes;
+     EDIT_STAND_ID null = add, set = edit. -->
 <div class="modal-backdrop" id="add-stand-modal">
   <div class="modal">
     <div class="modal-head">
-      <h3>Add a stand</h3>
+      <h3 id="add-stand-title">Add a stand</h3>
       <button class="modal-close" onclick="closeAddStand()">&times;</button>
     </div>
     <div class="modal-body">
+      <div class="modal-warn" id="add-stand-warn"></div>
       <div class="modal-field">
         <label>Venue</label>
         <input type="text" id="add-stand-venue" disabled>
@@ -282,16 +295,18 @@ body { background: var(--bg); font-family: var(--font); color: var(--primary); m
           <option value="nonevent">Non-event</option>
           <option value="mobilecart">Mobile cart</option>
         </select>
+        <div class="modal-hint">Type drives tip-pool bucketing on the Tips Report. <b>Revenue</b> = in the building pool. Hawking keeps its own tips; support / client / non-event are treated as labour and their tips get flagged for review.</div>
       </div>
       <div class="modal-field">
         <label>Category (decides which roles it can hold)</label>
         <select id="add-stand-category"></select>
+        <div class="modal-hint" id="add-stand-cat-hint"></div>
       </div>
     </div>
     <div class="modal-foot">
       <span class="modal-err" id="add-stand-err"></span>
       <button class="btn-cancel" onclick="closeAddStand()">Cancel</button>
-      <button class="save-btn" id="add-stand-save" style="padding:9px 18px;" onclick="saveNewStand()">Add stand</button>
+      <button class="save-btn" id="add-stand-save" style="padding:9px 18px;" onclick="saveStand()">Add stand</button>
     </div>
   </div>
 </div>
@@ -317,8 +332,9 @@ var STAND_BUSY=false;      // guards stand-toggle double-clicks
 var ROLE_BUSY=false;       // guards role add/retire double-clicks
 var FUTURE_USAGE={};       // { standName: { rows, events } } for the venue, future events only
 var CAT_ROLES=[];          // stand_category_roles rows (incl. is_active=false): {id, category_id, role_id, is_active}
-var STAND_CATEGORIES=[];   // stand_categories rows: {id, display_name, has_revenue, is_active, sort_order}
+var STAND_CATEGORIES=[];   // stand_categories rows: {id, display_name, has_revenue, flags, is_active, sort_order}
 var CAT_BUSY=false;        // guards allowlist toggle double-clicks
+var EDIT_STAND_ID=null;    // null = modal is in ADD mode; a uuid = EDIT mode
 
 function apiHeaders(){ return Object.assign({}, pcAuth.headers(), {'Content-Type':'application/json'}); }
 function sbList(path){ return fetch(SB_URL+'/rest/v1/'+path,{headers:apiHeaders()}).then(function(r){ if(!r.ok){ return r.text().then(function(t){ throw new Error('HTTP '+r.status+' '+path+(t?' -- '+t.slice(0,180):'')); }); } return r.json(); }); }
@@ -329,6 +345,26 @@ function jsEsc(s){ return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/
 function todayIso(){
   var d=new Date();
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
+// Set a <select> to a value WITHOUT silently falling back to option[0] when the
+// value isn't in the list. A stand carrying a retired/unknown category_id or
+// stand_type would otherwise be quietly rewritten to the first option the moment
+// someone opened the edit modal and hit save. Same class of bug as the
+// item-catalog edit-count-unit select. Unknown values are appended as a visible
+// "(current)" option instead.
+function setSelectValueSafe(sel, val){
+  if(!sel) return;
+  if(val==null || val===''){ sel.value=''; return; }
+  var found=false;
+  for(var i=0;i<sel.options.length;i++){ if(sel.options[i].value===val){ found=true; break; } }
+  if(!found){
+    var o=document.createElement('option');
+    o.value=val;
+    o.textContent=val+' \u2014 current (not in active list)';
+    sel.appendChild(o);
+  }
+  sel.value=val;
 }
 
 // ---------------------------------------------------------------------
@@ -391,7 +427,7 @@ function loadBaseData(){
   return Promise.all([
     sbList('inventory_items?select=id,name,chargeable,menu_name,cos_category_id,active,status&order=name.asc&limit=10000'),
     sbList('cos_categories?select=id,name,sort_order&order=sort_order.asc&limit=1000'),
-    sbList('stand_categories?select=id,display_name,has_revenue,is_active,sort_order&order=sort_order.asc&limit=1000'),
+    sbList('stand_categories?select=id,display_name,has_revenue,contributes_tips,counts_in_pool_headcount,pool_match_billable,is_active,sort_order&order=sort_order.asc&limit=1000'),
     sbList('stand_category_roles?select=id,category_id,role_id,is_active&limit=10000')
   ]).then(function(res){
     ALL_ITEMS=res[0]||[];
@@ -409,9 +445,14 @@ function loadCatRoles(){
   return sbList('stand_category_roles?select=id,category_id,role_id,is_active&limit=10000').then(function(rows){ CAT_ROLES=rows||[]; return CAT_ROLES; });
 }
 
+function categoryById(catId){
+  for(var i=0;i<STAND_CATEGORIES.length;i++){ if(STAND_CATEGORIES[i].id===catId) return STAND_CATEGORIES[i]; }
+  return null;
+}
+
 function categoryLabel(catId){
-  for(var i=0;i<STAND_CATEGORIES.length;i++){ if(STAND_CATEGORIES[i].id===catId) return STAND_CATEGORIES[i].display_name; }
-  return catId || null;
+  var c=categoryById(catId);
+  return c ? c.display_name : (catId || null);
 }
 
 function loadVenueProfiles(venueCode){
@@ -431,9 +472,10 @@ function loadStandItems(standId){
 // Future-plan usage for the venue: per-stand count of staffing_requests rows
 // on events dated today-or-later (headcount > 0). Powers the "used on N future
 // plans" warning on the Stands facet so an admin sees the blast radius before
-// turning a stand off. NOTE: staffing_requests.stand is free text (no FK), so
-// this matches by stand NAME — same join the Schedule Assistant uses. This is
-// a warning only in Build A; the actual plan-cascade on disable is Build B.
+// turning a stand off — and now also before RENAMING one. NOTE:
+// staffing_requests.stand is free text (no FK), so this matches by stand NAME —
+// same join the Schedule Assistant uses. This is a warning only in Build A; the
+// actual plan-cascade on disable is Build B.
 function loadFutureUsage(venueCode){
   FUTURE_USAGE={};
   // We can't filter by event_date directly on staffing_requests (it lives on
@@ -516,11 +558,27 @@ function renderStandsFacet(){
   panel.innerHTML=html;
 }
 
+// Pool-behaviour pill from the category flags. Read-only — it exists so the
+// non-obvious cases (DB2 contributes tips but isn't in the denominator, and its
+// pool match is billed back to the client) are visible without opening SQL.
+function poolPillHtml(catId){
+  var c=categoryById(catId);
+  if(!c) return '';
+  if(c.pool_match_billable){
+    return '<span class="stand-pool-pill billed" title="Tips collected here join the building pool, but this stand\'s staff are NOT in the pool denominator. They are paid the building pool rate anyway, and that unfunded match plus the tips collected is billed back to the client.">billed match</span>';
+  }
+  if(!c.contributes_tips && !c.counts_in_pool_headcount){
+    return '<span class="stand-pool-pill nopool" title="Outside the building tip pool entirely \u2014 no tips in, no headcount in the denominator.">no pool</span>';
+  }
+  return '';
+}
+
 function renderStandToggleRow(s){
   var on=s.is_active;
   var typeCls=(s.stand_type==='hawking'||s.stand_type==='support'||s.stand_type==='client')?(' '+s.stand_type):'';
   var typePill='<span class="stand-type-pill'+typeCls+'">'+esc(s.stand_type||'revenue')+'</span>';
   var offTag=on?'':'<span class="off-tag">Off</span>';
+  var poolPill=poolPillHtml(s.category_id);
 
   // Future-plan usage warning (active stands only — turning ON has no blast radius).
   var usage=FUTURE_USAGE[s.stand_name];
@@ -535,19 +593,28 @@ function renderStandToggleRow(s){
 
   var disabledAttr=IS_ADMIN?'':' disabled';
 
-  // Category line — shows which category this stand belongs to (and therefore
-  // which role allowlist governs it) with a jump to the Stand roles editor.
+  // "edit stand" opens the modal in edit mode (name / type / category).
+  var editStandLink=IS_ADMIN
+    ? '<a class="stand-cat-editlink" onclick="openEditStand(\''+jsEsc(s.id)+'\')">edit stand</a>'
+    : '';
+
+  // Category line. The roles link now names the CATEGORY and says "all venues"
+  // in the link text itself — sitting next to a stand name, a bare "edit roles"
+  // reads as "edit THIS stand's roles", which it is not.
   var catLine;
   if(s.category_id){
-    catLine='<div class="stand-cat-line">category: <b>'+esc(categoryLabel(s.category_id))+'</b>'+
-      '<a class="stand-cat-editlink" onclick="gotoCategoryEditor(\''+jsEsc(s.category_id)+'\')">edit roles</a></div>';
+    var catName=categoryLabel(s.category_id);
+    catLine='<div class="stand-cat-line">category: <b>'+esc(catName)+'</b>'+
+      '<a class="stand-cat-editlink" onclick="gotoCategoryEditor(\''+jsEsc(s.category_id)+'\')">edit '+esc(catName)+' roles (all venues)</a>'+
+      editStandLink+'</div>';
   } else {
-    catLine='<div class="stand-cat-line stand-cat-none">no category set \u2014 this stand can\'t be staffed until one is assigned</div>';
+    catLine='<div class="stand-cat-line"><span class="stand-cat-none">no category set \u2014 this stand can\'t be staffed until one is assigned</span>'+
+      editStandLink+'</div>';
   }
 
   return '<div class="stand-toggle-row'+(on?'':' off')+'" data-stand-id="'+esc(s.id)+'">'+
     '<div class="stand-toggle-main">'+
-      '<div class="stand-toggle-name">'+esc(s.stand_name)+typePill+offTag+usagePill+'</div>'+
+      '<div class="stand-toggle-name">'+esc(s.stand_name)+typePill+poolPill+offTag+usagePill+'</div>'+
       catLine+
     '</div>'+
     '<label class="switch" id="switch-'+esc(s.id)+'">'+
@@ -610,7 +677,7 @@ function refreshStandPicker(){
   else { CURRENT_STAND=null; } // selected stand was just turned off
 }
 
-// Jump from a stand's "edit roles" link to the Categories facet, pre-scrolled
+// Jump from a stand's roles link to the Categories facet, pre-scrolled
 // to that category. Sets a target so renderCategoriesFacet can highlight it.
 var _catScrollTarget=null;
 function gotoCategoryEditor(catId){
@@ -643,6 +710,7 @@ function renderCategoriesFacet(){
   html+='<div class="cat-editor-note"><strong>These lists are shared.</strong> '+
     'Every stand belongs to a category, and a category\'s roles apply to <strong>all</strong> stands in it, across every venue. '+
     'Ticking a role here makes it selectable on those stands in event planning. '+
+    'To change which category a single stand belongs to, use <strong>edit stand</strong> on the Stands list instead. '+
     (IS_ADMIN?'':'<br>You have view-only access \u2014 ask an admin to change these.')+
     '</div>';
 
@@ -743,31 +811,96 @@ function onCatRoleToggle(catId, roleId, makeOn){
 }
 
 // ---------------------------------------------------------------------
-// ADD STAND modal
+// ADD / EDIT STAND modal
 // ---------------------------------------------------------------------
-function openAddStand(){
-  if(!IS_ADMIN || !CURRENT_VENUE) return;
-  document.getElementById('add-stand-venue').value=pcCatalog.getVenueLabel(CURRENT_VENUE);
-  document.getElementById('add-stand-name').value='';
-  document.getElementById('add-stand-type').value='revenue';
-  // populate category dropdown from active stand_categories
+function populateStandCategorySelect(){
   var sel=document.getElementById('add-stand-category');
   var cats=STAND_CATEGORIES.filter(function(c){ return c.is_active!==false; });
   var opts='';
   for(var i=0;i<cats.length;i++){ opts+='<option value="'+esc(cats[i].id)+'">'+esc(cats[i].display_name)+'</option>'; }
   sel.innerHTML=opts;
+}
+
+// Live hint under the category picker, describing the tip-pool consequences of
+// the chosen category. Reads the same flags the Tips Report will read.
+function updateCatHint(){
+  var el=document.getElementById('add-stand-cat-hint');
+  if(!el) return;
+  var catId=document.getElementById('add-stand-category').value;
+  var c=categoryById(catId);
+  if(!c){ el.textContent=''; return; }
+  var bits=[];
+  bits.push(c.has_revenue ? 'We book revenue here.' : 'No revenue booked to us here.');
+  bits.push(c.contributes_tips ? 'Tips join the building pool.' : 'Tips do not join the building pool.');
+  bits.push(c.counts_in_pool_headcount ? 'Staff count in the pool split.' : 'Staff do NOT count in the pool split.');
+  if(c.pool_match_billable){ bits.push('Staff are paid the pool rate anyway and that match is billed to the client.'); }
+  el.textContent=bits.join(' ');
+}
+
+function openAddStand(){
+  if(!IS_ADMIN || !CURRENT_VENUE) return;
+  EDIT_STAND_ID=null;
+  document.getElementById('add-stand-title').textContent='Add a stand';
+  document.getElementById('add-stand-venue').value=pcCatalog.getVenueLabel(CURRENT_VENUE);
+  document.getElementById('add-stand-name').value='';
+  populateStandCategorySelect();
+  document.getElementById('add-stand-type').value='revenue';
+  updateCatHint();
+  var warn=document.getElementById('add-stand-warn'); warn.classList.remove('show'); warn.innerHTML='';
   var err=document.getElementById('add-stand-err'); err.classList.remove('show'); err.textContent='';
   var btn=document.getElementById('add-stand-save'); btn.disabled=false; btn.textContent='Add stand';
   document.getElementById('add-stand-modal').classList.add('show');
   setTimeout(function(){ document.getElementById('add-stand-name').focus(); }, 50);
 }
 
-function closeAddStand(){
-  document.getElementById('add-stand-modal').classList.remove('show');
+// EDIT mode. Same modal, prefilled from the catalog row. This is the control
+// that was missing: type and category were write-once at creation, so changing
+// a stand from Simple Stand to something else meant a hand-run UPDATE.
+function openEditStand(standId){
+  if(!IS_ADMIN) return;
+  var s=pcCatalog.getStandById(standId);
+  if(!s){ alert('Could not find that stand in the catalog. Refresh the page and try again.'); return; }
+  EDIT_STAND_ID=standId;
+  document.getElementById('add-stand-title').textContent='Edit stand';
+  document.getElementById('add-stand-venue').value=pcCatalog.getVenueLabel(s.venue_code||CURRENT_VENUE);
+  document.getElementById('add-stand-name').value=s.stand_name||'';
+  populateStandCategorySelect();
+  // setSelectValueSafe, not .value= — a legacy/retired value must stay visible
+  // rather than silently becoming option[0] on save.
+  setSelectValueSafe(document.getElementById('add-stand-type'), s.stand_type||'revenue');
+  setSelectValueSafe(document.getElementById('add-stand-category'), s.category_id||'');
+  updateCatHint();
+
+  // Rename warning. staffing_requests.stand is free text with no FK, so a
+  // rename does NOT follow onto plans already built against the old name.
+  var warn=document.getElementById('add-stand-warn');
+  var usage=FUTURE_USAGE[s.stand_name];
+  if(usage && usage.events>0){
+    warn.innerHTML='<b>On '+usage.events+' future event plan'+(usage.events===1?'':'s')+'.</b> '+
+      'Changing the type or category is safe. <b>Renaming is not</b> \u2014 event plans store the stand by name, '+
+      'so those '+usage.rows+' planned role row'+(usage.rows===1?'':'s')+' would be left pointing at the old name.';
+    warn.classList.add('show');
+  } else {
+    warn.classList.remove('show'); warn.innerHTML='';
+  }
+
+  var err=document.getElementById('add-stand-err'); err.classList.remove('show'); err.textContent='';
+  var btn=document.getElementById('add-stand-save'); btn.disabled=false; btn.textContent='Save changes';
+  document.getElementById('add-stand-modal').classList.add('show');
+  setTimeout(function(){ document.getElementById('add-stand-name').focus(); }, 50);
 }
 
-function saveNewStand(){
+function closeAddStand(){
+  document.getElementById('add-stand-modal').classList.remove('show');
+  EDIT_STAND_ID=null;
+}
+
+// One save path for both modes. ADD = POST a new stands row; EDIT = PATCH
+// name/type/category on the existing row. is_active is deliberately untouched
+// in edit mode — the toggle owns that.
+function saveStand(){
   if(!IS_ADMIN) return;
+  var isEdit=!!EDIT_STAND_ID;
   var err=document.getElementById('add-stand-err');
   err.classList.remove('show'); err.textContent='';
   var name=(document.getElementById('add-stand-name').value||'').trim();
@@ -778,10 +911,11 @@ function saveNewStand(){
   if(!catId){ err.textContent='Pick a category.'; err.classList.add('show'); return; }
 
   // Duplicate guard (case-insensitive) against existing stands at this venue,
-  // active or retired — a name collision with a retired stand should reactivate,
-  // not create a second row. We warn and stop rather than silently dupe.
+  // active or retired. In edit mode the row being edited is skipped, so saving
+  // without renaming isn't blocked by itself.
   var existing=pcCatalog.getAllStandsForVenue(CURRENT_VENUE);
   for(var i=0;i<existing.length;i++){
+    if(isEdit && existing[i].id===EDIT_STAND_ID) continue;
     if((existing[i].stand_name||'').toLowerCase()===name.toLowerCase()){
       err.textContent='A stand named "'+name+'" already exists here'+(existing[i].is_active?'.':' (it\'s turned off \u2014 turn it back on instead).');
       err.classList.add('show');
@@ -790,30 +924,72 @@ function saveNewStand(){
   }
 
   var btn=document.getElementById('add-stand-save');
-  btn.disabled=true; btn.textContent='Adding...';
-
   var headers=apiHeaders(); headers['Prefer']='return=minimal';
-  var body={
-    venue_code: CURRENT_VENUE,
-    stand_name: name,
-    stand_type: type,
-    category_id: catId,
-    is_active: true,
-    sort_order: 0,
-    added_by: CURRENT_USER,
-    added_date: todayIso()
-  };
-  fetch(SB_URL+'/rest/v1/stands',{ method:'POST', headers:headers, body:JSON.stringify(body) })
-    .then(function(res){ if(!res.ok){ return res.text().then(function(t){ throw new Error('HTTP '+res.status+' -- '+t.slice(0,180)); }); } return pcCatalog.refresh(); })
+  var req;
+
+  if(isEdit){
+    var prior=pcCatalog.getStandById(EDIT_STAND_ID);
+    var oldName=prior?(prior.stand_name||''):'';
+    // Hard confirm on a rename that would orphan planned rows. The warning
+    // banner is passive; this is the blocking one.
+    if(oldName && oldName!==name){
+      var u=FUTURE_USAGE[oldName];
+      if(u && u.events>0){
+        var ok=confirm('Rename "'+oldName+'" to "'+name+'"?\n\n'+
+          u.rows+' planned role row'+(u.rows===1?'':'s')+' across '+u.events+' future event plan'+(u.events===1?'':'s')+
+          ' store this stand by name, and they will NOT follow the rename. Those rows will still say "'+oldName+'".\n\n'+
+          'Type and category changes are safe either way. Continue with the rename?');
+        if(!ok){ return; }
+      }
+    }
+    btn.disabled=true; btn.textContent='Saving...';
+    req=fetch(SB_URL+'/rest/v1/stands?id=eq.'+encodeURIComponent(EDIT_STAND_ID),{
+      method:'PATCH', headers:headers,
+      body:JSON.stringify({
+        stand_name: name,
+        stand_type: type,
+        category_id: catId,
+        updated_at: new Date().toISOString()
+      })
+    });
+  } else {
+    btn.disabled=true; btn.textContent='Adding...';
+    req=fetch(SB_URL+'/rest/v1/stands',{
+      method:'POST', headers:headers,
+      body:JSON.stringify({
+        venue_code: CURRENT_VENUE,
+        stand_name: name,
+        stand_type: type,
+        category_id: catId,
+        is_active: true,
+        sort_order: 0,
+        added_by: CURRENT_USER,
+        added_date: todayIso()
+      })
+    });
+  }
+
+  req.then(function(res){
+      if(!res.ok){ return res.text().then(function(t){ throw new Error('HTTP '+res.status+' -- '+t.slice(0,180)); }); }
+      return pcCatalog.refresh();
+    })
+    .then(function(){
+      // A rename changes the FUTURE_USAGE key, so re-probe rather than let the
+      // pills go stale against the old name.
+      if(isEdit && CURRENT_VENUE){ return loadFutureUsage(CURRENT_VENUE); }
+    })
     .then(function(){
       closeAddStand();
       refreshStandPicker();
       renderStandsFacet();
+      if(typeof pcActivity!=='undefined' && pcActivity.log){
+        try { pcActivity.log(isEdit?'stand_edited':'stand_added', { stand_name:name, stand_type:type, category_id:catId, venue:CURRENT_VENUE }); } catch(e){}
+      }
     })
     .catch(function(e){
-      console.error('[stand-setup] add stand failed:',e);
-      btn.disabled=false; btn.textContent='Add stand';
-      err.textContent='Could not add stand. '+((e&&e.message)||'See console.');
+      console.error('[stand-setup] save stand failed:',e);
+      btn.disabled=false; btn.textContent=isEdit?'Save changes':'Add stand';
+      err.textContent='Could not save. '+((e&&e.message)||'See console.');
       err.classList.add('show');
     });
 }
@@ -1135,6 +1311,10 @@ pcAuth.require({
     IS_ADMIN = (typeof pcAuth.isAdmin==='function') ? pcAuth.isAdmin() : false;
     if(!IS_ADMIN){ document.getElementById('viewonly-banner').style.display='block'; }
     if(typeof pcActivity!=='undefined' && pcActivity.init) pcActivity.init('stand-setup');
+    // Keep the category hint live as the picker changes (listener, not inline
+    // onchange, so the modal markup stays declarative).
+    var catSel=document.getElementById('add-stand-category');
+    if(catSel){ catSel.addEventListener('change', updateCatHint); }
     Promise.all([ pcCatalog.ready(), pcRoles.ready() ]).then(function(){
       populateVenues();
       return loadBaseData();
