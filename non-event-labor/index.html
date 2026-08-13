@@ -131,6 +131,45 @@ tbody td.conflict { background: var(--amber-50); }
   background: var(--slate-50); color: var(--slate); border-left: 2px solid var(--slate);
   cursor: default;
 }
+.chip-republish { background: var(--amber-50); color: var(--amber-800); border: 1px solid var(--amber-400); }
+
+/* THE 7SHIFTS BADGE.
+   Its own click target, deliberately. Erika ticking twenty of these through a
+   modal would be twenty modals; the whole job is "yes, I put that in the other
+   system". Clicking the chip anywhere else still opens the editor. */
+.sync-badge {
+  display: inline-block; margin-top: 3px; font-size: 10px; font-weight: 700;
+  padding: 2px 6px; border-radius: 10px; cursor: pointer; white-space: nowrap;
+}
+.sync-no { background: var(--slate-50); color: var(--slate); border: 1px solid var(--border); }
+.sync-no:hover { border-color: var(--slate); }
+.sync-yes { background: var(--green-50); color: var(--green-800); }
+.sync-stale { background: var(--amber-100); color: var(--amber-800); }
+
+/* 7SHIFTS CLEANUP STRIP.
+   Rows that were removed here but are still sitting in 7shifts. This is the one
+   state that costs real money: 7shifts will happily let somebody clock in on a
+   shift that was cancelled on this page, and nothing else in the toolkit would
+   ever surface it. */
+.cleanup {
+  background: var(--red-50); border: 1px solid #f0c0c0; border-radius: 12px;
+  padding: 12px 16px; margin-bottom: 14px;
+}
+.cleanup-head { font-size: 13px; font-weight: 700; color: var(--red-600); margin-bottom: 8px; }
+.cleanup-row {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  font-size: 12px; padding: 6px 0; border-bottom: 1px solid #f4d8d4; line-height: 1.45;
+}
+.cleanup-row:last-child { border-bottom: none; }
+.cleanup-when { font-weight: 700; }
+.cleanup-what { color: var(--muted); }
+.cleanup-spacer { flex: 1; }
+.cleanup-btn {
+  padding: 5px 12px; border-radius: 14px; border: 1px solid #f0c0c0;
+  background: var(--surface); color: var(--red-600); font-size: 11px; font-weight: 700;
+  font-family: inherit; cursor: pointer; white-space: nowrap;
+}
+.cleanup-btn:hover { background: #fdf0ee; }
 
 .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--muted); }
 .legend-sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; vertical-align: 0; margin-right: 3px; }
@@ -232,6 +271,7 @@ tbody td.conflict { background: var(--amber-50); }
 
 <div class="canvas">
   <div class="toolbar" id="toolbar"></div>
+  <div id="cleanupStrip"></div>
   <div class="grid-wrap" id="gridWrap">
     <div class="loading">Loading…</div>
   </div>
@@ -272,7 +312,8 @@ tbody td.conflict { background: var(--amber-50); }
     days: [],             // 7 ISO dates
     staff: [],            // employees with is_non_event_staff
     availByKey: {},       // empId|date -> staff_day_availability row
-    assigns: [],          // non_event_assignments rows (not deleted)
+    assigns: [],          // non_event_assignments rows, live (deleted_at IS NULL)
+    orphans: [],          // soft-deleted rows still flagged as in 7shifts
     events: [],           // events in the week
     placementsByKey: {},  // empId|date -> [ {venue, report_time, event_name} ]
     venues: [],
@@ -437,9 +478,13 @@ tbody td.conflict { background: var(--amber-50); }
     var pAvail = sbGet('staff_day_availability?select=id,employee_id,work_date,is_available,note' +
       '&work_date=gte.' + start + '&work_date=lte.' + end + '&limit=2000');
 
+    /* NO deleted_at FILTER, deliberately. A row that was removed here but is
+       still ticked as being in 7shifts has to surface somewhere, and if the
+       query never fetches it nothing can. Split client-side below. */
     var pAssign = sbGet('non_event_assignments?select=id,employee_id,work_date,venue_code,start_time,end_time,note,' +
-      'published_at,published_by,confirmed_at,declined_at,decline_reason,created_by' +
-      '&deleted_at=is.null&work_date=gte.' + start + '&work_date=lte.' + end + '&limit=2000');
+      'published_at,published_by,confirmed_at,declined_at,decline_reason,created_by,deleted_at,' +
+      'seven_shifts_synced,seven_shifts_synced_at,seven_shifts_synced_by,seven_shifts_stale,needs_republish' +
+      '&work_date=gte.' + start + '&work_date=lte.' + end + '&limit=2000');
 
     /* A cancelled or deleted show is not a conflict. If it still tinted a cell
        amber, managers would stop trusting the tint -- which costs more than the
@@ -452,7 +497,11 @@ tbody td.conflict { background: var(--amber-50); }
 
     Promise.all([pStaff, pAvail, pAssign, pEvents, pVenues]).then(function(res) {
       state.staff = res[0] || [];
-      state.assigns = res[2] || [];
+      var allAssigns = res[2] || [];
+      state.assigns = allAssigns.filter(function(a) { return !a.deleted_at; });
+      state.orphans = allAssigns.filter(function(a) {
+        return a.deleted_at && a.seven_shifts_synced === true;
+      });
       state.events = res[3] || [];
       state.venues = (res[4] || []).filter(function(v) { return v.is_active !== false; });
 
@@ -533,8 +582,27 @@ tbody td.conflict { background: var(--amber-50); }
   function eventsOn(date) {
     return state.events.filter(function(e) { return e.event_date === date; });
   }
+  /* Anything the employee has not been told the CURRENT truth about: never
+     published, or published and then materially changed. Both are the same job
+     -- press Publish -- so they are one number on one button. */
   function draftCount() {
-    return state.assigns.filter(function(a) { return !a.published_at; }).length;
+    return state.assigns.filter(function(a) {
+      if (!a.published_at) return true;
+      return a.needs_republish === true;
+    }).length;
+  }
+
+  /* Erika's queue. Three distinct actions, not one:
+       not synced        -> add it to 7shifts
+       synced + stale    -> the times moved, go and EDIT it there
+       deleted + synced  -> pull it out (rendered in the cleanup strip)
+     Collapsing these into "not synced" would tell her to create a duplicate. */
+  function syncTodoCount() {
+    return state.assigns.filter(function(a) {
+      if (!a.published_at) return false;
+      if (!a.seven_shifts_synced) return true;
+      return a.seven_shifts_stale === true;
+    }).length;
   }
   /* People with no answer on ANY day of the week. This is the chase list, and it
      is the number the Wednesday reminder text should target. */
@@ -575,8 +643,64 @@ tbody td.conflict { background: var(--amber-50); }
   /* ---------------- Render ---------------- */
   function render() {
     renderToolbar();
+    renderCleanup();
     renderGrid();
     renderLegend();
+  }
+
+  /* Removed here, still in 7shifts. Nothing else in the toolkit would ever show
+     this, and the consequence of missing it is somebody clocking in -- and being
+     paid -- for a shift that was cancelled. */
+  function renderCleanup() {
+    var el = document.getElementById('cleanupStrip');
+    if (state.loading || state.orphans.length === 0) { el.innerHTML = ''; return; }
+
+    var byEmp = {};
+    state.staff.forEach(function(s) { byEmp[s.id] = fullName(s); });
+
+    var rows = state.orphans.slice().sort(function(a, b) {
+      if (a.work_date < b.work_date) return -1;
+      if (a.work_date > b.work_date) return 1;
+      return 0;
+    }).map(function(a) {
+      var i = state.days.indexOf(a.work_date);
+      var when = (i >= 0 ? DOW_SHORT[i] : a.work_date) + ' ' + fmtDayNum(a.work_date);
+      var times = a.start_time ? (fmtTime(a.start_time) + (a.end_time ? '–' + fmtTime(a.end_time) : '')) : '';
+      return '<div class="cleanup-row">' +
+        '<span class="cleanup-when">' + esc(when) + '</span>' +
+        '<span>' + esc(byEmp[a.employee_id] || 'Unknown') + '</span>' +
+        '<span class="cleanup-what">' + esc(a.venue_code || 'Any') + ' ' + esc(times) + '</span>' +
+        '<span class="cleanup-spacer"></span>' +
+        '<button class="cleanup-btn" data-orphan="' + a.id + '">Pulled it out</button>' +
+      '</div>';
+    }).join('');
+
+    el.innerHTML = '<div class="cleanup">' +
+      '<div class="cleanup-head">Removed here, still in 7shifts (' + state.orphans.length + ')</div>' +
+      rows + '</div>';
+
+    var btns = el.querySelectorAll('[data-orphan]');
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].addEventListener('click', function() {
+        clearOrphan(this.getAttribute('data-orphan'));
+      });
+    }
+  }
+
+  function clearOrphan(id) {
+    var now = new Date().toISOString();
+    sbWrite('PATCH', 'non_event_assignments?id=eq.' + encodeURIComponent(id), {
+      seven_shifts_synced: false,
+      seven_shifts_stale: false,
+      updated_at: now,
+      updated_by: actorName()
+    }).then(function() {
+      toast('Cleared.', 'good');
+      loadWeek();
+    }).catch(function(err) {
+      if (err && err.authFailed) { handleAuthFailure(); return; }
+      toast(err.message || 'Could not save.', 'bad');
+    });
   }
 
   function renderToolbar() {
@@ -584,16 +708,20 @@ tbody td.conflict { background: var(--amber-50); }
     var drafts = state.loading ? 0 : draftCount();
     var chase = state.loading ? 0 : noAnswerCount();
 
+    var todo = state.loading ? 0 : syncTodoCount();
     var stats = '';
     if (!state.loading) {
       if (chase > 0) {
         stats += '<span class="tb-stat chase">' + chase + ' with no answer</span>';
       }
       if (drafts > 0) {
-        stats += '<span class="tb-stat warn">' + drafts + ' unpublished</span>';
+        stats += '<span class="tb-stat warn">' + drafts + ' to publish</span>';
       }
-      if (chase === 0 && drafts === 0) {
-        stats += '<span class="tb-stat">All published</span>';
+      if (todo > 0) {
+        stats += '<span class="tb-stat warn">' + todo + ' to do in 7shifts</span>';
+      }
+      if (chase === 0 && drafts === 0 && todo === 0) {
+        stats += '<span class="tb-stat">All published and synced</span>';
       }
     }
 
@@ -668,6 +796,15 @@ tbody td.conflict { background: var(--amber-50); }
     var cells = wrap.querySelectorAll('[data-cell]');
     for (var i = 0; i < cells.length; i++) {
       cells[i].addEventListener('click', function(ev) {
+        /* The sync badge is checked FIRST and stops here. Erika's job is one
+           click per row; routing her into the editor twenty times would make
+           the fast path the slow one. */
+        var sync = ev.target.closest('[data-sync]');
+        if (sync) {
+          ev.stopPropagation();
+          setSync(sync.getAttribute('data-sync'), sync.getAttribute('data-sync-to') === '1');
+          return;
+        }
         var chip = ev.target.closest('[data-assign-id]');
         var empId = this.getAttribute('data-emp');
         var date = this.getAttribute('data-date');
@@ -709,14 +846,26 @@ tbody td.conflict { background: var(--amber-50); }
     assigns.forEach(function(a) {
       var conflict = conflictFor(a, placements);
       if (conflict) anyConflict = true;
-      var cls = conflict ? 'chip chip-conflict' : (a.published_at ? 'chip chip-pub' : 'chip chip-draft');
+
+      var cls;
+      if (conflict) cls = 'chip chip-conflict';
+      else if (!a.published_at) cls = 'chip chip-draft';
+      else if (a.needs_republish) cls = 'chip chip-republish';
+      else cls = 'chip chip-pub';
+
       var times = a.start_time ? (fmtTime(a.start_time) + (a.end_time ? '–' + fmtTime(a.end_time) : '')) : '';
       var line1 = esc(a.venue_code || 'Any') + (times ? ' ' + esc(times) : '');
+
+      /* One line about the EMPLOYEE. Order matters -- a conflict outranks
+         everything because it is the only one a manager must act on before the
+         day arrives. */
       var sub = '';
       if (conflict) {
         sub = '<div class="chip-state">Overlaps ' + esc(fmtTime(conflict.report_time || conflict.gates_open)) + ' call</div>';
       } else if (!a.published_at) {
         sub = '<div class="chip-state">Not published</div>';
+      } else if (a.needs_republish) {
+        sub = '<div class="chip-state">Changed &mdash; republish</div>';
       } else if (a.declined_at) {
         sub = '<div class="chip-state">Declined</div>';
       } else if (a.confirmed_at) {
@@ -724,14 +873,55 @@ tbody td.conflict { background: var(--amber-50); }
       } else {
         sub = '<div class="chip-state">Awaiting reply</div>';
       }
+
       var note = a.note ? '<div class="chip-sub">' + esc(a.note) + '</div>' : '';
-      body += '<div class="' + cls + '" data-assign-id="' + a.id + '">' + line1 + note + sub + '</div>';
+
+      /* And one badge about 7SHIFTS. Deliberately separate from the line above:
+         "she confirmed" and "it is in the system that pays her" are different
+         facts, done by different people, and a single line cannot say both. */
+      var badge = '';
+      if (a.published_at) {
+        if (!a.seven_shifts_synced) {
+          badge = '<span class="sync-badge sync-no" data-sync="' + a.id + '" data-sync-to="1" title="Mark as entered in 7shifts">Not in 7shifts</span>';
+        } else if (a.seven_shifts_stale) {
+          badge = '<span class="sync-badge sync-stale" data-sync="' + a.id + '" data-sync-to="1" title="The times moved after it was entered — update it in 7shifts, then click">7shifts needs updating</span>';
+        } else {
+          badge = '<span class="sync-badge sync-yes" data-sync="' + a.id + '" data-sync-to="0" title="Click to unmark">&#10003; In 7shifts</span>';
+        }
+      }
+
+      body += '<div class="' + cls + '" data-assign-id="' + a.id + '">' + line1 + note + sub + '</div>' + badge;
     });
 
     body += '<div class="add-hint">+ Assign</div>';
 
     var tdCls = 'cell' + (anyConflict ? ' conflict' : (av ? '' : ' blank-day'));
     return '<td class="' + tdCls + '" data-cell="1" data-emp="' + s.id + '" data-date="' + d + '">' + body + '</td>';
+  }
+
+  /* Ticking it also clears STALE -- she has just gone and fixed it, so the
+     "needs updating" state is exactly what she is answering. */
+  function setSync(id, on) {
+    var now = new Date().toISOString();
+    var patch = {
+      seven_shifts_synced: on === true,
+      seven_shifts_stale: false,
+      updated_at: now,
+      updated_by: actorName()
+    };
+    if (on) {
+      patch.seven_shifts_synced_at = now;
+      patch.seven_shifts_synced_by = actorName();
+    } else {
+      patch.seven_shifts_synced_at = null;
+      patch.seven_shifts_synced_by = null;
+    }
+    sbWrite('PATCH', 'non_event_assignments?id=eq.' + encodeURIComponent(id), patch)
+      .then(function() { loadWeek(); })
+      .catch(function(err) {
+        if (err && err.authFailed) { handleAuthFailure(); return; }
+        toast(err.message || 'Could not save.', 'bad');
+      });
   }
 
   function renderLegend() {
@@ -741,6 +931,7 @@ tbody td.conflict { background: var(--amber-50); }
       '<span><span class="av-none">&mdash;</span> No answer yet</span>' +
       '<span><span class="legend-sw" style="background:var(--green-50);"></span>Published</span>' +
       '<span><span class="legend-sw" style="background:var(--amber-50);border:1px dashed var(--amber-400);"></span>Draft</span>' +
+      '<span><span class="legend-sw" style="background:var(--amber-50);border:1px solid var(--amber-400);"></span>Changed since published</span>' +
       '<span><span class="legend-sw" style="background:var(--amber-100);"></span>Overlaps a show call</span>' +
       '<span><span class="legend-sw" style="background:var(--slate-50);border-left:2px solid var(--slate);border-radius:0;"></span>On a show</span>';
   }
@@ -844,8 +1035,11 @@ tbody td.conflict { background: var(--amber-50); }
     var wasPublished = m.existing && m.existing.published_at;
     var wasAnswered = m.existing && (m.existing.confirmed_at || m.existing.declined_at);
     var resetNote = '';
-    if (wasPublished && wasAnswered) {
-      resetNote = '<div class="apply-note">Changing the venue or the times clears their answer, so they are asked again.</div>';
+    if (wasPublished) {
+      var bits = ['they are asked to confirm again'];
+      if (m.existing.seven_shifts_synced) bits.push('it is flagged for updating in 7shifts');
+      resetNote = '<div class="apply-note">Changing the venue or the times means ' +
+        bits.join(' and ') + '. The note on its own changes neither.</div>';
     }
 
     el.innerHTML =
@@ -947,9 +1141,20 @@ tbody td.conflict { background: var(--amber-50); }
         updated_by: who
       };
       /* A published assignment stays editable forever -- but if the VENUE or the
-         TIMES move, their answer was to a different thing, so it is cleared and
-         they get asked again. A note-only edit leaves the answer alone: nobody
-         needs re-asking because the wording changed. */
+         TIMES move it is a different shift, and THREE things stop being true at
+         once:
+
+           the employee's answer   -> cleared, they are asked again
+           "we told them"          -> needs_republish, so Publish picks it up
+           "it is right in 7shifts"-> stale, so Erika goes and edits it there
+
+         published_at is deliberately NOT cleared. Blanking it would make the row
+         vanish from her page until somebody remembered to republish, and a shift
+         disappearing in silence is the exact failure this whole system exists to
+         remove. She sees the current truth; the amber flag is for us.
+
+         A note-only edit changes none of this -- nobody needs re-asking, and
+         7shifts does not care what the note says. */
       var materialChange =
         (m.existing.venue_code || '') !== (m.venue || '') ||
         (m.existing.start_time || '').slice(0, 5) !== (m.start || '') ||
@@ -959,12 +1164,19 @@ tbody td.conflict { background: var(--amber-50); }
         patch.confirmed_via = null;
         patch.declined_at = null;
         patch.decline_reason = null;
+        patch.needs_republish = true;
+        if (m.existing.seven_shifts_synced) patch.seven_shifts_stale = true;
       }
 
       sbWrite('PATCH', 'non_event_assignments?id=eq.' + encodeURIComponent(m.existing.id), patch)
         .then(function() {
           closeAssignModal();
-          toast(materialChange && m.existing.published_at ? 'Saved. They will be asked to confirm again.' : 'Saved.', 'good');
+          var msg = 'Saved.';
+          if (materialChange && m.existing.published_at) {
+            msg = 'Saved. Publish again to tell them';
+            msg += m.existing.seven_shifts_synced ? ', and update it in 7shifts.' : '.';
+          }
+          toast(msg, 'good');
           state.saving = false;
           loadWeek();
         }).catch(saveFailed);
@@ -1044,7 +1256,10 @@ tbody td.conflict { background: var(--amber-50); }
      half-built grid to the person it concerns teaches them the grid means
      nothing -- the same lesson the July placement release gate cost us. */
   function openPublishModal() {
-    var drafts = state.assigns.filter(function(a) { return !a.published_at; });
+    var drafts = state.assigns.filter(function(a) {
+      if (!a.published_at) return true;
+      return a.needs_republish === true;
+    });
     if (drafts.length === 0) return;
 
     var byEmp = {};
@@ -1060,10 +1275,11 @@ tbody td.conflict { background: var(--amber-50); }
       var i = state.days.indexOf(a.work_date);
       var when = (i >= 0 ? DOW_SHORT[i] : a.work_date) + ' ' + fmtDayNum(a.work_date);
       var times = a.start_time ? (fmtTime(a.start_time) + (a.end_time ? '–' + fmtTime(a.end_time) : '')) : 'time not set';
+      var tag = a.published_at ? ' <span class="pub-what">(changed)</span>' : '';
       return '<div class="pub-row"><span class="pub-when">' + esc(when) + '</span> &middot; ' +
         esc(byEmp[a.employee_id] || 'Unknown') +
         ' <span class="pub-what">' + esc(a.venue_code || 'Any') + ' ' + esc(times) +
-        (a.note ? ' &middot; ' + esc(a.note) : '') + '</span></div>';
+        (a.note ? ' &middot; ' + esc(a.note) : '') + '</span>' + tag + '</div>';
     }).join('');
 
     document.getElementById('publishModal').innerHTML =
@@ -1096,11 +1312,31 @@ tbody td.conflict { background: var(--amber-50); }
     var ids = drafts.map(function(a) { return '"' + a.id + '"'; });
     var inList = '(' + ids.join(',') + ')';
 
-    sbWrite('PATCH', 'non_event_assignments?id=in.' + encodeURIComponent(inList) + '&published_at=is.null', {
-      published_at: nowIso,
-      published_by: who,
+    /* Two shapes in one batch: never-published rows get published_at stamped,
+       already-published-but-changed rows keep theirs. Setting published_at on
+       everything would overwrite the original told-them date, which is the only
+       record of when the promise was first made.
+
+       The published_at IS NULL filter is GONE from the URL for exactly that
+       reason -- it would silently exclude every changed row from the batch. */
+    var newOnes = drafts.filter(function(a) { return !a.published_at; }).map(function(a) { return '"' + a.id + '"'; });
+
+    var jobs = [];
+    jobs.push(sbWrite('PATCH', 'non_event_assignments?id=in.' + encodeURIComponent(inList), {
+      needs_republish: false,
       updated_at: nowIso,
       updated_by: who
+    }));
+    if (newOnes.length > 0) {
+      jobs.push(sbWrite('PATCH', 'non_event_assignments?id=in.' + encodeURIComponent('(' + newOnes.join(',') + ')'), {
+        published_at: nowIso,
+        published_by: who
+      }));
+    }
+
+    Promise.all(jobs).then(function(results) {
+      var saved = results[0];
+      return saved;
     }).then(function(saved) {
       closePublishModal();
       toast('Published ' + saved.length + ' work day' + (saved.length !== 1 ? 's' : '') + '.', 'good');
