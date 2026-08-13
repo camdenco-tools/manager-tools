@@ -63,7 +63,8 @@
     prep: [
       { label: 'Prep & Production Planning',     href: '/prep-production-planning/', slugAny: ['prep-planning', 'prep-production'] },
       { label: 'Prep timing',                    href: '/prep-timing/',            slug: 'prep-timing' },
-      { label: 'Order guide',                    href: '/order-guide/',            slug: 'order-guide' }
+      { label: 'Order guide',                    href: '/order-guide/',            slug: 'order-guide' },
+      { label: 'Non-event labor',                href: '/non-event-labor/',        slug: 'non-event-labor' }
     ],
     dashboards: [
       { label: 'Confirmation dashboard',       href: '/dashboard/',          slug: 'dashboard' },
