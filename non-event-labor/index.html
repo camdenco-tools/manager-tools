@@ -1,0 +1,1151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Non-Event Labor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #F4F3EF;
+  --surface: #FFFFFF;
+  --text: #1a1a1a;
+  --muted: #888;
+  --light: #bbb;
+  --border: #E8E8E4;
+  --border-lt: #F0F0EC;
+  --green-50: #EAF3DE;
+  --green-600: #3B6D11;
+  --green-800: #27500A;
+  --amber-50: #FAEEDA;
+  --amber-100: #FAC775;
+  --amber-400: #BA7517;
+  --amber-600: #854F0B;
+  --amber-800: #633806;
+  --red-50: #FCEBEB;
+  --red-600: #c0392b;
+  --blue-600: #185fa5;
+  --blue-50: #E6F1FB;
+  --slate: #6b7280;
+  --slate-50: #f3f4f6;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+.page-head { max-width: 1360px; margin: 0 auto; padding: 22px 20px 10px; }
+.page-title { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 4px; }
+.page-sub { font-size: 13px; color: var(--muted); line-height: 1.5; max-width: 640px; }
+
+.canvas { max-width: 1360px; margin: 0 auto; padding: 0 20px 60px; }
+
+/* ---- Toolbar ---- */
+.toolbar {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 12px 16px; margin-bottom: 14px;
+}
+.wk-nav { display: flex; align-items: center; gap: 8px; }
+.wk-btn {
+  width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface); cursor: pointer; font-size: 14px; color: var(--text);
+  font-family: inherit; line-height: 1;
+}
+.wk-btn:hover { background: var(--bg); }
+.wk-today {
+  padding: 6px 13px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface); cursor: pointer; font-size: 12px; font-weight: 600;
+  font-family: inherit; color: var(--text);
+}
+.wk-today:hover { background: var(--bg); }
+.wk-label { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+.wk-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
+.tb-spacer { flex: 1; }
+.tb-stat { font-size: 12px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.tb-stat.warn { color: var(--amber-600); }
+.tb-stat.chase { color: var(--red-600); }
+.publish-btn {
+  padding: 8px 18px; border-radius: 20px; border: 1.5px solid var(--blue-600);
+  background: var(--surface); color: var(--blue-600); font-size: 13px; font-weight: 700;
+  font-family: inherit; cursor: pointer; white-space: nowrap;
+}
+.publish-btn:hover:not(:disabled) { background: var(--blue-50); }
+.publish-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ---- Grid ---- */
+.grid-wrap {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; overflow-x: auto;
+}
+table.grid { width: 100%; border-collapse: collapse; table-layout: fixed; min-width: 1080px; }
+table.grid th, table.grid td { border-left: 1px solid var(--border-lt); vertical-align: top; }
+table.grid th:first-child, table.grid td:first-child { border-left: none; }
+th.staff-col, td.staff-col {
+  width: 150px; position: sticky; left: 0; background: var(--surface);
+  z-index: 3; box-shadow: 1px 0 0 var(--border-lt); text-align: left;
+}
+thead th { background: #fafaf8; border-bottom: 1px solid var(--border); padding: 8px 9px; }
+thead th.staff-col { background: #fafaf8; z-index: 5; }
+.dh-day { font-size: 12px; font-weight: 700; }
+.dh-day.today { color: var(--blue-600); }
+.dh-pills { margin-top: 4px; display: flex; gap: 3px; flex-wrap: wrap; min-height: 17px; }
+.vpill {
+  font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 10px;
+  white-space: nowrap; cursor: default;
+}
+.dh-col-head { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+
+tbody td { padding: 5px; border-bottom: 1px solid var(--border-lt); height: 62px; }
+tbody td.staff-col { padding: 9px; }
+tbody tr:last-child td { border-bottom: none; }
+tbody td.blank-day { background: #fbfbf9; }
+tbody td.conflict { background: var(--amber-50); }
+.emp-name { font-size: 13px; font-weight: 600; line-height: 1.3; }
+.emp-venue { font-size: 11px; color: var(--muted); margin-top: 1px; }
+
+.cell { cursor: pointer; min-height: 50px; }
+.cell:hover .add-hint { opacity: 1; }
+.av-yes { color: var(--green-600); font-size: 14px; font-weight: 700; }
+.av-no { color: var(--muted); font-size: 12px; font-weight: 600; }
+.av-none { color: var(--light); font-size: 12px; }
+.av-note { font-size: 10px; color: var(--muted); font-style: italic; line-height: 1.35; margin-top: 1px; }
+.add-hint { opacity: 0; font-size: 11px; color: var(--blue-600); font-weight: 700; margin-top: 3px; transition: opacity 0.12s; }
+
+.chip {
+  margin-top: 3px; font-size: 11px; padding: 3px 6px; border-radius: 5px;
+  line-height: 1.35; cursor: pointer;
+}
+.chip-pub { background: var(--green-50); color: var(--green-800); }
+.chip-draft { background: var(--amber-50); color: var(--amber-800); border: 1px dashed var(--amber-400); }
+.chip-conflict { background: var(--amber-100); color: var(--amber-800); }
+.chip-sub { font-size: 10px; opacity: 0.85; }
+.chip-state { font-size: 10px; font-weight: 700; }
+.chip-show {
+  margin-top: 3px; font-size: 11px; padding: 3px 6px; line-height: 1.35;
+  background: var(--slate-50); color: var(--slate); border-left: 2px solid var(--slate);
+  cursor: default;
+}
+
+.legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--muted); }
+.legend-sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; vertical-align: 0; margin-right: 3px; }
+
+.loading, .empty { padding: 50px 20px; text-align: center; color: var(--muted); font-size: 13px; }
+.access-denied { max-width: 520px; margin: 80px auto; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 30px; text-align: center; }
+
+/* ---- Modal ---- */
+.backdrop {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+  z-index: 1000; align-items: flex-start; justify-content: center; padding: 30px 16px; overflow-y: auto;
+}
+.backdrop.open { display: flex; }
+.modal {
+  background: var(--surface); border-radius: 14px; width: 100%; max-width: 460px;
+  border: 1px solid var(--border); overflow: hidden;
+}
+.modal-head { padding: 16px 20px; border-bottom: 1px solid var(--border-lt); display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.modal-title { font-size: 16px; font-weight: 700; }
+.modal-who { font-size: 13px; color: var(--muted); margin-top: 2px; }
+.modal-close { background: none; border: none; font-size: 22px; color: var(--muted); cursor: pointer; line-height: 1; padding: 0 4px; }
+.modal-close:hover { color: var(--text); }
+.modal-body { padding: 16px 20px; }
+.fld { margin-bottom: 14px; }
+.fld-label { font-size: 12px; font-weight: 700; color: var(--text); display: block; margin-bottom: 5px; }
+.fld-input, .fld-select {
+  width: 100%; padding: 9px 11px; border: 1px solid var(--border); border-radius: 8px;
+  font-size: 14px; font-family: inherit; color: var(--text); background: var(--surface);
+}
+.fld-input:focus, .fld-select:focus { outline: none; border-color: var(--blue-600); }
+.time-row { display: flex; align-items: center; gap: 8px; }
+.time-row .fld-input { flex: 1; }
+.time-arrow { color: var(--muted); font-size: 13px; }
+.hrs { font-size: 12px; color: var(--muted); font-weight: 600; white-space: nowrap; min-width: 52px; text-align: right; }
+.char-count { font-size: 11px; color: var(--light); text-align: right; margin-top: 3px; }
+.day-chips { display: flex; gap: 5px; flex-wrap: wrap; }
+.day-chip {
+  padding: 6px 11px; border-radius: 16px; border: 1px solid var(--border);
+  background: var(--surface); font-size: 12px; font-weight: 600; font-family: inherit;
+  cursor: pointer; color: var(--muted);
+}
+.day-chip:hover { border-color: var(--muted); }
+.day-chip.on { background: var(--blue-50); border-color: var(--blue-600); color: var(--blue-600); }
+.day-chip.anchor { background: var(--text); border-color: var(--text); color: #fff; cursor: default; }
+.day-chip.past { opacity: 0.35; cursor: not-allowed; }
+.apply-note { font-size: 11px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+.warn-box {
+  background: var(--amber-50); border: 1px solid var(--amber-100); border-radius: 8px;
+  padding: 10px 12px; font-size: 12px; color: var(--amber-800); line-height: 1.5; margin-bottom: 14px;
+}
+.err-box { font-size: 12px; color: var(--red-600); min-height: 16px; margin-top: 6px; }
+.modal-foot { padding: 14px 20px; background: #fafaf8; display: flex; gap: 8px; align-items: center; }
+.foot-spacer { flex: 1; }
+.btn {
+  padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); font-size: 13px; font-weight: 600;
+  font-family: inherit; cursor: pointer;
+}
+.btn:hover { background: var(--bg); }
+.btn-primary { background: var(--text); color: #fff; border-color: var(--text); }
+.btn-primary:hover { background: #333; }
+.btn-primary:disabled { background: #aaa; border-color: #aaa; cursor: not-allowed; }
+.btn-danger { color: var(--red-600); border-color: #f0c0c0; }
+.btn-danger:hover { background: var(--red-50); }
+
+.pub-list { max-height: 260px; overflow-y: auto; margin-top: 10px; }
+.pub-row { font-size: 12px; padding: 5px 0; border-bottom: 1px solid var(--border-lt); line-height: 1.45; }
+.pub-row:last-child { border-bottom: none; }
+.pub-when { font-weight: 700; }
+.pub-what { color: var(--muted); }
+
+.toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(90px);
+  background: var(--text); color: #fff; font-size: 13px; font-weight: 600;
+  padding: 11px 20px; border-radius: 22px; z-index: 1200;
+  opacity: 0; transition: opacity 0.2s, transform 0.2s; pointer-events: none; max-width: 90vw;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.good { background: var(--green-800); }
+.toast.bad { background: var(--red-600); }
+
+.hidden { display: none !important; }
+
+@media (max-width: 700px) {
+  .page-head { padding: 16px 14px 8px; }
+  .canvas { padding: 0 14px 40px; }
+  .toolbar { padding: 10px 12px; }
+}
+</style>
+</head>
+<body>
+
+<!-- Header + ribbon + back-to-top injected by pc-nav.js -->
+
+<div class="page-head">
+  <h1 class="page-title">Non-event labor</h1>
+  <p class="page-sub">Who is around on days with no show, and who you need where. Nothing reaches anyone until you publish the week.</p>
+</div>
+
+<div class="canvas">
+  <div class="toolbar" id="toolbar"></div>
+  <div class="grid-wrap" id="gridWrap">
+    <div class="loading">Loading…</div>
+  </div>
+  <div class="legend" id="legend"></div>
+</div>
+
+<div class="backdrop" id="assignBackdrop"><div class="modal" id="assignModal"></div></div>
+<div class="backdrop" id="publishBackdrop"><div class="modal" id="publishModal"></div></div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/pc-auth.js"></script>
+<script src="/pc-nav.js"></script>
+<script src="/pc-activity.js"></script>
+<script>
+(function() {
+  'use strict';
+
+  var SB = 'https://aoazlttdjowhlfcksoyl.supabase.co';
+
+  /* Venue colours copied verbatim from the Event Planning VC object, same as
+     Prep & Production. Long-term these belong on a `color` column on venues so
+     every page reads one source -- that is a standing backlog item, not this
+     page's job to fix. */
+  var VENUE_COLORS = {
+    FMP: '#c0392b', Mann: '#5a9e1a', Cure: '#2471a3',
+    Subaru: '#7d3fbf', Villanova: '#1a237e', Montage: '#607d8b',
+    DE: '#00796b', BWH: '#e67e22', ACCC: '#c0620a',
+    SATB: '#888780', Kirkwood: '#b71c1c'
+  };
+
+  var DOW_SHORT = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var NOTE_MAX = 120;
+
+  var state = {
+    weekStart: null,      // Monday, YYYY-MM-DD
+    days: [],             // 7 ISO dates
+    staff: [],            // employees with is_non_event_staff
+    availByKey: {},       // empId|date -> staff_day_availability row
+    assigns: [],          // non_event_assignments rows (not deleted)
+    events: [],           // events in the week
+    placementsByKey: {},  // empId|date -> [ {venue, report_time, event_name} ]
+    venues: [],
+    loading: true,
+    modal: null,          // assign modal working state
+    saving: false
+  };
+
+  /* ---------------- Dates ----------------
+     PLAIN CALENDAR ARITHMETIC, MONDAY-START. This deliberately does NOT use
+     pcFiscal, even though the fiscal week is also Monday-start. CY2026 is the
+     non-standard 51-week calendar (Mar 30 - Apr 5 gap, 5-week periods in Jul,
+     Oct and Dec); an availability week that skipped a week or ran long would be
+     nonsense. Same start day, different mechanism, on purpose.
+
+     Everything is anchored at noon UTC so no arithmetic here can land on a DST
+     boundary and shift a date by one. The edge function does the same. */
+  function addDays(ymd, n) {
+    var d = new Date(ymd + 'T12:00:00Z');
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  }
+  function dowOf(ymd) { return new Date(ymd + 'T12:00:00Z').getUTCDay(); }
+  function mondayOf(ymd) {
+    var dow = dowOf(ymd);
+    var back = (dow === 0) ? 6 : (dow - 1);
+    return addDays(ymd, -back);
+  }
+  function todayYmd() {
+    var f = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit'
+    });
+    var p = {}; f.formatToParts(new Date()).forEach(function(x) { p[x.type] = x.value; });
+    return p.year + '-' + p.month + '-' + p.day;
+  }
+  function fmtDayNum(ymd) {
+    var d = new Date(ymd + 'T12:00:00Z');
+    return d.getUTCDate();
+  }
+  function fmtRange(startYmd) {
+    var a = new Date(startYmd + 'T12:00:00Z');
+    var b = new Date(addDays(startYmd, 6) + 'T12:00:00Z');
+    var am = MONTHS[a.getUTCMonth()], bm = MONTHS[b.getUTCMonth()];
+    if (am === bm) return am + ' ' + a.getUTCDate() + ' – ' + b.getUTCDate() + ', ' + b.getUTCFullYear();
+    return am + ' ' + a.getUTCDate() + ' – ' + bm + ' ' + b.getUTCDate() + ', ' + b.getUTCFullYear();
+  }
+  function fmtTime(t) {
+    if (!t) return '';
+    var p = String(t).split(':');
+    var h = parseInt(p[0], 10);
+    if (isNaN(h)) return '';
+    var ap = h >= 12 ? 'p' : 'a';
+    var h12 = h % 12; if (h12 === 0) h12 = 12;
+    var mm = p[1] || '00';
+    return mm === '00' ? (h12 + ap) : (h12 + ':' + mm + ap);
+  }
+  function minutesOf(t) {
+    if (!t) return null;
+    var p = String(t).split(':');
+    var h = parseInt(p[0], 10), m = parseInt(p[1], 10);
+    if (isNaN(h) || isNaN(m)) return null;
+    return h * 60 + m;
+  }
+  function hoursBetween(a, b) {
+    var s = minutesOf(a), e = minutesOf(b);
+    if (s === null || e === null) return null;
+    var diff = e - s;
+    if (diff <= 0) return null;
+    return Math.round((diff / 60) * 100) / 100;
+  }
+
+  /* ---------------- Names ----------------
+     position_assignments has NO employee_id FK. It joins to employees through
+     staff_name text ONLY, which is a structural fragility worth restating every
+     time it matters: if the Event Workspace ever writes "Dani Federwitz" while
+     her record says "Danielle", her show silently does not appear here and a
+     manager double-books her. Unmatched placements are console-warned rather
+     than dropped in silence. */
+  function stripMinorSuffix(s) {
+    return String(s == null ? '' : s).replace(/\s*-\s*U\s*$/i, '');
+  }
+  function keyName(s) {
+    return stripMinorSuffix(s).trim().toLowerCase().replace(/\s+/g, ' ');
+  }
+  function fullName(e) {
+    return String((e.first_name || '') + ' ' + (e.last_name || '')).trim();
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  /* ---------------- Fetch ---------------- */
+  function handleAuthFailure() {
+    try {
+      localStorage.removeItem('sb_access_token');
+      localStorage.removeItem('sb_refresh_token');
+    } catch (e) {}
+    toast('Session expired. Reloading…', 'bad');
+    setTimeout(function() { window.location.reload(); }, 1600);
+  }
+
+  function authFetch(url, options) {
+    return fetch(url, options).then(function(r) {
+      if (r.status === 401) { var e = new Error('Unauthorized'); e.authFailed = true; throw e; }
+      if (!r.ok) {
+        return r.text().then(function(t) {
+          if (t && t.indexOf('JWT expired') !== -1) { var e2 = new Error('JWT expired'); e2.authFailed = true; throw e2; }
+          throw new Error(t || ('HTTP ' + r.status));
+        });
+      }
+      return r.text().then(function(t) {
+        if (!t) return [];
+        try { return JSON.parse(t); } catch (e) { return []; }
+      });
+    });
+  }
+
+  function sbGet(path) {
+    return authFetch(SB + '/rest/v1/' + path, { method: 'GET', headers: pcAuth.headers() });
+  }
+
+  /* Every write asks for the representation back and THROWS on an empty array.
+     A PATCH that matches zero rows returns 204 and looks exactly like success --
+     that is how note saves were silently dead for months on the employee page.
+     Silence is not success. */
+  function sbWrite(method, path, body) {
+    var h = pcAuth.headers();
+    h['Content-Type'] = 'application/json';
+    h['Prefer'] = 'return=representation';
+    return authFetch(SB + '/rest/v1/' + path, {
+      method: method, headers: h, body: JSON.stringify(body)
+    }).then(function(rows) {
+      if (!rows || rows.length === 0) {
+        throw new Error('That did not take effect. Please refresh and try again.');
+      }
+      return rows;
+    });
+  }
+
+  function actorName() {
+    var u = (pcAuth.getUser && pcAuth.getUser()) || null;
+    if (!u) return 'Unknown';
+    return u.display_name || u.email || 'Unknown';
+  }
+
+  /* ---------------- Load ---------------- */
+  function loadWeek() {
+    state.loading = true;
+    render();
+
+    var start = state.weekStart;
+    var end = addDays(start, 6);
+    state.days = [];
+    for (var i = 0; i < 7; i++) state.days.push(addDays(start, i));
+
+    var pStaff = sbGet('employees?select=id,first_name,last_name,punch_id,home_venue' +
+      '&is_active=eq.true&is_non_event_staff=eq.true&order=last_name.asc,first_name.asc&limit=200');
+
+    var pAvail = sbGet('staff_day_availability?select=id,employee_id,work_date,is_available,note' +
+      '&work_date=gte.' + start + '&work_date=lte.' + end + '&limit=2000');
+
+    var pAssign = sbGet('non_event_assignments?select=id,employee_id,work_date,venue_code,start_time,end_time,note,' +
+      'published_at,published_by,confirmed_at,declined_at,decline_reason,created_by' +
+      '&deleted_at=is.null&work_date=gte.' + start + '&work_date=lte.' + end + '&limit=2000');
+
+    /* A cancelled or deleted show is not a conflict. If it still tinted a cell
+       amber, managers would stop trusting the tint -- which costs more than the
+       tint is worth. */
+    var pEvents = sbGet('events?select=id,venue,event_name,event_date,report_time,gates_open,show_time' +
+      '&event_date=gte.' + start + '&event_date=lte.' + end +
+      '&deleted_at=is.null&cancelled_at=is.null&order=event_date.asc&limit=500');
+
+    var pVenues = sbGet('venues?select=code,full_name,is_active&order=code.asc&limit=100');
+
+    Promise.all([pStaff, pAvail, pAssign, pEvents, pVenues]).then(function(res) {
+      state.staff = res[0] || [];
+      state.assigns = res[2] || [];
+      state.events = res[3] || [];
+      state.venues = (res[4] || []).filter(function(v) { return v.is_active !== false; });
+
+      state.availByKey = {};
+      (res[1] || []).forEach(function(a) {
+        state.availByKey[a.employee_id + '|' + a.work_date] = a;
+      });
+
+      return loadPlacements(start, end);
+    }).then(function() {
+      state.loading = false;
+      render();
+    }).catch(function(err) {
+      if (err && err.authFailed) { handleAuthFailure(); return; }
+      console.error('load failed:', err);
+      state.loading = false;
+      document.getElementById('gridWrap').innerHTML =
+        '<div class="empty">Could not load the week. ' + esc(err.message || '') + '</div>';
+    });
+  }
+
+  /* Event placements, READ-ONLY on this page. Staffing stays in Event Workspace;
+     nothing here ever writes position_assignments. The point is only so a manager
+     can see that Liz is called at 4pm before assigning her 10-5. */
+  function loadPlacements(start, end) {
+    state.placementsByKey = {};
+    if (state.events.length === 0) return Promise.resolve();
+    if (state.staff.length === 0) return Promise.resolve();
+
+    var evById = {};
+    var ids = state.events.map(function(e) { evById[e.id] = e; return '"' + e.id + '"'; });
+    var inList = '(' + ids.join(',') + ')';
+
+    return sbGet('position_assignments?select=id,event_id,venue,stand,role,staff_name' +
+      '&removed_at=is.null&event_id=in.' + encodeURIComponent(inList) + '&limit=5000')
+      .then(function(rows) {
+        var byName = {};
+        state.staff.forEach(function(s) { byName[keyName(fullName(s))] = s.id; });
+
+        var unmatched = 0;
+        (rows || []).forEach(function(p) {
+          var empId = byName[keyName(p.staff_name)];
+          if (!empId) { unmatched++; return; }
+          var ev = evById[p.event_id];
+          if (!ev) return;
+          var k = empId + '|' + ev.event_date;
+          if (!state.placementsByKey[k]) state.placementsByKey[k] = [];
+          state.placementsByKey[k].push({
+            venue: p.venue || ev.venue,
+            role: p.role,
+            event_name: ev.event_name,
+            report_time: ev.report_time || null,
+            gates_open: ev.gates_open || null
+          });
+        });
+        /* Loud, not silent. An unmatched placement is a name-drift bug, and the
+           failure mode is a manager double-booking somebody. */
+        if (unmatched > 0) {
+          console.warn('[non-event-labor] ' + unmatched + ' placement(s) in this week did not match a non-event staff name. ' +
+            'These are placements for people not on this roster, which is normal -- but if somebody IS on the roster and ' +
+            'their show is missing from the grid, check for a name mismatch between employees and position_assignments.');
+        }
+      });
+  }
+
+  /* ---------------- Derived ---------------- */
+  function assignsFor(empId, date) {
+    return state.assigns.filter(function(a) {
+      return a.employee_id === empId && a.work_date === date;
+    });
+  }
+  function availFor(empId, date) {
+    return state.availByKey[empId + '|' + date] || null;
+  }
+  function placementsFor(empId, date) {
+    return state.placementsByKey[empId + '|' + date] || [];
+  }
+  function eventsOn(date) {
+    return state.events.filter(function(e) { return e.event_date === date; });
+  }
+  function draftCount() {
+    return state.assigns.filter(function(a) { return !a.published_at; }).length;
+  }
+  /* People with no answer on ANY day of the week. This is the chase list, and it
+     is the number the Wednesday reminder text should target. */
+  function noAnswerCount() {
+    var n = 0;
+    state.staff.forEach(function(s) {
+      var any = false;
+      state.days.forEach(function(d) { if (availFor(s.id, d)) any = true; });
+      if (!any) n++;
+    });
+    return n;
+  }
+
+  /* The report time a show actually starts for staff. Never invented: if there
+     is no report_time and no gates_open, there is no clock and no conflict maths. */
+  function callMinutes(p) {
+    if (p.report_time) return minutesOf(p.report_time);
+    if (p.gates_open) {
+      var g = minutesOf(p.gates_open);
+      if (g === null) return null;
+      return g - 60;
+    }
+    return null;
+  }
+
+  function conflictFor(assign, placements) {
+    if (!assign.end_time) return null;
+    var end = minutesOf(assign.end_time);
+    if (end === null) return null;
+    for (var i = 0; i < placements.length; i++) {
+      var c = callMinutes(placements[i]);
+      if (c === null) continue;
+      if (end > c) return placements[i];
+    }
+    return null;
+  }
+
+  /* ---------------- Render ---------------- */
+  function render() {
+    renderToolbar();
+    renderGrid();
+    renderLegend();
+  }
+
+  function renderToolbar() {
+    var el = document.getElementById('toolbar');
+    var drafts = state.loading ? 0 : draftCount();
+    var chase = state.loading ? 0 : noAnswerCount();
+
+    var stats = '';
+    if (!state.loading) {
+      if (chase > 0) {
+        stats += '<span class="tb-stat chase">' + chase + ' with no answer</span>';
+      }
+      if (drafts > 0) {
+        stats += '<span class="tb-stat warn">' + drafts + ' unpublished</span>';
+      }
+      if (chase === 0 && drafts === 0) {
+        stats += '<span class="tb-stat">All published</span>';
+      }
+    }
+
+    el.innerHTML =
+      '<div class="wk-nav">' +
+        '<button class="wk-btn" id="wkPrev" title="Previous week">&#8249;</button>' +
+        '<div><div class="wk-label">' + esc(fmtRange(state.weekStart)) + '</div>' +
+        '<div class="wk-sub">Pay week &middot; ' + state.staff.length + ' staff</div></div>' +
+        '<button class="wk-btn" id="wkNext" title="Next week">&#8250;</button>' +
+        '<button class="wk-today" id="wkToday">Today</button>' +
+      '</div>' +
+      '<div class="tb-spacer"></div>' +
+      stats +
+      '<button class="publish-btn" id="publishBtn"' + (drafts === 0 ? ' disabled' : '') + '>' +
+        'Publish week' + (drafts > 0 ? ' (' + drafts + ')' : '') +
+      '</button>';
+
+    document.getElementById('wkPrev').addEventListener('click', function() { shiftWeek(-7); });
+    document.getElementById('wkNext').addEventListener('click', function() { shiftWeek(7); });
+    document.getElementById('wkToday').addEventListener('click', function() {
+      state.weekStart = mondayOf(todayYmd()); loadWeek();
+    });
+    var pb = document.getElementById('publishBtn');
+    if (pb) pb.addEventListener('click', openPublishModal);
+  }
+
+  function shiftWeek(n) {
+    state.weekStart = addDays(state.weekStart, n);
+    loadWeek();
+  }
+
+  function renderGrid() {
+    var wrap = document.getElementById('gridWrap');
+    if (state.loading) { wrap.innerHTML = '<div class="loading">Loading…</div>'; return; }
+    if (state.staff.length === 0) {
+      wrap.innerHTML = '<div class="empty">Nobody is flagged as non-event staff yet. ' +
+        'Open a crew card and tick <strong>Works non-event days</strong>.</div>';
+      return;
+    }
+
+    var today = todayYmd();
+    var html = '<table class="grid"><thead><tr>' +
+      '<th class="staff-col"><span class="dh-col-head">Staff</span></th>';
+
+    state.days.forEach(function(d, i) {
+      var evs = eventsOn(d);
+      var pills = evs.map(function(e) {
+        var c = VENUE_COLORS[e.venue] || '#666';
+        return '<span class="vpill" style="background:' + hexA(c, 0.14) + ';color:' + c + ';" title="' +
+          esc(e.event_name || '') + '">' + esc(e.venue) + '</span>';
+      }).join('');
+      html += '<th>' +
+        '<div class="dh-day' + (d === today ? ' today' : '') + '">' + DOW_SHORT[i] + ' ' + fmtDayNum(d) + '</div>' +
+        '<div class="dh-pills">' + pills + '</div>' +
+      '</th>';
+    });
+    html += '</tr></thead><tbody>';
+
+    state.staff.forEach(function(s) {
+      html += '<tr>' +
+        '<td class="staff-col">' +
+          '<div class="emp-name">' + esc(fullName(s)) + '</div>' +
+          '<div class="emp-venue">' + esc(s.home_venue && s.home_venue !== 'NA' ? s.home_venue : '—') + '</div>' +
+        '</td>';
+      state.days.forEach(function(d) { html += renderCell(s, d); });
+      html += '</tr>';
+    });
+
+    html += '</tbody></table>';
+    wrap.innerHTML = html;
+
+    var cells = wrap.querySelectorAll('[data-cell]');
+    for (var i = 0; i < cells.length; i++) {
+      cells[i].addEventListener('click', function(ev) {
+        var chip = ev.target.closest('[data-assign-id]');
+        var empId = this.getAttribute('data-emp');
+        var date = this.getAttribute('data-date');
+        if (chip) { openAssignModal(empId, date, chip.getAttribute('data-assign-id')); return; }
+        openAssignModal(empId, date, null);
+      });
+    }
+  }
+
+  function renderCell(s, d) {
+    var av = availFor(s.id, d);
+    var placements = placementsFor(s.id, d);
+    var assigns = assignsFor(s.id, d);
+
+    var anyConflict = false;
+    var body = '';
+
+    /* Declared. THREE STATES, and the third one is the point of the page:
+       blank means they have not said, which is what tells a manager to chase.
+       If blank rendered the same as "no" the page would rebuild the problem it
+       exists to solve. */
+    if (!av) {
+      body += '<div class="av-none">&mdash;</div>';
+    } else if (av.is_available) {
+      body += '<div class="av-yes">&#10003;</div>';
+    } else {
+      body += '<div class="av-no">No</div>';
+    }
+    if (av && av.note) body += '<div class="av-note">' + esc(av.note) + '</div>';
+
+    /* Placed on a show -- read-only. */
+    placements.forEach(function(p) {
+      var t = p.report_time ? fmtTime(p.report_time) : (p.gates_open ? '~' + fmtTime(p.gates_open) : 'show');
+      body += '<div class="chip-show" title="' + esc(p.event_name || '') + '">' +
+        esc(p.venue) + ' ' + esc(t) + '</div>';
+    });
+
+    /* Assigned. */
+    assigns.forEach(function(a) {
+      var conflict = conflictFor(a, placements);
+      if (conflict) anyConflict = true;
+      var cls = conflict ? 'chip chip-conflict' : (a.published_at ? 'chip chip-pub' : 'chip chip-draft');
+      var times = a.start_time ? (fmtTime(a.start_time) + (a.end_time ? '–' + fmtTime(a.end_time) : '')) : '';
+      var line1 = esc(a.venue_code || 'Any') + (times ? ' ' + esc(times) : '');
+      var sub = '';
+      if (conflict) {
+        sub = '<div class="chip-state">Overlaps ' + esc(fmtTime(conflict.report_time || conflict.gates_open)) + ' call</div>';
+      } else if (!a.published_at) {
+        sub = '<div class="chip-state">Not published</div>';
+      } else if (a.declined_at) {
+        sub = '<div class="chip-state">Declined</div>';
+      } else if (a.confirmed_at) {
+        sub = '<div class="chip-state">Confirmed</div>';
+      } else {
+        sub = '<div class="chip-state">Awaiting reply</div>';
+      }
+      var note = a.note ? '<div class="chip-sub">' + esc(a.note) + '</div>' : '';
+      body += '<div class="' + cls + '" data-assign-id="' + a.id + '">' + line1 + note + sub + '</div>';
+    });
+
+    body += '<div class="add-hint">+ Assign</div>';
+
+    var tdCls = 'cell' + (anyConflict ? ' conflict' : (av ? '' : ' blank-day'));
+    return '<td class="' + tdCls + '" data-cell="1" data-emp="' + s.id + '" data-date="' + d + '">' + body + '</td>';
+  }
+
+  function renderLegend() {
+    document.getElementById('legend').innerHTML =
+      '<span><span class="av-yes">&#10003;</span> Said yes</span>' +
+      '<span><span class="av-no">No</span> Said no</span>' +
+      '<span><span class="av-none">&mdash;</span> No answer yet</span>' +
+      '<span><span class="legend-sw" style="background:var(--green-50);"></span>Published</span>' +
+      '<span><span class="legend-sw" style="background:var(--amber-50);border:1px dashed var(--amber-400);"></span>Draft</span>' +
+      '<span><span class="legend-sw" style="background:var(--amber-100);"></span>Overlaps a show call</span>' +
+      '<span><span class="legend-sw" style="background:var(--slate-50);border-left:2px solid var(--slate);border-radius:0;"></span>On a show</span>';
+  }
+
+  function hexA(hex, a) {
+    if (!hex || hex.charAt(0) !== '#' || hex.length !== 7) return 'rgba(0,0,0,' + a + ')';
+    var r = parseInt(hex.substring(1, 3), 16);
+    var g = parseInt(hex.substring(3, 5), 16);
+    var b = parseInt(hex.substring(5, 7), 16);
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
+  }
+
+  /* ---------------- Assign modal ---------------- */
+
+  function openAssignModal(empId, date, assignId) {
+    var emp = state.staff.filter(function(s) { return s.id === empId; })[0];
+    if (!emp) return;
+    var existing = assignId ? state.assigns.filter(function(a) { return a.id === assignId; })[0] : null;
+
+    state.modal = {
+      empId: empId,
+      emp: emp,
+      date: date,
+      existing: existing || null,
+      venue: existing ? (existing.venue_code || '') : (emp.home_venue && emp.home_venue !== 'NA' ? emp.home_venue : ''),
+      start: existing ? (existing.start_time || '').slice(0, 5) : '09:00',
+      end: existing ? (existing.end_time || '').slice(0, 5) : '15:00',
+      note: existing ? (existing.note || '') : '',
+      applyDays: {},
+      err: ''
+    };
+    state.modal.applyDays[date] = true;
+    renderAssignModal();
+    document.getElementById('assignBackdrop').classList.add('open');
+  }
+
+  function closeAssignModal() {
+    state.modal = null;
+    document.getElementById('assignBackdrop').classList.remove('open');
+  }
+
+  function renderAssignModal() {
+    var m = state.modal;
+    if (!m) return;
+    var el = document.getElementById('assignModal');
+    var today = todayYmd();
+
+    var venueOpts = '<option value="">Any / not set</option>';
+    state.venues.forEach(function(v) {
+      venueOpts += '<option value="' + esc(v.code) + '"' + (m.venue === v.code ? ' selected' : '') + '>' +
+        esc(v.full_name || v.code) + '</option>';
+    });
+
+    /* Day chips. The clicked day is the ANCHOR -- always included, never
+       togglable, so there is no way to save an assignment that applies to
+       nothing. Past days are disabled: you cannot schedule yesterday. */
+    var chips = '';
+    state.days.forEach(function(d, i) {
+      var isAnchor = (d === m.date);
+      var isPast = (d < today);
+      var on = m.applyDays[d] === true;
+      var cls = 'day-chip' + (isAnchor ? ' anchor' : (on ? ' on' : '')) + ((isPast && !isAnchor) ? ' past' : '');
+      chips += '<button type="button" class="' + cls + '" data-day="' + d + '"' +
+        ((isAnchor || isPast) ? ' disabled' : '') + '>' + DOW_SHORT[i] + '</button>';
+    });
+
+    var selected = Object.keys(m.applyDays).filter(function(k) { return m.applyDays[k]; });
+    var wouldCreate = 0, wouldSkip = [];
+    selected.forEach(function(d) {
+      if (d === m.date) return;
+      if (assignsFor(m.empId, d).length > 0) wouldSkip.push(d);
+      else wouldCreate++;
+    });
+
+    var applyNote = '';
+    if (selected.length > 1) {
+      applyNote = 'Creates ' + wouldCreate + ' more day' + (wouldCreate !== 1 ? 's' : '') + '.';
+      if (wouldSkip.length > 0) {
+        /* A bulk apply must never silently overwrite an assignment that is
+           already there -- the manager would not know they had destroyed one. */
+        applyNote += ' ' + wouldSkip.map(function(d) { return DOW_SHORT[state.days.indexOf(d)]; }).join(', ') +
+          ' already ' + (wouldSkip.length === 1 ? 'has one' : 'have one') + ', skipped.';
+      }
+    }
+
+    /* The amber warning. It NAMES the days, and it never blocks -- she said no
+       for a reason, but a manager may have already spoken to her, and a hard
+       block would mean the page cannot represent that conversation. */
+    var saidNo = [];
+    selected.forEach(function(d) {
+      var av = availFor(m.empId, d);
+      if (av && av.is_available === false) saidNo.push(DOW_SHORT[state.days.indexOf(d)]);
+    });
+    var warn = '';
+    if (saidNo.length > 0) {
+      warn = '<div class="warn-box"><strong>' + esc(m.emp.first_name || 'They') + '</strong> said they are not available ' +
+        esc(saidNo.join(', ')) + '. You can still assign it &mdash; they will be asked to confirm.</div>';
+    }
+
+    var hrs = hoursBetween(m.start, m.end);
+    var wasPublished = m.existing && m.existing.published_at;
+    var wasAnswered = m.existing && (m.existing.confirmed_at || m.existing.declined_at);
+    var resetNote = '';
+    if (wasPublished && wasAnswered) {
+      resetNote = '<div class="apply-note">Changing the venue or the times clears their answer, so they are asked again.</div>';
+    }
+
+    el.innerHTML =
+      '<div class="modal-head">' +
+        '<div><div class="modal-title">' + (m.existing ? 'Edit work day' : 'Assign work day') + '</div>' +
+        '<div class="modal-who">' + esc(fullName(m.emp)) + ' &middot; ' +
+          DOW_SHORT[state.days.indexOf(m.date)] + ' ' + fmtDayNum(m.date) + ' ' +
+          MONTHS[new Date(m.date + 'T12:00:00Z').getUTCMonth()] + '</div></div>' +
+        '<button class="modal-close" id="mClose">&times;</button>' +
+      '</div>' +
+      '<div class="modal-body">' +
+        warn +
+        '<div class="fld"><label class="fld-label" for="mVenue">Venue</label>' +
+          '<select class="fld-select" id="mVenue">' + venueOpts + '</select></div>' +
+        '<div class="fld"><label class="fld-label">Time</label>' +
+          '<div class="time-row">' +
+            '<input class="fld-input" type="time" id="mStart" value="' + esc(m.start) + '">' +
+            '<span class="time-arrow">&rarr;</span>' +
+            '<input class="fld-input" type="time" id="mEnd" value="' + esc(m.end) + '">' +
+            '<span class="hrs" id="mHrs">' + (hrs === null ? '' : hrs + ' hrs') + '</span>' +
+          '</div></div>' +
+        '<div class="fld"><label class="fld-label" for="mNote">What they are doing</label>' +
+          '<input class="fld-input" type="text" id="mNote" maxlength="' + NOTE_MAX + '" placeholder="e.g. kettle corn and cotton candy" value="' + esc(m.note) + '">' +
+          '<div class="char-count" id="mCount">' + m.note.length + ' / ' + NOTE_MAX + '</div></div>' +
+        (m.existing ? '' :
+        '<div class="fld"><label class="fld-label">Also apply to</label>' +
+          '<div class="day-chips" id="mDays">' + chips + '</div>' +
+          '<div class="apply-note" id="mApplyNote">' + esc(applyNote) + '</div></div>') +
+        resetNote +
+        '<div class="err-box" id="mErr">' + esc(m.err) + '</div>' +
+      '</div>' +
+      '<div class="modal-foot">' +
+        (m.existing ? '<button class="btn btn-danger" id="mDelete">Remove</button>' : '') +
+        '<div class="foot-spacer"></div>' +
+        '<button class="btn" id="mCancel">Cancel</button>' +
+        '<button class="btn btn-primary" id="mSave">' + (m.existing ? 'Save' : 'Assign') + '</button>' +
+      '</div>';
+
+    document.getElementById('mClose').addEventListener('click', closeAssignModal);
+    document.getElementById('mCancel').addEventListener('click', closeAssignModal);
+    document.getElementById('mSave').addEventListener('click', saveAssignment);
+    var del = document.getElementById('mDelete');
+    if (del) del.addEventListener('click', deleteAssignment);
+
+    document.getElementById('mVenue').addEventListener('change', function() { m.venue = this.value; });
+    document.getElementById('mStart').addEventListener('change', function() { m.start = this.value; updateHrs(); });
+    document.getElementById('mEnd').addEventListener('change', function() { m.end = this.value; updateHrs(); });
+    document.getElementById('mNote').addEventListener('input', function() {
+      m.note = this.value;
+      document.getElementById('mCount').textContent = this.value.length + ' / ' + NOTE_MAX;
+    });
+
+    var dayBtns = el.querySelectorAll('[data-day]');
+    for (var i = 0; i < dayBtns.length; i++) {
+      dayBtns[i].addEventListener('click', function() {
+        var d = this.getAttribute('data-day');
+        if (m.applyDays[d]) delete m.applyDays[d];
+        else m.applyDays[d] = true;
+        renderAssignModal();
+      });
+    }
+  }
+
+  function updateHrs() {
+    var m = state.modal;
+    if (!m) return;
+    var h = hoursBetween(m.start, m.end);
+    var el = document.getElementById('mHrs');
+    if (el) el.textContent = (h === null ? '' : h + ' hrs');
+  }
+
+  function saveAssignment() {
+    var m = state.modal;
+    if (!m) return;
+    if (state.saving) return;
+
+    if (m.start && m.end) {
+      if (hoursBetween(m.start, m.end) === null) {
+        m.err = 'The end time has to be after the start time.';
+        renderAssignModal();
+        return;
+      }
+    }
+
+    state.saving = true;
+    var btn = document.getElementById('mSave');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
+    var who = actorName();
+    var nowIso = new Date().toISOString();
+
+    if (m.existing) {
+      var patch = {
+        venue_code: m.venue || null,
+        start_time: m.start || null,
+        end_time: m.end || null,
+        note: m.note ? m.note.trim() : null,
+        updated_at: nowIso,
+        updated_by: who
+      };
+      /* A published assignment stays editable forever -- but if the VENUE or the
+         TIMES move, their answer was to a different thing, so it is cleared and
+         they get asked again. A note-only edit leaves the answer alone: nobody
+         needs re-asking because the wording changed. */
+      var materialChange =
+        (m.existing.venue_code || '') !== (m.venue || '') ||
+        (m.existing.start_time || '').slice(0, 5) !== (m.start || '') ||
+        (m.existing.end_time || '').slice(0, 5) !== (m.end || '');
+      if (materialChange && m.existing.published_at) {
+        patch.confirmed_at = null;
+        patch.confirmed_via = null;
+        patch.declined_at = null;
+        patch.decline_reason = null;
+      }
+
+      sbWrite('PATCH', 'non_event_assignments?id=eq.' + encodeURIComponent(m.existing.id), patch)
+        .then(function() {
+          closeAssignModal();
+          toast(materialChange && m.existing.published_at ? 'Saved. They will be asked to confirm again.' : 'Saved.', 'good');
+          state.saving = false;
+          loadWeek();
+        }).catch(saveFailed);
+      return;
+    }
+
+    var days = Object.keys(m.applyDays).filter(function(d) { return m.applyDays[d]; });
+    var rows = [];
+    days.forEach(function(d) {
+      if (d !== m.date) {
+        if (assignsFor(m.empId, d).length > 0) return;
+      }
+      rows.push({
+        employee_id: m.empId,
+        work_date: d,
+        venue_code: m.venue || null,
+        start_time: m.start || null,
+        end_time: m.end || null,
+        note: m.note ? m.note.trim() : null,
+        created_by: who,
+        updated_by: who
+      });
+    });
+
+    if (rows.length === 0) {
+      m.err = 'Nothing to create.';
+      state.saving = false;
+      renderAssignModal();
+      return;
+    }
+
+    sbWrite('POST', 'non_event_assignments', rows).then(function(saved) {
+      closeAssignModal();
+      toast('Added ' + saved.length + ' work day' + (saved.length !== 1 ? 's' : '') + '. Publish when you are ready.', 'good');
+      state.saving = false;
+      loadWeek();
+    }).catch(saveFailed);
+  }
+
+  function saveFailed(err) {
+    state.saving = false;
+    if (err && err.authFailed) { handleAuthFailure(); return; }
+    console.error('save failed:', err);
+    if (state.modal) {
+      state.modal.err = err.message || 'Could not save. Please try again.';
+      renderAssignModal();
+    }
+  }
+
+  /* Soft delete, never a hard DELETE. A published row that is removed shows on
+     the employee page as "taken back" -- which is the honest version of a
+     manager changing their mind, and it only works if the row survives. */
+  function deleteAssignment() {
+    var m = state.modal;
+    if (!m || !m.existing) return;
+    var wasPublished = m.existing.published_at ? true : false;
+    var msg = wasPublished
+      ? 'Remove this work day? ' + (m.emp.first_name || 'They') + ' has already been told about it and will see that it was taken back.'
+      : 'Remove this work day? It was never published, so nobody has been told.';
+    if (!window.confirm(msg)) return;
+
+    sbWrite('PATCH', 'non_event_assignments?id=eq.' + encodeURIComponent(m.existing.id), {
+      deleted_at: new Date().toISOString(),
+      deleted_by: actorName(),
+      updated_at: new Date().toISOString(),
+      updated_by: actorName()
+    }).then(function() {
+      closeAssignModal();
+      toast('Removed.', 'good');
+      loadWeek();
+    }).catch(saveFailed);
+  }
+
+  /* ---------------- Publish ----------------
+     THE GATE. Everything above is a scratchpad until this runs. A manager
+     building next week's grid is not making promises yet, and showing a
+     half-built grid to the person it concerns teaches them the grid means
+     nothing -- the same lesson the July placement release gate cost us. */
+  function openPublishModal() {
+    var drafts = state.assigns.filter(function(a) { return !a.published_at; });
+    if (drafts.length === 0) return;
+
+    var byEmp = {};
+    state.staff.forEach(function(s) { byEmp[s.id] = fullName(s); });
+
+    drafts.sort(function(a, b) {
+      if (a.work_date < b.work_date) return -1;
+      if (a.work_date > b.work_date) return 1;
+      return (byEmp[a.employee_id] || '').localeCompare(byEmp[b.employee_id] || '');
+    });
+
+    var rows = drafts.map(function(a) {
+      var i = state.days.indexOf(a.work_date);
+      var when = (i >= 0 ? DOW_SHORT[i] : a.work_date) + ' ' + fmtDayNum(a.work_date);
+      var times = a.start_time ? (fmtTime(a.start_time) + (a.end_time ? '–' + fmtTime(a.end_time) : '')) : 'time not set';
+      return '<div class="pub-row"><span class="pub-when">' + esc(when) + '</span> &middot; ' +
+        esc(byEmp[a.employee_id] || 'Unknown') +
+        ' <span class="pub-what">' + esc(a.venue_code || 'Any') + ' ' + esc(times) +
+        (a.note ? ' &middot; ' + esc(a.note) : '') + '</span></div>';
+    }).join('');
+
+    document.getElementById('publishModal').innerHTML =
+      '<div class="modal-head">' +
+        '<div><div class="modal-title">Publish ' + drafts.length + ' work day' + (drafts.length !== 1 ? 's' : '') + '</div>' +
+        '<div class="modal-who">They will see these and be asked to confirm.</div></div>' +
+        '<button class="modal-close" id="pClose">&times;</button>' +
+      '</div>' +
+      '<div class="modal-body"><div class="pub-list">' + rows + '</div></div>' +
+      '<div class="modal-foot"><div class="foot-spacer"></div>' +
+        '<button class="btn" id="pCancel">Cancel</button>' +
+        '<button class="btn btn-primary" id="pGo">Publish</button>' +
+      '</div>';
+
+    document.getElementById('pClose').addEventListener('click', closePublishModal);
+    document.getElementById('pCancel').addEventListener('click', closePublishModal);
+    document.getElementById('pGo').addEventListener('click', function() { doPublish(drafts); });
+    document.getElementById('publishBackdrop').classList.add('open');
+  }
+
+  function closePublishModal() {
+    document.getElementById('publishBackdrop').classList.remove('open');
+  }
+
+  function doPublish(drafts) {
+    var btn = document.getElementById('pGo');
+    if (btn) { btn.disabled = true; btn.textContent = 'Publishing…'; }
+    var nowIso = new Date().toISOString();
+    var who = actorName();
+    var ids = drafts.map(function(a) { return '"' + a.id + '"'; });
+    var inList = '(' + ids.join(',') + ')';
+
+    sbWrite('PATCH', 'non_event_assignments?id=in.' + encodeURIComponent(inList) + '&published_at=is.null', {
+      published_at: nowIso,
+      published_by: who,
+      updated_at: nowIso,
+      updated_by: who
+    }).then(function(saved) {
+      closePublishModal();
+      toast('Published ' + saved.length + ' work day' + (saved.length !== 1 ? 's' : '') + '.', 'good');
+      loadWeek();
+    }).catch(function(err) {
+      if (err && err.authFailed) { handleAuthFailure(); return; }
+      console.error('publish failed:', err);
+      if (btn) { btn.disabled = false; btn.textContent = 'Publish'; }
+      toast(err.message || 'Publish failed.', 'bad');
+    });
+  }
+
+  /* ---------------- Toast ---------------- */
+  var toastTimer = null;
+  function toast(msg, kind) {
+    var el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = 'toast show' + (kind ? ' ' + kind : '');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function() { el.className = el.className.replace(' show', ''); }, 3000);
+  }
+
+  /* ---------------- Boot ---------------- */
+  pcAuth.require({
+    pageSlug: 'non-event-labor',
+    onReady: function() {
+      pcActivity.init('non-event-labor');
+      state.weekStart = mondayOf(todayYmd());
+
+      document.getElementById('assignBackdrop').addEventListener('click', function(ev) {
+        if (ev.target === this) closeAssignModal();
+      });
+      document.getElementById('publishBackdrop').addEventListener('click', function(ev) {
+        if (ev.target === this) closePublishModal();
+      });
+      document.addEventListener('keydown', function(ev) {
+        if (ev.key !== 'Escape') return;
+        if (document.getElementById('publishBackdrop').classList.contains('open')) { closePublishModal(); return; }
+        if (document.getElementById('assignBackdrop').classList.contains('open')) closeAssignModal();
+      });
+
+      loadWeek();
+    }
+  });
+})();
+</script>
+</body>
+</html>
