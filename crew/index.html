@@ -2251,6 +2251,12 @@ body {
     var url = SUPABASE_URL +
       '/rest/v1/employees' +
       '?select=id,first_name,last_name,punch_id,phone,is_active,home_venue,shirt_size,' +
+      // Non-event day availability roster (Aug 12). This flag ALONE decides who
+      // appears on the day-availability pages. It is deliberately NOT derived
+      // from employee_venue_roles: two of the eight people on it do prep and
+      // hold no Supervisor role at all, and a derived roster would change
+      // silently whenever somebody edits venue roles for an unrelated reason.
+      'is_non_event_staff,' +
       // SMS consent columns (Jul 27). Read-only here — /sms-consent/ is the
       // editor and the audit trail. These drive the Contact & basics pill and
       // the phone-edit guard in saveContactSection(). No extra round trip.
@@ -4118,6 +4124,16 @@ body {
         '</select>' +
         '<span class="dropdown-arrow">&#9662;</span>' +
       '</div>' +
+      '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-lt);">' +
+        '<label class="detail-checkbox-row">' +
+          '<input type="checkbox" data-card-non-event' + (emp.is_non_event_staff ? ' checked' : '') + ' />' +
+          '<span>Works non-event days</span>' +
+        '</label>' +
+        '<div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.45;">' +
+          'Adds them to the weekly day-availability page and the manager coverage grid. ' +
+          'Prep and supervisory staff who work when there is no show.' +
+        '</div>' +
+      '</div>' +
     '</div>';
   }
 
@@ -5163,7 +5179,8 @@ body {
     home_venue: 'Home venue',
     phone: 'Phone',
     shirt_size: 'Uniform shirt size',
-    candidate_record: 'Candidate record'
+    candidate_record: 'Candidate record',
+    is_non_event_staff: 'Non-event day staff'
   };
 
   function formatHistoryValue(fieldName, value) {
@@ -5171,6 +5188,11 @@ body {
       if (value == null || value === '') return 'venue default';
       var n = Number(value);
       return isNaN(n) ? value : '$' + n.toFixed(2);
+    }
+    if (fieldName === 'is_non_event_staff') {
+      // Stored as String(bool) by logCardChange, so 'false' is a real value,
+      // not an unset — check this BEFORE the empty guard below.
+      return value === 'true' ? 'Yes' : 'No';
     }
     if (value == null || value === '') return '(unset)';
     if (fieldName === 'phone') {
@@ -5511,6 +5533,32 @@ body {
           if (err && err.authFailed) { handleAuthFailure(); return; }
           ev.target.value = prev || '';
           showToast('Save failed', 'error');
+        });
+      });
+    }
+    // Non-event staff toggle. Writes immediately, same as the dropdown above.
+    // Audited via logCardChange — this flag controls who gets asked for their
+    // availability, so "who turned this off and when" is a real question.
+    var ne = root.querySelector('[data-card-non-event]');
+    if (ne) {
+      ne.addEventListener('change', function(ev) {
+        var newVal = ev.target.checked === true;
+        var prevVal = emp.is_non_event_staff === true;
+        ev.target.disabled = true;
+        patchEmployee(emp.id, {
+          is_non_event_staff: newVal,
+          updated_at: new Date().toISOString()
+        }).then(function() {
+          logCardChange(emp.id, 'is_non_event_staff', prevVal, newVal);
+          emp.is_non_event_staff = newVal;
+          showToast(newVal ? 'Added to non-event staff' : 'Removed from non-event staff', 'success');
+          renderCardModal();
+        }).catch(function(err) {
+          ev.target.disabled = false;
+          if (err && err.authFailed) { handleAuthFailure(); return; }
+          console.error('Non-event staff save failed:', err);
+          ev.target.checked = prevVal;
+          showToast('Save failed — try again', 'error');
         });
       });
     }
