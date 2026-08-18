@@ -1672,7 +1672,65 @@
   }
   .review-lines-table th.col-amount { text-align: right; width: 90px; }
   .review-lines-table th.col-date   { width: 76px; }
-  .review-lines-table th.col-photo  { width: 50px; text-align: center; }
+  .review-lines-table th.col-photo  { width: 84px; text-align: center; }
+
+  /* Driver documents block — employee-sourced reports only */
+  .driver-docs {
+    background: #fafaf6;
+    border: 1px solid #e0dfd8;
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 16px;
+  }
+  .driver-docs-title {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #666;
+    margin-bottom: 10px;
+  }
+  .driver-docs-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 14px;
+  }
+  .driver-docs-item { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .driver-docs-label {
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #888;
+  }
+  .driver-docs-value { font-size: 13px; color: #1a1a1a; }
+  .driver-docs-item .review-photo-link { align-self: flex-start; margin-left: -6px; }
+  .driver-docs-flag {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 2px 7px;
+    border-radius: 4px;
+  }
+  .driver-docs-flag.is-ok   { background: #eaf3de; color: #27500A; }
+  .driver-docs-flag.is-warn { background: #fef6ec; color: #854F0B; }
+  .driver-docs-flag.is-bad  { background: #fceaea; color: #791F1F; }
+  .source-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    background: #e6f1fb;
+    color: #0C447C;
+    padding: 2px 7px;
+    border-radius: 4px;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  @media (max-width: 620px) {
+    .driver-docs-grid { grid-template-columns: 1fr; }
+  }
   .review-lines-table tbody td {
     border-bottom: 1px solid #f0efe8;
     padding: 8px;
@@ -5988,11 +6046,12 @@
   function fetchReportFull(reportId) {
     var sel = 'select=' + [
       'id', 'submitter_id', 'submitter_name', 'mailing_address', 'status',
+      'source', 'employee_id',
       'total_amount', 'line_count', 'period_start', 'period_end',
       'created_at', 'submitted_at', 'submitter_certified_at',
       'approved_at', 'approved_by', 'paid_at', 'paid_by', 'check_number',
       'return_note', 'returned_at', 'returned_by',
-      'expense_report_lines(id,line_no,line_date,description,amount,miles,miles_from,miles_to,mileage_rate,venue,allocation_group_id,photo_url,category_id,return_flagged,return_line_note,expense_categories(id,name,gl_group))'
+      'expense_report_lines(id,line_no,line_date,description,amount,miles,miles_from,miles_to,mileage_rate,venue,allocation_group_id,photo_url,vehicle_photo_url,category_id,return_flagged,return_line_note,expense_categories(id,name,gl_group))'
     ].join(',');
     return authFetch(
       SB_REST + 'expense_reports?id=eq.' + encodeURIComponent(reportId) + '&' + sel,
@@ -6341,7 +6400,10 @@
     else if (report.status === 'paid')      statusBadge = '<span style="background:#eaf3de;color:#27500A;padding:2px 8px;border-radius:4px;font-size:11px;">Paid</span>';
     else if (report.status === 'returned')  statusBadge = '<span style="background:#fceaea;color:#791F1F;padding:2px 8px;border-radius:4px;font-size:11px;">Returned</span>';
 
-    titleEl.innerHTML = esc(report.submitter_name || '(unknown)') +
+    var sourceBadge = report.source === 'employee'
+      ? '<span class="source-badge">Employee</span>'
+      : '';
+    titleEl.innerHTML = esc(report.submitter_name || '(unknown)') + sourceBadge +
       ' &nbsp;·&nbsp; ' + esc(fmtMoney(Number(report.total_amount || 0))) +
       ' &nbsp; ' + statusBadge;
 
@@ -6388,7 +6450,7 @@
       '</tr>' +
     '</table>';
 
-    bodyEl.innerHTML = headHtml + linesHtml + totalsHtml;
+    bodyEl.innerHTML = headHtml + '<div id="reviewDriverDocs"></div>' + linesHtml + totalsHtml;
 
     // Wire any photo-open buttons inside the modal body
     bodyEl.querySelectorAll('[data-review-photo]').forEach(function (el) {
@@ -6398,6 +6460,9 @@
         if (path) openLightbox(path, isPdf);
       });
     });
+
+    // Async — fills in above the lines table once the profile loads.
+    loadDriverDocsBlock(report);
 
     // Footer buttons depend on status
     var printUrl = '/expense-reports/print/?id=' + encodeURIComponent(report.id);
@@ -6445,6 +6510,117 @@
     if (returnBtn)  returnBtn.addEventListener('click',  function () { openReturnModal(report.id); });
     if (payBtn)     payBtn.addEventListener('click',     function () { openPayModal(report.id); });
     if (reopenBtn)  reopenBtn.addEventListener('click',  function () { doReopen(report.id); });
+  }
+
+  // -------------------------------------------------------------
+  // DRIVER DOCUMENTS — employee-sourced reports only
+  //
+  // employee_mileage_profiles is admin-only SELECT, and the storage
+  // policy er_storage_employee_admin_select covers the employee/ prefix,
+  // so an admin session can sign URLs for both photos.
+  // -------------------------------------------------------------
+
+  function photoLinkHtml(path, label) {
+    var ext = (String(path).split('.').pop() || '').toLowerCase();
+    var isPdf = ext === 'pdf';
+    return '<button type="button" class="review-photo-link" data-review-photo="1" ' +
+      'data-path="' + esc(path) + '" data-is-pdf="' + (isPdf ? '1' : '0') + '">' +
+      esc(isPdf ? label + ' (PDF)' : label) +
+    '</button>';
+  }
+
+  function fetchEmployeeMileageProfile(employeeId) {
+    return authFetch(
+      SB_REST + 'employee_mileage_profiles?' +
+      'select=employee_id,mailing_address,plate_number,plate_photo_url,insurance_photo_url,insurance_expiration,updated_at' +
+      '&employee_id=eq.' + encodeURIComponent(employeeId) +
+      '&limit=1',
+      { headers: pcAuth.headers() }
+    );
+  }
+
+  function driverDocsHtml(p) {
+    var today = todayIso();
+    var exp = p.insurance_expiration || null;
+    var expired = !!(exp && exp < today);
+    var expLabel = exp ? fmtDate(exp) : 'not recorded';
+
+    var insBadge;
+    if (!p.insurance_photo_url) {
+      insBadge = '<span class="driver-docs-flag is-bad">no card on file</span>';
+    } else if (expired) {
+      insBadge = '<span class="driver-docs-flag is-bad">expired ' + esc(expLabel) + '</span>';
+    } else if (!exp) {
+      insBadge = '<span class="driver-docs-flag is-warn">no expiration recorded</span>';
+    } else {
+      insBadge = '<span class="driver-docs-flag is-ok">good through ' + esc(expLabel) + '</span>';
+    }
+
+    var plateLink = p.plate_photo_url
+      ? photoLinkHtml(p.plate_photo_url, 'View plate photo')
+      : '<span class="review-photo-link is-missing">no plate photo</span>';
+    var insLink = p.insurance_photo_url
+      ? photoLinkHtml(p.insurance_photo_url, 'View insurance card')
+      : '<span class="review-photo-link is-missing">no insurance card</span>';
+
+    return '<div class="driver-docs">' +
+      '<div class="driver-docs-title">Driver documents on file</div>' +
+      '<div class="driver-docs-grid">' +
+        '<div class="driver-docs-item">' +
+          '<span class="driver-docs-label">License plate</span>' +
+          '<span class="driver-docs-value">' + esc(p.plate_number || '—') + '</span>' +
+          plateLink +
+        '</div>' +
+        '<div class="driver-docs-item">' +
+          '<span class="driver-docs-label">Insurance</span>' +
+          '<span class="driver-docs-value">' + insBadge + '</span>' +
+          insLink +
+        '</div>' +
+        '<div class="driver-docs-item">' +
+          '<span class="driver-docs-label">Address on file</span>' +
+          '<span class="driver-docs-value" style="white-space:pre-wrap;">' + esc(p.mailing_address || '—') + '</span>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function wireDriverDocsPhotos(host) {
+    host.querySelectorAll('[data-review-photo]').forEach(function (el) {
+      el.addEventListener('click', function () {
+        var path = el.getAttribute('data-path');
+        var isPdf = el.getAttribute('data-is-pdf') === '1';
+        if (path) openLightbox(path, isPdf);
+      });
+    });
+  }
+
+  function loadDriverDocsBlock(report) {
+    var host = document.getElementById('reviewDriverDocs');
+    if (!host) return;
+    if (report.source !== 'employee' || !report.employee_id) {
+      host.innerHTML = '';
+      return;
+    }
+    host.innerHTML = '<div class="driver-docs"><div class="driver-docs-title">Driver documents on file</div>' +
+      '<p style="font-size:12px;color:#aaa;margin:0;">Loading…</p></div>';
+
+    fetchEmployeeMileageProfile(report.employee_id)
+      .then(function (rows) {
+        var p = rows && rows[0];
+        if (!p) {
+          host.innerHTML = '<div class="driver-docs"><div class="driver-docs-title">Driver documents on file</div>' +
+            '<p style="font-size:12px;color:#791F1F;margin:0;">No mileage profile found for this employee.</p></div>';
+          return;
+        }
+        host.innerHTML = driverDocsHtml(p);
+        wireDriverDocsPhotos(host);
+      })
+      .catch(function (e) {
+        if (e && e.authFailed) { handleAuthFailure(); return; }
+        console.error('[ER] driver docs load failed:', e);
+        host.innerHTML = '<div class="driver-docs"><div class="driver-docs-title">Driver documents on file</div>' +
+          '<p style="font-size:12px;color:#791F1F;margin:0;">Could not load driver documents.</p></div>';
+      });
   }
 
   function pairUpSplitLinesAdmin(lines) {
@@ -6508,17 +6684,19 @@
     if (item.splitSecondary) {
       // Photo lives on the primary
       photoCell = '<span style="color:#bbb;font-size:11px;">—</span>';
-    } else if (line.photo_url) {
-      var ext = (line.photo_url.split('.').pop() || '').toLowerCase();
-      var isPdf = ext === 'pdf';
-      photoCell = '<button type="button" class="review-photo-link" data-review-photo="1" ' +
-        'data-path="' + esc(line.photo_url) + '" data-is-pdf="' + (isPdf ? '1' : '0') + '">' +
-        (isPdf ? 'PDF' : 'View') +
-      '</button>';
-    } else if (isMileage) {
-      photoCell = '<span style="color:#bbb;font-size:11px;">n/a</span>';
     } else {
-      photoCell = '<span class="review-photo-link is-missing">none</span>';
+      // A line can carry both: a receipt (photo_url) and a car-at-venue
+      // shot (vehicle_photo_url, employee mileage lines only).
+      var links = [];
+      if (line.photo_url) links.push(photoLinkHtml(line.photo_url, 'Receipt'));
+      if (line.vehicle_photo_url) links.push(photoLinkHtml(line.vehicle_photo_url, 'Car'));
+      if (links.length > 0) {
+        photoCell = links.join('<br>');
+      } else if (isMileage) {
+        photoCell = '<span style="color:#bbb;font-size:11px;">n/a</span>';
+      } else {
+        photoCell = '<span class="review-photo-link is-missing">none</span>';
+      }
     }
 
     return '<tr' + (rowClass ? ' class="' + rowClass + '"' : '') + '>' +
