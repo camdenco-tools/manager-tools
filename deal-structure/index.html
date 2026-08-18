@@ -40,6 +40,9 @@ header { background: var(--card); border-bottom: 1px solid var(--border); paddin
 .saved-indicator { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--green); opacity: 0; transition: opacity 0.3s; }
 .saved-indicator.show { opacity: 1; }
 
+.catalog-warn { display: none; background: #fff3cd; border: 1px solid #ffe08a; border-radius: 10px; padding: 10px 14px; font-size: 12px; color: #856404; line-height: 1.5; margin-bottom: 18px; }
+.catalog-warn.show { display: block; }
+
 .venue-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px; }
 .venue-btn { font-size: 12px; font-weight: 700; letter-spacing: 0.04em; padding: 8px 14px; border-radius: 8px; border: 1.5px solid var(--border); background: var(--card); color: var(--label); cursor: pointer; transition: all 0.15s; font-family: var(--font); }
 .venue-btn:hover { border-color: var(--primary); color: var(--primary); }
@@ -61,6 +64,7 @@ header { background: var(--card); border-bottom: 1px solid var(--border); paddin
 .db-nc { background: #f4f4f2; color: #888780; }
 .db-fo { background: #e8f7f2; color: #0F6E56; }
 .db-cr { background: #f0e8fa; color: #7d3fbf; }
+.db-unsaved { background: #fff3e0; color: #d4720a; }
 .tpl-desc { font-size: 11px; color: var(--label); padding: 12px 18px 0; line-height: 1.4; }
 .tpl-body { padding: 12px 18px 14px; }
 .preset-row { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; flex-wrap: wrap; }
@@ -95,6 +99,9 @@ header { background: var(--card); border-bottom: 1px solid var(--border); paddin
 .cos-no { font-size: 10px; font-weight: 700; padding: 3px 7px; border-radius: 5px; background: #f4f4f2; color: #888; }
 .cos-credit { font-size: 10px; font-weight: 700; padding: 3px 7px; border-radius: 5px; background: #f0e8fa; color: #7d3fbf; }
 .override-chip { font-size: 10px; font-weight: 700; padding: 2px 5px; border-radius: 4px; background: #fff3e0; color: #d4720a; margin-left: 4px; }
+.retired-chip { font-size: 9px; font-weight: 700; letter-spacing: 0.05em; padding: 2px 6px; border-radius: 4px; background: #f4f4f2; color: #888; margin-left: 6px; text-transform: uppercase; }
+.orphan-chip { font-size: 9px; font-weight: 700; letter-spacing: 0.05em; padding: 2px 6px; border-radius: 4px; background: #fdecea; color: #b3261e; margin-left: 6px; text-transform: uppercase; }
+.zero-chip { font-size: 10px; font-weight: 700; padding: 2px 5px; border-radius: 4px; background: #eef0f4; color: #566; margin-left: 4px; }
 .unassigned-row { background: #fff3cd !important; }
 .unassigned-row td { color: #856404; }
 .edit-btn { font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 6px; border: 1.5px solid var(--border); background: var(--card); color: var(--primary); cursor: pointer; font-family: var(--font); }
@@ -109,6 +116,7 @@ header { background: var(--card); border-bottom: 1px solid var(--border); paddin
 .op-input:focus { border-color: var(--primary); }
 .op-suffix { font-size: 11px; color: var(--label); }
 .op-default { font-size: 10px; color: var(--label); font-style: italic; }
+.op-hint { font-size: 10px; color: var(--label); font-style: italic; margin-top: 2px; }
 .op-calc { background: white; border: 1px solid var(--border); border-radius: 7px; padding: 8px 12px; font-size: 11px; color: #666; line-height: 1.4; flex: 1; min-width: 200px; }
 .op-calc b { color: var(--primary); font-weight: 800; }
 .op-actions { display: flex; gap: 8px; align-items: center; margin-left: auto; align-self: center; }
@@ -160,9 +168,11 @@ header { background: var(--card); border-bottom: 1px solid var(--border); paddin
     <div class="page-header">
       <div>
         <h2>Deal Structure</h2>
-        <p>Select a venue to define its commission structures, then assign deal types to each stand. Overrides can be set per stand.</p>
+        <p>Select a venue to define its commission structures, then assign deal types to each stand. Overrides can be set per stand. Stands come from the shared catalog &mdash; add or retire them in Stand Setup.</p>
       </div>
     </div>
+
+    <div class="catalog-warn" id="catalog-warn"></div>
 
     <div class="section-label">Select venue</div>
     <div class="venue-tabs" id="venue-tabs"></div>
@@ -202,31 +212,62 @@ header { background: var(--card); border-bottom: 1px solid var(--border); paddin
 <div class="toast" id="toast"></div>
 
 <script src="/pc-auth.js"></script>
+<script src="/pc-catalog.js"></script>
 <script>
 var SB_URL='https://aoazlttdjowhlfcksoyl.supabase.co';
 var SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvYXpsdHRkam93aGxmY2tzb3lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNzU4MjMsImV4cCI6MjA5MDg1MTgyM30.tagP_88g7R3d_p7a4Kp0NirnJgkAR5AQQImCt414SJg';
-var SUPPORT_STAND='Support Staff',HAWKING_STAND='Hawking',CLIENT_STAND='Client Staffing Needs',NONEVENT_STAND='Non-Event Labor';
 
-var VENUE_STANDS={
-  Mann:[SUPPORT_STAND,HAWKING_STAND,'Upper Concession','Upper Popcorn','Lower Popcorn','Skyline Popcorn','Upper Pizza','Lower Pizza','Skyline Pizza','Farm & Fry Truck','Crescendo','Lawn Portable','Stage Left Bar','Upper Linear Bar','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4','Mobile Cart 5','Mobile Cart 6','Mobile Cart 7','Mobile Cart 8','Mobile Cart 9','Mobile Cart 10',NONEVENT_STAND,CLIENT_STAND],
-  FMP:[SUPPORT_STAND,HAWKING_STAND,'Stand 782','783','SC1','LM1','LM2','WWI','Ben Kettle','Walt Kettle','IC1','BWI','UD1','Ziggys Walt','Ziggys Ben','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4','Mobile Cart 5',NONEVENT_STAND,CLIENT_STAND],
-  Cure:[SUPPORT_STAND,HAWKING_STAND,'Popcorn','Candy','Cotton Candy',NONEVENT_STAND,CLIENT_STAND],
-  ACCC:[SUPPORT_STAND,HAWKING_STAND,'Stand 1','Stand 2',NONEVENT_STAND,CLIENT_STAND],
-  BWH:[SUPPORT_STAND,HAWKING_STAND,'Popcorn 1','Popcorn 2','North Stand','South Stand',NONEVENT_STAND,CLIENT_STAND],
-  DE:[SUPPORT_STAND,HAWKING_STAND,'VIP Bar','Cafe','Popcorn','Bar','Farm & Fry',NONEVENT_STAND,CLIENT_STAND],
-  Subaru:[SUPPORT_STAND,HAWKING_STAND,'Popcorn','VIP',NONEVENT_STAND,CLIENT_STAND],
-  Villanova:[SUPPORT_STAND,HAWKING_STAND,'Stand 1',NONEVENT_STAND,CLIENT_STAND],
-  Montage:[SUPPORT_STAND,HAWKING_STAND,'BW Pizza','Midway Pizza','Midway Popcorn','Boardwalk Popcorn','Festival Foods','Potato Stand','Boardwalk New Food','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4',NONEVENT_STAND,CLIENT_STAND],
-  SATB:[SUPPORT_STAND,HAWKING_STAND,'Stand 1','Ice Cream 1','Stand 2','Stand 3','Catering',NONEVENT_STAND,CLIENT_STAND],
-  Kirkwood:[SUPPORT_STAND,HAWKING_STAND,'Stand 1',NONEVENT_STAND,CLIENT_STAND]
+// ── Deal-type built-in defaults (used only when a venue has no saved template row) ──
+var DEF={rev_split_pct:70,bev_food_pct:91,bev_bev_pct:9,bev_food_cut:70,bev_bev_comm:10,labor_comm:15,reimb_comm:5};
+
+// Stand categories that never carry a commission deal. A stand of one of these
+// types is hidden UNLESS it already has a stand_deals row (legacy safety).
+var EXCLUDED_TYPES={support:1,nonevent:1,client:1};
+
+var OVR_FIELDS=['override_rev_split_pct','override_bev_food_pct','override_bev_bev_pct','override_bev_food_cut','override_bev_bev_comm','override_labor_comm','override_reimb_comm'];
+
+// ── Fallback catalog (only used if pcCatalog fails to load) ──
+var _FB_SUPPORT='Support Staff',_FB_HAWKING='Hawking',_FB_CLIENT='Client Staffing Needs',_FB_NONEVENT='Non-Event Labor';
+var _FB_VENUE_STANDS={
+  Mann:[_FB_HAWKING,'Upper Concession','Upper Popcorn','Lower Popcorn','Skyline Popcorn','Upper Pizza','Lower Pizza','Skyline Pizza','Farm & Fry Truck','Crescendo','Lawn Portable','Stage Left Bar','Upper Linear Bar','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4','Mobile Cart 5','Mobile Cart 6','Mobile Cart 7','Mobile Cart 8','Mobile Cart 9','Mobile Cart 10'],
+  FMP:[_FB_HAWKING,'Stand 782','SC1','LM1','LM2','WWI','Ben Kettle','Walt Kettle','IC1','BWI','Ziggys Walt','Ziggys Ben','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4','Mobile Cart 5','DB2','ML1','NABev'],
+  Cure:[_FB_HAWKING,'Popcorn','Candy','Cotton Candy'],
+  ACCC:[_FB_HAWKING,'Stand 1','Stand 2'],
+  BWH:[_FB_HAWKING,'Popcorn 1','Popcorn 2','North Stand','South Stand'],
+  DE:[_FB_HAWKING,'VIP Bar','Cafe','Popcorn','Bar','Farm & Fry'],
+  Subaru:[_FB_HAWKING,'Popcorn','VIP'],
+  Villanova:[_FB_HAWKING,'Stand 1'],
+  Montage:[_FB_HAWKING,'BW Pizza','Midway Pizza','Midway Popcorn','Boardwalk Popcorn','Festival Foods','Potato Stand','Boardwalk New Food','Mobile Cart 1','Mobile Cart 2','Mobile Cart 3','Mobile Cart 4'],
+  SATB:['Stand 1','Ice Cream 1','Stand 2','Stand 3','Catering'],
+  Kirkwood:['Stand 1']
 };
+var _FB_VENUE_LABELS={FMP:'Freedom Mortgage Pavilion',Mann:'Mann Music Center',BWH:'Boardwalk Hall',ACCC:'AC Convention Center',Cure:'Cure Insurance Arena',Subaru:'Subaru Park',DE:'DE Chase Field House',Montage:'Montage Mountain',SATB:'Sports at the Beach',Villanova:'Villanova',Kirkwood:'Kirkwood'};
+var _FB_VENUE_STATES={FMP:'NJ',Mann:'PA',BWH:'NJ',ACCC:'NJ',Cure:'NJ',Subaru:'PA',DE:'DE',Montage:'PA',SATB:'DE',Villanova:'PA',Kirkwood:'DE'};
 
-var VENUE_LABELS={FMP:'Freedom Mortgage Pavilion',Mann:'Mann Music Center',BWH:'Boardwalk Hall',ACCC:'AC Convention Center',Cure:'Cure Insurance Arena',Subaru:'Subaru Park',DE:'DE Chase Field House',Montage:'Montage Mountain',SATB:'Sports at the Beach',Villanova:'Villanova',Kirkwood:'Kirkwood'};
-var VENUE_STATES={FMP:'NJ',Mann:'PA',BWH:'NJ',ACCC:'NJ',Cure:'NJ',Subaru:'PA',DE:'DE',Montage:'PA',SATB:'DE',Villanova:'PA',Kirkwood:'DE'};
 var BILLING_ROLES=['Bartender','Beer Tender','Concessions Cashier','Concessions Cook','Concessions Lead','Pizza Cashier','Pizza Maker','Pizza Lead','Prep Cook','Barback','Hawker','Cleaning Crew','Warehouse/Runner','Supervisor','Venue Manager'];
 
 var dealTemplates={},standDeals={},billingRates={},payRates={};
 var dealDirty=false,activeVenue='',openPanel=null;
+var catalogOK=false,dataLoaded=false,currentUser=null;
+var VENUE_LIST=[];      // [{code,label,state}]
+var _rowStands=[];      // stands rendered in the current assignment table
+
+// ── Numeric helpers — the whole point is that 0 is a real value, not falsy ──
+function numOrNull(v){
+  if(v===null||v===undefined||v==='')return null;
+  var n=Number(v);
+  return isNaN(n)?null:n;
+}
+// pick(): first argument that is a real number. Replaces the old `a||b||c` chain,
+// which silently swallowed 0 and fell through to the default.
+function pick(){
+  for(var i=0;i<arguments.length;i++){
+    var n=numOrNull(arguments[i]);
+    if(n!==null)return n;
+  }
+  return null;
+}
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
 // Auth-aware fetch helper — uses authenticated token
 function sbFetch(method, path, body) {
@@ -260,82 +301,443 @@ function dKey(v,dt){return v+'||'+dt;}
 function sdKey(v,s){return v+'||'+s;}
 function brKey(v,r){return v+'||'+r;}
 
-function getRevenueStands(venue){var stands=VENUE_STANDS[venue]||[];var r=[];for(var i=0;i<stands.length;i++){if(stands[i]!==SUPPORT_STAND&&stands[i]!==NONEVENT_STAND)r.push(stands[i]);}return r;}
+function recomputeOverride(sd){
+  var any=false;
+  for(var i=0;i<OVR_FIELDS.length;i++){ if(sd[OVR_FIELDS[i]]!=null) any=true; }
+  sd.has_override=any;
+  return any;
+}
 
-function init(user) {
-  document.getElementById('app').style.display = 'block';
-  document.getElementById('header-user').textContent = user.display_name;
-  loadDealStructure();
+// ── Catalog plumbing ─────────────────────────────────────────────────────
+function buildVenueList(){
+  VENUE_LIST=[];
+  if(catalogOK){
+    var vs=pcCatalog.getActiveVenues()||[];
+    for(var i=0;i<vs.length;i++){
+      var v=vs[i];
+      VENUE_LIST.push({code:v.code,label:v.full_name||_FB_VENUE_LABELS[v.code]||v.code,state:v.state||_FB_VENUE_STATES[v.code]||''});
+    }
+  }
+  if(VENUE_LIST.length===0){
+    var codes=Object.keys(_FB_VENUE_STANDS);
+    for(var j=0;j<codes.length;j++){
+      VENUE_LIST.push({code:codes[j],label:_FB_VENUE_LABELS[codes[j]]||codes[j],state:_FB_VENUE_STATES[codes[j]]||''});
+    }
+  }
+}
+
+function venueMeta(code){
+  for(var i=0;i<VENUE_LIST.length;i++){ if(VENUE_LIST[i].code===code) return VENUE_LIST[i]; }
+  return {code:code,label:_FB_VENUE_LABELS[code]||code,state:_FB_VENUE_STATES[code]||''};
+}
+
+/*
+ * getDealStands(venue) — the assignment list.
+ *
+ * Source of truth is pcCatalog. Rules:
+ *   - support / nonevent / client category stands are hidden (no commission deal)
+ *   - retired stands are hidden UNLESS they already carry a stand_deals row
+ *   - any stand_deals row whose stand name is not in the catalog is surfaced
+ *     as an orphan rather than silently disappearing (its row survives save)
+ *
+ * Returns [{name, active, orphan}] in catalog sort order.
+ */
+function getDealStands(venue){
+  var out=[],seen={},i;
+  if(catalogOK){
+    var all=pcCatalog.getAllStandsForVenue(venue)||[];
+    for(i=0;i<all.length;i++){
+      var s=all[i];
+      var nm=s.stand_name;
+      var hasDeal=!!standDeals[sdKey(venue,nm)];
+      if(EXCLUDED_TYPES[s.stand_type] && !hasDeal) continue;
+      var isActive=(s.is_active!==false);
+      if(!isActive && !hasDeal) continue;
+      out.push({name:nm,active:isActive,orphan:false});
+      seen[nm]=1;
+    }
+  }else{
+    var fb=_FB_VENUE_STANDS[venue]||[];
+    for(i=0;i<fb.length;i++){ out.push({name:fb[i],active:true,orphan:false}); seen[fb[i]]=1; }
+  }
+  var keys=Object.keys(standDeals);
+  for(i=0;i<keys.length;i++){
+    var sd=standDeals[keys[i]];
+    if(sd.venue!==venue) continue;
+    if(seen[sd.stand]) continue;
+    out.push({name:sd.stand,active:false,orphan:true});
+    seen[sd.stand]=1;
+  }
+  return out;
+}
+
+// ── Load ─────────────────────────────────────────────────────────────────
+function init(user){
+  currentUser=user;
+  document.getElementById('app').style.display='block';
+  document.getElementById('header-user').textContent=user.display_name;
+
+  pcCatalog.ready().then(function(){
+    catalogOK=true;
+  }).catch(function(e){
+    catalogOK=false;
+    console.warn('deal-structure: pcCatalog failed to load, using fallback dict',e);
+    var w=document.getElementById('catalog-warn');
+    w.innerHTML='<b>Stand catalog unavailable.</b> Falling back to the built-in stand list, which may be out of date. Stands added recently in Stand Setup will not appear. Reload before saving.';
+    w.classList.add('show');
+  }).then(function(){
+    buildVenueList();
+    return loadDealStructure();
+  });
 }
 
 function loadDealStructure(){
   return new Promise(function(resolve){
     showToast('Loading deal structure...');
     Promise.all([
-      sbFetch('GET','deal_templates?select=*'),
-      sbFetch('GET','stand_deals?select=*'),
-      sbFetch('GET','client_billing_rates?select=*'),
-      sbFetch('GET','pay_rates?select=state,role,base_rate')
+      sbFetch('GET','deal_templates?select=*&limit=500'),
+      sbFetch('GET','stand_deals?select=*&limit=1000'),
+      sbFetch('GET','client_billing_rates?select=*&limit=1000'),
+      sbFetch('GET','pay_rates?select=state,role,base_rate&limit=500')
     ]).then(function(res){
       dealTemplates={};(res[0]||[]).forEach(function(row){dealTemplates[dKey(row.venue,row.deal_type)]=row;});
       standDeals={};(res[1]||[]).forEach(function(row){standDeals[sdKey(row.venue,row.stand)]=row;});
       billingRates={};(res[2]||[]).forEach(function(row){billingRates[brKey(row.venue,row.role)]=row;});
       payRates={};(res[3]||[]).forEach(function(row){payRates[row.state+'||'+row.role]=row.base_rate;});
+      dataLoaded=true;
       buildTabs();renderDeals();showToast('Deal structure loaded',true);resolve();
-    }).catch(function(e){showToast('Error loading deal structure.');console.error(e);resolve();});
+    }).catch(function(e){
+      dataLoaded=false;
+      showToast('Error loading deal structure — do not save.');console.error(e);resolve();
+    });
   });
 }
 
-function buildTabs(){var el=document.getElementById('venue-tabs');var vk=Object.keys(VENUE_STANDS);el.innerHTML=vk.map(function(v,i){return'<button class="venue-btn'+(i===0?' active':'')+'" onclick="switchVenue(\''+v+'\',this)">'+(VENUE_LABELS[v]||v)+'</button>';}).join('');activeVenue=vk[0];}
+function buildTabs(){
+  var el=document.getElementById('venue-tabs');
+  var h='';
+  for(var i=0;i<VENUE_LIST.length;i++){
+    var v=VENUE_LIST[i];
+    h+='<button class="venue-btn'+(i===0?' active':'')+'" data-code="'+esc(v.code)+'" onclick="switchVenue(\''+esc(v.code)+'\',this)">'+esc(v.label)+'</button>';
+  }
+  el.innerHTML=h;
+  if(VENUE_LIST.length>0) activeVenue=VENUE_LIST[0].code;
+}
 
-function switchVenue(v,btn){activeVenue=v;openPanel=null;document.querySelectorAll('#venue-tabs .venue-btn').forEach(function(b){b.classList.remove('active');});if(btn)btn.classList.add('active');renderDeals();}
+function switchVenue(v,btn){
+  activeVenue=v;openPanel=null;
+  var tabs=document.querySelectorAll('#venue-tabs .venue-btn');
+  for(var i=0;i<tabs.length;i++) tabs[i].classList.remove('active');
+  if(btn)btn.classList.add('active');
+  renderDeals();
+}
 
 function markDirty(){dealDirty=true;document.getElementById('save-btn').style.display='flex';}
 
-function renderDeals(){var v=activeVenue;if(!v)return;var st=VENUE_STATES[v]||'';var stands=getRevenueStands(v);var assigned=0;for(var i=0;i<stands.length;i++){if(standDeals[sdKey(v,stands[i])])assigned++;}document.getElementById('v-name').textContent=VENUE_LABELS[v]||v;document.getElementById('v-sub').innerHTML=st+' -- '+stands.length+' stands -- '+assigned+' assigned'+(stands.length-assigned>0?', '+(stands.length-assigned)+' unassigned':'');document.getElementById('assign-lbl').textContent=VENUE_LABELS[v]||v;document.getElementById('billing-lbl').textContent=VENUE_LABELS[v]||v;renderTemplates(v);renderStands(v);renderBilling(v);}
+function renderDeals(){
+  var v=activeVenue;if(!v)return;
+  var meta=venueMeta(v);
+  var stands=getDealStands(v);
+  var assigned=0,orphans=0;
+  for(var i=0;i<stands.length;i++){
+    if(standDeals[sdKey(v,stands[i].name)])assigned++;
+    if(stands[i].orphan)orphans++;
+  }
+  document.getElementById('v-name').textContent=meta.label;
+  var sub=meta.state+' -- '+stands.length+' stands -- '+assigned+' assigned';
+  if(stands.length-assigned>0) sub+=', '+(stands.length-assigned)+' unassigned';
+  if(orphans>0) sub+=' -- '+orphans+' not in catalog';
+  document.getElementById('v-sub').textContent=sub;
+  document.getElementById('assign-lbl').textContent=meta.label;
+  document.getElementById('billing-lbl').textContent=meta.label;
+  renderTemplates(v);renderStands(v);renderBilling(v);
+}
 
-function renderTemplates(v){var el=document.getElementById('tpl-grid');var rs=dealTemplates[dKey(v,'rev_split')]||{};var rb=dealTemplates[dKey(v,'rev_bev')]||{};var lb=dealTemplates[dKey(v,'labor')]||{};var rm=dealTemplates[dKey(v,'reimb')]||{};var rsPct=rs.rev_split_pct||70;var rbFP=rb.bev_food_pct||91,rbBP=rb.bev_bev_pct||9,rbFC=rb.bev_food_cut||70,rbBC=rb.bev_bev_comm||10;var lbC=lb.labor_comm||15;var rmC=rm.reimb_comm||5;
-var stands=getRevenueStands(v);var uRS=0,uRB=0,uL=0,uRe=0;for(var i=0;i<stands.length;i++){var sd=standDeals[sdKey(v,stands[i])];if(sd){if(sd.deal_type==='rev_split')uRS++;else if(sd.deal_type==='rev_bev')uRB++;else if(sd.deal_type==='labor')uL++;else if(sd.deal_type==='reimb')uRe++;}}
-function pBtns(vals,cur,hid){var h='';for(var j=0;j<vals.length;j++){h+='<button class="preset-btn'+(vals[j]===cur?' selected':'')+'" onclick="selPreset(this,\''+hid+'\','+vals[j]+')">'+vals[j]+(vals[j]<100?'/'+(100-vals[j]):'%')+'</button>';}return h;}
-el.innerHTML='<div class="tpl-card"><div class="tpl-header"><span class="tpl-title">Revenue split</span><span class="deal-badge db-cos">COS relatable</span></div><div class="tpl-desc">We keep X%, client keeps the rest. We buy all product.</div><div class="tpl-body"><div class="preset-row"><span class="preset-label">Default split</span>'+pBtns([60,70,75,80],rsPct,'h-rs')+'</div><input type="hidden" id="h-rs" value="'+rsPct+'" data-v="'+v+'" data-dt="rev_split" data-f="rev_split_pct"><div style="font-size:10px;color:var(--label);font-style:italic">Override available per stand</div><div class="deal-example">On $32,000 sales: $32,000 x '+rsPct+'% = <b>$'+Math.round(32000*rsPct/100).toLocaleString()+'</b> our revenue</div></div><div class="tpl-footer"><span class="used-count">Used by '+uRS+' stand'+(uRS!==1?'s':'')+'</span></div></div>'+
-'<div class="tpl-card"><div class="tpl-header"><span class="tpl-title">Revenue split + bev carveout</span><span class="deal-badge db-fo">COS: food only</span></div><div class="tpl-desc">Food portion at revenue split, bev portion at flat commission. Bev is never COS.</div><div class="tpl-body"><div class="two-col"><div><div class="col-label">Food side</div><div class="input-row"><span class="input-label">Est. food %</span><input class="deal-input" type="number" value="'+rbFP+'" data-v="'+v+'" data-dt="rev_bev" data-f="bev_food_pct" onchange="onTplInput(this)"><span class="input-suffix">%</span></div><div class="preset-row" style="margin-top:6px"><span class="preset-label">Our cut</span>'+pBtns([60,70,75],rbFC,'h-rbfc')+'</div><input type="hidden" id="h-rbfc" value="'+rbFC+'" data-v="'+v+'" data-dt="rev_bev" data-f="bev_food_cut"></div><div><div class="col-label">Beverage side (not COS)</div><div class="input-row"><span class="input-label">Est. bev %</span><input class="deal-input" type="number" value="'+rbBP+'" data-v="'+v+'" data-dt="rev_bev" data-f="bev_bev_pct" onchange="onTplInput(this)"><span class="input-suffix">%</span></div><div class="input-row" style="margin-top:6px"><span class="input-label">Commission</span><input class="deal-input" type="number" value="'+rbBC+'" data-v="'+v+'" data-dt="rev_bev" data-f="bev_bev_comm" onchange="onTplInput(this)"><span class="input-suffix">%</span></div></div></div><div class="deal-example">On $32,000: food $'+Math.round(32000*rbFP/100).toLocaleString()+' x '+rbFC+'% = $'+Math.round(32000*rbFP/100*rbFC/100).toLocaleString()+' + bev $'+Math.round(32000*rbBP/100).toLocaleString()+' x '+rbBC+'% = $'+Math.round(32000*rbBP/100*rbBC/100).toLocaleString()+' = <b>$'+(Math.round(32000*rbFP/100*rbFC/100)+Math.round(32000*rbBP/100*rbBC/100)).toLocaleString()+'</b></div></div><div class="tpl-footer"><span class="used-count">Used by '+uRB+' stand'+(uRB!==1?'s':'')+'</span></div></div>'+
-'<div class="tpl-card"><div class="tpl-header"><span class="tpl-title">Labor deal</span><span class="deal-badge db-nc">Not COS relatable</span></div><div class="tpl-desc">Flat commission on all sales. No product cost, labor only.</div><div class="tpl-body"><div class="input-row"><span class="input-label">Commission rate</span><input class="deal-input" type="number" value="'+lbC+'" data-v="'+v+'" data-dt="labor" data-f="labor_comm" onchange="onTplInput(this)"><span class="input-suffix">% (override per stand)</span></div><div class="deal-example">On $5,000 sales: $5,000 x '+lbC+'% = <b>$'+Math.round(5000*lbC/100).toLocaleString()+'</b> our revenue</div></div><div class="tpl-footer"><span class="used-count">Used by '+uL+' stand'+(uL!==1?'s':'')+'</span></div></div>'+
-'<div class="tpl-card"><div class="tpl-header"><span class="tpl-title">Reimb + commission</span><div style="display:flex;gap:5px"><span class="deal-badge db-cr">Labor credit</span><span class="deal-badge db-nc">Not COS</span></div></div><div class="tpl-desc">Venue reimburses per employee hour plus a commission % on sales.</div><div class="tpl-body"><div class="input-row"><span class="input-label">Commission rate</span><input class="deal-input" type="number" value="'+rmC+'" data-v="'+v+'" data-dt="reimb" data-f="reimb_comm" onchange="onTplInput(this)"><span class="input-suffix">%</span></div><div class="info-box">Revenue from two sources:<br>1. Commission: sales x '+rmC+'%<br>2. Labor reimbursement: billed from Client Staffing rates below</div><div class="deal-example">On $8,000 sales + 4 staff at $31/hr x 6 hrs: $'+Math.round(8000*rmC/100)+' commission + $744 labor credit</div></div><div class="tpl-footer"><span class="used-count">Used by '+uRe+' stand'+(uRe!==1?'s':'')+'</span></div></div>';}
+// ── Venue deal defaults ──────────────────────────────────────────────────
+function renderTemplates(v){
+  var el=document.getElementById('tpl-grid');
+  var rs=dealTemplates[dKey(v,'rev_split')]||{};
+  var rb=dealTemplates[dKey(v,'rev_bev')]||{};
+  var lb=dealTemplates[dKey(v,'labor')]||{};
+  var rm=dealTemplates[dKey(v,'reimb')]||{};
 
-function selPreset(btn,hid,val){btn.parentElement.querySelectorAll('.preset-btn').forEach(function(b){b.classList.remove('selected');});btn.classList.add('selected');var h=document.getElementById(hid);if(h){h.value=val;onTplInput(h);}}
+  var rsPct=pick(rs.rev_split_pct,DEF.rev_split_pct);
+  var rbFP=pick(rb.bev_food_pct,DEF.bev_food_pct),rbBP=pick(rb.bev_bev_pct,DEF.bev_bev_pct);
+  var rbFC=pick(rb.bev_food_cut,DEF.bev_food_cut),rbBC=pick(rb.bev_bev_comm,DEF.bev_bev_comm);
+  var lbC=pick(lb.labor_comm,DEF.labor_comm);
+  var rmC=pick(rm.reimb_comm,DEF.reimb_comm);
 
-function onTplInput(inp){var v=inp.dataset.v,dt=inp.dataset.dt,f=inp.dataset.f;var val=parseInt(inp.value)||0;var k=dKey(v,dt);if(!dealTemplates[k])dealTemplates[k]={venue:v,deal_type:dt};dealTemplates[k][f]=val;markDirty();renderDeals();}
+  // A template value that has never been saved is running on the built-in
+  // default. Flag it — the number is in JavaScript, not the database.
+  function unsavedChip(storedVal){
+    return numOrNull(storedVal)===null?'<span class="deal-badge db-unsaved">Built-in default &mdash; not saved</span>':'';
+  }
 
-function renderStands(v){var stands=getRevenueStands(v);var tbody=document.getElementById('assign-tbody');var h='';for(var i=0;i<stands.length;i++){var s=stands[i];var sd=standDeals[sdKey(v,s)];var dt=sd?sd.deal_type:'';var isUn=!dt;var split=getSplitDisp(v,s,sd);var cos=getCosDisp(dt);var hasO=sd?sd.has_override:false;if(hasO)split+='<span class="override-chip">override</span>';var rc=isUn?' class="unassigned-row"':'';var esc=s.replace(/'/g,'&#39;');var sel='<select class="type-select" data-v="'+v+'" data-s="'+esc+'" onchange="onStandChange(this)"><option value=""'+(dt?'':' selected')+'>-- Select --</option><option value="rev_split"'+(dt==='rev_split'?' selected':'')+'>Revenue split</option><option value="rev_bev"'+(dt==='rev_bev'?' selected':'')+'>Revenue split + bev</option><option value="labor"'+(dt==='labor'?' selected':'')+'>Labor deal</option><option value="reimb"'+(dt==='reimb'?' selected':'')+'>Reimb + commission</option></select>';var eb=dt?'<button class="edit-btn" onclick="togglePanel(\''+v+'\',\''+s.replace(/'/g,"\\'")+'\')">Edit</button>':'';h+='<tr'+rc+'><td class="stand-name-cell">'+s+'</td><td>'+sel+'</td><td class="split-cell">'+split+'</td><td>'+cos+'</td><td>'+eb+'</td></tr>';h+='<tr><td colspan="5" style="padding:0;border-bottom:none"><div class="override-panel'+(openPanel===s?' open':'')+'">'+buildOvrPanel(v,s,sd)+'</div></td></tr>';}tbody.innerHTML=h;}
+  var stands=getDealStands(v);var uRS=0,uRB=0,uL=0,uRe=0;
+  for(var i=0;i<stands.length;i++){
+    var sd=standDeals[sdKey(v,stands[i].name)];
+    if(sd){
+      if(sd.deal_type==='rev_split')uRS++;
+      else if(sd.deal_type==='rev_bev')uRB++;
+      else if(sd.deal_type==='labor')uL++;
+      else if(sd.deal_type==='reimb')uRe++;
+    }
+  }
 
-function getSplitDisp(v,s,sd){if(!sd)return'--';var dt=sd.deal_type;var tpl=dealTemplates[dKey(v,dt)]||{};if(dt==='rev_split'){var p=(sd.has_override&&sd.override_rev_split_pct!=null?sd.override_rev_split_pct:null)||tpl.rev_split_pct||70;return p+'/'+(100-p);}if(dt==='rev_bev'){var fc=(sd.has_override&&sd.override_bev_food_cut!=null?sd.override_bev_food_cut:null)||tpl.bev_food_cut||70;return fc+'/'+(100-fc);}if(dt==='labor'){var c=(sd.has_override&&sd.override_labor_comm!=null?sd.override_labor_comm:null)||tpl.labor_comm||15;return c+'%';}if(dt==='reimb'){var rc=(sd.has_override&&sd.override_reimb_comm!=null?sd.override_reimb_comm:null)||tpl.reimb_comm||5;return rc+'%';}return'--';}
+  function pBtns(vals,cur,hid){
+    var h='';
+    for(var j=0;j<vals.length;j++){
+      h+='<button class="preset-btn'+(vals[j]===cur?' selected':'')+'" onclick="selPreset(this,\''+hid+'\','+vals[j]+')">'+vals[j]+(vals[j]<100?'/'+(100-vals[j]):'%')+'</button>';
+    }
+    return h;
+  }
 
-function getCosDisp(dt){if(dt==='rev_split')return'<span class="cos-yes">Yes</span>';if(dt==='rev_bev')return'<span class="cos-yes">Yes (food)</span>';if(dt==='labor')return'<span class="cos-no">No</span>';if(dt==='reimb')return'<span class="cos-credit">Credit</span>';return'<span style="color:#856404;font-size:11px;font-weight:700">ASSIGN</span>';}
+  el.innerHTML=
+  '<div class="tpl-card"><div class="tpl-header"><span class="tpl-title">Revenue split</span><div style="display:flex;gap:5px;flex-wrap:wrap">'+unsavedChip(rs.rev_split_pct)+'<span class="deal-badge db-cos">COS relatable</span></div></div><div class="tpl-desc">We keep X%, client keeps the rest. We buy all product.</div><div class="tpl-body"><div class="preset-row"><span class="preset-label">Default split</span>'+pBtns([60,70,75,80],rsPct,'h-rs')+'</div><input type="hidden" id="h-rs" value="'+rsPct+'" data-v="'+esc(v)+'" data-dt="rev_split" data-f="rev_split_pct"><div style="font-size:10px;color:var(--label);font-style:italic">Override available per stand</div><div class="deal-example">On $32,000 sales: $32,000 x '+rsPct+'% = <b>$'+Math.round(32000*rsPct/100).toLocaleString()+'</b> our revenue</div></div><div class="tpl-footer"><span class="used-count">Used by '+uRS+' stand'+(uRS!==1?'s':'')+'</span></div></div>'+
 
-function buildOvrPanel(v,s,sd){if(!sd)return'';var dt=sd.deal_type;var tpl=dealTemplates[dKey(v,dt)]||{};var esc=s.replace(/'/g,'&#39;');if(dt==='rev_split'){var def=tpl.rev_split_pct||70;var cur=(sd.has_override&&sd.override_rev_split_pct!=null?sd.override_rev_split_pct:null)||def;return'<div class="op-inner"><div class="op-col"><div class="op-label">Revenue split</div><div style="display:flex;align-items:center;gap:6px"><span style="font-size:11px">Our cut</span><input class="op-input" value="'+cur+'" data-v="'+v+'" data-s="'+esc+'" data-f="override_rev_split_pct" onchange="onOvrInput(this)"><span class="op-suffix">%</span></div><div class="op-default">Venue default: '+def+'%</div></div><div class="op-calc">On $25,000: $25,000 x '+cur+'% = <b>$'+Math.round(25000*cur/100).toLocaleString()+'</b></div><div class="op-actions"><button class="btn-sm btn-cancel" onclick="closePanel()">Close</button></div></div>';}
-if(dt==='rev_bev'){var dFP=tpl.bev_food_pct||91,dBP=tpl.bev_bev_pct||9,dFC=tpl.bev_food_cut||70,dBC=tpl.bev_bev_comm||10;var cFP=(sd.has_override&&sd.override_bev_food_pct!=null?sd.override_bev_food_pct:null)||dFP,cBP=(sd.has_override&&sd.override_bev_bev_pct!=null?sd.override_bev_bev_pct:null)||dBP;var cFC=(sd.has_override&&sd.override_bev_food_cut!=null?sd.override_bev_food_cut:null)||dFC,cBC=(sd.has_override&&sd.override_bev_bev_comm!=null?sd.override_bev_bev_comm:null)||dBC;return'<div class="op-inner"><div class="op-col"><div class="op-label">Food side</div><div style="display:flex;align-items:center;gap:6px"><span style="font-size:11px">Food %</span><input class="op-input" value="'+cFP+'" data-v="'+v+'" data-s="'+esc+'" data-f="override_bev_food_pct" onchange="onOvrInput(this)"><span class="op-suffix">%</span></div><div style="display:flex;align-items:center;gap:6px;margin-top:4px"><span style="font-size:11px">Our cut</span><input class="op-input" value="'+cFC+'" data-v="'+v+'" data-s="'+esc+'" data-f="override_bev_food_cut" onchange="onOvrInput(this)"><span class="op-suffix">%</span></div><div class="op-default">Default: '+dFP+'% food, '+dFC+'% cut</div></div><div class="op-col"><div class="op-label">Beverage side</div><div style="display:flex;align-items:center;gap:6px"><span style="font-size:11px">Bev %</span><input class="op-input" value="'+cBP+'" data-v="'+v+'" data-s="'+esc+'" data-f="override_bev_bev_pct" onchange="onOvrInput(this)"><span class="op-suffix">%</span></div><div style="display:flex;align-items:center;gap:6px;margin-top:4px"><span style="font-size:11px">Commission</span><input class="op-input" value="'+cBC+'" data-v="'+v+'" data-s="'+esc+'" data-f="override_bev_bev_comm" onchange="onOvrInput(this)"><span class="op-suffix">%</span></div><div class="op-default">Default: '+dBP+'% bev, '+dBC+'% comm</div></div><div class="op-actions"><button class="btn-sm btn-cancel" onclick="closePanel()">Close</button></div></div>';}
-if(dt==='labor'){var dC=tpl.labor_comm||15,cC=(sd.has_override&&sd.override_labor_comm!=null?sd.override_labor_comm:null)||dC;return'<div class="op-inner"><div class="op-col"><div class="op-label">Commission rate</div><div style="display:flex;align-items:center;gap:6px"><input class="op-input" value="'+cC+'" data-v="'+v+'" data-s="'+esc+'" data-f="override_labor_comm" onchange="onOvrInput(this)"><span class="op-suffix">%</span></div><div class="op-default">Venue default: '+dC+'%</div></div><div class="op-calc">On $5,000: $5,000 x '+cC+'% = <b>$'+Math.round(5000*cC/100).toLocaleString()+'</b></div><div class="op-actions"><button class="btn-sm btn-cancel" onclick="closePanel()">Close</button></div></div>';}
-if(dt==='reimb'){var dR=tpl.reimb_comm||5,cR=(sd.has_override&&sd.override_reimb_comm!=null?sd.override_reimb_comm:null)||dR;return'<div class="op-inner"><div class="op-col"><div class="op-label">Commission rate</div><div style="display:flex;align-items:center;gap:6px"><input class="op-input" value="'+cR+'" data-v="'+v+'" data-s="'+esc+'" data-f="override_reimb_comm" onchange="onOvrInput(this)"><span class="op-suffix">%</span></div><div class="op-default">Venue default: '+dR+'%</div></div><div class="op-actions"><button class="btn-sm btn-cancel" onclick="closePanel()">Close</button></div></div>';}
-return'';}
+  '<div class="tpl-card"><div class="tpl-header"><span class="tpl-title">Revenue split + bev carveout</span><div style="display:flex;gap:5px;flex-wrap:wrap">'+unsavedChip(rb.bev_food_cut)+'<span class="deal-badge db-fo">COS: food only</span></div></div><div class="tpl-desc">Food portion at revenue split, bev portion at flat commission. Bev is never COS.</div><div class="tpl-body"><div class="two-col"><div><div class="col-label">Food side</div><div class="input-row"><span class="input-label">Est. food %</span><input class="deal-input" type="number" min="0" max="100" value="'+rbFP+'" data-v="'+esc(v)+'" data-dt="rev_bev" data-f="bev_food_pct" onchange="onTplInput(this)"><span class="input-suffix">%</span></div><div class="preset-row" style="margin-top:6px"><span class="preset-label">Our cut</span>'+pBtns([60,70,75],rbFC,'h-rbfc')+'</div><input type="hidden" id="h-rbfc" value="'+rbFC+'" data-v="'+esc(v)+'" data-dt="rev_bev" data-f="bev_food_cut"></div><div><div class="col-label">Beverage side (not COS)</div><div class="input-row"><span class="input-label">Est. bev %</span><input class="deal-input" type="number" min="0" max="100" value="'+rbBP+'" data-v="'+esc(v)+'" data-dt="rev_bev" data-f="bev_bev_pct" onchange="onTplInput(this)"><span class="input-suffix">%</span></div><div class="input-row" style="margin-top:6px"><span class="input-label">Commission</span><input class="deal-input" type="number" min="0" max="100" value="'+rbBC+'" data-v="'+esc(v)+'" data-dt="rev_bev" data-f="bev_bev_comm" onchange="onTplInput(this)"><span class="input-suffix">%</span></div></div></div><div class="deal-example">On $32,000: food $'+Math.round(32000*rbFP/100).toLocaleString()+' x '+rbFC+'% = $'+Math.round(32000*rbFP/100*rbFC/100).toLocaleString()+' + bev $'+Math.round(32000*rbBP/100).toLocaleString()+' x '+rbBC+'% = $'+Math.round(32000*rbBP/100*rbBC/100).toLocaleString()+' = <b>$'+(Math.round(32000*rbFP/100*rbFC/100)+Math.round(32000*rbBP/100*rbBC/100)).toLocaleString()+'</b></div></div><div class="tpl-footer"><span class="used-count">Used by '+uRB+' stand'+(uRB!==1?'s':'')+'</span></div></div>'+
 
-function onStandChange(sel){var v=sel.dataset.v,s=sel.dataset.s,nt=sel.value;var k=sdKey(v,s);if(!nt){delete standDeals[k];}else{standDeals[k]={venue:v,stand:s,deal_type:nt,has_override:false,override_rev_split_pct:null,override_bev_food_pct:null,override_bev_bev_pct:null,override_bev_food_cut:null,override_bev_bev_comm:null,override_labor_comm:null,override_reimb_comm:null};}markDirty();renderDeals();}
+  '<div class="tpl-card"><div class="tpl-header"><span class="tpl-title">Labor deal</span><div style="display:flex;gap:5px;flex-wrap:wrap">'+unsavedChip(lb.labor_comm)+'<span class="deal-badge db-nc">Not COS relatable</span></div></div><div class="tpl-desc">Flat commission on all sales. No product cost, labor only.</div><div class="tpl-body"><div class="input-row"><span class="input-label">Commission rate</span><input class="deal-input" type="number" min="0" max="100" value="'+lbC+'" data-v="'+esc(v)+'" data-dt="labor" data-f="labor_comm" onchange="onTplInput(this)"><span class="input-suffix">% (override per stand)</span></div><div class="deal-example">On $5,000 sales: $5,000 x '+lbC+'% = <b>$'+Math.round(5000*lbC/100).toLocaleString()+'</b> our revenue</div></div><div class="tpl-footer"><span class="used-count">Used by '+uL+' stand'+(uL!==1?'s':'')+'</span></div></div>'+
 
-function onOvrInput(inp){var v=inp.dataset.v,s=inp.dataset.s,f=inp.dataset.f;var val=parseInt(inp.value)||0;var k=sdKey(v,s);var sd=standDeals[k];if(!sd)return;sd[f]=val;sd.has_override=true;markDirty();}
+  '<div class="tpl-card"><div class="tpl-header"><span class="tpl-title">Reimb + commission</span><div style="display:flex;gap:5px;flex-wrap:wrap">'+unsavedChip(rm.reimb_comm)+'<span class="deal-badge db-cr">Labor credit</span><span class="deal-badge db-nc">Not COS</span></div></div><div class="tpl-desc">Venue reimburses per employee hour plus a commission % on sales.</div><div class="tpl-body"><div class="input-row"><span class="input-label">Commission rate</span><input class="deal-input" type="number" min="0" max="100" value="'+rmC+'" data-v="'+esc(v)+'" data-dt="reimb" data-f="reimb_comm" onchange="onTplInput(this)"><span class="input-suffix">%</span></div><div class="info-box">Revenue from two sources:<br>1. Commission: sales x '+rmC+'%<br>2. Labor reimbursement: billed from Client Staffing rates below</div><div class="deal-example">On $8,000 sales + 4 staff at $31/hr x 6 hrs: $'+Math.round(8000*rmC/100)+' commission + $744 labor credit</div></div><div class="tpl-footer"><span class="used-count">Used by '+uRe+' stand'+(uRe!==1?'s':'')+'</span></div></div>';
+}
 
-function togglePanel(v,s){openPanel=(openPanel===s)?null:s;renderStands(v);}
+function selPreset(btn,hid,val){
+  var sibs=btn.parentElement.querySelectorAll('.preset-btn');
+  for(var i=0;i<sibs.length;i++) sibs[i].classList.remove('selected');
+  btn.classList.add('selected');
+  var h=document.getElementById(hid);
+  if(h){h.value=val;onTplInput(h);}
+}
+
+function onTplInput(inp){
+  var v=inp.dataset.v,dt=inp.dataset.dt,f=inp.dataset.f;
+  var val=numOrNull(inp.value);
+  var k=dKey(v,dt);
+  if(!dealTemplates[k])dealTemplates[k]={venue:v,deal_type:dt};
+  dealTemplates[k][f]=val;
+  markDirty();renderDeals();
+}
+
+// ── Stand assignments ────────────────────────────────────────────────────
+function renderStands(v){
+  _rowStands=getDealStands(v);
+  var tbody=document.getElementById('assign-tbody');
+  var h='';
+  for(var i=0;i<_rowStands.length;i++){
+    var row=_rowStands[i];
+    var s=row.name;
+    var sd=standDeals[sdKey(v,s)];
+    var dt=sd?sd.deal_type:'';
+    var isUn=!dt;
+    var split=getSplitDisp(v,s,sd);
+    var cos=getCosDisp(dt);
+    if(sd&&sd.has_override)split+='<span class="override-chip">override</span>';
+
+    var nameCell=esc(s);
+    if(row.orphan)nameCell+='<span class="orphan-chip">not in catalog</span>';
+    else if(!row.active)nameCell+='<span class="retired-chip">retired</span>';
+
+    var rc=isUn?' class="unassigned-row"':'';
+    var sel='<select class="type-select" data-idx="'+i+'" onchange="onStandChange(this)">'+
+      '<option value=""'+(dt?'':' selected')+'>-- Select --</option>'+
+      '<option value="rev_split"'+(dt==='rev_split'?' selected':'')+'>Revenue split</option>'+
+      '<option value="rev_bev"'+(dt==='rev_bev'?' selected':'')+'>Revenue split + bev</option>'+
+      '<option value="labor"'+(dt==='labor'?' selected':'')+'>Labor deal</option>'+
+      '<option value="reimb"'+(dt==='reimb'?' selected':'')+'>Reimb + commission</option></select>';
+    var eb=dt?'<button class="edit-btn" onclick="togglePanelIdx('+i+')">Edit</button>':'';
+
+    h+='<tr'+rc+'><td class="stand-name-cell">'+nameCell+'</td><td>'+sel+'</td><td class="split-cell">'+split+'</td><td>'+cos+'</td><td>'+eb+'</td></tr>';
+    h+='<tr><td colspan="5" style="padding:0;border-bottom:none"><div class="override-panel'+(openPanel===s?' open':'')+'">'+buildOvrPanel(v,s,sd,i)+'</div></td></tr>';
+  }
+  tbody.innerHTML=h;
+}
+
+function effVal(sd,ovrField,tpl,tplField,dflt){
+  var ovr=(sd&&sd.has_override)?sd[ovrField]:null;
+  return pick(ovr,tpl?tpl[tplField]:null,dflt);
+}
+
+function getSplitDisp(v,s,sd){
+  if(!sd)return'--';
+  var dt=sd.deal_type;
+  var tpl=dealTemplates[dKey(v,dt)]||{};
+  var n;
+  if(dt==='rev_split'){n=effVal(sd,'override_rev_split_pct',tpl,'rev_split_pct',DEF.rev_split_pct);return n+'/'+(100-n);}
+  if(dt==='rev_bev'){n=effVal(sd,'override_bev_food_cut',tpl,'bev_food_cut',DEF.bev_food_cut);return n+'/'+(100-n);}
+  if(dt==='labor'){n=effVal(sd,'override_labor_comm',tpl,'labor_comm',DEF.labor_comm);return n+'%'+(n===0?'<span class="zero-chip">no commission</span>':'');}
+  if(dt==='reimb'){n=effVal(sd,'override_reimb_comm',tpl,'reimb_comm',DEF.reimb_comm);return n+'%'+(n===0?'<span class="zero-chip">no commission</span>':'');}
+  return'--';
+}
+
+function getCosDisp(dt){
+  if(dt==='rev_split')return'<span class="cos-yes">Yes</span>';
+  if(dt==='rev_bev')return'<span class="cos-yes">Yes (food)</span>';
+  if(dt==='labor')return'<span class="cos-no">No</span>';
+  if(dt==='reimb')return'<span class="cos-credit">Credit</span>';
+  return'<span style="color:#856404;font-size:11px;font-weight:700">ASSIGN</span>';
+}
+
+function ovrInput(idx,field,val){
+  return '<input class="op-input" type="number" min="0" max="100" value="'+(val==null?'':val)+'" data-idx="'+idx+'" data-f="'+field+'" onchange="onOvrInput(this)">';
+}
+
+function buildOvrPanel(v,s,sd,idx){
+  if(!sd)return'';
+  var dt=sd.deal_type;
+  var tpl=dealTemplates[dKey(v,dt)]||{};
+  var clearHint='<div class="op-hint">Clear the box to fall back to the venue default. 0 is a real value.</div>';
+
+  if(dt==='rev_split'){
+    var def=pick(tpl.rev_split_pct,DEF.rev_split_pct);
+    var cur=effVal(sd,'override_rev_split_pct',tpl,'rev_split_pct',DEF.rev_split_pct);
+    var raw=sd.has_override?numOrNull(sd.override_rev_split_pct):null;
+    return'<div class="op-inner"><div class="op-col"><div class="op-label">Revenue split</div><div style="display:flex;align-items:center;gap:6px"><span style="font-size:11px">Our cut</span>'+ovrInput(idx,'override_rev_split_pct',raw)+'<span class="op-suffix">%</span></div><div class="op-default">Venue default: '+def+'%</div>'+clearHint+'</div><div class="op-calc">On $25,000: $25,000 x '+cur+'% = <b>$'+Math.round(25000*cur/100).toLocaleString()+'</b></div><div class="op-actions"><button class="btn-sm btn-cancel" onclick="closePanel()">Close</button></div></div>';
+  }
+
+  if(dt==='rev_bev'){
+    var dFP=pick(tpl.bev_food_pct,DEF.bev_food_pct),dBP=pick(tpl.bev_bev_pct,DEF.bev_bev_pct);
+    var dFC=pick(tpl.bev_food_cut,DEF.bev_food_cut),dBC=pick(tpl.bev_bev_comm,DEF.bev_bev_comm);
+    var rFP=sd.has_override?numOrNull(sd.override_bev_food_pct):null;
+    var rBP=sd.has_override?numOrNull(sd.override_bev_bev_pct):null;
+    var rFC=sd.has_override?numOrNull(sd.override_bev_food_cut):null;
+    var rBC=sd.has_override?numOrNull(sd.override_bev_bev_comm):null;
+    return'<div class="op-inner"><div class="op-col"><div class="op-label">Food side</div><div style="display:flex;align-items:center;gap:6px"><span style="font-size:11px">Food %</span>'+ovrInput(idx,'override_bev_food_pct',rFP)+'<span class="op-suffix">%</span></div><div style="display:flex;align-items:center;gap:6px;margin-top:4px"><span style="font-size:11px">Our cut</span>'+ovrInput(idx,'override_bev_food_cut',rFC)+'<span class="op-suffix">%</span></div><div class="op-default">Default: '+dFP+'% food, '+dFC+'% cut</div></div><div class="op-col"><div class="op-label">Beverage side</div><div style="display:flex;align-items:center;gap:6px"><span style="font-size:11px">Bev %</span>'+ovrInput(idx,'override_bev_bev_pct',rBP)+'<span class="op-suffix">%</span></div><div style="display:flex;align-items:center;gap:6px;margin-top:4px"><span style="font-size:11px">Commission</span>'+ovrInput(idx,'override_bev_bev_comm',rBC)+'<span class="op-suffix">%</span></div><div class="op-default">Default: '+dBP+'% bev, '+dBC+'% comm</div>'+clearHint+'</div><div class="op-actions"><button class="btn-sm btn-cancel" onclick="closePanel()">Close</button></div></div>';
+  }
+
+  if(dt==='labor'){
+    var dC=pick(tpl.labor_comm,DEF.labor_comm);
+    var cC=effVal(sd,'override_labor_comm',tpl,'labor_comm',DEF.labor_comm);
+    var rC=sd.has_override?numOrNull(sd.override_labor_comm):null;
+    return'<div class="op-inner"><div class="op-col"><div class="op-label">Commission rate</div><div style="display:flex;align-items:center;gap:6px">'+ovrInput(idx,'override_labor_comm',rC)+'<span class="op-suffix">%</span></div><div class="op-default">Venue default: '+dC+'%</div>'+clearHint+'</div><div class="op-calc">On $5,000: $5,000 x '+cC+'% = <b>$'+Math.round(5000*cC/100).toLocaleString()+'</b></div><div class="op-actions"><button class="btn-sm btn-cancel" onclick="closePanel()">Close</button></div></div>';
+  }
+
+  if(dt==='reimb'){
+    var dR=pick(tpl.reimb_comm,DEF.reimb_comm);
+    var cR=effVal(sd,'override_reimb_comm',tpl,'reimb_comm',DEF.reimb_comm);
+    var rR=sd.has_override?numOrNull(sd.override_reimb_comm):null;
+    return'<div class="op-inner"><div class="op-col"><div class="op-label">Commission rate</div><div style="display:flex;align-items:center;gap:6px">'+ovrInput(idx,'override_reimb_comm',rR)+'<span class="op-suffix">%</span></div><div class="op-default">Venue default: '+dR+'%</div>'+clearHint+'</div><div class="op-calc">On $8,000: $8,000 x '+cR+'% = <b>$'+Math.round(8000*cR/100).toLocaleString()+'</b> commission</div><div class="op-actions"><button class="btn-sm btn-cancel" onclick="closePanel()">Close</button></div></div>';
+  }
+  return'';
+}
+
+function standAtIdx(idx){
+  var i=parseInt(idx,10);
+  if(isNaN(i)||i<0||i>=_rowStands.length)return null;
+  return _rowStands[i].name;
+}
+
+function onStandChange(sel){
+  var s=standAtIdx(sel.dataset.idx);
+  if(s===null)return;
+  var v=activeVenue,nt=sel.value,k=sdKey(v,s);
+  if(!nt){
+    delete standDeals[k];
+    if(openPanel===s)openPanel=null;
+  }else{
+    standDeals[k]={venue:v,stand:s,deal_type:nt,has_override:false,
+      override_rev_split_pct:null,override_bev_food_pct:null,override_bev_bev_pct:null,
+      override_bev_food_cut:null,override_bev_bev_comm:null,override_labor_comm:null,
+      override_reimb_comm:null};
+  }
+  markDirty();renderDeals();
+}
+
+function onOvrInput(inp){
+  var s=standAtIdx(inp.dataset.idx);
+  if(s===null)return;
+  var v=activeVenue,f=inp.dataset.f;
+  var sd=standDeals[sdKey(v,s)];
+  if(!sd)return;
+  sd[f]=numOrNull(inp.value);   // '' clears the override; 0 stores 0
+  recomputeOverride(sd);
+  markDirty();renderDeals();
+}
+
+function togglePanelIdx(idx){
+  var s=standAtIdx(idx);
+  if(s===null)return;
+  openPanel=(openPanel===s)?null:s;
+  renderStands(activeVenue);
+}
 function closePanel(){openPanel=null;renderDeals();}
 
-function renderBilling(v){var tbody=document.getElementById('billing-tbody');var st=VENUE_STATES[v]||'NJ';var h='';for(var i=0;i<BILLING_ROLES.length;i++){var r=BILLING_ROLES[i];var br=billingRates[brKey(v,r)];var rate=br?parseFloat(br.billing_rate):0;var pr=payRates[st+'||'+r]||0;var mg=rate>0?(rate-pr):0;h+='<tr><td style="font-weight:700">'+r+'</td><td><input class="rate-input" type="number" min="0" step="0.50" value="'+(rate>0?rate.toFixed(2):'')+'" placeholder="0.00" data-v="'+v+'" data-r="'+r+'" onchange="onBillingInput(this)"></td><td style="color:var(--label)">'+(pr>0?'$'+parseFloat(pr).toFixed(2):'--')+'</td><td style="font-weight:700;color:'+(mg>0?'var(--green)':'var(--label)')+'">'+(mg>0?'$'+mg.toFixed(2):'--')+'</td></tr>';}tbody.innerHTML=h;}
+// ── Client staffing billing rates ────────────────────────────────────────
+function renderBilling(v){
+  var tbody=document.getElementById('billing-tbody');
+  var st=venueMeta(v).state||'NJ';
+  var h='';
+  for(var i=0;i<BILLING_ROLES.length;i++){
+    var r=BILLING_ROLES[i];
+    var br=billingRates[brKey(v,r)];
+    var rate=br?parseFloat(br.billing_rate):0;
+    var pr=payRates[st+'||'+r]||0;
+    var mg=rate>0?(rate-pr):0;
+    h+='<tr><td style="font-weight:700">'+esc(r)+'</td><td><input class="rate-input" type="number" min="0" step="0.50" value="'+(rate>0?rate.toFixed(2):'')+'" placeholder="0.00" data-v="'+esc(v)+'" data-r="'+esc(r)+'" onchange="onBillingInput(this)"></td><td style="color:var(--label)">'+(pr>0?'$'+parseFloat(pr).toFixed(2):'--')+'</td><td style="font-weight:700;color:'+(mg>0?'var(--green)':'var(--label)')+'">'+(mg>0?'$'+mg.toFixed(2):'--')+'</td></tr>';
+  }
+  tbody.innerHTML=h;
+}
 
-function onBillingInput(inp){var v=inp.dataset.v,r=inp.dataset.r;var val=parseFloat(inp.value)||0;var k=brKey(v,r);if(val>0){if(!billingRates[k])billingRates[k]={venue:v,role:r};billingRates[k].billing_rate=val;}else{delete billingRates[k];}markDirty();}
+function onBillingInput(inp){
+  var v=inp.dataset.v,r=inp.dataset.r;
+  var val=parseFloat(inp.value)||0;
+  var k=brKey(v,r);
+  if(val>0){
+    if(!billingRates[k])billingRates[k]={venue:v,role:r};
+    billingRates[k].billing_rate=val;
+  }else{
+    delete billingRates[k];
+  }
+  markDirty();
+}
 
+// ── Save ─────────────────────────────────────────────────────────────────
 function saveDealStructure(){
+  if(!dataLoaded){
+    showToast('Load failed earlier — reload the page before saving.');
+    return;
+  }
   var btn=document.getElementById('save-btn');btn.textContent='Saving...';btn.disabled=true;
-  var tplRows=[];Object.keys(dealTemplates).forEach(function(k){var t=dealTemplates[k];tplRows.push({venue:t.venue,deal_type:t.deal_type,rev_split_pct:t.rev_split_pct||null,bev_food_pct:t.bev_food_pct||null,bev_bev_pct:t.bev_bev_pct||null,bev_food_cut:t.bev_food_cut||null,bev_bev_comm:t.bev_bev_comm||null,labor_comm:t.labor_comm||null,reimb_comm:t.reimb_comm||null,updated_at:new Date().toISOString()});});
-  var sdRows=[];Object.keys(standDeals).forEach(function(k){var s=standDeals[k];sdRows.push({venue:s.venue,stand:s.stand,deal_type:s.deal_type,has_override:s.has_override||false,override_rev_split_pct:s.override_rev_split_pct||null,override_bev_food_pct:s.override_bev_food_pct||null,override_bev_bev_pct:s.override_bev_bev_pct||null,override_bev_food_cut:s.override_bev_food_cut||null,override_bev_bev_comm:s.override_bev_bev_comm||null,override_labor_comm:s.override_labor_comm||null,override_reimb_comm:s.override_reimb_comm||null,updated_at:new Date().toISOString()});});
-  var brRows=[];Object.keys(billingRates).forEach(function(k){var b=billingRates[k];if(b.billing_rate>0)brRows.push({venue:b.venue,role:b.role,billing_rate:b.billing_rate,updated_at:new Date().toISOString()});});
+  var who=(currentUser&&currentUser.display_name)?currentUser.display_name:null;
+  var now=new Date().toISOString();
 
-  var delHeaders = pcAuth.headers();
+  var tplRows=[];
+  Object.keys(dealTemplates).forEach(function(k){
+    var t=dealTemplates[k];
+    tplRows.push({venue:t.venue,deal_type:t.deal_type,
+      rev_split_pct:numOrNull(t.rev_split_pct),
+      bev_food_pct:numOrNull(t.bev_food_pct),
+      bev_bev_pct:numOrNull(t.bev_bev_pct),
+      bev_food_cut:numOrNull(t.bev_food_cut),
+      bev_bev_comm:numOrNull(t.bev_bev_comm),
+      labor_comm:numOrNull(t.labor_comm),
+      reimb_comm:numOrNull(t.reimb_comm),
+      updated_at:now,updated_by:who});
+  });
+
+  var sdRows=[];
+  Object.keys(standDeals).forEach(function(k){
+    var s=standDeals[k];
+    var row={venue:s.venue,stand:s.stand,deal_type:s.deal_type,
+      override_rev_split_pct:numOrNull(s.override_rev_split_pct),
+      override_bev_food_pct:numOrNull(s.override_bev_food_pct),
+      override_bev_bev_pct:numOrNull(s.override_bev_bev_pct),
+      override_bev_food_cut:numOrNull(s.override_bev_food_cut),
+      override_bev_bev_comm:numOrNull(s.override_bev_bev_comm),
+      override_labor_comm:numOrNull(s.override_labor_comm),
+      override_reimb_comm:numOrNull(s.override_reimb_comm),
+      updated_at:now,updated_by:who};
+    row.has_override=recomputeOverride(row);
+    sdRows.push(row);
+  });
+
+  var brRows=[];
+  Object.keys(billingRates).forEach(function(k){
+    var b=billingRates[k];
+    if(b.billing_rate>0)brRows.push({venue:b.venue,role:b.role,billing_rate:b.billing_rate,updated_at:now});
+  });
+
+  var delHeaders=pcAuth.headers();
   Promise.all([
     fetch(SB_URL+'/rest/v1/deal_templates?venue=neq.ZZZZZ',{method:'DELETE',headers:delHeaders}),
     fetch(SB_URL+'/rest/v1/stand_deals?venue=neq.ZZZZZ',{method:'DELETE',headers:delHeaders}),
@@ -348,19 +750,29 @@ function saveDealStructure(){
     return Promise.all(promises);
   }).then(function(){
     dealDirty=false;btn.style.display='none';btn.textContent='Save Changes';btn.disabled=false;
-    var ind=document.getElementById('saved-ind');ind.classList.add('show');setTimeout(function(){ind.classList.remove('show');},3000);
+    var ind=document.getElementById('saved-ind');ind.classList.add('show');
+    setTimeout(function(){ind.classList.remove('show');},3000);
     showToast('Deal structure saved',true);
     var savedVenue=activeVenue;
     loadDealStructure().then(function(){
       var tabs=document.querySelectorAll('#venue-tabs .venue-btn');
-      for(var i=0;i<tabs.length;i++){if(tabs[i].textContent===(VENUE_LABELS[savedVenue]||savedVenue)){switchVenue(savedVenue,tabs[i]);break;}}
+      for(var i=0;i<tabs.length;i++){
+        if(tabs[i].getAttribute('data-code')===savedVenue){switchVenue(savedVenue,tabs[i]);break;}
+      }
     });
-  }).catch(function(e){showToast('Error saving deal structure.');btn.textContent='Save Changes';btn.disabled=false;console.error(e);});
+  }).catch(function(e){
+    showToast('Error saving deal structure.');btn.textContent='Save Changes';btn.disabled=false;console.error(e);
+  });
 }
 
 window.addEventListener('beforeunload',function(e){if(dealDirty){e.preventDefault();e.returnValue='';}});
 
-function showToast(msg,good){var t=document.getElementById('toast');t.textContent=msg;t.className='toast'+(good?' green':'');t.classList.add('show');setTimeout(function(){t.classList.remove('show');},3000);}
+function showToast(msg,good){
+  var t=document.getElementById('toast');
+  t.textContent=msg;t.className='toast'+(good?' green':'');
+  t.classList.add('show');
+  setTimeout(function(){t.classList.remove('show');},3000);
+}
 
 // ── Auth gate ──
 pcAuth.require({
