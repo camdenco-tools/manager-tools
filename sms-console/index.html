@@ -362,6 +362,7 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
         </div>
         <div class="pills" id="modePills">
           <button class="pill active" type="button" data-mode="event">One event</button>
+          <button class="pill" type="button" data-mode="pool">Building regulars</button>
           <button class="pill" type="button" data-mode="roster">Whole roster</button>
         </div>
       </div>
@@ -383,6 +384,14 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
           <div class="field">
             <label for="reachStand">Stand</label>
             <select id="reachStand" class="wide"><option value="">All stands</option></select>
+          </div>
+        </div>
+
+        <div id="poolPickers" class="settings-grid" style="display:none;">
+          <div class="field">
+            <label for="reachPoolVenue">Building</label>
+            <select id="reachPoolVenue" class="wide"></select>
+            <div class="hint">Anyone who signed up for or worked this building in the last 12 months, whether or not it is their home venue. Add more than one to cover several buildings in one message.</div>
           </div>
         </div>
 
@@ -535,6 +544,11 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
             <label for="setEvent">Event sends per event, per day</label>
             <input type="number" id="setEvent" min="0" max="50">
             <div class="hint">Each event gets its own allowance. Three shows the same night do not share a pool.</div>
+          </div>
+          <div class="field">
+            <label for="setPool">Building-regulars sends per building, per day</label>
+            <input type="number" id="setPool" min="0" max="20">
+            <div class="hint">Each building gets its own allowance. Pushing Delaware never silences Montage.</div>
           </div>
           <div class="field">
             <label for="setQStart">Send window opens (ET)</label>
@@ -969,6 +983,14 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
       } else {
         parts.push('One event');
       }
+    } else if (tc.scope === 'pool') {
+      var pools = (tc.picker && tc.picker.pools && tc.picker.pools.length)
+        ? tc.picker.pools.join(', ')
+        : (tc.pool_venue || 'a building');
+      parts.push('Building regulars \u00b7 ' + esc(pools));
+      if (tc.picker && tc.picker.pool_window_months) {
+        parts.push('signups and shifts from the last ' + tc.picker.pool_window_months + ' months');
+      }
     } else if (tc.scope === 'roster') {
       parts.push(tc.picker && tc.picker.home_venue
         ? ('Whole roster \u00b7 home venue ' + esc(tc.picker.home_venue))
@@ -1097,6 +1119,7 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
     if (!state.settings) return;
     document.getElementById('setRoster').value = state.settings.roster_sends_per_day;
     document.getElementById('setEvent').value = state.settings.event_sends_per_day;
+    document.getElementById('setPool').value = state.settings.pool_sends_per_day;
     document.getElementById('setQStart').value = state.settings.quiet_hours_start_et;
     document.getElementById('setQEnd').value = state.settings.quiet_hours_end_et;
     document.getElementById('setReason').value = '';
@@ -1105,6 +1128,7 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
   var SETTING_FIELDS = [
     { col: 'roster_sends_per_day',  el: 'setRoster', min: 0, max: 20 },
     { col: 'event_sends_per_day',   el: 'setEvent',  min: 0, max: 50 },
+    { col: 'pool_sends_per_day',    el: 'setPool',   min: 0, max: 20 },
     { col: 'quiet_hours_start_et',  el: 'setQStart', min: 0, max: 23 },
     { col: 'quiet_hours_end_et',    el: 'setQEnd',   min: 0, max: 23 }
   ];
@@ -1212,8 +1236,12 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
   var reach = {
     mode: 'event',
     events: [],
+    venues: [],      // venue catalog, for the pool picker
     rows: [],
-    picked: [],      // event ids, in the order they were added
+    // Event ids in event mode, venue codes in pool mode. One list because the
+    // chips, the dedupe and the per-target billing are identical either way --
+    // the only thing that changes is what a picked item names.
+    picked: [],
     lastLabel: ''
   };
 
@@ -1244,6 +1272,28 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
       if (reach.events[i].id === id) return reach.events[i];
     }
     return state.eventsById[id] || null;
+  }
+
+  // What one picked item is called. In event mode that is a show; in pool mode
+  // it is a building. Everything downstream -- chips, cap lines, confirm text --
+  // asks these rather than reaching for ev.venue directly.
+  function pickedLabel(id) {
+    if (reach.mode === 'pool') return id;
+    var ev = eventById(id);
+    return ev ? (ev.venue + ' \u00b7 ' + ev.event_name) : 'Event';
+  }
+
+  function pickedShortLabel(id) {
+    if (reach.mode === 'pool') return id;
+    var ev = eventById(id);
+    return ev ? ev.venue : '?';
+  }
+
+  // Whose allowance a send draws on, in words.
+  function allowanceWord() {
+    if (reach.mode === 'event') return 'event\u2019s';
+    if (reach.mode === 'pool') return 'building\u2019s';
+    return 'day\u2019s';
   }
 
   // The single id still used for anything that can only carry one: token
@@ -1279,9 +1329,11 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
 
   // Role and stand are per-event constructs. A role string that matches at one
   // venue and not another would filter silently and wrongly, so above one event
-  // the filters are switched off rather than applied optimistically.
+  // the filters are switched off rather than applied optimistically. In pool
+  // mode there is no placement to filter on at all -- the whole point is
+  // reaching people who are not on anything yet.
   function afterPickChange() {
-    var multi = multiEvent();
+    var multi = multiEvent() || reach.mode === 'pool';
     var roleSel = document.getElementById('reachRole');
     var standSel = document.getElementById('reachStand');
     if (multi) {
@@ -1297,24 +1349,32 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
 
   function renderPickedChips() {
     var host = document.getElementById('pickedHost');
-    if (reach.mode !== 'event') { host.innerHTML = ''; return; }
+    if (reach.mode === 'roster') { host.innerHTML = ''; return; }
 
     if (!reach.picked.length) {
-      host.innerHTML = '<div class="chips-none">No events chosen yet. ' +
-        'Pick one above, or tap any number of them in Happening today.</div>';
+      host.innerHTML = '<div class="chips-none">' +
+        (reach.mode === 'pool'
+          ? 'No buildings chosen yet. Pick one above.'
+          : 'No events chosen yet. Pick one above, or tap any number of them in Happening today.') +
+        '</div>';
       return;
     }
 
+    var tail = '';
+    if (reach.mode === 'pool') {
+      tail = '<div class="chips-none">Everyone who signed up for or worked ' +
+        (reach.picked.length === 1 ? 'this building' : 'these buildings') +
+        ' in the last 12 months. Role and stand do not apply. ' +
+        'Anyone who regulars more than one is texted once.</div>';
+    } else if (multiEvent()) {
+      tail = '<div class="chips-none">Role and stand filters are off while more than one event ' +
+        'is chosen. Anyone working both is texted once.</div>';
+    }
+
     host.innerHTML = '<div class="chips">' + reach.picked.map(function (id) {
-      var ev = eventById(id);
-      var label = ev ? (ev.venue + ' \u00b7 ' + ev.event_name) : 'Event';
-      return '<span class="chip">' + esc(label) +
+      return '<span class="chip">' + esc(pickedLabel(id)) +
         '<button class="x" type="button" data-unpick="' + esc(id) + '" title="Remove">\u00d7</button></span>';
-    }).join('') + '</div>' +
-    (multiEvent()
-      ? '<div class="chips-none">Role and stand filters are off while more than one event is chosen. ' +
-        'Anyone working both is texted once.</div>'
-      : '');
+    }).join('') + '</div>' + tail;
   }
 
   function markTodayStrip() {
@@ -1349,6 +1409,34 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
       if (e && e.authFailed) { handleAuthFailure(); return; }
       showToast('Could not load events: ' + (e.message || 'unknown error'));
     });
+  }
+
+  // The pool picker offers the whole venue catalog, not just venues with an
+  // event in the last fortnight -- a building with nothing on the books is
+  // exactly the one you need to text about.
+  function loadVenues() {
+    var url = REST + 'venues?select=code,full_name&order=code.asc&limit=100';
+    return authFetch(url, { headers: pcAuth.headers() }).then(function (rows) {
+      reach.venues = rows || [];
+      buildPoolVenueOptions();
+    }).catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      reach.venues = [];
+      buildPoolVenueOptions();
+    });
+  }
+
+  function buildPoolVenueOptions() {
+    var sel = document.getElementById('reachPoolVenue');
+    if (!reach.venues.length) {
+      sel.innerHTML = '<option value="">Could not load the building list</option>';
+      return;
+    }
+    sel.innerHTML = '<option value="">Choose a building\u2026</option>' +
+      reach.venues.map(function (v) {
+        var label = v.full_name ? (v.code + ' \u2014 ' + v.full_name) : v.code;
+        return '<option value="' + esc(v.code) + '">' + esc(label) + '</option>';
+      }).join('');
   }
 
   function todayStr() {
@@ -1477,7 +1565,50 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
 
   // --- Run + render ---------------------------------------------------
 
+  // Pool mode. One venue at a time, matching the event loop, so choosing three
+  // buildings cannot fire three simultaneous queries. Each row carries the pool
+  // that produced it, because that pool's allowance pays for the message.
+  function runPoolReach() {
+    if (!reach.picked.length) {
+      reach.rows = [];
+      resetCompose();
+      return;
+    }
+
+    reach.lastLabel = reach.picked.length === 1
+      ? (reach.picked[0] + ' regulars')
+      : (reach.picked.length + ' buildings \u2014 ' + reach.picked.join(', '));
+
+    setComposeBusy('Working out who this reaches\u2026');
+
+    var collected = [];
+    var idx = 0;
+    var codes = reach.picked.slice(0);
+
+    function step() {
+      if (idx >= codes.length) return Promise.resolve(collected);
+      var code = codes[idx];
+      idx = idx + 1;
+      return rpcAudience({ p_pool_venue: code }).then(function (rows) {
+        (rows || []).forEach(function (r) {
+          r._event_id = null;
+          r._pool_venue = code;
+          collected.push(r);
+        });
+        return step();
+      });
+    }
+
+    step().then(function () {
+      reach.rows = dedupeAudience(collected);
+      onAudienceResolved();
+      renderExclusions();
+    }).catch(audienceFailed);
+  }
+
   function runReach() {
+    if (reach.mode === 'pool') { runPoolReach(); return; }
+
     if (reach.mode === 'roster') {
       var params = {};
       var hv = document.getElementById('reachHomeVenue').value;
@@ -1711,8 +1842,14 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
       pills[i].classList.toggle('active', pills[i].getAttribute('data-mode') === mode);
     }
     document.getElementById('eventPickers').style.display = (mode === 'event') ? 'grid' : 'none';
+    document.getElementById('poolPickers').style.display = (mode === 'pool') ? 'grid' : 'none';
     document.getElementById('rosterPickers').style.display = (mode === 'roster') ? 'grid' : 'none';
     reach.picked = [];
+    // Cleared, not just hidden: a stale role left over from an earlier event
+    // would sit invisibly behind the other two modes.
+    document.getElementById('reachRole').value = '';
+    document.getElementById('reachStand').value = '';
+    document.getElementById('reachPoolVenue').value = '';
     document.getElementById('reachRole').disabled = false;
     document.getElementById('reachStand').disabled = false;
     renderPickedChips();
@@ -1747,6 +1884,13 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
       var x = e.target.closest('[data-unpick]');
       if (!x) return;
       removePickedEvent(x.getAttribute('data-unpick'));
+    });
+
+    document.getElementById('reachPoolVenue').addEventListener('change', function () {
+      var sel = document.getElementById('reachPoolVenue');
+      var code = sel.value;
+      sel.value = '';
+      if (code) addPickedEvent(code);
     });
 
     document.getElementById('reachRole').addEventListener('change', runReach);
@@ -1797,7 +1941,7 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
     sending: false,
     templates: [],
     appliedText: null,  // what a template produced, to detect an untouched box
-    capsByEvent: {},    // eventId -> { limit, used_today }
+    capsByTarget: {},   // event id (event mode) or venue code (pool mode)
     lastResult: null
   };
 
@@ -1975,8 +2119,11 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
 
   // ---- describe() ----------------------------------------------------
 
+  // Pool mode must be in the key too, or switching DE to Montage would keep a
+  // stale cap on screen -- 'pool:' alone never changes.
   function describeKey() {
-    return reach.mode + ':' + (reach.mode === 'event' ? reach.picked.join(',') : '');
+    return reach.mode + ':' +
+      ((reach.mode === 'event' || reach.mode === 'pool') ? reach.picked.join(',') : '');
   }
 
   function refreshDescribe(force) {
@@ -1986,11 +2133,11 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
       return Promise.resolve();
     }
     compose.descLoading = true;
-    compose.capsByEvent = {};
+    compose.capsByTarget = {};
 
     // The wrapper, ceilings, types and window are identical whatever the scope.
-    // Only the cap differs, so each chosen event is asked for its own.
-    var targets = (reach.mode === 'event' && reach.picked.length)
+    // Only the cap differs, so each chosen event or building is asked for its own.
+    var targets = ((reach.mode === 'event' || reach.mode === 'pool') && reach.picked.length)
       ? reach.picked.slice(0)
       : [null];
 
@@ -1999,15 +2146,18 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
 
     function step() {
       if (idx >= targets.length) return Promise.resolve();
-      var evId = targets[idx];
+      var target = targets[idx];
       idx = idx + 1;
       var payload = { action: 'describe', scope: reach.mode };
-      if (evId) payload.event_id = evId;
+      if (target) {
+        if (reach.mode === 'pool') payload.pool_venue = target;
+        else payload.event_id = target;
+      }
       return callSendFn(payload).then(function (d) {
         if (!d || d.ok === false) throw new Error((d && d.error) || 'describe was refused');
         if (!first) first = d;
-        if (evId && d.caps) {
-          compose.capsByEvent[evId] = {
+        if (target && d.caps) {
+          compose.capsByTarget[target] = {
             limit: d.caps.limit,
             used_today: d.caps.used_today
           };
@@ -2247,7 +2397,7 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
       btn.className = compose.testArmed ? 'btn btn-dark' : 'btn';
       note.innerHTML = 'Goes to ' + esc(compose.testTarget.name) +
         '. A test is a real send: it costs a segment and uses one of this ' +
-        (reach.mode === 'event' ? 'event\u2019s' : 'day\u2019s') + ' allowance.';
+        allowanceWord() + ' allowance.';
       btn.disabled = !canSend().testOk;
       return;
     }
@@ -2285,7 +2435,7 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
     btn.disabled = !canSend().testOk;
     note.innerHTML = 'Could not match your sign-in to a crew record, so pick yourself once. ' +
       'A test is a real send: it costs a segment and uses one of this ' +
-      (reach.mode === 'event' ? 'event\u2019s' : 'day\u2019s') + ' allowance.';
+      allowanceWord() + ' allowance.';
   }
 
   function currentTestId() {
@@ -2302,22 +2452,21 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
     var d = compose.desc;
     if (!d || !d.caps) return { known: false, limit: null, used: null, atCap: false, blocked: [] };
 
-    if (reach.mode === 'event' && reach.picked.length) {
+    if ((reach.mode === 'event' || reach.mode === 'pool') && reach.picked.length) {
       var blocked = [];
       var anyKnown = false;
       var limit = null;
       var worstUsed = null;
 
       reach.picked.forEach(function (id) {
-        var c = compose.capsByEvent[id];
+        var c = compose.capsByTarget[id];
         if (!c) return;
         if (typeof c.limit === 'number') limit = c.limit;
         if (typeof c.used_today === 'number') {
           anyKnown = true;
           if (worstUsed === null || c.used_today > worstUsed) worstUsed = c.used_today;
           if (typeof c.limit === 'number' && c.used_today >= c.limit) {
-            var ev = eventById(id);
-            blocked.push(ev ? ev.venue : 'an event');
+            blocked.push(pickedShortLabel(id));
           }
         }
       });
@@ -2363,16 +2512,16 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
     var cap = capState();
     var bits = [];
 
-    if (reach.mode === 'event' && reach.picked.length > 1) {
+    if ((reach.mode === 'event' || reach.mode === 'pool') && reach.picked.length > 1) {
       bits.push(reach.picked.map(function (id) {
-        var c = compose.capsByEvent[id];
-        var ev = eventById(id);
-        var vn = ev ? ev.venue : '?';
+        var c = compose.capsByTarget[id];
+        var vn = pickedShortLabel(id);
         if (!c || typeof c.used_today !== 'number') return vn + ' usage unknown';
         return vn + ' ' + c.used_today + '/' + c.limit;
       }).join(' \u00b7 '));
     } else if (cap.limit !== null) {
-      var scopeWords = reach.mode === 'event' ? 'for this event today' : 'across the whole roster today';
+      var scopeWords = reach.mode === 'event' ? 'for this event today'
+        : (reach.mode === 'pool' ? 'for this building today' : 'across the whole roster today');
       bits.push(cap.known
         ? (cap.used + ' of ' + cap.limit + ' sends used ' + scopeWords)
         : ('Limit ' + cap.limit + ' ' + scopeWords + ', usage not reported'));
@@ -2408,9 +2557,11 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
         (cap.blocked.length
           ? (cap.blocked.join(' and ') + ' ' + (cap.blocked.length === 1 ? 'is' : 'are') + ' at the limit.')
           : 'This day is at its limit.') +
-        '</b> Nothing will be sent to any of the chosen events until that clears \u2014 ' +
+        '</b> Nothing will be sent to any of the chosen ' +
+        (reach.mode === 'pool' ? 'buildings' : 'events') + ' until that clears \u2014 ' +
         'a message that reached one venue and not the other is worse than one nobody got. ' +
-        'Raise the limit on the Inbox tab, or remove that event.</div>';
+        'Raise the limit on the Inbox tab, or remove that ' +
+        (reach.mode === 'pool' ? 'building' : 'event') + '.</div>';
     }
     if (!cap.known && cap.limit !== null) {
       html += '<div class="notice notice-quiet">Today\u2019s usage was not reported for this scope, so the ' +
@@ -2450,7 +2601,10 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
     var stray = unresolvedTokens(msg);
     if (stray.length) {
       msgReasons.push('The message still contains ' + stray.join(' and ') +
-        '. Pick an event so it can be filled in, or delete it — it would be sent literally.');
+        (reach.mode === 'pool'
+          ? '. Placeholders only fill from a single event, and a building pool has none \u2014 ' +
+            'type the venue and date yourself, or delete them. They would be sent literally.'
+          : '. Pick an event so it can be filled in, or delete it \u2014 it would be sent literally.'));
     }
     if (compose.desc && seg.segments > maxSegments()) {
       msgReasons.push('The message is ' + seg.segments + ' segments, over the limit of ' + maxSegments() + '.');
@@ -2524,7 +2678,8 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
 
   // Every call to send_manual is built here, so there is one place to correct
   // if a parameter name turns out to be different.
-  function buildSendPayload(recipients, eventId) {
+  function buildSendPayload(recipients, target) {
+    var t = target || {};
     var payload = {
       action: 'send_manual',
       scope: reach.mode,
@@ -2532,7 +2687,8 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
       message_type: document.getElementById('cmpType').value,
       recipients: recipients
     };
-    if (eventId) payload.event_id = eventId;
+    if (t.eventId) payload.event_id = t.eventId;
+    if (t.poolVenue) payload.pool_venue = t.poolVenue;
 
     // target_criteria already carries a "picker" key that nothing was filling,
     // which is why older sends cannot say whether a role filter was applied.
@@ -2541,6 +2697,11 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
       picker.role = multiEvent() ? null : (document.getElementById('reachRole').value || null);
       picker.stand = multiEvent() ? null : (document.getElementById('reachStand').value || null);
       if (reach.picked.length > 1) picker.events_in_message = reach.picked.length;
+    } else if (reach.mode === 'pool') {
+      // Recorded so the history can say which buildings and over what window,
+      // rather than leaving a future reader to guess how the pool was defined.
+      picker.pools = reach.picked.slice(0);
+      picker.pool_window_months = 12;
     } else {
       var hv = document.getElementById('reachHomeVenue').value;
       picker.home_venue = hv || null;
@@ -2554,17 +2715,39 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
   // already run, so nobody appears in two groups.
   function sendGroups() {
     if (reach.mode === 'roster') {
-      return [{ eventId: null, venue: 'Roster', ids: sendableRows().map(function (r) { return r.employee_id; }) }];
+      return [{ eventId: null, poolVenue: null, venue: 'Roster',
+                ids: sendableRows().map(function (r) { return r.employee_id; }) }];
+    }
+    if (reach.mode === 'pool') {
+      return reach.picked.map(function (code) {
+        return {
+          eventId: null,
+          poolVenue: code,
+          venue: code,
+          ids: sendableRows().filter(function (r) { return r._pool_venue === code; })
+                 .map(function (r) { return r.employee_id; })
+        };
+      }).filter(function (g) { return g.ids.length > 0; });
     }
     return reach.picked.map(function (id) {
       var ev = eventById(id);
       return {
         eventId: id,
+        poolVenue: null,
         venue: ev ? ev.venue : 'Event',
         ids: sendableRows().filter(function (r) { return r._event_id === id; })
                .map(function (r) { return r.employee_id; })
       };
     }).filter(function (g) { return g.ids.length > 0; });
+  }
+
+  // A test is billed to the first chosen target, which is also the one that
+  // would pay first on a real send.
+  function testTarget() {
+    if (reach.mode === 'pool') {
+      return { eventId: null, poolVenue: reach.picked.length ? reach.picked[0] : null };
+    }
+    return { eventId: selectedEventId(), poolVenue: null };
   }
 
   function doTestSend() {
@@ -2585,7 +2768,7 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
     renderMessageState();
     renderTestState();
 
-    callSendFn(buildSendPayload([id], selectedEventId())).then(function (d) {
+    callSendFn(buildSendPayload([id], testTarget())).then(function (d) {
       compose.sending = false;
       if (d && d.ok === false) throw new Error(d.error || 'The send was refused.');
       showToast('Test sent. Check your phone.');
@@ -2606,7 +2789,10 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
     var people = sendableRows();
     var seg = countSegments(fullBody());
     var cap = capState();
-    var needsTyped = (reach.mode === 'roster');
+    // Typed confirmation for a roster blast, and for any large audience. A Mann
+    // pool is 79 people; a DE pool is 22. The number, not the mode, is what
+    // makes a mistake expensive.
+    var needsTyped = (reach.mode === 'roster') || (people.length >= 40);
 
     compose.confirmOpen = true;
 
@@ -2615,16 +2801,18 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
     lines.push('<b>' + people.length + '</b> ' + (people.length === 1 ? 'person' : 'people') +
       ' \u00b7 ' + esc(reach.lastLabel));
     if (groups.length > 1) {
-      lines.push('Goes out as <b>' + groups.length + ' separate sends</b>, one per event: ' +
+      lines.push('Goes out as <b>' + groups.length + ' separate sends</b>, one per ' +
+        (reach.mode === 'pool' ? 'building' : 'event') + ': ' +
         groups.map(function (g) { return esc(g.venue) + ' ' + g.ids.length; }).join(', ') +
-        ' \u2014 each uses one of that event\u2019s allowance');
+        ' \u2014 each uses one of that ' + allowanceWord() + ' allowance');
     }
     lines.push('<b>' + seg.segments + '</b> segment' + (seg.segments === 1 ? '' : 's') +
       ' each \u00b7 about <b>' + money(seg.segments * people.length * COST_PER_SEGMENT) + '</b>');
     lines.push('Recorded as <b>' + esc(typeLabel(document.getElementById('cmpType').value)) + '</b>');
     if (cap.known && cap.limit !== null) {
       lines.push('This uses <b>' + (cap.used + 1) + ' of ' + cap.limit + '</b> ' +
-        (reach.mode === 'event' ? 'sends for this event today' : 'roster sends today'));
+        (reach.mode === 'event' ? 'sends for this event today'
+          : (reach.mode === 'pool' ? 'sends for this building today' : 'roster sends today')));
     }
     if (!windowOpen() && overrideChecked()) {
       lines.push('<b>Overriding the send window.</b> This will be recorded.');
@@ -2645,7 +2833,10 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
         ? '<div class="field" style="margin-bottom:16px;">' +
             '<label for="cmpTyped">Type ' + people.length + ' to confirm</label>' +
             '<input class="confirm-type" id="cmpTyped" inputmode="numeric" autocomplete="off">' +
-            '<div class="hint">A roster blast goes to people who are not working tonight. ' +
+            '<div class="hint">' +
+            (reach.mode === 'roster'
+              ? 'A roster blast goes to people who are not working tonight. '
+              : 'This is a large audience. ') +
             'Typing the number is the last check that it is the number you meant.</div>' +
           '</div>'
         : '') +
@@ -2702,7 +2893,7 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
       if (idx >= groups.length) return Promise.resolve();
       var g = groups[idx];
       idx = idx + 1;
-      return callSendFn(buildSendPayload(g.ids, g.eventId)).then(function (d) {
+      return callSendFn(buildSendPayload(g.ids, g)).then(function (d) {
         if (d && d.ok === false) throw new Error(d.error || 'refused');
         done.push(g.venue + ' (' + g.ids.length + ')');
         return step();
@@ -2944,6 +3135,7 @@ select.wide:disabled { background: #f6f6f3; color: #a3a199; }
       loadReplies();
       loadSends();
       loadEvents();
+      loadVenues();
       loadTemplates();
     }
   });
