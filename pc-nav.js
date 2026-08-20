@@ -82,6 +82,7 @@
       { label: 'Expense reports',                href: '/expense-reports/',        slug: 'expense-reports' },
       { label: 'Check writer',                   href: '/checks/',                 slug: 'checks' },
       { label: 'Bank review',                    href: '/bank-review/',            slug: 'bank-review' },
+      { label: 'P&L categories',                 href: '/pl-overview/categories/', slug: 'pl-overview' },
       { label: 'Venue roles',                    href: '/manage-venue-roles/',     slug: 'manage-venue-roles' },
       { label: 'Par levels',                     href: '/par-levels/',             slug: 'par-levels' },
       { label: 'Deal structure',                 href: '/deal-structure/',         slug: 'deal-structure' },
