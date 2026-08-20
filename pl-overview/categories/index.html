@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Expense Categories — Admin · Popcorn Chez</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap">
+
+<script src="/pc-auth.js"></script>
+<script src="/pc-nav.js"></script>
+<script src="/pc-activity.js"></script>
+
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: #faf9f6; color: #1a1a1a;
+    font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 14px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page-title-row {
+    background: #faf9f6; border-bottom: 1px solid #e8e8e4;
+    padding: 18px 22px 16px;
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap;
+  }
+  .page-title { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; margin: 0; }
+  .page-title-meta { font-size: 12px; color: #888; font-weight: 500; }
+
+  .page-body { max-width: 1000px; margin: 0 auto; padding: 18px 22px 80px; }
+
+  /* ── Legend ── */
+  .legend-card {
+    background: #fff; border: 0.5px solid #e0dfd8; border-radius: 10px;
+    padding: 16px 18px; margin-bottom: 18px;
+  }
+  .legend-title { font-size: 13px; font-weight: 600; margin-bottom: 10px; }
+  .legend-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 18px; }
+  @media (max-width: 700px) { .legend-grid { grid-template-columns: 1fr; } }
+  .legend-item { display: flex; gap: 9px; align-items: flex-start; font-size: 12px; color: #555; }
+  .legend-item .tag { flex-shrink: 0; margin-top: 1px; }
+  .legend-item strong { color: #1a1a1a; font-weight: 600; display: block; }
+
+  /* ── Group tag colors ── */
+  .tag {
+    display: inline-block; font-size: 10px; font-weight: 600;
+    letter-spacing: 0.04em; text-transform: uppercase;
+    padding: 2px 8px; border-radius: 4px; white-space: nowrap;
+  }
+  .tag.is-cogs       { background: #fef6ec; color: #854F0B; }
+  .tag.is-expense    { background: #e6f1fb; color: #0C447C; }
+  .tag.is-non_pl     { background: #f0e6f8; color: #5B2D7E; }
+  .tag.is-settlement { background: #f1f0eb; color: #444441; }
+
+  /* ── Action row ── */
+  .actions-row {
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 12px; margin-bottom: 14px; flex-wrap: wrap;
+  }
+  .filter-wrap { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .filter-wrap input[type="text"], .filter-wrap select {
+    font-family: inherit; font-size: 13px; padding: 7px 10px;
+    border: 1px solid #e0dfd8; border-radius: 6px; background: #fff; color: #1a1a1a;
+  }
+  .filter-wrap input:focus, .filter-wrap select:focus { outline: none; border-color: #1a1a1a; }
+  .filter-wrap input[type="text"] { min-width: 200px; }
+  .show-inactive { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #555; cursor: pointer; }
+  .show-inactive input { cursor: pointer; margin: 0; }
+
+  .btn-primary {
+    background: #1a1a1a; color: #fff; border: 0;
+    font-family: inherit; font-size: 13px; font-weight: 500;
+    padding: 9px 16px; border-radius: 6px; cursor: pointer;
+    transition: background 0.12s ease;
+  }
+  .btn-primary:hover { background: #2c2c2a; }
+  .btn-primary:disabled { background: #b4b2a9; cursor: not-allowed; }
+  .btn-secondary {
+    background: transparent; border: 1px solid #e0dfd8; color: #555;
+    font-family: inherit; font-size: 13px; font-weight: 500;
+    padding: 9px 16px; border-radius: 6px; cursor: pointer;
+  }
+  .btn-secondary:hover { background: #f1f0eb; color: #1a1a1a; }
+
+  /* ── Group sections ── */
+  .group-card {
+    background: #fff; border: 0.5px solid #e0dfd8; border-radius: 10px;
+    overflow: hidden; margin-bottom: 14px;
+  }
+  .group-head {
+    padding: 12px 16px; border-bottom: 1px solid #f0efe8;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  }
+  .group-name { font-size: 13px; font-weight: 600; }
+  .group-count { font-size: 12px; color: #888; margin-left: auto; }
+
+  .cat-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .cat-table thead tr { background: #f6f6f3; border-bottom: 1px solid #e0dfd8; }
+  .cat-table th {
+    text-align: left; padding: 8px 14px; font-weight: 500; color: #555;
+    font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap;
+  }
+  .cat-table th.is-num, .cat-table td.is-num { text-align: right; }
+  .cat-table th.is-actions { width: 150px; text-align: right; }
+  .cat-table tbody tr { border-bottom: 1px solid #f0efe8; }
+  .cat-table tbody tr:last-child { border-bottom: 0; }
+  .cat-table tbody tr:hover { background: #fafaf6; }
+  .cat-table tbody tr.is-inactive { opacity: 0.55; }
+  .cat-table td { padding: 10px 14px; vertical-align: middle; }
+  .cat-table td.col-name { font-weight: 500; }
+  .cat-table td.is-num { font-variant-numeric: tabular-nums; color: #555; }
+  .cat-table td.col-actions { text-align: right; white-space: nowrap; }
+
+  .inactive-pill {
+    display: inline-block; font-size: 10px; font-weight: 500;
+    background: #f1f0eb; color: #888; padding: 1px 7px;
+    border-radius: 4px; margin-left: 7px;
+  }
+  .dupe-pill {
+    display: inline-block; font-size: 10px; font-weight: 500;
+    background: #fef6ec; color: #854F0B; padding: 1px 7px;
+    border-radius: 4px; margin-left: 7px;
+  }
+
+  .row-btn {
+    background: transparent; border: 1px solid #e0dfd8; color: #555;
+    font-family: inherit; font-size: 11px; font-weight: 500;
+    padding: 4px 10px; border-radius: 5px; cursor: pointer; margin-left: 5px;
+  }
+  .row-btn:hover { background: #f1f0eb; color: #1a1a1a; }
+  .row-btn.is-warn { color: #854F0B; border-color: #f3d9a8; }
+  .row-btn.is-warn:hover { background: #fef6ec; }
+  .row-btn.is-restore { color: #27500A; border-color: #c5dba1; }
+  .row-btn.is-restore:hover { background: #eaf3de; }
+
+  .list-loading, .list-empty {
+    padding: 40px 20px; text-align: center; color: #888; font-size: 13px;
+  }
+
+  /* ── Modal ── */
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.36); z-index: 1500;
+    display: none; align-items: flex-start; justify-content: center;
+    padding: 60px 16px; overflow-y: auto;
+  }
+  .modal-backdrop.is-open { display: flex; }
+  .modal-card {
+    background: #fff; border-radius: 14px; max-width: 480px; width: 100%;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.18); overflow: hidden;
+  }
+  .modal-head {
+    padding: 20px 24px 14px; border-bottom: 1px solid #f0efe8;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .modal-title { font-size: 17px; font-weight: 600; }
+  .modal-subtitle { font-size: 12px; color: #888; margin-top: 2px; }
+  .modal-close {
+    background: transparent; border: 0; font-size: 22px; color: #888;
+    cursor: pointer; line-height: 1; padding: 4px 8px;
+  }
+  .modal-close:hover { color: #1a1a1a; }
+  .modal-body { padding: 20px 24px; }
+  .modal-footer {
+    padding: 14px 24px; border-top: 1px solid #f0efe8; background: #fafaf6;
+    display: flex; justify-content: flex-end; gap: 10px; align-items: center;
+  }
+
+  .field { margin-bottom: 14px; }
+  .field:last-child { margin-bottom: 0; }
+  .field label {
+    display: block; font-size: 11px; font-weight: 500;
+    letter-spacing: 0.04em; text-transform: uppercase; color: #666; margin-bottom: 5px;
+  }
+  .field label .req { color: #c33; }
+  .field input[type="text"], .field input[type="number"], .field select {
+    width: 100%; font-family: inherit; font-size: 13px; padding: 8px 10px;
+    border: 1px solid #e0dfd8; border-radius: 6px; background: #fff; color: #1a1a1a;
+  }
+  .field input:focus, .field select:focus { outline: none; border-color: #1a1a1a; }
+  .field input.is-error, .field select.is-error { border-color: #791F1F; background: #fceaea; }
+  .field-hint { font-size: 11px; color: #888; margin-top: 4px; line-height: 1.45; }
+
+  .group-warn {
+    background: #fef6ec; border: 1px solid #f3d9a8; border-radius: 6px;
+    padding: 9px 12px; margin-top: 8px; font-size: 12px; color: #633806; line-height: 1.45;
+  }
+  .group-warn[hidden] { display: none; }
+
+  /* ── Toast ── */
+  .pc-toast-host {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    z-index: 2000; pointer-events: none;
+  }
+  .pc-toast {
+    background: #1a1a1a; color: #fff; font-size: 13px; font-weight: 500;
+    padding: 11px 18px; border-radius: 24px; box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+    opacity: 0; transform: translateY(8px);
+    transition: opacity 0.18s ease, transform 0.18s ease;
+  }
+  .pc-toast.is-shown { opacity: 1; transform: translateY(0); }
+
+  .access-denied { max-width: 520px; margin: 60px auto; text-align: center; color: #555; }
+  .access-denied h2 { font-size: 18px; color: #1a1a1a; }
+
+  body.pre-auth .page-body, body.pre-auth .page-title-row { display: none; }
+</style>
+</head>
+
+<body class="pre-auth">
+
+  <div class="page-title-row" aria-hidden="true">
+    <h1 class="page-title">Expense categories</h1>
+    <span class="page-title-meta">Admin · P&amp;L foundation</span>
+  </div>
+
+  <main class="page-body" id="pageBody">
+
+    <div class="legend-card">
+      <div class="legend-title">What each group means</div>
+      <div class="legend-grid">
+        <div class="legend-item">
+          <span class="tag is-cogs">COGS</span>
+          <span><strong>Cost of sales</strong>Food and supplies consumed to generate revenue. Sits above gross profit.</span>
+        </div>
+        <div class="legend-item">
+          <span class="tag is-expense">Expense</span>
+          <span><strong>Operating expense</strong>Normal running costs. Reduces net income.</span>
+        </div>
+        <div class="legend-item">
+          <span class="tag is-non_pl">Non-P&amp;L</span>
+          <span><strong>Balance-sheet movement</strong>Loans, owner draws, transfers. Real money, but not income or expense — shows below the line.</span>
+        </div>
+        <div class="legend-item">
+          <span class="tag is-settlement">Settlement</span>
+          <span><strong>Paying something already recorded</strong>Payroll funding, checks clearing an existing bill. Kept off the P&amp;L so it isn't counted twice.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="actions-row">
+      <div class="filter-wrap">
+        <input type="text" id="filterSearch" placeholder="Search categories…" autocomplete="off">
+        <select id="filterGroup" aria-label="Filter by group">
+          <option value="all">All groups</option>
+          <option value="cogs">Cost of sales</option>
+          <option value="expense">Operating expense</option>
+          <option value="non_pl">Non-P&amp;L</option>
+          <option value="settlement">Settlement</option>
+        </select>
+        <label class="show-inactive">
+          <input type="checkbox" id="showInactive"> Show inactive
+        </label>
+      </div>
+      <button type="button" class="btn-primary" id="btnNewCategory">+ New category</button>
+    </div>
+
+    <div id="listHost">
+      <div class="list-loading" id="listLoading">Loading categories…</div>
+    </div>
+
+  </main>
+
+  <div class="pc-toast-host" id="pcToastHost" aria-live="polite" aria-atomic="true"></div>
+  <div class="modal-backdrop" id="modalBackdrop"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var SB_URL  = 'https://aoazlttdjowhlfcksoyl.supabase.co';
+  var SB_REST = SB_URL + '/rest/v1/';
+
+  var GROUP_ORDER  = ['cogs', 'expense', 'non_pl', 'settlement'];
+  var GROUP_LABELS = {
+    cogs:       'Cost of sales',
+    expense:    'Operating expense',
+    non_pl:     'Non-P&L (below the line)',
+    settlement: 'Settlement (off the P&L)'
+  };
+
+  var state = {
+    categories: [],
+    usage: {},            // category_id -> count of expenses rows
+    usageLoaded: false,
+    filterSearch: '',
+    filterGroup: 'all',
+    showInactive: false,
+    submitting: false
+  };
+
+  // =====================================================================
+  // UTILITIES
+  // =====================================================================
+  function esc(s) {
+    if (s == null) return '';
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function actorName() {
+    try {
+      if (typeof pcAuth !== 'undefined' && pcAuth.getUser) {
+        var u = pcAuth.getUser();
+        return (u && u.display_name) || (u && u.email) || 'unknown';
+      }
+    } catch (e) { /* ignore */ }
+    return 'unknown';
+  }
+
+  function showToast(msg, ms) {
+    ms = ms || 2400;
+    var host = document.getElementById('pcToastHost');
+    if (!host) return;
+    var el = document.createElement('div');
+    el.className = 'pc-toast';
+    el.textContent = msg;
+    host.appendChild(el);
+    requestAnimationFrame(function () { el.classList.add('is-shown'); });
+    setTimeout(function () {
+      el.classList.remove('is-shown');
+      setTimeout(function () { el.remove(); }, 260);
+    }, ms);
+  }
+
+  function handleAuthFailure() {
+    try {
+      localStorage.removeItem('sb_access_token');
+      localStorage.removeItem('sb_refresh_token');
+    } catch (e) { /* ignore */ }
+    showToast('Session expired. Reloading…', 1800);
+    setTimeout(function () { window.location.reload(); }, 1800);
+  }
+
+  function authFetch(url, options) {
+    return fetch(url, options).then(function (r) {
+      if (!r.ok) {
+        return r.text().then(function (t) {
+          if (r.status === 401 || (t && t.indexOf('JWT expired') !== -1)) {
+            var ae = new Error('JWT expired');
+            ae.authFailed = true;
+            throw ae;
+          }
+          throw new Error(t || ('HTTP ' + r.status));
+        });
+      }
+      return r.text().then(function (t) {
+        if (!t) return [];
+        try { return JSON.parse(t); } catch (e) { return []; }
+      });
+    });
+  }
+
+  // =====================================================================
+  // FETCHES
+  // =====================================================================
+  function fetchCategories() {
+    return authFetch(
+      SB_REST + 'expense_categories' +
+      '?select=id,name,gl_group,sort_order,is_active,created_at,updated_at,updated_by' +
+      '&order=gl_group.asc,sort_order.asc,name.asc&limit=500',
+      { headers: pcAuth.headers() }
+    );
+  }
+
+  /**
+   * Usage counts. Non-blocking: if this fails the page still works, the
+   * usage column just shows a dash. Counting client-side because PostgREST
+   * has no GROUP BY — the expenses table is small enough that pulling the
+   * category_id column alone is cheap.
+   */
+  function fetchUsage() {
+    return authFetch(
+      SB_REST + 'expenses?select=category_id&deleted_at=is.null&limit=50000',
+      { headers: pcAuth.headers() }
+    ).then(function (rows) {
+      var counts = {};
+      (rows || []).forEach(function (r) {
+        if (!r.category_id) return;
+        counts[r.category_id] = (counts[r.category_id] || 0) + 1;
+      });
+      state.usage = counts;
+      state.usageLoaded = true;
+    }).catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      console.warn('[categories] usage counts unavailable:', e);
+      state.usageLoaded = false;
+    });
+  }
+
+  // =====================================================================
+  // DERIVED
+  // =====================================================================
+
+  /** Case-insensitive name map for duplicate detection. */
+  function nameKey(s) {
+    return String(s == null ? '' : s).trim().toLowerCase();
+  }
+
+  /**
+   * Names that collide case-insensitively. The DB unique index on name is
+   * case-SENSITIVE, so "Lodging" and "lodging" can both exist. Flagging them
+   * beats silently reporting under two headings.
+   */
+  function duplicateNameKeys() {
+    var seen = {};
+    var dupes = {};
+    state.categories.forEach(function (c) {
+      var k = nameKey(c.name);
+      if (seen[k]) dupes[k] = true;
+      seen[k] = true;
+    });
+    return dupes;
+  }
+
+  function visibleCategories() {
+    var q = state.filterSearch.trim().toLowerCase();
+    return state.categories.filter(function (c) {
+      if (!state.showInactive && !c.is_active) return false;
+      if (state.filterGroup !== 'all' && c.gl_group !== state.filterGroup) return false;
+      if (q && String(c.name || '').toLowerCase().indexOf(q) === -1) return false;
+      return true;
+    });
+  }
+
+  function categoryById(id) {
+    for (var i = 0; i < state.categories.length; i++) {
+      if (state.categories[i].id === id) return state.categories[i];
+    }
+    return null;
+  }
+
+  // =====================================================================
+  // RENDER
+  // =====================================================================
+  function renderList() {
+    var host = document.getElementById('listHost');
+    if (!host) return;
+
+    var rows = visibleCategories();
+    if (rows.length === 0) {
+      host.innerHTML = '<div class="list-empty">No categories match these filters.</div>';
+      return;
+    }
+
+    var dupes = duplicateNameKeys();
+
+    var byGroup = {};
+    rows.forEach(function (c) {
+      var g = c.gl_group || 'expense';
+      if (!byGroup[g]) byGroup[g] = [];
+      byGroup[g].push(c);
+    });
+
+    var html = '';
+    GROUP_ORDER.forEach(function (g) {
+      var list = byGroup[g];
+      if (!list || list.length === 0) return;
+
+      var activeCount = list.filter(function (c) { return c.is_active; }).length;
+
+      html += '<div class="group-card">' +
+        '<div class="group-head">' +
+          '<span class="tag is-' + esc(g) + '">' + esc(g.replace('_', '-')) + '</span>' +
+          '<span class="group-name">' + esc(GROUP_LABELS[g] || g) + '</span>' +
+          '<span class="group-count">' + activeCount + ' active' +
+            (list.length !== activeCount ? ' · ' + (list.length - activeCount) + ' inactive' : '') +
+          '</span>' +
+        '</div>' +
+        '<table class="cat-table"><thead><tr>' +
+          '<th>Category</th>' +
+          '<th class="is-num">Sort</th>' +
+          '<th class="is-num">Used by</th>' +
+          '<th class="is-actions"></th>' +
+        '</tr></thead><tbody>';
+
+      list.forEach(function (c) {
+        var usage = state.usageLoaded ? (state.usage[c.id] || 0) : null;
+        var usageTxt = usage === null ? '—' : (usage + (usage === 1 ? ' txn' : ' txns'));
+        var isDupe = dupes[nameKey(c.name)];
+
+        html += '<tr class="' + (c.is_active ? '' : 'is-inactive') + '">' +
+          '<td class="col-name">' + esc(c.name) +
+            (c.is_active ? '' : '<span class="inactive-pill">inactive</span>') +
+            (isDupe ? '<span class="dupe-pill">duplicate name</span>' : '') +
+          '</td>' +
+          '<td class="is-num">' + (c.sort_order == null ? '—' : c.sort_order) + '</td>' +
+          '<td class="is-num">' + esc(usageTxt) + '</td>' +
+          '<td class="col-actions">' +
+            '<button type="button" class="row-btn" data-action="edit" data-id="' + esc(c.id) + '">Edit</button>' +
+            (c.is_active
+              ? '<button type="button" class="row-btn is-warn" data-action="deactivate" data-id="' + esc(c.id) + '">Deactivate</button>'
+              : '<button type="button" class="row-btn is-restore" data-action="activate" data-id="' + esc(c.id) + '">Reactivate</button>') +
+          '</td>' +
+        '</tr>';
+      });
+
+      html += '</tbody></table></div>';
+    });
+
+    host.innerHTML = html;
+  }
+
+  // =====================================================================
+  // MODAL
+  // =====================================================================
+  function modalMarkup(cat) {
+    var isEdit = !!cat;
+    var groupOpts = GROUP_ORDER.map(function (g) {
+      var sel = (isEdit && cat.gl_group === g) ? ' selected' : '';
+      return '<option value="' + esc(g) + '"' + sel + '>' + esc(GROUP_LABELS[g]) + '</option>';
+    }).join('');
+
+    return '' +
+      '<div class="modal-card" role="dialog" aria-labelledby="catModalTitle">' +
+        '<div class="modal-head">' +
+          '<div>' +
+            '<div class="modal-title" id="catModalTitle">' +
+              (isEdit ? 'Edit category' : 'New category') +
+            '</div>' +
+            '<div class="modal-subtitle">' +
+              (isEdit ? esc(cat.name) : 'Adds a row to expense_categories') +
+            '</div>' +
+          '</div>' +
+          '<button type="button" class="modal-close" data-action="close" aria-label="Close">\u00d7</button>' +
+        '</div>' +
+        '<div class="modal-body">' +
+          '<div class="field">' +
+            '<label for="catName">Name <span class="req">*</span></label>' +
+            '<input type="text" id="catName" maxlength="120" autocomplete="off" value="' +
+              (isEdit ? esc(cat.name) : '') + '" placeholder="e.g. Interest Expense">' +
+          '</div>' +
+          '<div class="field">' +
+            '<label for="catGroup">Group <span class="req">*</span></label>' +
+            '<select id="catGroup">' + groupOpts + '</select>' +
+            '<div class="field-hint">Decides where this lands on the P&amp;L. See the guide at the top of the page.</div>' +
+            '<div class="group-warn" id="catGroupWarn" hidden></div>' +
+          '</div>' +
+          '<div class="field">' +
+            '<label for="catSort">Sort order</label>' +
+            '<input type="number" id="catSort" step="1" min="0" max="9999" value="' +
+              (isEdit ? esc(cat.sort_order == null ? 0 : cat.sort_order) : '') + '" placeholder="auto">' +
+            '<div class="field-hint">Controls display order within the group. Leave blank to place at the end.</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="modal-footer">' +
+          '<button type="button" class="btn-secondary" data-action="close">Cancel</button>' +
+          '<button type="button" class="btn-primary" id="catSave">' +
+            (isEdit ? 'Save changes' : 'Add category') +
+          '</button>' +
+        '</div>' +
+      '</div>';
+  }
+
+  var editingId = null;
+
+  function openCategoryModal(cat) {
+    var bd = document.getElementById('modalBackdrop');
+    if (!bd) return;
+    editingId = cat ? cat.id : null;
+    bd.innerHTML = modalMarkup(cat);
+    bd.classList.add('is-open');
+
+    var nameEl = document.getElementById('catName');
+    if (nameEl) { nameEl.focus(); nameEl.select(); }
+
+    var groupEl = document.getElementById('catGroup');
+    if (groupEl) {
+      groupEl.addEventListener('change', paintGroupWarning);
+      paintGroupWarning();
+    }
+
+    var saveBtn = document.getElementById('catSave');
+    if (saveBtn) saveBtn.addEventListener('click', handleSaveCategory);
+
+    bd.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape') { ev.stopPropagation(); closeModal(); }
+      else if (ev.key === 'Enter' && ev.target && ev.target.tagName === 'INPUT') {
+        ev.preventDefault();
+        handleSaveCategory();
+      }
+    });
+  }
+
+  /**
+   * Changing the group on a category that already has transactions moves
+   * historical dollars between P&L sections. Warn, don't block — the whole
+   * point of this page is fixing categorizations that were wrong.
+   */
+  function paintGroupWarning() {
+    var warn = document.getElementById('catGroupWarn');
+    var groupEl = document.getElementById('catGroup');
+    if (!warn || !groupEl) return;
+
+    var cat = editingId ? categoryById(editingId) : null;
+    var usage = (cat && state.usageLoaded) ? (state.usage[cat.id] || 0) : 0;
+
+    if (cat && groupEl.value !== cat.gl_group && usage > 0) {
+      warn.hidden = false;
+      warn.innerHTML = '<strong>' + usage + ' existing transaction' + (usage === 1 ? '' : 's') +
+        '</strong> use this category. Changing the group moves ' +
+        (usage === 1 ? 'it' : 'them') + ' to a different part of the P&amp;L, including for periods already reviewed.';
+      return;
+    }
+
+    if (!cat && (groupEl.value === 'non_pl' || groupEl.value === 'settlement')) {
+      warn.hidden = false;
+      warn.innerHTML = groupEl.value === 'non_pl'
+        ? 'Non-P&amp;L categories are captured and reconcile to the bank, but never affect net income.'
+        : 'Settlement categories are hidden from the P&amp;L entirely \u2014 use these only for cash movement that pays something already recorded.';
+      return;
+    }
+
+    warn.hidden = true;
+    warn.innerHTML = '';
+  }
+
+  function closeModal() {
+    var bd = document.getElementById('modalBackdrop');
+    if (!bd) return;
+    bd.classList.remove('is-open');
+    bd.innerHTML = '';
+    editingId = null;
+  }
+
+  // =====================================================================
+  // SAVE
+  // =====================================================================
+  function handleSaveCategory() {
+    if (state.submitting) return;
+
+    var nameEl  = document.getElementById('catName');
+    var groupEl = document.getElementById('catGroup');
+    var sortEl  = document.getElementById('catSort');
+    var saveBtn = document.getElementById('catSave');
+    if (!nameEl || !groupEl) return;
+
+    nameEl.classList.remove('is-error');
+
+    var name = (nameEl.value || '').trim();
+    if (!name) {
+      nameEl.classList.add('is-error');
+      showToast('Category name is required', 2000);
+      nameEl.focus();
+      return;
+    }
+
+    // Case-insensitive dupe guard. The DB unique index is case-sensitive,
+    // so this is the only thing standing between "Lodging" and "lodging".
+    var key = nameKey(name);
+    var clash = null;
+    for (var i = 0; i < state.categories.length; i++) {
+      var c = state.categories[i];
+      if (editingId && c.id === editingId) continue;
+      if (nameKey(c.name) === key) { clash = c; break; }
+    }
+    if (clash) {
+      nameEl.classList.add('is-error');
+      showToast('"' + clash.name + '" already exists' + (clash.is_active ? '' : ' (inactive)'), 3000);
+      nameEl.focus();
+      return;
+    }
+
+    var group = groupEl.value;
+    if (GROUP_ORDER.indexOf(group) === -1) {
+      showToast('Pick a valid group', 2000);
+      return;
+    }
+
+    // Blank sort order = place at the end of its group.
+    var sortVal = sortEl ? (sortEl.value || '').trim() : '';
+    var sortNum;
+    if (sortVal === '') {
+      var maxInGroup = 0;
+      state.categories.forEach(function (c) {
+        if (c.gl_group === group && typeof c.sort_order === 'number' && c.sort_order > maxInGroup) {
+          maxInGroup = c.sort_order;
+        }
+      });
+      sortNum = maxInGroup + 1;
+    } else {
+      sortNum = parseInt(sortVal, 10);
+      if (isNaN(sortNum) || sortNum < 0) sortNum = 0;
+      if (sortNum > 9999) sortNum = 9999;
+    }
+
+    var actor = actorName();
+    var nowIso = new Date().toISOString();
+
+    var payload = {
+      name:       name,
+      gl_group:   group,
+      sort_order: sortNum,
+      updated_by: actor,
+      updated_at: nowIso
+    };
+
+    state.submitting = true;
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving\u2026'; }
+
+    var hdrs = Object.assign({}, pcAuth.headers(), {
+      'Content-Type': 'application/json',
+      'Prefer':       'return=representation'
+    });
+
+    var req;
+    if (editingId) {
+      req = authFetch(SB_REST + 'expense_categories?id=eq.' + encodeURIComponent(editingId), {
+        method: 'PATCH', headers: hdrs, body: JSON.stringify(payload)
+      });
+    } else {
+      payload.is_active = true;
+      req = authFetch(SB_REST + 'expense_categories', {
+        method: 'POST', headers: hdrs, body: JSON.stringify(payload)
+      });
+    }
+
+    req
+      .then(function (rows) {
+        var saved = (rows && rows[0]) || null;
+        if (!saved || !saved.id) throw new Error('Save returned no row');
+        closeModal();
+        return reload().then(function () {
+          showToast((editingId ? 'Updated ' : 'Added ') + saved.name, 2200);
+        });
+      })
+      .catch(function (e) {
+        if (e && e.authFailed) { handleAuthFailure(); return; }
+        console.error('[categories] save failed:', e);
+        var msg = (e && e.message) ? e.message : 'Save failed';
+        if (msg.indexOf('expense_categories_name_key') !== -1) {
+          msg = 'A category with that exact name already exists';
+        } else if (msg.indexOf('gl_group_check') !== -1) {
+          msg = 'That group is not a valid value';
+        } else if (msg.length > 140) {
+          msg = msg.substring(0, 140) + '\u2026';
+        }
+        showToast('Save failed \u00b7 ' + msg, 4000);
+      })
+      .then(function () {
+        state.submitting = false;
+        var btn = document.getElementById('catSave');
+        if (btn) { btn.disabled = false; btn.textContent = editingId ? 'Save changes' : 'Add category'; }
+      });
+  }
+
+  // =====================================================================
+  // ACTIVATE / DEACTIVATE
+  //
+  // No hard delete, ever — historical expenses rows reference these ids.
+  // Deactivating hides the category from future pickers while leaving every
+  // past transaction intact and still reportable.
+  // =====================================================================
+  function setActive(id, makeActive) {
+    if (state.submitting) return;
+    var cat = categoryById(id);
+    if (!cat) return;
+
+    var usage = state.usageLoaded ? (state.usage[id] || 0) : null;
+
+    if (!makeActive) {
+      var msg = 'Deactivate "' + cat.name + '"?\n\n';
+      if (usage) {
+        msg += usage + ' existing transaction' + (usage === 1 ? '' : 's') +
+               ' will keep this category and still appear on the P&L.\n' +
+               'It just stops being selectable for new ones.';
+      } else {
+        msg += 'It stops being selectable for new transactions. Nothing is deleted.';
+      }
+      if (!window.confirm(msg)) return;
+    }
+
+    state.submitting = true;
+
+    var hdrs = Object.assign({}, pcAuth.headers(), {
+      'Content-Type': 'application/json',
+      'Prefer':       'return=minimal'
+    });
+
+    authFetch(SB_REST + 'expense_categories?id=eq.' + encodeURIComponent(id), {
+      method:  'PATCH',
+      headers: hdrs,
+      body:    JSON.stringify({
+        is_active:  !!makeActive,
+        updated_by: actorName(),
+        updated_at: new Date().toISOString()
+      })
+    })
+    .then(function () {
+      return reload().then(function () {
+        showToast((makeActive ? 'Reactivated ' : 'Deactivated ') + cat.name, 2000);
+      });
+    })
+    .catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      console.error('[categories] status change failed:', e);
+      showToast('Could not update \u00b7 ' + ((e && e.message) || 'unknown'), 3500);
+    })
+    .then(function () { state.submitting = false; });
+  }
+
+  // =====================================================================
+  // WIRING
+  // =====================================================================
+  function wireFilters() {
+    var searchEl = document.getElementById('filterSearch');
+    var groupEl  = document.getElementById('filterGroup');
+    var inactEl  = document.getElementById('showInactive');
+
+    if (searchEl) searchEl.addEventListener('input', function () {
+      state.filterSearch = searchEl.value || '';
+      renderList();
+    });
+    if (groupEl) groupEl.addEventListener('change', function () {
+      state.filterGroup = groupEl.value;
+      renderList();
+    });
+    if (inactEl) inactEl.addEventListener('change', function () {
+      state.showInactive = !!inactEl.checked;
+      renderList();
+    });
+  }
+
+  function wireListActions() {
+    var host = document.getElementById('listHost');
+    if (!host) return;
+    host.addEventListener('click', function (ev) {
+      var t = ev.target;
+      if (!t || !t.closest) return;
+      var btn = t.closest('[data-action]');
+      if (!btn) return;
+      var action = btn.getAttribute('data-action');
+      var id = btn.getAttribute('data-id');
+      if (action === 'edit') {
+        var cat = categoryById(id);
+        if (cat) openCategoryModal(cat);
+      } else if (action === 'deactivate') {
+        setActive(id, false);
+      } else if (action === 'activate') {
+        setActive(id, true);
+      }
+    });
+  }
+
+  function wireModalClose() {
+    var bd = document.getElementById('modalBackdrop');
+    if (!bd) return;
+    bd.addEventListener('click', function (ev) {
+      var t = ev.target;
+      if (t === bd) { closeModal(); return; }
+      if (!t || !t.closest) return;
+      if (t.closest('[data-action="close"]')) closeModal();
+    });
+  }
+
+  function wireNewButton() {
+    var btn = document.getElementById('btnNewCategory');
+    if (btn) btn.addEventListener('click', function () { openCategoryModal(null); });
+  }
+
+  // =====================================================================
+  // RELOAD
+  // =====================================================================
+  function reload() {
+    return fetchCategories()
+      .then(function (rows) {
+        state.categories = rows || [];
+        return fetchUsage();
+      })
+      .then(function () {
+        renderList();
+      })
+      .catch(function (e) {
+        if (e && e.authFailed) { handleAuthFailure(); return; }
+        console.error('[categories] load failed:', e);
+        var host = document.getElementById('listHost');
+        if (host) host.innerHTML = '<div class="list-empty">Could not load categories. Try refreshing.</div>';
+      });
+  }
+
+  // =====================================================================
+  // BOOT
+  // =====================================================================
+  function onAuthReady(user) {
+    if (typeof pcActivity !== 'undefined' && pcActivity.init) pcActivity.init('pl-overview');
+    document.body.classList.remove('pre-auth');
+
+    var isAdmin = (typeof pcAuth !== 'undefined' && pcAuth.isAdmin) ? pcAuth.isAdmin() : false;
+    if (!isAdmin) {
+      document.getElementById('pageBody').innerHTML =
+        '<div class="access-denied"><h2>Admins only</h2>' +
+        '<p>Expense categories drive the P&amp;L for the whole company. If you need access, ask Keith.</p></div>';
+      return;
+    }
+
+    wireFilters();
+    wireListActions();
+    wireModalClose();
+    wireNewButton();
+    reload();
+
+    void user;
+  }
+
+  if (typeof pcAuth === 'undefined' || !pcAuth.require) {
+    document.body.innerHTML =
+      '<div style="padding:60px 22px;font-family:DM Sans,sans-serif;">' +
+      '<h1>Authentication unavailable</h1>' +
+      '<p>pc-auth.js failed to load. Check the network tab.</p></div>';
+  } else {
+    pcAuth.require({
+      pageSlug: 'pl-overview',
+      onReady:  onAuthReady
+    });
+  }
+
+})();
+</script>
+
+</body>
+</html>
