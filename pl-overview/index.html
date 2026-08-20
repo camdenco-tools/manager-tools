@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>P&amp;L Overview — Admin · Popcorn Chez</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap">
+
+<script src="/pc-auth.js"></script>
+<script src="/pc-nav.js"></script>
+<script src="/pc-activity.js"></script>
+
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: #faf9f6; color: #1a1a1a;
+    font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 14px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page-title-row {
+    background: #faf9f6; border-bottom: 1px solid #e8e8e4;
+    padding: 18px 22px 16px;
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap;
+  }
+  .page-title { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; margin: 0; }
+  .page-title-meta { font-size: 12px; color: #888; font-weight: 500; }
+  .page-title-meta a { color: #0C447C; text-decoration: none; }
+  .page-title-meta a:hover { text-decoration: underline; }
+
+  .page-body { max-width: 1040px; margin: 0 auto; padding: 18px 22px 80px; }
+
+  /* ── Date chips ── */
+  .chip-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .chip {
+    background: #fff; border: 1px solid #e0dfd8; color: #555;
+    font-family: inherit; font-size: 13px; font-weight: 500;
+    padding: 7px 14px; border-radius: 20px; cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  }
+  .chip:hover { background: #f1f0eb; color: #1a1a1a; }
+  .chip.is-active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+  .chip-range { display: inline-flex; align-items: center; gap: 6px; margin-left: 4px; }
+  .chip-range[hidden] { display: none; }
+  .chip-range input[type="date"] {
+    font-family: inherit; font-size: 13px; padding: 6px 8px;
+    border: 1px solid #e0dfd8; border-radius: 6px; background: #fff; color: #1a1a1a;
+  }
+  .chip-range input:focus { outline: none; border-color: #1a1a1a; }
+  .chip-range span { color: #888; font-size: 12px; }
+
+  .range-banner { font-size: 12px; color: #888; margin-bottom: 16px; }
+  .range-banner strong { color: #555; font-weight: 600; }
+
+  /* ── Warning strip ── */
+  .warn-strip {
+    background: #fef6ec; border: 1px solid #f3d9a8; border-radius: 8px;
+    padding: 11px 14px; margin-bottom: 16px; font-size: 12.5px;
+    color: #633806; line-height: 1.5;
+  }
+  .warn-strip[hidden] { display: none; }
+  .warn-strip strong { font-weight: 600; }
+  .warn-strip ul { margin: 6px 0 0; padding-left: 18px; }
+  .warn-strip li { margin-bottom: 2px; }
+
+  /* ── Statement ── */
+  .stmt-card {
+    background: #fff; border: 0.5px solid #e0dfd8; border-radius: 12px;
+    overflow: hidden; margin-bottom: 18px;
+  }
+  .stmt-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .stmt-table td { padding: 9px 18px; vertical-align: middle; }
+  .stmt-table td.col-amt {
+    text-align: right; font-variant-numeric: tabular-nums;
+    white-space: nowrap; width: 150px;
+  }
+  .stmt-table td.col-pct {
+    text-align: right; font-variant-numeric: tabular-nums;
+    white-space: nowrap; width: 70px; color: #888; font-size: 12px;
+  }
+
+  tr.sec-head td {
+    background: #f6f6f3; border-top: 1px solid #e0dfd8; border-bottom: 1px solid #e0dfd8;
+    font-size: 10.5px; font-weight: 600; letter-spacing: 0.07em;
+    text-transform: uppercase; color: #666; padding: 9px 18px;
+  }
+  tr.line-row { border-bottom: 1px solid #f6f5f0; cursor: pointer; }
+  tr.line-row:hover { background: #fafaf6; }
+  tr.line-row.is-open { background: #f6f6f3; }
+  tr.line-row td.col-label { padding-left: 30px; }
+  tr.line-row .chev {
+    display: inline-block; width: 9px; margin-right: 7px;
+    color: #b4b2a9; font-size: 9px; transition: transform 0.12s ease;
+  }
+  tr.line-row.is-open .chev { transform: rotate(90deg); }
+
+  tr.subtotal-row td {
+    border-top: 1px solid #d8d6ce; font-weight: 600; padding-top: 11px; padding-bottom: 11px;
+  }
+  tr.net-row td {
+    border-top: 2px solid #1a1a1a; border-bottom: 2px solid #1a1a1a;
+    font-weight: 700; font-size: 15px; padding-top: 14px; padding-bottom: 14px;
+    background: #f1f0eb;
+  }
+  tr.spacer-row td { padding: 0; height: 10px; border: 0; }
+
+  .is-negative { color: #791F1F; }
+  .is-muted    { color: #b4b2a9; }
+
+  /* ── Drill-down ── */
+  tr.detail-row td { padding: 0; background: #fafaf6; border-bottom: 1px solid #f0efe8; }
+  .detail-wrap { padding: 4px 18px 12px 30px; }
+  .detail-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .detail-table th {
+    text-align: left; padding: 7px 10px; font-weight: 500; color: #888;
+    font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase;
+    border-bottom: 1px solid #e8e6de; white-space: nowrap;
+  }
+  .detail-table th.is-amt { text-align: right; }
+  .detail-table td { padding: 7px 10px; border-bottom: 1px solid #f0efe8; vertical-align: top; }
+  .detail-table tr:last-child td { border-bottom: 0; }
+  .detail-table td.d-date { font-variant-numeric: tabular-nums; color: #666; white-space: nowrap; width: 88px; }
+  .detail-table td.d-venue { color: #888; width: 90px; white-space: nowrap; }
+  .detail-table td.d-src { color: #b4b2a9; font-size: 11px; width: 96px; white-space: nowrap; }
+  .detail-table td.d-amt {
+    text-align: right; font-variant-numeric: tabular-nums;
+    font-weight: 500; white-space: nowrap; width: 110px;
+  }
+  .detail-more { padding: 8px 10px; font-size: 12px; color: #888; font-style: italic; }
+  .split-tag {
+    display: inline-block; font-size: 9.5px; font-weight: 600;
+    background: #f0e6f8; color: #5B2D7E; padding: 1px 6px;
+    border-radius: 3px; margin-left: 6px; vertical-align: middle;
+  }
+
+  /* ── Loading / empty ── */
+  .stmt-loading, .stmt-empty {
+    padding: 60px 20px; text-align: center; color: #888; font-size: 13px;
+  }
+
+  .footnote { font-size: 11.5px; color: #999; line-height: 1.6; margin-top: 4px; }
+  .footnote strong { color: #666; font-weight: 600; }
+
+  /* ── Toast ── */
+  .pc-toast-host {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    z-index: 2000; pointer-events: none;
+  }
+  .pc-toast {
+    background: #1a1a1a; color: #fff; font-size: 13px; font-weight: 500;
+    padding: 11px 18px; border-radius: 24px; box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+    opacity: 0; transform: translateY(8px);
+    transition: opacity 0.18s ease, transform 0.18s ease;
+  }
+  .pc-toast.is-shown { opacity: 1; transform: translateY(0); }
+
+  .access-denied { max-width: 520px; margin: 60px auto; text-align: center; color: #555; }
+  .access-denied h2 { font-size: 18px; color: #1a1a1a; }
+
+  body.pre-auth .page-body, body.pre-auth .page-title-row { display: none; }
+
+  @media (max-width: 700px) {
+    .stmt-table td { padding: 8px 12px; }
+    .stmt-table td.col-amt { width: 110px; }
+    .stmt-table td.col-pct { display: none; }
+    .detail-table td.d-venue, .detail-table td.d-src { display: none; }
+  }
+</style>
+</head>
+
+<body class="pre-auth">
+
+  <div class="page-title-row" aria-hidden="true">
+    <h1 class="page-title">P&amp;L overview</h1>
+    <span class="page-title-meta">
+      Accrual · calendar year ·
+      <a href="/pl-overview/categories/">Manage categories</a>
+    </span>
+  </div>
+
+  <main class="page-body" id="pageBody">
+
+    <div class="chip-row" id="chipRow">
+      <button type="button" class="chip is-active" data-chip="ytd">Year to date</button>
+      <button type="button" class="chip" data-chip="this-month">This month</button>
+      <button type="button" class="chip" data-chip="last-month">Last month</button>
+      <button type="button" class="chip" data-chip="this-quarter">This quarter</button>
+      <button type="button" class="chip" data-chip="custom">Custom</button>
+      <span class="chip-range" id="chipRangeWrap" hidden>
+        <input type="date" id="chipFrom" aria-label="From date">
+        <span>&rarr;</span>
+        <input type="date" id="chipTo" aria-label="To date">
+      </span>
+    </div>
+
+    <div class="range-banner" id="rangeBanner">Loading&hellip;</div>
+
+    <div class="warn-strip" id="warnStrip" hidden></div>
+
+    <div class="stmt-card">
+      <div id="stmtHost">
+        <div class="stmt-loading" id="stmtLoading">Loading transactions&hellip;</div>
+      </div>
+    </div>
+
+    <div class="footnote" id="footnote"></div>
+
+  </main>
+
+  <div class="pc-toast-host" id="pcToastHost" aria-live="polite" aria-atomic="true"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var SB_URL  = 'https://aoazlttdjowhlfcksoyl.supabase.co';
+  var SB_REST = SB_URL + '/rest/v1/';
+
+  var DETAIL_CAP = 60;   // rows shown per expanded line before "+N more"
+
+  // Revenue sub-categories come from ar_items.income_category, which is a
+  // different vocabulary from expense_categories. Labels only.
+  var REVENUE_LABELS = {
+    sales:               'Sales',
+    labor_reimbursement: 'Labor reimbursement',
+    tips:                'Tips (pass-through)',
+    fees:                'Fees',
+    tax:                 'Tax',
+    adjustment:          'Adjustments'
+  };
+  var REVENUE_ORDER = ['sales', 'labor_reimbursement', 'tips', 'fees', 'tax', 'adjustment'];
+
+  // Labor lines are synthesized by the view with these exact category names.
+  var LABOR_LABELS = ['Wages & overtime', 'Tips paid out', 'Employer payroll taxes', 'Contract Labor (1099)'];
+
+  var state = {
+    chip: 'ytd',
+    from: null,
+    to:   null,
+    rows: [],
+    openKeys: {},
+    loading: true
+  };
+
+  // =====================================================================
+  // UTILITIES
+  // =====================================================================
+  function pad2(n) { n = String(n); return n.length < 2 ? '0' + n : n; }
+
+  function todayIso() {
+    var d = new Date();
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    var p = String(iso).split('-');
+    if (p.length < 3) return iso;
+    var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return (months[parseInt(p[1], 10) - 1] || '') + ' ' + parseInt(p[2], 10) + ', ' + p[0];
+  }
+
+  function fmtDateShort(iso) {
+    if (!iso) return '—';
+    var p = String(iso).split('-');
+    if (p.length < 3) return iso;
+    return parseInt(p[1], 10) + '/' + parseInt(p[2], 10) + '/' + p[0].slice(2);
+  }
+
+  /** Accounting format: negatives in parentheses, never a minus sign. */
+  function fmtMoney(n) {
+    if (n == null || isNaN(n)) n = 0;
+    var abs = Math.abs(n);
+    var s = '$' + abs.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return n < 0 ? '(' + s + ')' : s;
+  }
+
+  function fmtPct(n) {
+    if (n == null || isNaN(n) || !isFinite(n)) return '';
+    return (Math.round(n * 10) / 10).toFixed(1) + '%';
+  }
+
+  function esc(s) {
+    if (s == null) return '';
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function showToast(msg, ms) {
+    ms = ms || 2400;
+    var host = document.getElementById('pcToastHost');
+    if (!host) return;
+    var el = document.createElement('div');
+    el.className = 'pc-toast';
+    el.textContent = msg;
+    host.appendChild(el);
+    requestAnimationFrame(function () { el.classList.add('is-shown'); });
+    setTimeout(function () {
+      el.classList.remove('is-shown');
+      setTimeout(function () { el.remove(); }, 260);
+    }, ms);
+  }
+
+  function handleAuthFailure() {
+    try {
+      localStorage.removeItem('sb_access_token');
+      localStorage.removeItem('sb_refresh_token');
+    } catch (e) { /* ignore */ }
+    showToast('Session expired. Reloading…', 1800);
+    setTimeout(function () { window.location.reload(); }, 1800);
+  }
+
+  function authFetch(url, options) {
+    return fetch(url, options).then(function (r) {
+      if (!r.ok) {
+        return r.text().then(function (t) {
+          if (r.status === 401 || (t && t.indexOf('JWT expired') !== -1)) {
+            var ae = new Error('JWT expired');
+            ae.authFailed = true;
+            throw ae;
+          }
+          throw new Error(t || ('HTTP ' + r.status));
+        });
+      }
+      return r.text().then(function (t) {
+        if (!t) return [];
+        try { return JSON.parse(t); } catch (e) { return []; }
+      });
+    });
+  }
+
+  // =====================================================================
+  // DATE RANGE
+  // Calendar year, not fiscal — pc-fiscal's CY2026 starts Jan 5 and would
+  // silently drop Jan 1-4 from a tax P&L.
+  // =====================================================================
+  function resolveRange(chip) {
+    var today = todayIso();
+    var y  = parseInt(today.slice(0, 4), 10);
+    var m  = parseInt(today.slice(5, 7), 10);
+
+    function monthStart(yy, mm) { return yy + '-' + pad2(mm) + '-01'; }
+    function monthEnd(yy, mm) {
+      var d = new Date(yy, mm, 0);   // day 0 of next month = last day of this
+      return yy + '-' + pad2(mm) + '-' + pad2(d.getDate());
+    }
+
+    if (chip === 'ytd') {
+      return { from: y + '-01-01', to: today, label: 'Year to date' };
+    }
+    if (chip === 'this-month') {
+      return { from: monthStart(y, m), to: monthEnd(y, m), label: 'This month' };
+    }
+    if (chip === 'last-month') {
+      var ly = m === 1 ? y - 1 : y;
+      var lm = m === 1 ? 12 : m - 1;
+      return { from: monthStart(ly, lm), to: monthEnd(ly, lm), label: 'Last month' };
+    }
+    if (chip === 'this-quarter') {
+      var qStart = Math.floor((m - 1) / 3) * 3 + 1;
+      return { from: monthStart(y, qStart), to: monthEnd(y, qStart + 2), label: 'This quarter' };
+    }
+    if (chip === 'custom') {
+      if (!state.from || !state.to) return null;
+      return { from: state.from, to: state.to, label: 'Custom range' };
+    }
+    return null;
+  }
+
+  // =====================================================================
+  // FETCH
+  // =====================================================================
+  function fetchTransactions(fromIso, toIso) {
+    var url = SB_REST + 'v_pl_transactions?' + [
+      'select=source_table,source_id,txn_date,amount,category_id,category_name,' +
+        'gl_group,description,venue_code,is_split,editable',
+      'txn_date=gte.' + encodeURIComponent(fromIso),
+      'txn_date=lte.' + encodeURIComponent(toIso),
+      'order=txn_date.desc',
+      'limit=50000'
+    ].join('&');
+    return authFetch(url, { headers: pcAuth.headers() });
+  }
+
+  // =====================================================================
+  // AGGREGATION
+  // =====================================================================
+
+  /** Group rows into { key -> { label, total, rows[] } }, preserving order. */
+  function groupBy(rows, keyFn, labelFn) {
+    var out = {};
+    rows.forEach(function (r) {
+      var k = keyFn(r);
+      if (!out[k]) out[k] = { key: k, label: labelFn(r, k), total: 0, rows: [] };
+      out[k].total += Number(r.amount || 0);
+      out[k].rows.push(r);
+    });
+    return out;
+  }
+
+  function sumOf(rows) {
+    var t = 0;
+    rows.forEach(function (r) { t += Number(r.amount || 0); });
+    return Math.round(t * 100) / 100;
+  }
+
+  function buildStatement() {
+    var rows = state.rows;
+
+    var revenue    = rows.filter(function (r) { return r.gl_group === 'revenue'; });
+    var cogs       = rows.filter(function (r) { return r.gl_group === 'cogs'; });
+    var allExpense = rows.filter(function (r) { return r.gl_group === 'expense'; });
+    var nonPl      = rows.filter(function (r) { return r.gl_group === 'non_pl'; });
+
+    // Labor is a presentation split of gl_group='expense' — the view emits
+    // payroll with these exact category names.
+    var labor = allExpense.filter(function (r) {
+      return LABOR_LABELS.indexOf(r.category_name) !== -1;
+    });
+    var opex = allExpense.filter(function (r) {
+      return LABOR_LABELS.indexOf(r.category_name) === -1;
+    });
+
+    var revenueTotal = sumOf(revenue);
+    var cogsTotal    = sumOf(cogs);
+    var laborTotal   = sumOf(labor);
+    var opexTotal    = sumOf(opex);
+
+    return {
+      revenue:      groupBy(revenue, function (r) { return r.category_name || 'uncategorized'; },
+                            function (r, k) { return REVENUE_LABELS[k] || k; }),
+      cogs:         groupBy(cogs, function () { return 'cogs'; },
+                            function () { return 'Food & supplies'; }),
+      labor:        groupBy(labor, function (r) { return r.category_name; },
+                            function (r) { return r.category_name; }),
+      opex:         groupBy(opex, function (r) { return r.category_name || '(uncategorized)'; },
+                            function (r) { return r.category_name || '(uncategorized)'; }),
+      nonPl:        groupBy(nonPl, function (r) { return r.category_name || '(uncategorized)'; },
+                            function (r) { return r.category_name || '(uncategorized)'; }),
+      revenueTotal: revenueTotal,
+      cogsTotal:    cogsTotal,
+      laborTotal:   laborTotal,
+      opexTotal:    opexTotal,
+      grossProfit:  Math.round((revenueTotal + cogsTotal) * 100) / 100,
+      netIncome:    Math.round((revenueTotal + cogsTotal + laborTotal + opexTotal) * 100) / 100,
+      hasPayroll:   labor.length > 0
+    };
+  }
+
+  // =====================================================================
+  // RENDER
+  // =====================================================================
+  function pctOfRevenue(amount, revenueTotal) {
+    if (!revenueTotal) return '';
+    return fmtPct(Math.abs(amount) / Math.abs(revenueTotal) * 100);
+  }
+
+  /** Ordered array of groups, largest magnitude first. */
+  function sortedGroups(groupMap, explicitOrder) {
+    var arr = Object.keys(groupMap).map(function (k) { return groupMap[k]; });
+    if (explicitOrder) {
+      arr.sort(function (a, b) {
+        var ia = explicitOrder.indexOf(a.key);
+        var ib = explicitOrder.indexOf(b.key);
+        if (ia === -1) ia = 999;
+        if (ib === -1) ib = 999;
+        return ia - ib;
+      });
+    } else {
+      arr.sort(function (a, b) { return Math.abs(b.total) - Math.abs(a.total); });
+    }
+    return arr;
+  }
+
+  function lineRowHtml(group, revenueTotal, sectionKey) {
+    var key = sectionKey + '::' + group.key;
+    var isOpen = !!state.openKeys[key];
+    var neg = group.total < 0;
+    var count = group.rows.length;
+
+    var html = '<tr class="line-row' + (isOpen ? ' is-open' : '') + '" data-key="' + esc(key) + '">' +
+      '<td class="col-label"><span class="chev">&#9654;</span>' + esc(group.label) +
+        ' <span class="is-muted" style="font-size:11.5px;">' + count +
+        (count === 1 ? ' txn' : ' txns') + '</span></td>' +
+      '<td class="col-amt' + (neg ? ' is-negative' : '') + '">' + esc(fmtMoney(group.total)) + '</td>' +
+      '<td class="col-pct">' + pctOfRevenue(group.total, revenueTotal) + '</td>' +
+    '</tr>';
+
+    if (isOpen) html += detailRowHtml(group);
+    return html;
+  }
+
+  function detailRowHtml(group) {
+    var rows = group.rows.slice().sort(function (a, b) {
+      return Math.abs(Number(b.amount || 0)) - Math.abs(Number(a.amount || 0));
+    });
+    var shown = rows.slice(0, DETAIL_CAP);
+
+    var inner = '<table class="detail-table"><thead><tr>' +
+      '<th>Date</th><th>Description</th><th>Venue</th><th>Source</th><th class="is-amt">Amount</th>' +
+      '</tr></thead><tbody>';
+
+    shown.forEach(function (r) {
+      var amt = Number(r.amount || 0);
+      var src = String(r.source_table || '').replace('split:', '').replace(/_/g, ' ');
+      inner += '<tr>' +
+        '<td class="d-date">' + esc(fmtDateShort(r.txn_date)) + '</td>' +
+        '<td>' + esc(r.description || '—') +
+          (r.is_split ? '<span class="split-tag">SPLIT</span>' : '') + '</td>' +
+        '<td class="d-venue">' + esc(r.venue_code || '—') + '</td>' +
+        '<td class="d-src">' + esc(src) + '</td>' +
+        '<td class="d-amt' + (amt < 0 ? ' is-negative' : '') + '">' + esc(fmtMoney(amt)) + '</td>' +
+      '</tr>';
+    });
+
+    inner += '</tbody></table>';
+
+    if (rows.length > shown.length) {
+      inner += '<div class="detail-more">+ ' + (rows.length - shown.length) +
+        ' more, largest ' + DETAIL_CAP + ' shown</div>';
+    }
+
+    return '<tr class="detail-row"><td colspan="3"><div class="detail-wrap">' + inner + '</div></td></tr>';
+  }
+
+  function sectionHeadHtml(label) {
+    return '<tr class="sec-head"><td colspan="3">' + esc(label) + '</td></tr>';
+  }
+
+  function totalRowHtml(label, amount, revenueTotal, cls) {
+    var neg = amount < 0;
+    return '<tr class="' + (cls || 'subtotal-row') + '">' +
+      '<td>' + esc(label) + '</td>' +
+      '<td class="col-amt' + (neg ? ' is-negative' : '') + '">' + esc(fmtMoney(amount)) + '</td>' +
+      '<td class="col-pct">' + pctOfRevenue(amount, revenueTotal) + '</td>' +
+    '</tr>';
+  }
+
+  function renderStatement() {
+    var host = document.getElementById('stmtHost');
+    if (!host) return;
+
+    if (state.rows.length === 0) {
+      host.innerHTML = '<div class="stmt-empty">No transactions in this date range.</div>';
+      return;
+    }
+
+    var s = buildStatement();
+    var rt = s.revenueTotal;
+    var html = '<table class="stmt-table"><tbody>';
+
+    // REVENUE
+    html += sectionHeadHtml('Revenue');
+    sortedGroups(s.revenue, REVENUE_ORDER).forEach(function (g) {
+      html += lineRowHtml(g, rt, 'rev');
+    });
+    html += totalRowHtml('Total revenue', rt, rt);
+
+    // COST OF SALES
+    html += '<tr class="spacer-row"><td colspan="3"></td></tr>';
+    html += sectionHeadHtml('Cost of sales');
+    sortedGroups(s.cogs).forEach(function (g) {
+      html += lineRowHtml(g, rt, 'cogs');
+    });
+    html += totalRowHtml('Gross profit', s.grossProfit, rt);
+
+    // LABOR
+    html += '<tr class="spacer-row"><td colspan="3"></td></tr>';
+    html += sectionHeadHtml('Labor');
+    if (s.hasPayroll) {
+      sortedGroups(s.labor).forEach(function (g) {
+        html += lineRowHtml(g, rt, 'labor');
+      });
+      html += totalRowHtml('Total labor', s.laborTotal, rt);
+    } else {
+      html += '<tr class="line-row" style="cursor:default;">' +
+        '<td class="col-label is-muted"><em>No payroll loaded for this period</em></td>' +
+        '<td class="col-amt is-muted">$0.00</td><td class="col-pct"></td></tr>';
+    }
+
+    // OPERATING EXPENSES
+    html += '<tr class="spacer-row"><td colspan="3"></td></tr>';
+    html += sectionHeadHtml('Operating expenses');
+    sortedGroups(s.opex).forEach(function (g) {
+      html += lineRowHtml(g, rt, 'opex');
+    });
+    html += totalRowHtml('Total operating expenses', s.opexTotal, rt);
+
+    // NET
+    html += '<tr class="spacer-row"><td colspan="3"></td></tr>';
+    html += totalRowHtml('NET INCOME', s.netIncome, rt, 'net-row');
+
+    // BELOW THE LINE
+    var nonPlGroups = sortedGroups(s.nonPl);
+    if (nonPlGroups.length > 0) {
+      html += '<tr class="spacer-row"><td colspan="3"></td></tr>';
+      html += sectionHeadHtml('Below the line — does not affect net income');
+      nonPlGroups.forEach(function (g) {
+        html += lineRowHtml(g, rt, 'nonpl');
+      });
+    }
+
+    html += '</tbody></table>';
+    host.innerHTML = html;
+
+    renderWarnings(s);
+    renderFootnote(s);
+  }
+
+  /**
+   * Surfaces what the reader would otherwise have to already know. Silence
+   * here would be worse than noise — a P&L missing payroll looks profitable.
+   */
+  function renderWarnings(s) {
+    var el = document.getElementById('warnStrip');
+    if (!el) return;
+
+    var items = [];
+
+    if (!s.hasPayroll) {
+      items.push('<strong>Payroll is not loaded.</strong> Wages, employer taxes, and tips paid out are ' +
+        'missing entirely, so net income is overstated by the full cost of labor.');
+    }
+
+    var uncat = s.opex['(uncategorized)'];
+    if (uncat) {
+      items.push('<strong>' + uncat.rows.length + ' transaction' +
+        (uncat.rows.length === 1 ? '' : 's') + ' with no category</strong> totalling ' +
+        esc(fmtMoney(uncat.total)) + '.');
+    }
+
+    var misc = s.opex['Miscellaneous'];
+    if (misc && Math.abs(misc.total) > 1000) {
+      items.push('<strong>Miscellaneous holds ' + esc(fmtMoney(misc.total)) + '</strong> across ' +
+        misc.rows.length + ' transaction' + (misc.rows.length === 1 ? '' : 's') +
+        '. Large balances here usually mean loan movement or transfers that belong below the line.');
+    }
+
+    var tipsIn = s.revenue['tips'];
+    var tipsOut = s.labor['Tips paid out'];
+    if (tipsIn && !tipsOut) {
+      items.push('<strong>' + esc(fmtMoney(tipsIn.total)) + ' of tips billed</strong> with no matching ' +
+        'payout recorded. Tips are pass-through — the offsetting cost arrives with payroll.');
+    }
+
+    if (items.length === 0) { el.hidden = true; el.innerHTML = ''; return; }
+    el.hidden = false;
+    el.innerHTML = 'Read this before trusting the numbers:<ul><li>' +
+      items.join('</li><li>') + '</li></ul>';
+  }
+
+  function renderFootnote(s) {
+    var el = document.getElementById('footnote');
+    if (!el) return;
+    var n = state.rows.length;
+    el.innerHTML = '<strong>' + n.toLocaleString('en-US') + '</strong> transactions. ' +
+      'Accrual basis \u2014 revenue at invoice date, costs at invoice or pay-period date. ' +
+      'Settlement rows (checks clearing, payroll funding, transfers between accounts) are ' +
+      'excluded so nothing is counted twice. Operating expenses have no venue attribution in the ' +
+      'source data, so the venue column is blank for those rows.';
+  }
+
+  function renderRangeBanner(range) {
+    var el = document.getElementById('rangeBanner');
+    if (!el) return;
+    if (!range) { el.textContent = 'Pick a custom date range to load the report.'; return; }
+    el.innerHTML = '<strong>' + esc(range.label) + '</strong> \u00b7 ' +
+      esc(fmtDate(range.from)) + ' \u2013 ' + esc(fmtDate(range.to));
+  }
+
+  // =====================================================================
+  // WIRING
+  // =====================================================================
+  function wireChips() {
+    var chipRow   = document.getElementById('chipRow');
+    var rangeWrap = document.getElementById('chipRangeWrap');
+    var fromEl    = document.getElementById('chipFrom');
+    var toEl      = document.getElementById('chipTo');
+    if (!chipRow) return;
+
+    chipRow.addEventListener('click', function (ev) {
+      var t = ev.target;
+      if (!t || !t.closest) return;
+      var btn = t.closest('.chip');
+      if (!btn) return;
+      var chip = btn.getAttribute('data-chip');
+      if (!chip) return;
+
+      var chips = chipRow.querySelectorAll('.chip');
+      for (var i = 0; i < chips.length; i++) {
+        chips[i].classList.toggle('is-active', chips[i] === btn);
+      }
+      state.chip = chip;
+      state.openKeys = {};
+
+      if (chip === 'custom') {
+        if (rangeWrap) rangeWrap.hidden = false;
+        if (fromEl && !fromEl.value) fromEl.value = state.from || '';
+        if (toEl && !toEl.value)     toEl.value   = state.to   || '';
+        if (state.from && state.to) reload();
+        return;
+      }
+      if (rangeWrap) rangeWrap.hidden = true;
+      reload();
+    });
+
+    function onDateChange() {
+      if (state.chip !== 'custom') return;
+      var f = fromEl ? fromEl.value : '';
+      var t = toEl ? toEl.value : '';
+      if (!f || !t) return;
+      if (f > t) { showToast('"From" must be before "to"', 2200); return; }
+      state.from = f;
+      state.to   = t;
+      reload();
+    }
+    if (fromEl) fromEl.addEventListener('change', onDateChange);
+    if (toEl)   toEl.addEventListener('change', onDateChange);
+  }
+
+  function wireExpand() {
+    var host = document.getElementById('stmtHost');
+    if (!host) return;
+    host.addEventListener('click', function (ev) {
+      var t = ev.target;
+      if (!t || !t.closest) return;
+      var row = t.closest('tr.line-row[data-key]');
+      if (!row) return;
+      var key = row.getAttribute('data-key');
+      if (!key) return;
+      if (state.openKeys[key]) delete state.openKeys[key];
+      else state.openKeys[key] = true;
+      renderStatement();
+    });
+  }
+
+  // =====================================================================
+  // RELOAD
+  // =====================================================================
+  function reload() {
+    var range = resolveRange(state.chip);
+    renderRangeBanner(range);
+
+    if (!range) {
+      state.rows = [];
+      var host0 = document.getElementById('stmtHost');
+      if (host0) host0.innerHTML = '<div class="stmt-empty">Pick both dates to load the statement.</div>';
+      return;
+    }
+
+    var host = document.getElementById('stmtHost');
+    if (host) host.innerHTML = '<div class="stmt-loading">Loading transactions\u2026</div>';
+    var warn = document.getElementById('warnStrip');
+    if (warn) warn.hidden = true;
+
+    return fetchTransactions(range.from, range.to)
+      .then(function (rows) {
+        state.rows = rows || [];
+        renderStatement();
+      })
+      .catch(function (e) {
+        if (e && e.authFailed) { handleAuthFailure(); return; }
+        console.error('[pl-overview] load failed:', e);
+        state.rows = [];
+        var h = document.getElementById('stmtHost');
+        if (h) h.innerHTML = '<div class="stmt-empty">Could not load transactions. ' +
+          esc((e && e.message) ? e.message.substring(0, 120) : '') + '</div>';
+      });
+  }
+
+  // =====================================================================
+  // BOOT
+  // =====================================================================
+  function onAuthReady(user) {
+    if (typeof pcActivity !== 'undefined' && pcActivity.init) pcActivity.init('pl-overview');
+    document.body.classList.remove('pre-auth');
+
+    var isAdmin = (typeof pcAuth !== 'undefined' && pcAuth.isAdmin) ? pcAuth.isAdmin() : false;
+    if (!isAdmin) {
+      document.getElementById('pageBody').innerHTML =
+        '<div class="access-denied"><h2>Admins only</h2>' +
+        '<p>The P&amp;L covers the whole company. If you need access, ask Keith.</p></div>';
+      return;
+    }
+
+    wireChips();
+    wireExpand();
+    reload();
+
+    void user;
+  }
+
+  if (typeof pcAuth === 'undefined' || !pcAuth.require) {
+    document.body.innerHTML =
+      '<div style="padding:60px 22px;font-family:DM Sans,sans-serif;">' +
+      '<h1>Authentication unavailable</h1>' +
+      '<p>pc-auth.js failed to load. Check the network tab.</p></div>';
+  } else {
+    pcAuth.require({
+      pageSlug: 'pl-overview',
+      onReady:  onAuthReady
+    });
+  }
+
+})();
+</script>
+
+</body>
+</html>
