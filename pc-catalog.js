@@ -82,7 +82,7 @@
   // ---------------------------------------------------------------------
   function loadAll() {
     var venuesReq = sbGet(
-      'venues?select=code,full_name,state,city,is_tiered,is_active,sort_order' +
+      'venues?select=code,full_name,state,city,is_tiered,settles_monthly,is_active,sort_order' +
       '&order=sort_order.asc,code.asc&limit=10000'
     );
 
@@ -99,6 +99,7 @@
           state: v.state || null,
           city: v.city || null,
           is_tiered: v.is_tiered === true,
+          settles_monthly: v.settles_monthly === true,
           is_active: v.is_active !== false,
           sort_order: typeof v.sort_order === 'number' ? v.sort_order : 0
         };
@@ -225,6 +226,30 @@
       return !!(v && v.is_tiered);
     },
 
+    /*
+     * isVenueSettlementBilled(code) — boolean. True for venues billed as
+     * one lump per calendar month (DE) rather than per-event, per-stand.
+     * Drives the AR invoice form's month picker and the coverage page's
+     * month-based clearing rule. False for unknown venues, so an
+     * unrecognised code falls back to normal event billing.
+     */
+    isVenueSettlementBilled: function (code) {
+      var v = pcCatalog.getVenue(code);
+      return !!(v && v.settles_monthly);
+    },
+
+    /*
+     * getSettlementVenueCodes() — codes of every settlement-billed venue,
+     * active or retired. Replaces the hardcoded SETTLEMENT_VENUES object
+     * on the AR coverage page.
+     */
+    getSettlementVenueCodes: function () {
+      _assertReady('getSettlementVenueCodes');
+      return _venues
+        .filter(function (v) { return v.settles_monthly; })
+        .map(function (v) { return v.code; });
+    },
+
     // -------------------------------------------------------------------
     // STAND GETTERS
     // -------------------------------------------------------------------
@@ -329,6 +354,7 @@
       state: v.state,
       city: v.city,
       is_tiered: v.is_tiered,
+      settles_monthly: v.settles_monthly,
       is_active: v.is_active,
       sort_order: v.sort_order
     };
