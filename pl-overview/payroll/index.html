@@ -816,7 +816,6 @@
     out.overhead_wages = 0;
     out.overhead_people = [];
     out.unmatched_people = [];
-    out.variable_wages = r2(pdf.regular_wages + pdf.overtime_wages - fixedTotal);
 
     // Group shifts by venue.
     var byVenue = {};
@@ -855,14 +854,39 @@
 
     out.unmapped = Object.keys(unmappedRoles).map(function (k) { return unmappedRoles[k]; });
 
-    // Reconcile: xlsx shift pay should equal PDF variable wages.
-    var shiftPay = r2(out.shifts.reduce(function (t, s) { return t + s.pay; }, 0));
+    // What actually reached a venue line. Roles mapped to "exclude" are
+    // deliberately absent from venueLines, so their pay falls into overhead
+    // with everyone else the spreadsheet never mentioned — total labor has
+    // to foot to the payroll report either way.
+    var allocPay = 0, allocHours = 0;
+    out.venueLines.forEach(function (l) {
+      allocPay   += (l.regular_pay || 0) + (l.ot_pay || 0);
+      allocHours += (l.regular_hours || 0) + (l.ot_hours || 0);
+    });
+    allocPay = r2(allocPay);
+    allocHours = r2(allocHours);
+
+    // Overhead is the residual: paid through payroll, never clocked into a
+    // shift in the spreadsheet. Erika is the known case, but the gap is
+    // usually several people and sometimes carries no hours at all — a bonus
+    // or a retro rate correction — so it is never attributed to a name.
+    out.variable_wages = allocPay;
+    out.overhead_wages = r2(pdf.regular_wages + pdf.overtime_wages - fixedTotal - allocPay);
+    out.overhead_hours = r2(pdf.total_hours - allocHours);
+    if (out.overhead_hours < 0) out.overhead_hours = 0;
+
+    var shiftPay  = r2(out.shifts.reduce(function (t, s) { return t + s.pay; }, 0));
     var shiftTips = r2(out.shifts.reduce(function (t, s) { return t + s.tips; }, 0));
+
+    // A positive residual is normal. A negative one means venue lines exceed
+    // what payroll actually paid, which cannot happen honestly, so it blocks
+    // the week from reading as reconciled.
     out.recon = {
       skipped: false,
       shift_pay: shiftPay,
-      variable_wages: out.variable_wages,
-      pay_delta: r2(shiftPay - out.variable_wages),
+      alloc_pay: allocPay,
+      overhead: out.overhead_wages,
+      over_allocated: out.overhead_wages < -0.005,
       shift_tips: shiftTips,
       pdf_tips: pdf.tips_paid,
       tips_delta: r2(shiftTips - pdf.tips_paid)
@@ -912,11 +936,11 @@
       warns.push('Gross on the report (' + fmtMoney(run.gross_total) + ') does not match the sum of its parts (' +
         fmtMoney(run.computed_gross) + '). Check the PDF before saving.');
     }
-    if (p.recon && !p.recon.skipped && Math.abs(p.recon.pay_delta) > 0.02) {
-      warns.push('Shift pay in the spreadsheet (' + fmtMoney(p.recon.shift_pay) +
-        ') does not match variable wages on the payroll report (' + fmtMoney(p.recon.variable_wages) +
-        ') \u2014 off by ' + fmtMoney(Math.abs(p.recon.pay_delta)) +
-        '. Usually means a shift was edited after the file was sent.');
+    if (p.recon && !p.recon.skipped && p.recon.over_allocated) {
+      warns.push('Venue lines total ' + fmtMoney(p.recon.alloc_pay) +
+        ', more than the payroll report paid in hourly wages \u2014 over by ' +
+        fmtMoney(Math.abs(p.overhead_wages)) +
+        '. Something is double-counted. Do not save this week until it is resolved.');
     }
     if (p.recon && !p.recon.skipped && Math.abs(p.recon.tips_delta) > 0.02) {
       warns.push('Tips differ between the two files by ' + fmtMoney(Math.abs(p.recon.tips_delta)) + '.');
@@ -942,6 +966,10 @@
 
     html += '<table class="sum-table"><tbody>' +
       row('Variable labor (hourly)', p.variable_wages, 'allocates to venues') +
+      (p.overhead_wages > 1
+        ? row('Company labor (unallocated)', p.overhead_wages,
+              fmtHours(p.overhead_hours || 0) + ' hrs \u00b7 not in the spreadsheet')
+        : '') +
       row('Fixed labor (salaried)', p.fixed_wages, 'company level') +
       row('Tips paid out', run.tips_paid, 'pass-through') +
       row('Contract labor (1099)', run.comp_1099, '') +
@@ -1153,7 +1181,8 @@
             source_pdf_path:  paths.pdf,
             source_xlsx_path: paths.xlsx,
             reconciled:       !!(p.recon && !p.recon.skipped &&
-                                 Math.abs(p.recon.pay_delta) < 0.02),
+                                 !p.recon.over_allocated &&
+                                 Math.abs(p.recon.tips_delta) < 0.02),
             uploaded_by:      actorName()
           })
         });
@@ -1173,13 +1202,11 @@
           });
         }
         // Overhead: hourly, supports every venue, allocated to none.
-        if (p.overhead_wages > 0.005) {
-          var ohHours = (p.overhead_people || []).reduce(function (t, o) {
-            return t + Number(o.hours || 0); }, 0);
+        if (p.overhead_wages > 1) {
           lines.push({
             payroll_run_id: runId, venue_code: '__company__', labor_type: 'overhead',
             regular_pay: p.overhead_wages, ot_pay: 0,
-            regular_hours: r2(ohHours), ot_hours: 0,
+            regular_hours: r2(p.overhead_hours || 0), ot_hours: 0,
             tips: 0, employer_tax_alloc: 0
           });
         }
