@@ -433,7 +433,23 @@
     var laborTotal   = sumOf(labor);
     var opexTotal    = sumOf(opex);
 
+    // Tips are a pass-through: billed to the client, paid out through payroll.
+    // Both sides belong on the tax return, but neither belongs in the
+    // denominator of a percentage — including them inflates revenue and makes
+    // every ratio look better than it is. All percentages use OPERATING
+    // revenue (revenue less tips) as the basis.
+    var tipsIn = sumOf(revenue.filter(function (r) {
+      return r.category_name === 'tips';
+    }));
+    var tipsOut = sumOf(labor.filter(function (r) {
+      return r.category_name === 'Tips paid out';
+    }));
+    var operatingRevenue = Math.round((revenueTotal - tipsIn) * 100) / 100;
+
     return {
+      tipsIn:           tipsIn,
+      tipsOut:          tipsOut,
+      operatingRevenue: operatingRevenue,
       revenue:      groupBy(revenue, function (r) { return r.category_name || 'uncategorized'; },
                             function (r, k) { return REVENUE_LABELS[k] || k; }),
       cogs:         groupBy(cogs, function () { return 'cogs'; },
@@ -553,15 +569,20 @@
     }
 
     var s = buildStatement();
-    var rt = s.revenueTotal;
+    // Percentage basis = operating revenue, NOT total revenue. See buildStatement.
+    var rt = s.operatingRevenue;
     var html = '<table class="stmt-table"><tbody>';
 
     // REVENUE
     html += sectionHeadHtml('Revenue');
     sortedGroups(s.revenue, REVENUE_ORDER).forEach(function (g) {
-      html += lineRowHtml(g, rt, 'rev');
+      // Tips carry no percentage — they're excluded from the basis.
+      html += lineRowHtml(g, g.key === 'tips' ? 0 : rt, 'rev');
     });
-    html += totalRowHtml('Total revenue', rt, rt);
+    html += totalRowHtml('Total revenue', s.revenueTotal, 0);
+    if (Math.abs(s.tipsIn) > 0.005) {
+      html += totalRowHtml('Operating revenue \u2014 excludes tips', rt, 0);
+    }
 
     // COST OF SALES
     html += '<tr class="spacer-row"><td colspan="3"></td></tr>';
@@ -576,9 +597,16 @@
     html += sectionHeadHtml('Labor');
     if (s.hasPayroll) {
       sortedGroups(s.labor).forEach(function (g) {
-        html += lineRowHtml(g, rt, 'labor');
+        // Tips paid out is the offset to tips billed — no percentage.
+        html += lineRowHtml(g, g.key === 'Tips paid out' ? 0 : rt, 'labor');
       });
+      // Total labor excludes tips from its ratio so labor % stays comparable
+      // to what COS & Labor reports.
       html += totalRowHtml('Total labor', s.laborTotal, rt);
+      if (Math.abs(s.tipsOut) > 0.005) {
+        html += totalRowHtml('Labor excluding tips',
+          Math.round((s.laborTotal - s.tipsOut) * 100) / 100, rt);
+      }
     } else {
       html += '<tr class="line-row" style="cursor:default;">' +
         '<td class="col-label is-muted"><em>No payroll loaded for this period</em></td>' +
@@ -660,7 +688,13 @@
     var el = document.getElementById('footnote');
     if (!el) return;
     var n = state.rows.length;
-    el.innerHTML = '<strong>' + n.toLocaleString('en-US') + '</strong> transactions. ' +
+    var basisNote = Math.abs(s.tipsIn) > 0.005
+      ? 'Percentages are against <strong>operating revenue</strong> (' +
+        esc(fmtMoney(s.operatingRevenue)) + '), which excludes ' +
+        esc(fmtMoney(s.tipsIn)) + ' of tips \u2014 tips are collected and paid out, ' +
+        'so counting them would flatter every ratio. '
+      : '';
+    el.innerHTML = '<strong>' + n.toLocaleString('en-US') + '</strong> transactions. ' + basisNote +
       'Accrual basis \u2014 revenue at invoice date, costs at invoice or pay-period date. ' +
       'Settlement rows (checks clearing, payroll funding, transfers between accounts) are ' +
       'excluded so nothing is counted twice. Operating expenses have no venue attribution in the ' +
