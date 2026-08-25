@@ -122,6 +122,7 @@
   }
   .lt-pill.variable { background: #e6f1fb; color: #0C447C; }
   .lt-pill.fixed    { background: #f0e6f8; color: #5B2D7E; }
+  .lt-pill.overhead { background: #fef6ec; color: #854F0B; }
 
   /* Unmapped roles */
   .map-row {
@@ -160,6 +161,91 @@
 
   .empty { padding: 26px 12px; text-align: center; color: #888; font-size: 13px; }
   .loading { padding: 26px 12px; text-align: center; color: #aaa; font-size: 13px; }
+
+  /* ── Week grid ── */
+  .month-block { margin-bottom: 16px; }
+  .month-label {
+    font-size: 10.5px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase;
+    color: #888; margin-bottom: 7px;
+  }
+  .week-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 7px; }
+  @media (max-width: 820px) { .week-grid { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 520px) { .week-grid { grid-template-columns: repeat(2, 1fr); } }
+  .week-cell {
+    border: 1px solid #e8e8e4; border-radius: 8px; padding: 9px 10px;
+    background: #fff; text-align: left; font-family: inherit; cursor: default;
+    transition: border-color 0.12s, background 0.12s;
+  }
+  .week-cell .wk-date { font-size: 12px; font-weight: 600; color: #1a1a1a; }
+  .week-cell .wk-amt {
+    font-size: 12.5px; font-variant-numeric: tabular-nums; margin-top: 3px; color: #555;
+  }
+  .week-cell .wk-state { font-size: 10.5px; color: #b4b2a9; margin-top: 2px; }
+  .week-cell.is-done {
+    background: #f6faf1; border-color: #c5dba1; cursor: pointer;
+  }
+  .week-cell.is-done:hover { border-color: #97C459; background: #eef7e4; }
+  .week-cell.is-done .wk-amt { color: #27500A; font-weight: 600; }
+  .week-cell.is-done .wk-state { color: #3B6D11; }
+  .week-cell.is-future { opacity: 0.45; }
+  .week-cell.is-missing { border-style: dashed; }
+  .week-cell.is-missing .wk-state { color: #854F0B; }
+  .wk-check {
+    display: inline-block; width: 13px; height: 13px; border-radius: 3px;
+    border: 1.5px solid #c8c6bd; margin-right: 6px; vertical-align: -2px;
+    text-align: center; line-height: 11px; font-size: 9px; color: transparent;
+  }
+  .week-cell.is-done .wk-check {
+    background: #27500A; border-color: #27500A; color: #fff;
+  }
+  .grid-legend {
+    display: flex; gap: 16px; flex-wrap: wrap; font-size: 11.5px;
+    color: #888; margin-bottom: 14px;
+  }
+  .grid-summary {
+    display: flex; gap: 22px; flex-wrap: wrap; padding: 12px 0 14px;
+    border-bottom: 1px solid #f0efe8; margin-bottom: 14px;
+  }
+  .gs-item .gs-label {
+    font-size: 10.5px; font-weight: 500; letter-spacing: 0.06em;
+    text-transform: uppercase; color: #888; margin-bottom: 2px;
+  }
+  .gs-item .gs-val { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  /* Week detail modal */
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.36); z-index: 1500;
+    display: none; align-items: flex-start; justify-content: center;
+    padding: 60px 16px; overflow-y: auto;
+  }
+  .modal-backdrop.is-open { display: flex; }
+  .modal-card {
+    background: #fff; border-radius: 14px; max-width: 560px; width: 100%;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.18); overflow: hidden;
+  }
+  .modal-head {
+    padding: 20px 24px 14px; border-bottom: 1px solid #f0efe8;
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  }
+  .modal-title { font-size: 17px; font-weight: 600; }
+  .modal-subtitle { font-size: 12px; color: #888; margin-top: 3px; }
+  .modal-close {
+    background: transparent; border: 0; font-size: 22px; color: #888;
+    cursor: pointer; line-height: 1; padding: 4px 8px;
+  }
+  .modal-close:hover { color: #1a1a1a; }
+  .modal-body { padding: 18px 24px; }
+  .modal-footer {
+    padding: 14px 24px; border-top: 1px solid #f0efe8; background: #fafaf6;
+    display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  }
+  .file-link {
+    display: inline-flex; align-items: center; gap: 7px;
+    background: #1a1a1a; color: #fff; text-decoration: none;
+    font-size: 12.5px; font-weight: 500; padding: 8px 14px; border-radius: 6px;
+  }
+  .file-link:hover { background: #2c2c2a; }
+  .file-link.is-missing { background: #f1f0eb; color: #888; cursor: not-allowed; }
 
   .pc-toast-host {
     position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
@@ -223,8 +309,8 @@
     <div class="card">
       <div class="card-head">
         <div>
-          <h2 class="card-title">Loaded weeks</h2>
-          <div class="card-sub">Most recent first</div>
+          <h2 class="card-title">2026 payroll weeks</h2>
+          <div class="card-sub">Every week of the year. Click a completed week to open its files.</div>
         </div>
       </div>
       <div class="card-body" id="runsHost">
@@ -235,6 +321,7 @@
   </main>
 
   <div class="pc-toast-host" id="pcToastHost" aria-live="polite" aria-atomic="true"></div>
+  <div class="modal-backdrop" id="modalBackdrop"></div>
 
 <script>
 (function () {
@@ -254,6 +341,37 @@
     'sports at the beach': 'SATB'
   };
 
+  /**
+   * Tokens that appear as a prefix on 7shifts role names, mapped to venue
+   * codes. The prefix is real information — "MANN - Cook" says Mann as
+   * plainly as a column would — so it gets read rather than asked about.
+   *
+   * Aliases matter here: CHASE is DE Chase Field House, AC is ACCC. These
+   * are what the schedulers actually type, not what the venues table calls
+   * them.
+   */
+  var VENUE_ALIASES = {
+    'MANN': 'Mann', 'FMP': 'FMP', 'BWH': 'BWH', 'BOARDWALK': 'BWH',
+    'AC': 'ACCC', 'ACCC': 'ACCC', 'CHASE': 'DE', 'DE': 'DE',
+    'CURE': 'Cure', 'SATB': 'SATB', 'SUBARU': 'Subaru',
+    'MONTAGE': 'Montage', 'MM': 'Montage',
+    'VILLANOVA': 'Villanova', 'NOVA': 'Villanova',
+    'KIRKWOOD': 'Kirkwood', 'PNC': 'PNC'
+  };
+
+  /**
+   * Reads the venue off the front of a role name. Handles hyphen, en-dash,
+   * em-dash or plain space as the separator — the exports use all of them,
+   * sometimes in the same week.
+   */
+  function inferVenueFromRole(roleRaw) {
+    var s = String(roleRaw == null ? '' : roleRaw).trim();
+    if (!s) return null;
+    var first = s.split(/[\s\u2010-\u2015\-]+/)[0];
+    if (!first) return null;
+    return VENUE_ALIASES[first.toUpperCase()] || null;
+  }
+
   var state = {
     pdfFile: null, xlsxFile: null,
     parsed: null,          // combined parse result awaiting confirmation
@@ -261,6 +379,7 @@
     venues: [],
     runs: [],
     pendingMappings: {},   // role_raw -> venue_code chosen in the preview
+    laborChoices: {},      // employee name -> 'overhead' | 'variable'
     submitting: false
   };
 
@@ -296,6 +415,34 @@
   }
   function r2(n) { return Math.round((n || 0) * 100) / 100; }
   function normKey(s) { return String(s == null ? '' : s).trim().toLowerCase(); }
+
+  /**
+   * Splits a payroll name into surname and first name, stripping the things
+   * the two files disagree about:
+   *   - the " - U" minor suffix, which 7shifts carries and payroll doesn't
+   *   - JR / SR / III, which appear on one side only
+   * Without this, "Adkins - U, Dominick" and "Adkins,Dominick" look like
+   * different people and the whole roster reads as unmatched.
+   */
+  function splitName(s) {
+    var t = String(s == null ? '' : s).toLowerCase();
+    var parts = t.split(',');
+    var last = parts[0]
+      .replace(/\s*-\s*[a-z]{1,2}\s*$/, '')
+      .replace(/\s*(jr|sr|ii|iii|iv)\s*$/, '')
+      .replace(/[^a-z]/g, '');
+    var first = (parts.length > 1 ? parts[1] : '').replace(/[^a-z]/g, '');
+    return { last: last, first: first };
+  }
+
+  function nameKeyFull(s) { var n = splitName(s); return n.last + n.first; }
+
+  /**
+   * Surname plus first initial. Catches "Beltrante, Kenneth" against
+   * "Beltrante, Ken" — but deliberately NOT surname alone, because
+   * "Legates, Zachary" and "Legates, Amber" are two different people.
+   */
+  function nameKeyLoose(s) { var n = splitName(s); return n.last + n.first.charAt(0); }
 
   function actorName() {
     try {
@@ -472,22 +619,36 @@
       var deductions = r2(grossTotal - empTax - netPay);
       if (deductions < 0) deductions = 0;
 
-      // Per-employee pass, purely to split fixed from variable labor.
-      // Salaried people show 0.00 hours with a flat amount and no rate;
-      // hourly people always carry a four-decimal rate.
+      // Per-employee pass. Salaried people show 0.00 hours with a flat
+      // amount and no rate; hourly people always carry a four-decimal rate,
+      // which is what separates "Regular 40.00 25.0000 1,000.00" from
+      // "Regular 0.00 1,179.42".
       var employees = [];
       var chunks = flat.split(/Employee:/).slice(1);
       chunks.forEach(function (b) {
         var nm = b.match(/^(.*?)(?:SSN|TIN):/);
         var name = nm ? nm[1] : '(unknown)';
         var body = b.slice(0, 900);
-        var flatM = body.match(/Regular0\.00([\d,]+\.\d{2})/);
         var is1099 = /1099Compensation/.test(body);
+
+        var hourly = 0, hrs = 0;
+        var re = /(?:Regular|Overtime)([\d,]+\.\d{2})([\d,]+\.\d{4})([\d,]+\.\d{2})/g;
+        var m;
+        while ((m = re.exec(body)) !== null) {
+          hrs += num(m[1]);
+          hourly += num(m[3]);
+        }
+
+        var flatM = body.match(/Regular0\.00([\d,]+\.\d{2})(?!\d)/);
+        var isFixed = !!flatM && hourly === 0 && !is1099;
+
         employees.push({
           name: name,
-          isFixed: !!flatM && !is1099,
+          isFixed: isFixed,
           is1099: is1099,
-          flatAmount: flatM ? num(flatM[1]) : 0
+          flatAmount: isFixed ? num(flatM[1]) : 0,
+          hourlyAmount: r2(hourly),
+          hours: r2(hrs)
         });
       });
 
@@ -594,10 +755,37 @@
 
   function resolveVenue(shift) {
     var m = roleMapLookup(shift.role_raw);
-    if (m) return { venue: m.venue_code, labor_type: m.labor_type, mapped: true };
+    if (m) return { venue: m.venue_code, labor_type: m.labor_type, mapped: true, why: 'mapped' };
+    // The role prefix is the strongest unmapped signal — it names the venue
+    // outright. Location is the fallback for roles carrying no prefix.
+    var pre = inferVenueFromRole(shift.role_raw);
+    if (pre) return { venue: pre, labor_type: 'variable', mapped: false, why: 'role prefix' };
     var loc = LOCATION_VENUE[normKey(shift.location_raw)];
-    if (loc) return { venue: loc, labor_type: 'variable', mapped: false };
-    return { venue: null, labor_type: 'variable', mapped: false };
+    if (loc) return { venue: loc, labor_type: 'variable', mapped: false, why: 'location' };
+    return { venue: null, labor_type: 'variable', mapped: false, why: null };
+  }
+
+  /**
+   * Recomputes the labor split from whatever is currently selected in the
+   * review list. Anyone marked "overhead" is pulled out of variable labor;
+   * anyone marked "variable" stays in it, on the assumption their shifts are
+   * in the spreadsheet under a name we failed to match.
+   */
+  function applyLaborChoices(p) {
+    var overheadTotal = 0;
+    var overheadPeople = [];
+    (p.unmatched_people || []).forEach(function (u) {
+      var choice = state.laborChoices[u.name];
+      if (choice === undefined) choice = 'overhead';   // default
+      if (choice !== 'overhead') return;
+      overheadTotal += u.amount;
+      overheadPeople.push(u);
+    });
+    p.overhead_wages = r2(overheadTotal);
+    p.overhead_people = overheadPeople;
+    p.variable_wages = r2(p.run.regular_wages + p.run.overtime_wages -
+                          p.fixed_wages - overheadTotal);
+    return p;
   }
 
   function buildParse(pdf, xlsx) {
@@ -616,9 +804,19 @@
       if (e.isFixed) fixedTotal += e.flatAmount;
     });
     out.fixed_wages = r2(fixedTotal);
-    out.variable_wages = r2(pdf.regular_wages + pdf.overtime_wages - fixedTotal);
 
-    if (!xlsx) { out.recon = { skipped: true }; return out; }
+    if (!xlsx) {
+      out.variable_wages = r2(pdf.regular_wages + pdf.overtime_wages - fixedTotal);
+      out.overhead_wages = 0;
+      out.overhead_people = [];
+      out.recon = { skipped: true };
+      return out;
+    }
+
+    out.overhead_wages = 0;
+    out.overhead_people = [];
+    out.unmatched_people = [];
+    out.variable_wages = r2(pdf.regular_wages + pdf.overtime_wages - fixedTotal);
 
     // Group shifts by venue.
     var byVenue = {};
@@ -628,7 +826,7 @@
       var res = resolveVenue(s);
       if (!res.mapped) {
         if (!unmappedRoles[s.role_raw]) {
-          unmappedRoles[s.role_raw] = { role: s.role_raw, location: s.location_raw, count: 0, pay: 0, suggested: res.venue };
+          unmappedRoles[s.role_raw] = { role: s.role_raw, location: s.location_raw, count: 0, pay: 0, suggested: res.venue, why: res.why };
         }
         unmappedRoles[s.role_raw].count += 1;
         unmappedRoles[s.role_raw].pay += s.pay;
@@ -760,25 +958,41 @@
 
     // Unmapped roles.
     if (p.unmapped.length) {
-      html += '<div class="card"><div class="card-head"><div>' +
-        '<h2 class="card-title">' + p.unmapped.length + ' role' + (p.unmapped.length === 1 ? '' : 's') +
-          ' need a venue</h2>' +
-        '<div class="card-sub">Assign once and it is remembered for every future upload</div>' +
-        '</div></div><div class="card-body">';
+      // Anything with a confident suggestion is pre-selected, so the common
+      // case is "glance, then save" rather than sixteen dropdowns.
+      var suggested = p.unmapped.filter(function (u) { return !!u.suggested; }).length;
       p.unmapped.forEach(function (u) {
+        if (u.suggested && !state.pendingMappings[u.role]) {
+          state.pendingMappings[u.role] = u.suggested;
+        }
+      });
+
+      html += '<div class="card"><div class="card-head"><div>' +
+        '<h2 class="card-title">' + p.unmapped.length + ' new role' + (p.unmapped.length === 1 ? '' : 's') +
+          '</h2>' +
+        '<div class="card-sub">' +
+          (suggested === p.unmapped.length
+            ? 'All read straight off the role name or location \u2014 check and save.'
+            : suggested + ' of ' + p.unmapped.length + ' read automatically. The rest need a venue.') +
+        '</div></div>' +
+        (suggested < p.unmapped.length ? '' :
+          '<span class="recon-pill yes">ready</span>') +
+        '</div><div class="card-body">';
+      p.unmapped.forEach(function (u) {
+        var chosen = state.pendingMappings[u.role] || u.suggested || '';
         var opts = '<option value="">\u2014 pick a venue \u2014</option>' +
           state.venues.map(function (v) {
-            var sel = (state.pendingMappings[u.role] || u.suggested) === v.code ? ' selected' : '';
-            return '<option value="' + esc(v.code) + '"' + sel + '>' + esc(v.code) + '</option>';
+            return '<option value="' + esc(v.code) + '"' +
+              (chosen === v.code ? ' selected' : '') + '>' + esc(v.code) + '</option>';
           }).join('') +
-          '<option value="__exclude__">Exclude from P&amp;L</option>';
+          '<option value="__exclude__"' + (chosen === '__exclude__' ? ' selected' : '') +
+            '>Exclude from P&amp;L</option>';
         html += '<div class="map-row">' +
           '<div><div class="map-role">' + esc(u.role) + '</div>' +
             '<div class="map-meta">' + u.count + ' shift' + (u.count === 1 ? '' : 's') + ' \u00b7 ' +
-              esc(fmtMoney(u.pay)) + ' \u00b7 location ' + esc(u.location || '\u2014') +
-              (u.suggested ? ' \u00b7 suggested ' + esc(u.suggested) : '') + '</div></div>' +
+              esc(fmtMoney(u.pay)) + ' \u00b7 ' + esc(u.location || '\u2014') + '</div></div>' +
           '<select data-role="' + esc(u.role) + '">' + opts + '</select>' +
-          '<div class="map-meta">' + (u.suggested ? 'from location' : 'no signal') + '</div>' +
+          '<div class="map-meta">' + esc(u.why || 'needs a venue') + '</div>' +
         '</div>';
       });
       html += '</div></div>';
@@ -821,6 +1035,13 @@
     host.querySelectorAll('select[data-role]').forEach(function (sel) {
       sel.addEventListener('change', function () {
         state.pendingMappings[sel.getAttribute('data-role')] = sel.value;
+      });
+    });
+    host.querySelectorAll('select[data-person]').forEach(function (sel) {
+      sel.addEventListener('change', function () {
+        state.laborChoices[sel.getAttribute('data-person')] = sel.value;
+        applyLaborChoices(state.parsed);
+        renderPreview();
       });
     });
     var save = document.getElementById('btnSaveRun');
@@ -882,6 +1103,33 @@
         })
       : Promise.resolve();
 
+    // Stash the source files first. If storage fails the week still saves —
+    // the numbers matter more than the attachment, and the run records that
+    // no file was kept rather than pretending one was.
+    var paths = { pdf: null, xlsx: null };
+    var storeErrors = [];
+    step = step.then(function () {
+      var folder = run.pay_period_start;
+      var ops = [];
+      if (state.pdfFile) {
+        ops.push(uploadFile(state.pdfFile, folder + '/detail.pdf')
+          .then(function (path) { paths.pdf = path; })
+          .catch(function (e) {
+            console.warn('[payroll] pdf store failed:', e);
+            storeErrors.push('PDF');
+          }));
+      }
+      if (state.xlsxFile) {
+        ops.push(uploadFile(state.xlsxFile, folder + '/hours.xlsx')
+          .then(function (path) { paths.xlsx = path; })
+          .catch(function (e) {
+            console.warn('[payroll] xlsx store failed:', e);
+            storeErrors.push('spreadsheet');
+          }));
+      }
+      return Promise.all(ops);
+    });
+
     step
       .then(function () {
         return authFetch(SB_REST + 'payroll_runs', {
@@ -902,6 +1150,8 @@
             total_hours:      run.total_hours,
             source_pdf_name:  run.source_name,
             source_xlsx_name: p.xlsx_name,
+            source_pdf_path:  paths.pdf,
+            source_xlsx_path: paths.xlsx,
             reconciled:       !!(p.recon && !p.recon.skipped &&
                                  Math.abs(p.recon.pay_delta) < 0.02),
             uploaded_by:      actorName()
@@ -919,6 +1169,17 @@
           lines.push({
             payroll_run_id: runId, venue_code: '__company__', labor_type: 'fixed',
             regular_pay: p.fixed_wages, ot_pay: 0, regular_hours: 0, ot_hours: 0,
+            tips: 0, employer_tax_alloc: 0
+          });
+        }
+        // Overhead: hourly, supports every venue, allocated to none.
+        if (p.overhead_wages > 0.005) {
+          var ohHours = (p.overhead_people || []).reduce(function (t, o) {
+            return t + Number(o.hours || 0); }, 0);
+          lines.push({
+            payroll_run_id: runId, venue_code: '__company__', labor_type: 'overhead',
+            regular_pay: p.overhead_wages, ot_pay: 0,
+            regular_hours: r2(ohHours), ot_hours: 0,
             tips: 0, employer_tax_alloc: 0
           });
         }
@@ -979,10 +1240,17 @@
         state.parsed = null;
         state.pdfFile = null; state.xlsxFile = null;
         state.pendingMappings = {};
+      state.laborChoices = {};
+        state.laborChoices = {};
         resetFileSlots();
         renderPreview();
         return loadRuns().then(function () {
-          showToast('Week saved \u00b7 ' + fmtDate(run.pay_period_start), 2600);
+          if (storeErrors.length) {
+            showToast('Saved, but the ' + storeErrors.join(' and ') +
+              ' could not be stored \u2014 check the console', 5000);
+          } else {
+            showToast('Week saved \u00b7 ' + fmtDate(run.pay_period_start), 2600);
+          }
         });
       })
       .catch(function (e) {
@@ -1001,10 +1269,25 @@
   // =====================================================================
   // RUNS LIST
   // =====================================================================
+  /** Upload into the private payroll-files bucket. Returns the object path. */
+  function uploadFile(file, path) {
+    var hdrs = Object.assign({}, pcAuth.headers(), {
+      'Content-Type': file.type || 'application/octet-stream',
+      'x-upsert': 'true'
+    });
+    return fetch(SB_URL + '/storage/v1/object/payroll-files/' + path, {
+      method: 'POST', headers: hdrs, body: file
+    }).then(function (r) {
+      if (!r.ok) return r.text().then(function (t) { throw new Error(t || ('HTTP ' + r.status)); });
+      return path;
+    });
+  }
+
   function loadRuns() {
     return authFetch(
       SB_REST + 'payroll_runs?select=id,pay_period_start,pay_period_end,check_date,' +
-      'gross_total,employer_taxes,tips_paid,reconciled,source_xlsx_name' +
+      'regular_wages,overtime_wages,gross_total,employer_taxes,tips_paid,comp_1099,' +
+      'reconciled,source_xlsx_name,source_pdf_name,source_pdf_path,source_xlsx_path,uploaded_by' +
       '&deleted_at=is.null&order=pay_period_start.desc&limit=200',
       { headers: pcAuth.headers() }
     ).then(function (rows) {
@@ -1018,37 +1301,287 @@
     });
   }
 
+  /**
+   * Every pay period of 2026. The payroll week runs Monday–Sunday and the
+   * first 2026 period starts Jan 5 — the week ending Jan 4 belongs to 2025
+   * and is deliberately excluded, matching where revenue is recognised.
+   */
+  function payrollWeeks() {
+    var weeks = [];
+    var d = new Date(2026, 0, 5);        // Mon Jan 5 2026
+    while (d.getFullYear() === 2026) {
+      var start = new Date(d);
+      var end = new Date(d); end.setDate(end.getDate() + 6);
+      weeks.push({ start: isoOf(start), end: isoOf(end), month: start.getMonth() });
+      d.setDate(d.getDate() + 7);
+    }
+    return weeks;
+  }
+  function isoOf(d) {
+    function p2(x) { x = String(x); return x.length < 2 ? '0' + x : x; }
+    return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate());
+  }
+  function todayIso() { return isoOf(new Date()); }
+
+  var MONTH_NAMES = ['January','February','March','April','May','June',
+                     'July','August','September','October','November','December'];
+
   function renderRuns() {
     var host = document.getElementById('runsHost');
     if (!host) return;
-    if (!state.runs.length) {
-      host.innerHTML = '<div class="empty">No weeks loaded yet.</div>';
-      return;
-    }
-    var total = state.runs.reduce(function (t, r) {
-      return t + Number(r.gross_total || 0) + Number(r.employer_taxes || 0);
-    }, 0);
 
-    host.innerHTML = state.runs.map(function (r) {
-      return '<div class="run-row">' +
-        '<div><div class="run-period">' + esc(fmtDate(r.pay_period_start)) + ' \u2013 ' +
-          esc(fmtDate(r.pay_period_end)) + '</div>' +
-          '<div class="run-meta">check ' + esc(fmtDate(r.check_date)) +
-            (r.source_xlsx_name ? ' \u00b7 venue split' : ' \u00b7 company-wide only') + '</div></div>' +
-        '<div class="run-amt">' + esc(fmtMoney(Number(r.gross_total || 0))) + '</div>' +
-        '<div class="run-amt">' + esc(fmtMoney(Number(r.employer_taxes || 0))) + '</div>' +
-        '<div><span class="recon-pill ' + (r.reconciled ? 'yes' : 'no') + '">' +
-          (r.reconciled ? 'reconciled' : 'check') + '</span>' +
-          '<button type="button" class="link-quiet" data-del="' + esc(r.id) + '">Remove</button></div>' +
+    var byStart = {};
+    state.runs.forEach(function (r) { byStart[r.pay_period_start] = r; });
+
+    var weeks = payrollWeeks();
+    var today = todayIso();
+
+    var loaded = 0, due = 0, totalCost = 0;
+    weeks.forEach(function (w) {
+      var run = byStart[w.start];
+      if (run) {
+        loaded++;
+        totalCost += Number(run.gross_total || 0) + Number(run.employer_taxes || 0);
+      } else if (w.end < today) { due++; }
+    });
+
+    var html = '<div class="grid-summary">' +
+      '<div class="gs-item"><div class="gs-label">Weeks loaded</div><div class="gs-val">' +
+        loaded + ' <span style="font-size:13px;color:#888;font-weight:500;">of ' +
+        (loaded + due) + ' due</span></div></div>' +
+      '<div class="gs-item"><div class="gs-label">Total labor cost</div><div class="gs-val">' +
+        esc(fmtMoney(totalCost)) + '</div></div>' +
+      (due > 0
+        ? '<div class="gs-item"><div class="gs-label">Still to upload</div><div class="gs-val" style="color:#854F0B;">' +
+          due + '</div></div>'
+        : '') +
       '</div>';
-    }).join('') +
-    '<div class="run-row" style="border-bottom:0;"><div><strong>' + state.runs.length +
-      ' week' + (state.runs.length === 1 ? '' : 's') + '</strong></div>' +
-      '<div class="run-amt"><strong>' + esc(fmtMoney(total)) + '</strong></div>' +
-      '<div class="run-meta">total labor cost</div><div></div></div>';
 
-    host.querySelectorAll('[data-del]').forEach(function (b) {
-      b.addEventListener('click', function () { removeRun(b.getAttribute('data-del')); });
+    html += '<div class="grid-legend">' +
+      '<span><span class="wk-check" style="background:#27500A;border-color:#27500A;color:#fff;">\u2713</span>Uploaded \u2014 click to open</span>' +
+      '<span><span class="wk-check" style="border-style:dashed;"></span>Not yet uploaded</span>' +
+      '</div>';
+
+    var lastMonth = -1;
+    weeks.forEach(function (w, i) {
+      if (w.month !== lastMonth) {
+        if (lastMonth !== -1) html += '</div></div>';
+        html += '<div class="month-block"><div class="month-label">' +
+          esc(MONTH_NAMES[w.month]) + '</div><div class="week-grid">';
+        lastMonth = w.month;
+      }
+      var run = byStart[w.start];
+      var future = w.end >= today && !run;
+      var cls = 'week-cell' + (run ? ' is-done' : (future ? ' is-future' : ' is-missing'));
+      var cost = run ? (Number(run.gross_total || 0) + Number(run.employer_taxes || 0)) : 0;
+
+      html += '<' + (run ? 'button type="button"' : 'div') + ' class="' + cls + '"' +
+        (run ? ' data-run="' + esc(run.id) + '"' : '') + '>' +
+        '<div class="wk-date"><span class="wk-check">\u2713</span>' +
+          esc(shortRange(w.start, w.end)) + '</div>' +
+        '<div class="wk-amt">' + (run ? esc(fmtMoney(cost)) : '\u2014') + '</div>' +
+        '<div class="wk-state">' +
+          (run
+            ? (run.source_xlsx_path || run.source_xlsx_name ? 'venue split' : 'company-wide')
+            : (future ? 'upcoming' : 'missing')) +
+        '</div>' +
+        '</' + (run ? 'button' : 'div') + '>';
+      void i;
+    });
+    if (lastMonth !== -1) html += '</div></div>';
+
+    host.innerHTML = html;
+
+    host.querySelectorAll('[data-run]').forEach(function (b) {
+      b.addEventListener('click', function () { openRunModal(b.getAttribute('data-run')); });
+    });
+  }
+
+  function shortRange(s, e) {
+    function md(iso) {
+      var p = iso.split('-');
+      return parseInt(p[1], 10) + '/' + parseInt(p[2], 10);
+    }
+    return md(s) + ' \u2013 ' + md(e);
+  }
+
+  // ---------------------------------------------------------------------
+  // WEEK DETAIL — figures plus signed links to the stored source files
+  // ---------------------------------------------------------------------
+  function openRunModal(id) {
+    var run = null;
+    for (var i = 0; i < state.runs.length; i++) if (state.runs[i].id === id) run = state.runs[i];
+    if (!run) return;
+    var bd = document.getElementById('modalBackdrop');
+    if (!bd) return;
+
+    var cost = Number(run.gross_total || 0) + Number(run.employer_taxes || 0);
+
+    bd.innerHTML =
+      '<div class="modal-card" role="dialog">' +
+        '<div class="modal-head">' +
+          '<div><div class="modal-title">' + esc(fmtDate(run.pay_period_start)) + ' \u2013 ' +
+            esc(fmtDate(run.pay_period_end)) + '</div>' +
+            '<div class="modal-subtitle">Check date ' + esc(fmtDate(run.check_date)) +
+              ' \u00b7 uploaded by ' + esc(run.uploaded_by || 'unknown') + '</div></div>' +
+          '<button type="button" class="modal-close" data-act="close">\u00d7</button>' +
+        '</div>' +
+        '<div class="modal-body">' +
+          '<table class="sum-table"><tbody>' +
+            row('Wages & overtime', r2(Number(run.regular_wages || 0) + Number(run.overtime_wages || 0)), '') +
+            row('Tips paid out', Number(run.tips_paid || 0), 'pass-through') +
+            row('Contract labor (1099)', Number(run.comp_1099 || 0), '') +
+            rowTotal('Gross payroll', Number(run.gross_total || 0)) +
+            row('Employer payroll taxes', Number(run.employer_taxes || 0), '') +
+            rowTotal('Total labor cost', cost) +
+          '</tbody></table>' +
+          '<div id="runVenueHost" style="margin-top:18px;">' +
+            '<div class="loading" style="padding:14px;">Loading the venue split\u2026</div></div>' +
+          '<div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;">' +
+            fileLinkHtml(run.source_pdf_path, run.source_pdf_name, 'Payroll Detail PDF') +
+            fileLinkHtml(run.source_xlsx_path, run.source_xlsx_name, 'Hours &amp; Wages xlsx') +
+          '</div>' +
+        '</div>' +
+        '<div class="modal-footer">' +
+          '<button type="button" class="link-quiet" data-act="remove" data-id="' + esc(run.id) + '">Remove this week</button>' +
+          '<button type="button" class="btn-secondary" data-act="close">Close</button>' +
+        '</div>' +
+      '</div>';
+
+    bd.classList.add('is-open');
+
+    loadRunVenueLines(run.id);
+
+    bd.querySelectorAll('[data-file]').forEach(function (a) {
+      a.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        openStoredFile(a.getAttribute('data-file'));
+      });
+    });
+  }
+
+  /**
+   * Reads back what was actually written, rather than recomputing it. If a
+   * role was assigned during upload, this is where you confirm the money
+   * went where you sent it — and where anything left unresolved shows up.
+   */
+  function loadRunVenueLines(runId) {
+    authFetch(
+      SB_REST + 'payroll_run_venue_lines?select=venue_code,labor_type,regular_hours,ot_hours,' +
+      'regular_pay,ot_pay,tips,employer_tax_alloc' +
+      '&payroll_run_id=eq.' + encodeURIComponent(runId) +
+      '&order=regular_pay.desc&limit=100',
+      { headers: pcAuth.headers() }
+    ).then(function (lines) {
+      var host = document.getElementById('runVenueHost');
+      if (!host) return;
+      if (!lines || !lines.length) {
+        host.innerHTML = '<div class="map-meta">No venue split \u2014 this week was loaded ' +
+          'from the payroll report alone.</div>';
+        return;
+      }
+
+      var unresolved = lines.filter(function (l) { return l.venue_code === '__unresolved__'; });
+
+      var html = '<div class="month-label">Where it landed</div>';
+      if (unresolved.length) {
+        html += '<div class="warn-strip" style="margin-bottom:10px;">' +
+          esc(fmtMoney(unresolved.reduce(function (t, l) {
+            return t + Number(l.regular_pay || 0) + Number(l.ot_pay || 0); }, 0))) +
+          ' could not be matched to a venue. Remove and re-upload this week to assign it.</div>';
+      }
+
+      html += '<table class="v-table"><thead><tr><th>Venue</th><th class="r">Hours</th>' +
+        '<th class="r">Wages</th><th class="r">Tips</th><th class="r">Empl. tax</th>' +
+        '</tr></thead><tbody>';
+      var tH = 0, tW = 0, tT = 0, tE = 0;
+      lines.forEach(function (l) {
+        var h = Number(l.regular_hours || 0) + Number(l.ot_hours || 0);
+        var w = Number(l.regular_pay || 0) + Number(l.ot_pay || 0);
+        tH += h; tW += w; tT += Number(l.tips || 0); tE += Number(l.employer_tax_alloc || 0);
+        var label = l.venue_code === '__company__' ? 'Company'
+                  : l.venue_code === '__unresolved__' ? 'Unresolved'
+                  : l.venue_code;
+        html += '<tr><td class="name">' + esc(label) +
+          '<span class="lt-pill ' + esc(l.labor_type || 'variable') + '">' +
+            esc(l.labor_type || 'variable') + '</span></td>' +
+          '<td class="r">' + fmtHours(h) + '</td>' +
+          '<td class="r">' + esc(fmtMoney(w)) + '</td>' +
+          '<td class="r">' + esc(fmtMoney(Number(l.tips || 0))) + '</td>' +
+          '<td class="r">' + esc(fmtMoney(Number(l.employer_tax_alloc || 0))) + '</td></tr>';
+      });
+      html += '<tr class="total"><td>Total</td><td class="r">' + fmtHours(tH) + '</td>' +
+        '<td class="r">' + esc(fmtMoney(tW)) + '</td>' +
+        '<td class="r">' + esc(fmtMoney(tT)) + '</td>' +
+        '<td class="r">' + esc(fmtMoney(tE)) + '</td></tr></tbody></table>';
+
+      host.innerHTML = html;
+    }).catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      console.error('[payroll] venue lines load failed:', e);
+      var host = document.getElementById('runVenueHost');
+      if (host) host.innerHTML = '<div class="map-meta">Could not load the venue split.</div>';
+    });
+  }
+
+  function fileLinkHtml(path, name, label) {
+    if (!path) {
+      return '<span class="file-link is-missing" title="Not stored \u2014 uploaded before file keeping was added">' +
+        label + ' \u00b7 not stored</span>';
+    }
+    return '<a class="file-link" href="#" data-file="' + esc(path) + '" title="' +
+      esc(name || '') + '">' + label + '</a>';
+  }
+
+  /**
+   * The bucket is private, so a short-lived signed URL is minted on demand
+   * rather than storing a public link anywhere. Payroll files carry names,
+   * wages and partial account numbers — they should never be reachable by
+   * URL alone.
+   */
+  function openStoredFile(path) {
+    authFetch(SB_URL + '/storage/v1/object/sign/payroll-files/' + path, {
+      method: 'POST',
+      headers: Object.assign({}, pcAuth.headers(), { 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ expiresIn: 300 })
+    })
+    .then(function (res) {
+      var signed = res && res.signedURL;
+      if (!signed) throw new Error('No signed URL returned');
+      window.open(SB_URL + '/storage/v1' + signed, '_blank');
+    })
+    .catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      console.error('[payroll] signed url failed:', e);
+      showToast('Could not open the file', 3000);
+    });
+  }
+
+  function closeModal() {
+    var bd = document.getElementById('modalBackdrop');
+    if (!bd) return;
+    bd.classList.remove('is-open');
+    bd.innerHTML = '';
+  }
+
+  function wireModal() {
+    var bd = document.getElementById('modalBackdrop');
+    if (!bd) return;
+    bd.addEventListener('click', function (ev) {
+      var t = ev.target;
+      if (t === bd) { closeModal(); return; }
+      if (!t || !t.closest) return;
+      var act = t.closest('[data-act]');
+      if (!act) return;
+      if (act.getAttribute('data-act') === 'close') closeModal();
+      else if (act.getAttribute('data-act') === 'remove') {
+        var id = act.getAttribute('data-id');
+        closeModal();
+        removeRun(id);
+      }
+    });
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape') closeModal();
     });
   }
 
@@ -1153,6 +1686,7 @@
     if (reset) reset.addEventListener('click', function () {
       state.pdfFile = null; state.xlsxFile = null; state.parsed = null;
       state.pendingMappings = {};
+      state.laborChoices = {};
       resetFileSlots();
       renderPreview();
     });
@@ -1175,6 +1709,8 @@
       .then(function (res) {
         state.parsed = buildParse(res.pdf, res.xlsx);
         state.pendingMappings = {};
+      state.laborChoices = {};
+        state.laborChoices = {};
         renderPreview();
         if (note) note.textContent = '';
         window.scrollTo({ top: 300, behavior: 'smooth' });
@@ -1206,6 +1742,7 @@
     }
 
     wireFiles();
+    wireModal();
     Promise.all([loadRoleMap(), loadVenues()])
       .then(loadRuns)
       .catch(function (e) {
