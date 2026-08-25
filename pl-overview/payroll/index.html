@@ -1,0 +1,1231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Payroll Upload — Admin · Popcorn Chez</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap">
+
+<script src="/pc-auth.js"></script>
+<script src="/pc-nav.js"></script>
+<script src="/pc-activity.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; background: #faf9f6; color: #1a1a1a;
+    font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased;
+  }
+  .page-title-row {
+    background: #faf9f6; border-bottom: 1px solid #e8e8e4; padding: 18px 22px 16px;
+    display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  }
+  .page-title { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; margin: 0; }
+  .page-title-meta { font-size: 12px; color: #888; font-weight: 500; }
+  .page-title-meta a { color: #0C447C; text-decoration: none; }
+  .page-title-meta a:hover { text-decoration: underline; }
+  .page-body { max-width: 1000px; margin: 0 auto; padding: 18px 22px 80px; }
+
+  .card {
+    background: #fff; border: 0.5px solid #e0dfd8; border-radius: 10px;
+    margin-bottom: 16px; overflow: hidden;
+  }
+  .card-head {
+    padding: 14px 18px; border-bottom: 1px solid #f0efe8;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  }
+  .card-title { font-size: 13px; font-weight: 600; margin: 0; }
+  .card-sub { font-size: 12px; color: #888; margin-top: 2px; }
+  .card-body { padding: 16px 18px; }
+
+  /* File pickers */
+  .file-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 700px) { .file-row { grid-template-columns: 1fr; } }
+  .file-slot {
+    border: 1.5px dashed #d8d8d4; border-radius: 10px; padding: 18px 16px;
+    text-align: center; cursor: pointer; transition: border-color 0.12s, background 0.12s;
+  }
+  .file-slot:hover { border-color: #b4b2a9; background: #fafaf6; }
+  .file-slot.is-loaded { border-style: solid; border-color: #97C459; background: #f6faf1; }
+  .file-slot .fs-label { font-size: 13px; font-weight: 600; margin-bottom: 3px; }
+  .file-slot .fs-hint { font-size: 11.5px; color: #888; line-height: 1.45; }
+  .file-slot .fs-name { font-size: 12px; color: #27500A; font-weight: 500; margin-top: 6px; word-break: break-all; }
+  .file-slot input[type="file"] { display: none; }
+  .req-pill {
+    display: inline-block; font-size: 9.5px; font-weight: 600; letter-spacing: 0.04em;
+    text-transform: uppercase; padding: 1px 6px; border-radius: 3px; margin-left: 6px;
+    background: #fceaea; color: #791F1F; vertical-align: middle;
+  }
+  .opt-pill { background: #f1f0eb; color: #666; }
+
+  .actions { display: flex; gap: 10px; align-items: center; margin-top: 16px; flex-wrap: wrap; }
+  .btn-primary {
+    background: #1a1a1a; color: #fff; border: 0; font-family: inherit;
+    font-size: 13px; font-weight: 500; padding: 10px 18px; border-radius: 6px; cursor: pointer;
+  }
+  .btn-primary:hover { background: #2c2c2a; }
+  .btn-primary:disabled { background: #b4b2a9; cursor: not-allowed; }
+  .btn-secondary {
+    background: transparent; border: 1px solid #e0dfd8; color: #555; font-family: inherit;
+    font-size: 13px; font-weight: 500; padding: 9px 16px; border-radius: 6px; cursor: pointer;
+  }
+  .btn-secondary:hover { background: #f1f0eb; color: #1a1a1a; }
+
+  /* Parse status */
+  .parse-note { font-size: 12px; color: #888; margin-top: 10px; }
+  .err-strip {
+    background: #fceaea; border: 1px solid #f0c0c0; border-radius: 8px;
+    padding: 11px 14px; margin-top: 12px; font-size: 12.5px; color: #791F1F; line-height: 1.5;
+  }
+  .err-strip[hidden] { display: none; }
+  .warn-strip {
+    background: #fef6ec; border: 1px solid #f3d9a8; border-radius: 8px;
+    padding: 11px 14px; margin-bottom: 14px; font-size: 12.5px; color: #633806; line-height: 1.5;
+  }
+  .ok-strip {
+    background: #eaf3de; border: 1px solid #c5dba1; border-radius: 8px;
+    padding: 11px 14px; margin-bottom: 14px; font-size: 12.5px; color: #27500A; line-height: 1.5;
+  }
+
+  /* Summary table */
+  .sum-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .sum-table td { padding: 8px 4px; border-bottom: 1px solid #f6f5f0; }
+  .sum-table td.amt {
+    text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; width: 130px;
+  }
+  .sum-table td.note { color: #888; font-size: 11.5px; width: 190px; }
+  .sum-table tr.total td {
+    border-top: 1px solid #d8d6ce; border-bottom: 0; font-weight: 700; padding-top: 11px;
+  }
+  .sum-table tr.sub td { color: #888; font-size: 12px; }
+
+  /* Venue table */
+  .v-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .v-table th {
+    text-align: left; padding: 8px 10px; font-weight: 500; color: #666;
+    font-size: 10.5px; letter-spacing: 0.04em; text-transform: uppercase;
+    border-bottom: 1px solid #e0dfd8; white-space: nowrap;
+  }
+  .v-table th.r, .v-table td.r { text-align: right; }
+  .v-table td { padding: 8px 10px; border-bottom: 1px solid #f6f5f0; font-variant-numeric: tabular-nums; }
+  .v-table td.name { font-weight: 500; font-variant-numeric: normal; }
+  .v-table tr.total td { border-top: 1px solid #d8d6ce; font-weight: 700; }
+  .lt-pill {
+    display: inline-block; font-size: 9.5px; font-weight: 600; padding: 1px 6px;
+    border-radius: 3px; margin-left: 6px; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .lt-pill.variable { background: #e6f1fb; color: #0C447C; }
+  .lt-pill.fixed    { background: #f0e6f8; color: #5B2D7E; }
+
+  /* Unmapped roles */
+  .map-row {
+    display: grid; grid-template-columns: 1fr 170px 130px; gap: 10px;
+    align-items: center; padding: 9px 0; border-bottom: 1px solid #f6f5f0;
+  }
+  .map-row:last-child { border-bottom: 0; }
+  .map-role { font-weight: 500; font-size: 13px; }
+  .map-meta { font-size: 11.5px; color: #888; }
+  .map-row select {
+    font-family: inherit; font-size: 12.5px; padding: 6px 8px;
+    border: 1px solid #e0dfd8; border-radius: 5px; background: #fff; color: #1a1a1a; width: 100%;
+  }
+  .map-row select:focus { outline: none; border-color: #1a1a1a; }
+
+  /* Runs list */
+  .run-row {
+    display: grid; grid-template-columns: 1fr 120px 120px auto;
+    gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid #f6f5f0; font-size: 13px;
+  }
+  .run-row:last-child { border-bottom: 0; }
+  .run-period { font-weight: 500; }
+  .run-meta { font-size: 11.5px; color: #888; }
+  .run-amt { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .recon-pill {
+    display: inline-block; font-size: 9.5px; font-weight: 600; padding: 1px 7px;
+    border-radius: 3px; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .recon-pill.yes { background: #eaf3de; color: #27500A; }
+  .recon-pill.no  { background: #fef6ec; color: #854F0B; }
+  .link-quiet {
+    background: transparent; border: 0; color: #999; cursor: pointer;
+    font-family: inherit; font-size: 11.5px; padding: 4px 6px; border-radius: 4px;
+  }
+  .link-quiet:hover { color: #791F1F; background: #fceaea; }
+
+  .empty { padding: 26px 12px; text-align: center; color: #888; font-size: 13px; }
+  .loading { padding: 26px 12px; text-align: center; color: #aaa; font-size: 13px; }
+
+  .pc-toast-host {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    z-index: 2000; pointer-events: none;
+  }
+  .pc-toast {
+    background: #1a1a1a; color: #fff; font-size: 13px; font-weight: 500;
+    padding: 11px 18px; border-radius: 24px; box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+    opacity: 0; transform: translateY(8px); transition: opacity 0.18s ease, transform 0.18s ease;
+  }
+  .pc-toast.is-shown { opacity: 1; transform: translateY(0); }
+
+  .access-denied { max-width: 520px; margin: 60px auto; text-align: center; color: #555; }
+  .access-denied h2 { font-size: 18px; color: #1a1a1a; }
+  body.pre-auth .page-body, body.pre-auth .page-title-row { display: none; }
+</style>
+</head>
+
+<body class="pre-auth">
+
+  <div class="page-title-row" aria-hidden="true">
+    <h1 class="page-title">Payroll upload</h1>
+    <span class="page-title-meta"><a href="/pl-overview/">&larr; P&amp;L overview</a></span>
+  </div>
+
+  <main class="page-body" id="pageBody">
+
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <h2 class="card-title">Upload a week</h2>
+          <div class="card-sub">Payroll Detail carries the money. Hours &amp; Wages carries the venue.</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="file-row">
+          <label class="file-slot" id="slotPdf">
+            <div class="fs-label">Payroll Detail PDF <span class="req-pill">required</span></div>
+            <div class="fs-hint">From the payroll company, after the run. Gross, taxes, employer burden, net.</div>
+            <div class="fs-name" id="pdfName"></div>
+            <input type="file" id="pdfInput" accept="application/pdf">
+          </label>
+          <label class="file-slot" id="slotXlsx">
+            <div class="fs-label">Hours &amp; Wages xlsx <span class="req-pill opt-pill">optional</span></div>
+            <div class="fs-hint">The 7shifts export you send off. Adds the per-venue split. Skip it and the week still loads company-wide.</div>
+            <div class="fs-name" id="xlsxName"></div>
+            <input type="file" id="xlsxInput" accept=".xlsx,.xls">
+          </label>
+        </div>
+        <div class="actions">
+          <button type="button" class="btn-primary" id="btnParse" disabled>Read files</button>
+          <button type="button" class="btn-secondary" id="btnReset">Clear</button>
+          <span class="parse-note" id="parseNote"></span>
+        </div>
+        <div class="err-strip" id="errStrip" hidden></div>
+      </div>
+    </div>
+
+    <div id="previewHost"></div>
+
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <h2 class="card-title">Loaded weeks</h2>
+          <div class="card-sub">Most recent first</div>
+        </div>
+      </div>
+      <div class="card-body" id="runsHost">
+        <div class="loading">Loading&hellip;</div>
+      </div>
+    </div>
+
+  </main>
+
+  <div class="pc-toast-host" id="pcToastHost" aria-live="polite" aria-atomic="true"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var SB_URL  = 'https://aoazlttdjowhlfcksoyl.supabase.co';
+  var SB_REST = SB_URL + '/rest/v1/';
+
+  if (typeof pdfjsLib !== 'undefined') {
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+
+  // Location names that identify a venue on their own. Used only when a role
+  // has no mapping — an explicit role mapping always wins.
+  var LOCATION_VENUE = {
+    'sports at the beach': 'SATB'
+  };
+
+  var state = {
+    pdfFile: null, xlsxFile: null,
+    parsed: null,          // combined parse result awaiting confirmation
+    roleMap: [],           // payroll_role_venue_map rows
+    venues: [],
+    runs: [],
+    pendingMappings: {},   // role_raw -> venue_code chosen in the preview
+    submitting: false
+  };
+
+  // =====================================================================
+  // UTILITIES
+  // =====================================================================
+  function esc(s) {
+    if (s == null) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
+  function fmtMoney(n) {
+    if (n == null || isNaN(n)) n = 0;
+    var abs = Math.abs(n);
+    var s = '$' + abs.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return n < 0 ? '(' + s + ')' : s;
+  }
+  function fmtHours(n) {
+    if (n == null || isNaN(n)) n = 0;
+    return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    var p = String(iso).split('-');
+    if (p.length < 3) return iso;
+    var m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return m[parseInt(p[1],10)-1] + ' ' + parseInt(p[2],10) + ', ' + p[0];
+  }
+  function num(s) {
+    if (s == null) return NaN;
+    var n = parseFloat(String(s).replace(/[$,\s]/g, ''));
+    return isFinite(n) ? n : NaN;
+  }
+  function r2(n) { return Math.round((n || 0) * 100) / 100; }
+  function normKey(s) { return String(s == null ? '' : s).trim().toLowerCase(); }
+
+  function actorName() {
+    try {
+      if (typeof pcAuth !== 'undefined' && pcAuth.getUser) {
+        var u = pcAuth.getUser();
+        return (u && u.display_name) || (u && u.email) || 'unknown';
+      }
+    } catch (e) {}
+    return 'unknown';
+  }
+
+  function showToast(msg, ms) {
+    ms = ms || 2400;
+    var host = document.getElementById('pcToastHost');
+    if (!host) return;
+    var el = document.createElement('div');
+    el.className = 'pc-toast'; el.textContent = msg;
+    host.appendChild(el);
+    requestAnimationFrame(function () { el.classList.add('is-shown'); });
+    setTimeout(function () {
+      el.classList.remove('is-shown');
+      setTimeout(function () { el.remove(); }, 260);
+    }, ms);
+  }
+
+  function handleAuthFailure() {
+    try {
+      localStorage.removeItem('sb_access_token');
+      localStorage.removeItem('sb_refresh_token');
+    } catch (e) {}
+    showToast('Session expired. Reloading…', 1800);
+    setTimeout(function () { window.location.reload(); }, 1800);
+  }
+
+  function authFetch(url, options) {
+    return fetch(url, options).then(function (r) {
+      if (!r.ok) {
+        return r.text().then(function (t) {
+          if (r.status === 401 || (t && t.indexOf('JWT expired') !== -1)) {
+            var ae = new Error('JWT expired'); ae.authFailed = true; throw ae;
+          }
+          throw new Error(t || ('HTTP ' + r.status));
+        });
+      }
+      return r.text().then(function (t) {
+        if (!t) return [];
+        try { return JSON.parse(t); } catch (e) { return []; }
+      });
+    });
+  }
+
+  function showError(msg) {
+    var el = document.getElementById('errStrip');
+    if (!el) return;
+    if (!msg) { el.hidden = true; el.innerHTML = ''; return; }
+    el.hidden = false;
+    el.innerHTML = msg;
+  }
+
+  // =====================================================================
+  // PDF PARSER
+  //
+  // The report is machine-generated by the payroll provider and its layout
+  // is stable, so labelled-number extraction is reliable. Every value is
+  // still shown in the preview before anything is written — if a pattern
+  // ever stops matching, the number goes missing loudly rather than being
+  // guessed at.
+  // =====================================================================
+
+  function readPdfText(file) {
+    return file.arrayBuffer().then(function (buf) {
+      return pdfjsLib.getDocument({ data: buf }).promise;
+    }).then(function (pdf) {
+      var pages = [];
+      var chain = Promise.resolve();
+      for (var i = 1; i <= pdf.numPages; i++) {
+        (function (pageNum) {
+          chain = chain.then(function () {
+            return pdf.getPage(pageNum).then(function (page) {
+              return page.getTextContent().then(function (tc) {
+                // Sort by line (y descending) then x, so multi-column rows
+                // read left-to-right the way a human sees them.
+                var items = tc.items.map(function (it) {
+                  return { s: it.str, x: it.transform[4], y: it.transform[5] };
+                });
+                items.sort(function (a, b) {
+                  var dy = b.y - a.y;
+                  if (Math.abs(dy) > 3) return dy;
+                  return a.x - b.x;
+                });
+                var out = '', lastY = null;
+                items.forEach(function (it) {
+                  if (lastY !== null && Math.abs(lastY - it.y) > 3) out += '\n';
+                  else if (out) out += ' ';
+                  out += it.s;
+                  lastY = it.y;
+                });
+                pages.push(out);
+              });
+            });
+          });
+        })(i);
+      }
+      return chain.then(function () { return pages; });
+    });
+  }
+
+  function toIso(mdy) {
+    var m = String(mdy).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (!m) return null;
+    function p2(x) { x = String(x); return x.length < 2 ? '0' + x : x; }
+    return m[3] + '-' + p2(m[1]) + '-' + p2(m[2]);
+  }
+
+  /**
+   * Every pattern below runs against text with ALL whitespace stripped.
+   * Different PDF text extractors space this report differently — some
+   * produce "Pay Period: 01/05/2026", others "PayPeriod:01/05/2026" — and
+   * matching on a whitespace-free string is immune to that. Verified
+   * against January and August reports, whose layouts already differ.
+   */
+  function parsePdf(file) {
+    return readPdfText(file).then(function (pages) {
+      var flat = pages.join('').replace(/\s+/g, '');
+
+      var periodM = flat.match(/PayPeriod:(\d{1,2}\/\d{1,2}\/\d{4})to:?(\d{1,2}\/\d{1,2}\/\d{4})/i);
+      if (!periodM) {
+        throw new Error('Could not find a pay period. Is this the Payroll Detail report?');
+      }
+      var checkM = flat.match(/Checkdate:(\d{1,2}\/\d{1,2}\/\d{4})/i);
+
+      var idx = flat.lastIndexOf('CompanyTotals');
+      var block = idx === -1 ? flat : flat.slice(idx);
+
+      var regM  = block.match(/Regular([\d,]+\.\d{2})\$([\d,]+\.\d{2})/);
+      if (!regM) throw new Error('Could not read the Company Totals block.');
+      var otM   = block.match(/Overtime([\d,]+\.\d{2})\$([\d,]+\.\d{2})/);
+      var tipsM = block.match(/Creditcardtips[\d,]+\.\d{2}\$([\d,]+\.\d{2})/);
+      var c99M  = block.match(/1099[\d,]+\.\d{2}\$([\d,]+\.\d{2})/);
+
+      var regularHours = num(regM[1]), regularWages = num(regM[2]);
+      var otHours = otM ? num(otM[1]) : 0, otWages = otM ? num(otM[2]) : 0;
+      var tips     = tipsM ? num(tipsM[1]) : 0;
+      var comp1099 = c99M ? num(c99M[1]) : 0;
+
+      // Gross is derived, not scraped. The printed total sits in a column
+      // that reads inconsistently, while the parts are unambiguous — and
+      // they footed exactly on all three test files.
+      var grossTotal = r2(regularWages + otWages + tips + comp1099);
+
+      // Employer burden, summed from its parts so the detail is retained.
+      var erKeys = ['FEDSOCSEC-ER','FEDMEDCARE-ER','FEDFUTA','NJSUI-ER','PASUI-ER','NJSDI-ER'];
+      var erDetail = {}, erTotal = 0;
+      erKeys.forEach(function (k) {
+        var m = block.match(new RegExp(k.replace(/-/g, '\\-') + '\\$([\\d,]+\\.\\d{2})'));
+        if (m) { erDetail[k] = num(m[1]); erTotal += num(m[1]); }
+      });
+
+      var netM = block.match(/\$([\d,]+\.\d{2})FEDSOCSEC-ER/);
+      var netPay = netM ? num(netM[1]) : 0;
+
+      // Employee withholding: the printed total follows the tax column.
+      // Falls back to gross-minus-net, flagged as approximate, if the
+      // Philadelphia LIT line ever disappears from the report.
+      var taxM = block.match(/ResidentLIT\$([\d,]+\.\d{2})/);
+      var empTax, taxApprox = false;
+      if (taxM) {
+        empTax = num(taxM[1]);
+      } else {
+        empTax = r2(grossTotal - netPay);
+        taxApprox = true;
+      }
+
+      var deductions = r2(grossTotal - empTax - netPay);
+      if (deductions < 0) deductions = 0;
+
+      // Per-employee pass, purely to split fixed from variable labor.
+      // Salaried people show 0.00 hours with a flat amount and no rate;
+      // hourly people always carry a four-decimal rate.
+      var employees = [];
+      var chunks = flat.split(/Employee:/).slice(1);
+      chunks.forEach(function (b) {
+        var nm = b.match(/^(.*?)(?:SSN|TIN):/);
+        var name = nm ? nm[1] : '(unknown)';
+        var body = b.slice(0, 900);
+        var flatM = body.match(/Regular0\.00([\d,]+\.\d{2})/);
+        var is1099 = /1099Compensation/.test(body);
+        employees.push({
+          name: name,
+          isFixed: !!flatM && !is1099,
+          is1099: is1099,
+          flatAmount: flatM ? num(flatM[1]) : 0
+        });
+      });
+
+      return {
+        pay_period_start: toIso(periodM[1]),
+        pay_period_end:   toIso(periodM[2]),
+        check_date:       checkM ? toIso(checkM[1]) : toIso(periodM[2]),
+        regular_wages:    r2(regularWages),
+        overtime_wages:   r2(otWages),
+        tips_paid:        r2(tips),
+        comp_1099:        r2(comp1099),
+        gross_total:      grossTotal,
+        computed_gross:   grossTotal,
+        employee_tax_withheld: r2(empTax),
+        tax_approx:       taxApprox,
+        employee_deductions:   deductions,
+        net_pay:          r2(netPay),
+        employer_taxes:   r2(erTotal),
+        employer_tax_detail: erDetail,
+        total_hours:      r2(regularHours + otHours),
+        employees:        employees,
+        source_name:      file.name
+      };
+    });
+  }
+
+  // =====================================================================
+  // XLSX PARSER
+  //
+  // The 7shifts export repeats a per-employee block: a name row, a header
+  // row, then one row per shift. Shift rows are identified by having a
+  // Location and a Role — summary rows ("Weekly Total", "Grand Total") do
+  // not, so they fall out without needing to be named.
+  // =====================================================================
+  function parseXlsx(file) {
+    return file.arrayBuffer().then(function (buf) {
+      var wb = XLSX.read(buf, { type: 'array' });
+      var ws = wb.Sheets[wb.SheetNames[0]];
+      var rows = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: '' });
+
+      var shifts = [];
+      var currentName = null;
+      var col = null;
+
+      rows.forEach(function (row) {
+        var first = String(row[0] == null ? '' : row[0]).trim();
+
+        // Header row — establishes column positions for the block that follows.
+        if (first === 'Date' && row.indexOf('Role') !== -1) {
+          col = {
+            date:    row.indexOf('Date'),
+            loc:     row.indexOf('Location'),
+            role:    row.indexOf('Role'),
+            wage:    row.indexOf('Wage'),
+            regH:    row.indexOf('Regular hours'),
+            otH:     row.indexOf('OT hours'),
+            regPay:  row.indexOf('Regular pay'),
+            otPay:   row.indexOf('OT pay'),
+            totPay:  row.indexOf('Total pay'),
+            tips:    row.indexOf('Total Tips')
+          };
+          return;
+        }
+
+        // A bare non-empty first cell with nothing after it is a name row.
+        if (first && !col) { currentName = first; return; }
+        if (first && col) {
+          var restEmpty = row.slice(1).every(function (c) { return String(c).trim() === ''; });
+          if (restEmpty) { currentName = first; return; }
+        }
+        if (!col || !currentName) return;
+
+        var loc  = String(row[col.loc]  == null ? '' : row[col.loc]).trim();
+        var role = String(row[col.role] == null ? '' : row[col.role]).trim();
+        if (!loc || !role) return;                       // summary row
+        if (/^(Weekly|Grand) Total$/i.test(role)) return;
+
+        shifts.push({
+          employee_name: currentName,
+          shift_date:    String(row[col.date] == null ? '' : row[col.date]).trim(),
+          location_raw:  loc,
+          role_raw:      role,
+          wage_rate:     num(row[col.wage]) || 0,
+          hours:         (num(row[col.regH]) || 0) + (num(row[col.otH]) || 0),
+          pay:           (num(row[col.regPay]) || 0) + (num(row[col.otPay]) || 0),
+          tips:          num(row[col.tips]) || 0
+        });
+      });
+
+      return { shifts: shifts, source_name: file.name };
+    });
+  }
+
+  // =====================================================================
+  // COMBINE + ALLOCATE
+  // =====================================================================
+  function roleMapLookup(roleRaw) {
+    var k = normKey(roleRaw);
+    for (var i = 0; i < state.roleMap.length; i++) {
+      if (normKey(state.roleMap[i].role_raw) === k) return state.roleMap[i];
+    }
+    return null;
+  }
+
+  function resolveVenue(shift) {
+    var m = roleMapLookup(shift.role_raw);
+    if (m) return { venue: m.venue_code, labor_type: m.labor_type, mapped: true };
+    var loc = LOCATION_VENUE[normKey(shift.location_raw)];
+    if (loc) return { venue: loc, labor_type: 'variable', mapped: false };
+    return { venue: null, labor_type: 'variable', mapped: false };
+  }
+
+  function buildParse(pdf, xlsx) {
+    var out = {
+      run: pdf,
+      shifts: xlsx ? xlsx.shifts : [],
+      xlsx_name: xlsx ? xlsx.source_name : null,
+      venueLines: [],
+      unmapped: [],
+      recon: null
+    };
+
+    // Fixed labor from the PDF — salaried people never appear in the xlsx.
+    var fixedTotal = 0;
+    pdf.employees.forEach(function (e) {
+      if (e.isFixed) fixedTotal += e.flatAmount;
+    });
+    out.fixed_wages = r2(fixedTotal);
+    out.variable_wages = r2(pdf.regular_wages + pdf.overtime_wages - fixedTotal);
+
+    if (!xlsx) { out.recon = { skipped: true }; return out; }
+
+    // Group shifts by venue.
+    var byVenue = {};
+    var unmappedRoles = {};
+
+    out.shifts.forEach(function (s) {
+      var res = resolveVenue(s);
+      if (!res.mapped) {
+        if (!unmappedRoles[s.role_raw]) {
+          unmappedRoles[s.role_raw] = { role: s.role_raw, location: s.location_raw, count: 0, pay: 0, suggested: res.venue };
+        }
+        unmappedRoles[s.role_raw].count += 1;
+        unmappedRoles[s.role_raw].pay += s.pay;
+      }
+      if (res.labor_type === 'exclude') return;
+      var key = (res.venue || '__unresolved__') + '|' + (res.labor_type || 'variable');
+      if (!byVenue[key]) {
+        byVenue[key] = {
+          venue_code: res.venue || '__unresolved__',
+          labor_type: res.labor_type || 'variable',
+          regular_pay: 0, ot_pay: 0, regular_hours: 0, ot_hours: 0, tips: 0
+        };
+      }
+      byVenue[key].regular_pay   += s.pay;
+      byVenue[key].regular_hours += s.hours;
+      byVenue[key].tips          += s.tips;
+    });
+
+    out.venueLines = Object.keys(byVenue).map(function (k) {
+      var v = byVenue[k];
+      v.regular_pay   = r2(v.regular_pay);
+      v.regular_hours = r2(v.regular_hours);
+      v.tips          = r2(v.tips);
+      return v;
+    }).sort(function (a, b) { return b.regular_pay - a.regular_pay; });
+
+    out.unmapped = Object.keys(unmappedRoles).map(function (k) { return unmappedRoles[k]; });
+
+    // Reconcile: xlsx shift pay should equal PDF variable wages.
+    var shiftPay = r2(out.shifts.reduce(function (t, s) { return t + s.pay; }, 0));
+    var shiftTips = r2(out.shifts.reduce(function (t, s) { return t + s.tips; }, 0));
+    out.recon = {
+      skipped: false,
+      shift_pay: shiftPay,
+      variable_wages: out.variable_wages,
+      pay_delta: r2(shiftPay - out.variable_wages),
+      shift_tips: shiftTips,
+      pdf_tips: pdf.tips_paid,
+      tips_delta: r2(shiftTips - pdf.tips_paid)
+    };
+    return out;
+  }
+
+  // Employer taxes spread across venues by variable wages, excluding tips.
+  function allocateEmployerTax(parsed) {
+    var lines = parsed.venueLines.filter(function (l) { return l.labor_type === 'variable'; });
+    var base = lines.reduce(function (t, l) { return t + l.regular_pay + l.ot_pay; }, 0);
+    var pool = parsed.run.employer_taxes || 0;
+    if (base <= 0 || pool <= 0) {
+      parsed.venueLines.forEach(function (l) { l.employer_tax_alloc = 0; });
+      return;
+    }
+    var running = 0, biggest = null;
+    parsed.venueLines.forEach(function (l) {
+      if (l.labor_type !== 'variable') { l.employer_tax_alloc = 0; return; }
+      var share = r2(pool * ((l.regular_pay + l.ot_pay) / base));
+      l.employer_tax_alloc = share;
+      running += share;
+      if (!biggest || share > biggest.employer_tax_alloc) biggest = l;
+    });
+    // Rounding remainder lands on the largest venue so the total is exact.
+    if (biggest) biggest.employer_tax_alloc = r2(biggest.employer_tax_alloc + (pool - running));
+  }
+
+  // =====================================================================
+  // PREVIEW
+  // =====================================================================
+  function renderPreview() {
+    var host = document.getElementById('previewHost');
+    if (!host) return;
+    if (!state.parsed) { host.innerHTML = ''; return; }
+
+    var p = state.parsed, run = p.run;
+    var html = '';
+
+    // Warnings first.
+    var warns = [];
+    if (run.tax_approx) {
+      warns.push('Could not read the withholding total directly, so it was derived from gross minus net. ' +
+        'It does not affect the P&amp;L (withholding sits inside gross), but the figure below is approximate.');
+    }
+    if (Math.abs(run.gross_total - run.computed_gross) > 0.02) {
+      warns.push('Gross on the report (' + fmtMoney(run.gross_total) + ') does not match the sum of its parts (' +
+        fmtMoney(run.computed_gross) + '). Check the PDF before saving.');
+    }
+    if (p.recon && !p.recon.skipped && Math.abs(p.recon.pay_delta) > 0.02) {
+      warns.push('Shift pay in the spreadsheet (' + fmtMoney(p.recon.shift_pay) +
+        ') does not match variable wages on the payroll report (' + fmtMoney(p.recon.variable_wages) +
+        ') \u2014 off by ' + fmtMoney(Math.abs(p.recon.pay_delta)) +
+        '. Usually means a shift was edited after the file was sent.');
+    }
+    if (p.recon && !p.recon.skipped && Math.abs(p.recon.tips_delta) > 0.02) {
+      warns.push('Tips differ between the two files by ' + fmtMoney(Math.abs(p.recon.tips_delta)) + '.');
+    }
+    if (p.recon && p.recon.skipped) {
+      warns.push('No spreadsheet loaded \u2014 this week will save company-wide with no venue split. ' +
+        'You can re-upload later with both files to fill it in.');
+    }
+
+    html += '<div class="card"><div class="card-head"><div>' +
+      '<h2 class="card-title">' + esc(fmtDate(run.pay_period_start)) + ' \u2013 ' +
+        esc(fmtDate(run.pay_period_end)) + '</h2>' +
+      '<div class="card-sub">Check date ' + esc(fmtDate(run.check_date)) + ' \u00b7 ' +
+        fmtHours(run.total_hours) + ' hours</div>' +
+      '</div></div><div class="card-body">';
+
+    if (warns.length) {
+      html += '<div class="warn-strip"><strong>Check before saving:</strong><ul style="margin:6px 0 0;padding-left:18px;"><li>' +
+        warns.join('</li><li>') + '</li></ul></div>';
+    } else {
+      html += '<div class="ok-strip">Both files reconcile to the penny.</div>';
+    }
+
+    html += '<table class="sum-table"><tbody>' +
+      row('Variable labor (hourly)', p.variable_wages, 'allocates to venues') +
+      row('Fixed labor (salaried)', p.fixed_wages, 'company level') +
+      row('Tips paid out', run.tips_paid, 'pass-through') +
+      row('Contract labor (1099)', run.comp_1099, '') +
+      rowTotal('Gross payroll', run.gross_total) +
+      row('Employer payroll taxes', run.employer_taxes, 'company expense') +
+      rowTotal('Total labor cost', r2(run.gross_total + run.employer_taxes)) +
+      '<tr class="sub"><td>Employee withholding</td><td class="note">inside gross, not an expense</td>' +
+        '<td class="amt">' + esc(fmtMoney(run.employee_tax_withheld)) + '</td></tr>' +
+      '<tr class="sub"><td>Net pay</td><td class="note">settlement</td>' +
+        '<td class="amt">' + esc(fmtMoney(run.net_pay)) + '</td></tr>' +
+      '</tbody></table>';
+
+    html += '</div></div>';
+
+    // Unmapped roles.
+    if (p.unmapped.length) {
+      html += '<div class="card"><div class="card-head"><div>' +
+        '<h2 class="card-title">' + p.unmapped.length + ' role' + (p.unmapped.length === 1 ? '' : 's') +
+          ' need a venue</h2>' +
+        '<div class="card-sub">Assign once and it is remembered for every future upload</div>' +
+        '</div></div><div class="card-body">';
+      p.unmapped.forEach(function (u) {
+        var opts = '<option value="">\u2014 pick a venue \u2014</option>' +
+          state.venues.map(function (v) {
+            var sel = (state.pendingMappings[u.role] || u.suggested) === v.code ? ' selected' : '';
+            return '<option value="' + esc(v.code) + '"' + sel + '>' + esc(v.code) + '</option>';
+          }).join('') +
+          '<option value="__exclude__">Exclude from P&amp;L</option>';
+        html += '<div class="map-row">' +
+          '<div><div class="map-role">' + esc(u.role) + '</div>' +
+            '<div class="map-meta">' + u.count + ' shift' + (u.count === 1 ? '' : 's') + ' \u00b7 ' +
+              esc(fmtMoney(u.pay)) + ' \u00b7 location ' + esc(u.location || '\u2014') +
+              (u.suggested ? ' \u00b7 suggested ' + esc(u.suggested) : '') + '</div></div>' +
+          '<select data-role="' + esc(u.role) + '">' + opts + '</select>' +
+          '<div class="map-meta">' + (u.suggested ? 'from location' : 'no signal') + '</div>' +
+        '</div>';
+      });
+      html += '</div></div>';
+    }
+
+    // Venue allocation.
+    if (p.venueLines.length) {
+      allocateEmployerTax(p);
+      html += '<div class="card"><div class="card-head"><div>' +
+        '<h2 class="card-title">By venue</h2>' +
+        '<div class="card-sub">Employer taxes spread by wages, excluding tips</div>' +
+        '</div></div><div class="card-body">' +
+        '<table class="v-table"><thead><tr><th>Venue</th><th class="r">Hours</th>' +
+        '<th class="r">Wages</th><th class="r">Tips</th><th class="r">Empl. tax</th></tr></thead><tbody>';
+      var tH = 0, tW = 0, tT = 0, tE = 0;
+      p.venueLines.forEach(function (l) {
+        tH += l.regular_hours; tW += l.regular_pay; tT += l.tips; tE += (l.employer_tax_alloc || 0);
+        var label = l.venue_code === '__unresolved__' ? 'Unresolved' : l.venue_code;
+        html += '<tr><td class="name">' + esc(label) +
+          '<span class="lt-pill ' + esc(l.labor_type) + '">' + esc(l.labor_type) + '</span></td>' +
+          '<td class="r">' + fmtHours(l.regular_hours) + '</td>' +
+          '<td class="r">' + esc(fmtMoney(l.regular_pay)) + '</td>' +
+          '<td class="r">' + esc(fmtMoney(l.tips)) + '</td>' +
+          '<td class="r">' + esc(fmtMoney(l.employer_tax_alloc || 0)) + '</td></tr>';
+      });
+      html += '<tr class="total"><td>Total</td><td class="r">' + fmtHours(tH) + '</td>' +
+        '<td class="r">' + esc(fmtMoney(tW)) + '</td><td class="r">' + esc(fmtMoney(tT)) + '</td>' +
+        '<td class="r">' + esc(fmtMoney(tE)) + '</td></tr>';
+      html += '</tbody></table></div></div>';
+    }
+
+    html += '<div class="card"><div class="card-body">' +
+      '<div class="actions"><button type="button" class="btn-primary" id="btnSaveRun">Save this week</button>' +
+      '<button type="button" class="btn-secondary" id="btnDiscard">Discard</button>' +
+      '<span class="parse-note">Saving writes the payroll run, the venue split, and every shift as an audit trail.</span>' +
+      '</div></div></div>';
+
+    host.innerHTML = html;
+
+    host.querySelectorAll('select[data-role]').forEach(function (sel) {
+      sel.addEventListener('change', function () {
+        state.pendingMappings[sel.getAttribute('data-role')] = sel.value;
+      });
+    });
+    var save = document.getElementById('btnSaveRun');
+    if (save) save.addEventListener('click', handleSaveRun);
+    var disc = document.getElementById('btnDiscard');
+    if (disc) disc.addEventListener('click', function () {
+      state.parsed = null; renderPreview();
+    });
+  }
+
+  function row(label, amount, note) {
+    return '<tr><td>' + esc(label) + '</td><td class="note">' + esc(note || '') + '</td>' +
+      '<td class="amt">' + esc(fmtMoney(amount)) + '</td></tr>';
+  }
+  function rowTotal(label, amount) {
+    return '<tr class="total"><td>' + esc(label) + '</td><td class="note"></td>' +
+      '<td class="amt">' + esc(fmtMoney(amount)) + '</td></tr>';
+  }
+
+  // =====================================================================
+  // SAVE
+  // =====================================================================
+  function handleSaveRun() {
+    if (state.submitting || !state.parsed) return;
+    var p = state.parsed, run = p.run;
+    var btn = document.getElementById('btnSaveRun');
+
+    // Persist any newly-assigned role mappings first, then re-resolve so the
+    // venue split reflects what was just chosen.
+    var newMaps = [];
+    Object.keys(state.pendingMappings).forEach(function (role) {
+      var v = state.pendingMappings[role];
+      if (!v) return;
+      newMaps.push({
+        role_raw:   role,
+        venue_code: v === '__exclude__' ? null : v,
+        labor_type: v === '__exclude__' ? 'exclude' : 'variable',
+        created_by: actorName()
+      });
+    });
+
+    state.submitting = true;
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving\u2026'; }
+
+    var jsonHdrs = Object.assign({}, pcAuth.headers(), {
+      'Content-Type': 'application/json', 'Prefer': 'return=minimal'
+    });
+    var repHdrs = Object.assign({}, pcAuth.headers(), {
+      'Content-Type': 'application/json', 'Prefer': 'return=representation'
+    });
+
+    var step = newMaps.length
+      ? authFetch(SB_REST + 'payroll_role_venue_map', {
+          method: 'POST', headers: jsonHdrs, body: JSON.stringify(newMaps)
+        }).then(loadRoleMap).then(function () {
+          state.parsed = buildParse(p.run, { shifts: p.shifts, source_name: p.xlsx_name });
+          allocateEmployerTax(state.parsed);
+          p = state.parsed;
+        })
+      : Promise.resolve();
+
+    step
+      .then(function () {
+        return authFetch(SB_REST + 'payroll_runs', {
+          method: 'POST', headers: repHdrs, body: JSON.stringify({
+            pay_period_start: run.pay_period_start,
+            pay_period_end:   run.pay_period_end,
+            check_date:       run.check_date,
+            regular_wages:    run.regular_wages,
+            overtime_wages:   run.overtime_wages,
+            tips_paid:        run.tips_paid,
+            comp_1099:        run.comp_1099,
+            gross_total:      run.gross_total,
+            employee_tax_withheld: run.employee_tax_withheld,
+            employee_deductions:   run.employee_deductions,
+            net_pay:          run.net_pay,
+            employer_taxes:   run.employer_taxes,
+            employer_tax_detail: run.employer_tax_detail,
+            total_hours:      run.total_hours,
+            source_pdf_name:  run.source_name,
+            source_xlsx_name: p.xlsx_name,
+            reconciled:       !!(p.recon && !p.recon.skipped &&
+                                 Math.abs(p.recon.pay_delta) < 0.02),
+            uploaded_by:      actorName()
+          })
+        });
+      })
+      .then(function (rows) {
+        var saved = (rows && rows[0]) || null;
+        if (!saved || !saved.id) throw new Error('Payroll run insert returned no row');
+        var runId = saved.id;
+
+        var lines = [];
+        // Fixed labor is company-level: no venue, never allocated.
+        if (p.fixed_wages > 0.005) {
+          lines.push({
+            payroll_run_id: runId, venue_code: '__company__', labor_type: 'fixed',
+            regular_pay: p.fixed_wages, ot_pay: 0, regular_hours: 0, ot_hours: 0,
+            tips: 0, employer_tax_alloc: 0
+          });
+        }
+        p.venueLines.forEach(function (l) {
+          lines.push({
+            payroll_run_id: runId,
+            venue_code:     l.venue_code,
+            labor_type:     l.labor_type,
+            regular_pay:    l.regular_pay,
+            ot_pay:         l.ot_pay || 0,
+            regular_hours:  l.regular_hours,
+            ot_hours:       l.ot_hours || 0,
+            tips:           l.tips,
+            employer_tax_alloc: l.employer_tax_alloc || 0
+          });
+        });
+
+        // No spreadsheet: one company-wide variable line so the P&L is still
+        // complete, just not split.
+        if (!p.venueLines.length && p.variable_wages > 0.005) {
+          lines.push({
+            payroll_run_id: runId, venue_code: '__company__', labor_type: 'variable',
+            regular_pay: p.variable_wages, ot_pay: 0,
+            regular_hours: run.total_hours, ot_hours: 0,
+            tips: run.tips_paid, employer_tax_alloc: run.employer_taxes
+          });
+        }
+
+        var ops = [];
+        if (lines.length) {
+          ops.push(authFetch(SB_REST + 'payroll_run_venue_lines', {
+            method: 'POST', headers: jsonHdrs, body: JSON.stringify(lines)
+          }));
+        }
+        if (p.shifts.length) {
+          var empRows = p.shifts.map(function (s) {
+            var res = resolveVenue(s);
+            return {
+              payroll_run_id: runId,
+              employee_name:  s.employee_name,
+              shift_date:     null,
+              location_raw:   s.location_raw,
+              role_raw:       s.role_raw,
+              venue_code:     res.venue,
+              wage_rate:      s.wage_rate,
+              hours:          s.hours,
+              pay:            s.pay,
+              tips:           s.tips
+            };
+          });
+          ops.push(authFetch(SB_REST + 'payroll_run_employee_lines', {
+            method: 'POST', headers: jsonHdrs, body: JSON.stringify(empRows)
+          }));
+        }
+        return Promise.all(ops);
+      })
+      .then(function () {
+        state.parsed = null;
+        state.pdfFile = null; state.xlsxFile = null;
+        state.pendingMappings = {};
+        resetFileSlots();
+        renderPreview();
+        return loadRuns().then(function () {
+          showToast('Week saved \u00b7 ' + fmtDate(run.pay_period_start), 2600);
+        });
+      })
+      .catch(function (e) {
+        if (e && e.authFailed) { handleAuthFailure(); return; }
+        console.error('[payroll] save failed:', e);
+        var msg = (e && e.message) ? e.message : 'Save failed';
+        if (msg.indexOf('idx_payroll_runs_period') !== -1) {
+          msg = 'This week is already loaded. Remove it first to re-upload.';
+        }
+        showToast('Save failed \u00b7 ' + msg.substring(0, 120), 5000);
+        if (btn) { btn.disabled = false; btn.textContent = 'Save this week'; }
+      })
+      .then(function () { state.submitting = false; });
+  }
+
+  // =====================================================================
+  // RUNS LIST
+  // =====================================================================
+  function loadRuns() {
+    return authFetch(
+      SB_REST + 'payroll_runs?select=id,pay_period_start,pay_period_end,check_date,' +
+      'gross_total,employer_taxes,tips_paid,reconciled,source_xlsx_name' +
+      '&deleted_at=is.null&order=pay_period_start.desc&limit=200',
+      { headers: pcAuth.headers() }
+    ).then(function (rows) {
+      state.runs = rows || [];
+      renderRuns();
+    }).catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      console.error('[payroll] runs load failed:', e);
+      var h = document.getElementById('runsHost');
+      if (h) h.innerHTML = '<div class="empty">Could not load.</div>';
+    });
+  }
+
+  function renderRuns() {
+    var host = document.getElementById('runsHost');
+    if (!host) return;
+    if (!state.runs.length) {
+      host.innerHTML = '<div class="empty">No weeks loaded yet.</div>';
+      return;
+    }
+    var total = state.runs.reduce(function (t, r) {
+      return t + Number(r.gross_total || 0) + Number(r.employer_taxes || 0);
+    }, 0);
+
+    host.innerHTML = state.runs.map(function (r) {
+      return '<div class="run-row">' +
+        '<div><div class="run-period">' + esc(fmtDate(r.pay_period_start)) + ' \u2013 ' +
+          esc(fmtDate(r.pay_period_end)) + '</div>' +
+          '<div class="run-meta">check ' + esc(fmtDate(r.check_date)) +
+            (r.source_xlsx_name ? ' \u00b7 venue split' : ' \u00b7 company-wide only') + '</div></div>' +
+        '<div class="run-amt">' + esc(fmtMoney(Number(r.gross_total || 0))) + '</div>' +
+        '<div class="run-amt">' + esc(fmtMoney(Number(r.employer_taxes || 0))) + '</div>' +
+        '<div><span class="recon-pill ' + (r.reconciled ? 'yes' : 'no') + '">' +
+          (r.reconciled ? 'reconciled' : 'check') + '</span>' +
+          '<button type="button" class="link-quiet" data-del="' + esc(r.id) + '">Remove</button></div>' +
+      '</div>';
+    }).join('') +
+    '<div class="run-row" style="border-bottom:0;"><div><strong>' + state.runs.length +
+      ' week' + (state.runs.length === 1 ? '' : 's') + '</strong></div>' +
+      '<div class="run-amt"><strong>' + esc(fmtMoney(total)) + '</strong></div>' +
+      '<div class="run-meta">total labor cost</div><div></div></div>';
+
+    host.querySelectorAll('[data-del]').forEach(function (b) {
+      b.addEventListener('click', function () { removeRun(b.getAttribute('data-del')); });
+    });
+  }
+
+  function removeRun(id) {
+    var run = null;
+    for (var i = 0; i < state.runs.length; i++) if (state.runs[i].id === id) run = state.runs[i];
+    if (!run) return;
+    if (!window.confirm('Remove the week of ' + fmtDate(run.pay_period_start) +
+      '?\n\nThe run is soft-deleted and its lines are cleared, so you can re-upload it.')) return;
+
+    var jsonHdrs = Object.assign({}, pcAuth.headers(), {
+      'Content-Type': 'application/json', 'Prefer': 'return=minimal'
+    });
+    var plainHdrs = Object.assign({}, pcAuth.headers(), { 'Prefer': 'return=minimal' });
+
+    // Child lines are hard-deleted on purpose: a re-upload must replace them,
+    // not accumulate alongside them.
+    authFetch(SB_REST + 'payroll_run_venue_lines?payroll_run_id=eq.' + encodeURIComponent(id),
+      { method: 'DELETE', headers: plainHdrs })
+    .then(function () {
+      return authFetch(SB_REST + 'payroll_run_employee_lines?payroll_run_id=eq.' + encodeURIComponent(id),
+        { method: 'DELETE', headers: plainHdrs });
+    })
+    .then(function () {
+      return authFetch(SB_REST + 'payroll_runs?id=eq.' + encodeURIComponent(id), {
+        method: 'PATCH', headers: jsonHdrs,
+        body: JSON.stringify({ deleted_at: new Date().toISOString(), deleted_by: actorName() })
+      });
+    })
+    .then(function () { return loadRuns(); })
+    .then(function () { showToast('Week removed', 2000); })
+    .catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      console.error('[payroll] remove failed:', e);
+      showToast('Could not remove', 3000);
+    });
+  }
+
+  // =====================================================================
+  // REFERENCE DATA
+  // =====================================================================
+  function loadRoleMap() {
+    return authFetch(
+      SB_REST + 'payroll_role_venue_map?select=id,role_raw,venue_code,labor_type&limit=1000',
+      { headers: pcAuth.headers() }
+    ).then(function (rows) { state.roleMap = rows || []; });
+  }
+
+  function loadVenues() {
+    return authFetch(
+      SB_REST + 'venues?select=code,full_name&is_active=eq.true&order=code.asc&limit=200',
+      { headers: pcAuth.headers() }
+    ).then(function (rows) { state.venues = rows || []; });
+  }
+
+  // =====================================================================
+  // FILE WIRING
+  // =====================================================================
+  function resetFileSlots() {
+    ['pdf', 'xlsx'].forEach(function (k) {
+      var slot = document.getElementById(k === 'pdf' ? 'slotPdf' : 'slotXlsx');
+      var name = document.getElementById(k === 'pdf' ? 'pdfName' : 'xlsxName');
+      var input = document.getElementById(k === 'pdf' ? 'pdfInput' : 'xlsxInput');
+      if (slot) slot.classList.remove('is-loaded');
+      if (name) name.textContent = '';
+      if (input) input.value = '';
+    });
+    updateParseButton();
+    showError('');
+  }
+
+  function updateParseButton() {
+    var btn = document.getElementById('btnParse');
+    if (btn) btn.disabled = !state.pdfFile;
+  }
+
+  function wireFiles() {
+    var pdfIn = document.getElementById('pdfInput');
+    var xlsxIn = document.getElementById('xlsxInput');
+
+    if (pdfIn) pdfIn.addEventListener('change', function () {
+      var f = pdfIn.files && pdfIn.files[0];
+      if (!f) return;
+      state.pdfFile = f;
+      document.getElementById('pdfName').textContent = f.name;
+      document.getElementById('slotPdf').classList.add('is-loaded');
+      updateParseButton();
+    });
+
+    if (xlsxIn) xlsxIn.addEventListener('change', function () {
+      var f = xlsxIn.files && xlsxIn.files[0];
+      if (!f) return;
+      state.xlsxFile = f;
+      document.getElementById('xlsxName').textContent = f.name;
+      document.getElementById('slotXlsx').classList.add('is-loaded');
+      updateParseButton();
+    });
+
+    var parse = document.getElementById('btnParse');
+    if (parse) parse.addEventListener('click', handleParse);
+    var reset = document.getElementById('btnReset');
+    if (reset) reset.addEventListener('click', function () {
+      state.pdfFile = null; state.xlsxFile = null; state.parsed = null;
+      state.pendingMappings = {};
+      resetFileSlots();
+      renderPreview();
+    });
+  }
+
+  function handleParse() {
+    if (!state.pdfFile) return;
+    showError('');
+    var btn = document.getElementById('btnParse');
+    var note = document.getElementById('parseNote');
+    if (btn) { btn.disabled = true; btn.textContent = 'Reading\u2026'; }
+    if (note) note.textContent = 'Reading the payroll report\u2026';
+
+    parsePdf(state.pdfFile)
+      .then(function (pdf) {
+        if (note) note.textContent = state.xlsxFile ? 'Reading the spreadsheet\u2026' : '';
+        if (!state.xlsxFile) return { pdf: pdf, xlsx: null };
+        return parseXlsx(state.xlsxFile).then(function (x) { return { pdf: pdf, xlsx: x }; });
+      })
+      .then(function (res) {
+        state.parsed = buildParse(res.pdf, res.xlsx);
+        state.pendingMappings = {};
+        renderPreview();
+        if (note) note.textContent = '';
+        window.scrollTo({ top: 300, behavior: 'smooth' });
+      })
+      .catch(function (e) {
+        console.error('[payroll] parse failed:', e);
+        showError('<strong>Could not read the files.</strong> ' +
+          esc((e && e.message) || 'Unknown error') +
+          '<br>Nothing was saved. Check the PDF is the Payroll Detail report and try again.');
+        if (note) note.textContent = '';
+      })
+      .then(function () {
+        if (btn) { btn.disabled = !state.pdfFile; btn.textContent = 'Read files'; }
+      });
+  }
+
+  // =====================================================================
+  // BOOT
+  // =====================================================================
+  function onAuthReady(user) {
+    if (typeof pcActivity !== 'undefined' && pcActivity.init) pcActivity.init('pl-overview');
+    document.body.classList.remove('pre-auth');
+
+    var isAdmin = (typeof pcAuth !== 'undefined' && pcAuth.isAdmin) ? pcAuth.isAdmin() : false;
+    if (!isAdmin) {
+      document.getElementById('pageBody').innerHTML =
+        '<div class="access-denied"><h2>Admins only</h2><p>Payroll upload is admin-only.</p></div>';
+      return;
+    }
+
+    wireFiles();
+    Promise.all([loadRoleMap(), loadVenues()])
+      .then(loadRuns)
+      .catch(function (e) {
+        if (e && e.authFailed) { handleAuthFailure(); return; }
+        console.error('[payroll] init failed:', e);
+      });
+
+    void user;
+  }
+
+  if (typeof pcAuth === 'undefined' || !pcAuth.require) {
+    document.body.innerHTML =
+      '<div style="padding:60px 22px;font-family:DM Sans,sans-serif;">' +
+      '<h1>Authentication unavailable</h1><p>pc-auth.js failed to load.</p></div>';
+  } else {
+    pcAuth.require({ pageSlug: 'pl-overview', onReady: onAuthReady });
+  }
+
+})();
+</script>
+
+</body>
+</html>
