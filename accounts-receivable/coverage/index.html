@@ -145,6 +145,16 @@
     padding: 2px 7px; border-radius: 4px; background: #e6f1fb; color: #0C447C;
   }
 
+  /* Settlement (monthly) table — blue-leaning so it reads as a different
+     billing model, not an error state like the red table. */
+  .csr-month-wrap { border-color: #cfdff0; margin-bottom: 22px; }
+  .csr-month-wrap .csr-table-head { background: #f4f9fe; border-bottom-color: #dbe8f5; }
+  .csr-month-wrap .csr-table thead tr { background: #f4f9fe; border-bottom-color: #dbe8f5; }
+  .csr-month-wrap .csr-table tr.total-row { background: #f4f9fe; border-top-color: #0C447C; }
+  .csr-month-wrap .csr-table tr.total-row td { color: #0C447C; }
+  .csr-month-wrap td.col-month { font-weight: 600; white-space: nowrap; }
+  .csr-month-meta { color: #888; font-size: 12px; font-variant-numeric: tabular-nums; }
+
   /* Red / fail-loud table */
   .csr-red-wrap { border-color: #f0cccc; }
   .csr-red-wrap .csr-table-head { background: #fdf3f3; border-bottom-color: #f3dada; }
@@ -260,14 +270,14 @@
         <div class="csr-card-sub">Statemented &amp; invoiced · <a href="/accounts-receivable/">see Receivables</a></div>
       </div>
       <div class="csr-card">
-        <div class="csr-card-label">Chase Fieldhouse (est.)</div>
+        <div class="csr-card-label">Monthly settlement (est.)</div>
         <div class="csr-card-value" id="statDe">—</div>
-        <div class="csr-card-sub" id="statDeSub">Monthly settlement · separate</div>
+        <div class="csr-card-sub" id="statDeSub">Billed by calendar month · separate</div>
       </div>
       <div class="csr-card">
         <div class="csr-card-label">Combined expected</div>
         <div class="csr-card-value" id="statCombined">—</div>
-        <div class="csr-card-sub">Awaiting + tips + AR open + Chase</div>
+        <div class="csr-card-sub">Awaiting + tips + AR open + monthly</div>
       </div>
     </div>
 
@@ -330,6 +340,29 @@
       </table>
     </div>
 
+    <!-- Settlement venues: one row per uncovered calendar month. A month
+         leaves this table when an invoice claims it in ar_invoice_periods. -->
+    <div class="csr-table-wrap csr-month-wrap" id="monthWrap" hidden>
+      <div class="csr-table-head">
+        <div>
+          <div class="csr-table-title">Monthly settlement — months awaiting an invoice</div>
+          <div class="csr-table-subtitle" id="monthSubtitle">Billed as one lump per calendar month. A month clears when an invoice claims it.</div>
+        </div>
+      </div>
+      <table class="csr-table">
+        <thead>
+          <tr>
+            <th class="col-month">Month</th>
+            <th>Venue</th>
+            <th class="r">Event dates</th>
+            <th class="r">Stands</th>
+            <th class="r">Est. commission</th>
+          </tr>
+        </thead>
+        <tbody id="monthBody"></tbody>
+      </table>
+    </div>
+
     <!-- Dismissed rows — quiet recovery affordance, no dollar figures. -->
     <div class="csr-recovery" id="csrRecovery" hidden>
       <button type="button" class="csr-recovery-toggle" id="btnToggleDismissed" aria-expanded="false"><span id="dismissedCountLabel">0 dismissed</span> — <span id="dismissedToggleWord">show</span></button>
@@ -368,6 +401,11 @@
   // drop via the invoice-rule regardless of this date. Defaulted to AR ledger
   // go-live (your first invoice entry). Lower it to see further back; set to
   // null to disable. "Show older" bypasses it.
+  //
+  // NOTE: the floor also applies to settlement venues. A claimed month
+  // clears everything inside it regardless (the month check runs first),
+  // so the floor only governs months you have NOT invoiced — March, April
+  // and May 1-14 for DE stay hidden as pre-ledger by design.
   var COVERAGE_START = '2026-05-15';
 
   // Lump-invoice suppression cutoff. Before this date, ANY non-voided invoice
@@ -382,10 +420,16 @@
 
   // SATB: own POS, we keep the money, never an AR — excluded from CSR entirely.
   var EXCLUDE_VENUES = { SATB: true };
-  // DE (Chase Fieldhouse): settles as one end-of-month lump, not the per-stand
-  // statement trickle. Its uncovered estimate gets its own headline box and is
-  // kept OUT of the main "awaiting statement" total.
-  var SETTLEMENT_VENUES = { DE: true };
+
+  // Settlement venues — billed as ONE lump per calendar month rather than
+  // per event, per stand. Sourced from venues.settles_monthly via
+  // pcCatalog.getSettlementVenueCodes() at boot, NOT hardcoded here, so the
+  // AR invoice form and this page can never disagree about which venues
+  // use month billing. DE (Chase Fieldhouse) is the only one today.
+  //
+  // Their uncovered estimate gets its own headline card + month table and
+  // is kept OUT of the main "awaiting statement" total.
+  var SETTLEMENT_VENUES = {};
 
   // How long the undo affordance stays on screen after a dismissal.
   var UNDO_TOAST_MS = 6000;
@@ -396,6 +440,7 @@
     coveredSet: {},      // 'eventId||standId' -> true (active per-stand coverage)
     perStandEventSet: {},// 'eventId' -> true (events that USE per-stand coverage)
     invoicedEventKeys: {},// 'venue||period_start' -> true (event has a non-voided invoice)
+    coveredMonths: {},   // 'venue||YYYY-MM' -> covering invoice number
     standAliases: {},    // 'venue||alias' -> canonical stand
     venueAliases: {},    // raw venue -> canonical venue
     arOpen: [],          // [{ net, venue_code }] open/partial invoices
@@ -408,7 +453,8 @@
     filters: { venue: 'all' },
     mainRows: [],
     redRows: [],
-    deRows: []
+    deRows: [],
+    monthRows: []
   };
 
   // =====================================================================
@@ -426,6 +472,16 @@
     var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     var m = months[parseInt(parts[1], 10) - 1] || '';
     return m + ' ' + parseInt(parts[2], 10) + ', ' + parts[0];
+  }
+  // 'YYYY-MM' -> 'August 2026'. Used by the settlement month table.
+  function fmtMonth(mk) {
+    if (!mk) return '—';
+    var parts = String(mk).split('-');
+    if (parts.length < 2) return mk;
+    var months = ['January','February','March','April','May','June',
+                  'July','August','September','October','November','December'];
+    var m = months[parseInt(parts[1], 10) - 1] || '';
+    return m + ' ' + parts[0];
   }
   // Whole-dollar formatting — this is a ballpark estimate page, matching
   // the Commission Tracker's rounded presentation.
@@ -543,37 +599,26 @@
   }
 
   // =====================================================================
-  // FISCAL-YEAR FLOOR
-  //
-  // Resolve the start date of the CURRENT fiscal year via pc-fiscal.js.
-  // The current period carries a 'YYYY-MM' key; the FY-start is that
-  // year's January period. Falls back to calendar Jan 1 of the key's year
-  // with a visible warning if pcFiscal can't resolve it.
+  // SETTLEMENT VENUES — resolved from the catalog, never hardcoded.
+  // Must run after pcCatalog.ready() resolves and BEFORE compute().
   // =====================================================================
-  function resolveFiscalYearStart() {
+  function loadSettlementVenues() {
+    SETTLEMENT_VENUES = {};
+    var codes = [];
     try {
-      var cur = pcFiscal.getCurrentPeriod ? pcFiscal.getCurrentPeriod() : null;
-      if (!cur || !cur.key) throw new Error('no current period');
-      var year = cur.key.split('-')[0];
-      if (pcFiscal.getPeriodByKey) {
-        var jan = pcFiscal.getPeriodByKey(year + '-01');
-        if (jan && jan.start) return jan.start;
-      }
-      // Fallback within the try: use the current period's own start only if
-      // it IS January; otherwise drop to the calendar fallback below.
-      if (cur.name && cur.name.indexOf('January') === 0 && cur.start) return cur.start;
-      throw new Error('could not resolve FY-start period');
+      codes = (pcCatalog.getSettlementVenueCodes)
+        ? (pcCatalog.getSettlementVenueCodes() || [])
+        : [];
     } catch (e) {
-      console.warn('[CSR] pcFiscal FY-start resolution failed, using calendar Jan 1:', e);
-      var d = new Date();
-      var warn = document.getElementById('csrWarn');
-      if (warn) {
-        warn.hidden = false;
-        warn.textContent = 'Fiscal-calendar lookup unavailable — using calendar Jan 1, ' +
-          d.getFullYear() + ' as the year start. Totals are otherwise accurate.';
-      }
-      return d.getFullYear() + '-01-01';
+      console.warn('[CSR] settlement-venue lookup failed — every venue will be ' +
+        'treated as per-event billed:', e);
     }
+    if (codes.length === 0) {
+      console.warn('[CSR] no venues flagged settles_monthly. If Chase Fieldhouse ' +
+        'should bill monthly, check that pc-catalog.js selects the ' +
+        'settles_monthly column.');
+    }
+    codes.forEach(function (c) { SETTLEMENT_VENUES[c] = true; });
   }
 
   // =====================================================================
@@ -611,6 +656,18 @@
   function fetchCoverage() {
     return authFetch(
       SB_REST + 'ar_invoice_stands?select=event_id,stand_id&deleted_at=is.null&limit=10000',
+      { headers: pcAuth.headers() }
+    );
+  }
+  // Month-coverage claims for settlement venues. Deliberately NOT
+  // date-bounded: a claim must suppress its month whenever that month
+  // appears, including in "show older" mode after the FY floor drops.
+  // The embedded ar_invoices row lets us ignore claims whose invoice was
+  // voided without a second round-trip.
+  function fetchInvoicePeriods() {
+    return authFetch(
+      SB_REST + 'ar_invoice_periods?select=venue_code,period_month,invoice_id,' +
+      'ar_invoices(internal_invoice_number,status)&deleted_at=is.null&limit=5000',
       { headers: pcAuth.headers() }
     );
   }
@@ -656,6 +713,20 @@
     state.dismissedRows.forEach(function (row) {
       if (!row.venue_code || !row.event_date || !row.stand_name) return;
       state.dismissedMap[dismissKey(row.venue_code, row.event_date, row.stand_name)] = row;
+    });
+  }
+
+  // Build the covered-months lookup. A voided invoice's claim is ignored
+  // rather than deleted, so voiding an invoice re-opens its month here
+  // without any cleanup in ar_invoice_periods.
+  function applyPeriodRows(rows) {
+    state.coveredMonths = {};
+    (rows || []).forEach(function (row) {
+      var inv = row.ar_invoices || {};
+      if (inv.status === 'voided') return;
+      if (!row.venue_code || !row.period_month) return;
+      var mk = String(row.period_month).slice(0, 7);
+      state.coveredMonths[row.venue_code + '||' + mk] = inv.internal_invoice_number || '';
     });
   }
 
@@ -717,6 +788,16 @@
       //    Checked before classification so it applies to main AND red rows.
       if (state.dismissedMap[dismissKey(g.venue, g.date, g.stand)]) return;
 
+      // 0b. Settlement venue whose calendar month is already invoiced.
+      //     DE bills one lump per calendar month, so a claimed month settles
+      //     EVERY stand and EVERY event date inside it — whether that month's
+      //     sales were logged per-event (June: 12 dates) or as a single lump
+      //     row (July: 1 date). Runs before the per-stand and lump-invoice
+      //     rules because a settlement venue never gets per-stand coverage
+      //     rows and its invoice date sits outside the month it covers.
+      if (SETTLEMENT_VENUES[g.venue] &&
+          state.coveredMonths[g.venue + '||' + g.date.slice(0, 7)]) return;
+
       var ev = evByVD[g.venue + '||' + g.date];
       var eventId = ev ? ev.id : null;
       var eventName = (ev && ev.event_name) || g.eventName || '';
@@ -760,8 +841,8 @@
         venue: g.venue, date: g.date, eventName: eventName, stand: g.stand,
         dealType: comm.dealType, commission: comm.commission, tips: g.tips
       };
-      // DE settles monthly as a lump — track it in its own bucket, out of
-      // the main per-stand awaiting total.
+      // Settlement venues settle monthly as a lump — track them in their own
+      // bucket, out of the main per-stand awaiting total.
       if (SETTLEMENT_VENUES[g.venue]) deRows.push(row);
       else mainRows.push(row);
     });
@@ -777,6 +858,41 @@
     state.mainRows = mainRows;
     state.redRows = redRows;
     state.deRows = deRows;
+    state.monthRows = buildMonthRows(deRows);
+  }
+
+  // Roll the surviving settlement-venue stand rows up into one row per
+  // calendar month — the unit you actually invoice. Covered months never
+  // reach here; they were dropped in compute() step 0b.
+  function buildMonthRows(deRows) {
+    var monthAgg = {};
+    (deRows || []).forEach(function (r) {
+      var mk = r.date.slice(0, 7);
+      var k = r.venue + '||' + mk;
+      if (!monthAgg[k]) {
+        monthAgg[k] = {
+          venue: r.venue, month: mk, commission: 0, tips: 0,
+          _dates: {}, _stands: {}
+        };
+      }
+      var m = monthAgg[k];
+      m.commission += r.commission;
+      m.tips += (r.tips || 0);
+      m._dates[r.date] = true;
+      m._stands[r.stand] = true;
+    });
+
+    var rows = Object.keys(monthAgg).map(function (k) {
+      var m = monthAgg[k];
+      m.eventDates = Object.keys(m._dates).length;
+      m.stands = Object.keys(m._stands).length;
+      return m;
+    });
+    rows.sort(function (a, b) {
+      if (a.month !== b.month) return a.month < b.month ? 1 : -1;  // month desc
+      return a.venue < b.venue ? -1 : 1;
+    });
+    return rows;
   }
 
   // =====================================================================
@@ -925,6 +1041,49 @@
     }).join('');
   }
 
+  // Settlement-venue month table. No dismiss column: dismissing a whole
+  // calendar month is a far larger claim than dismissing one residual
+  // stand, and the dismissal table is keyed venue||date||stand, which a
+  // month row has no honest value for. The only way to clear a month is
+  // to invoice it.
+  function renderMonthTable(monthRows, monthTotal) {
+    var wrap = document.getElementById('monthWrap');
+    var body = document.getElementById('monthBody');
+    var sub  = document.getElementById('monthSubtitle');
+    if (!wrap || !body) return;
+
+    if (!monthRows || monthRows.length === 0) {
+      wrap.hidden = true;
+      body.innerHTML = '';
+      return;
+    }
+    wrap.hidden = false;
+
+    if (sub) {
+      sub.textContent = monthRows.length + ' month' + (monthRows.length === 1 ? '' : 's') +
+        ' awaiting an invoice · billed as one lump per calendar month · ' +
+        'a month clears when an invoice claims it';
+    }
+
+    var html = monthRows.map(function (m) {
+      var label = pcCatalog.getVenueLabel(m.venue) || m.venue;
+      return '<tr>' +
+        '<td class="col-month">' + esc(fmtMonth(m.month)) + '</td>' +
+        '<td><span class="venue-chip">' + esc(m.venue) + '</span>' + esc(label) + '</td>' +
+        '<td class="r csr-month-meta">' + m.eventDates + '</td>' +
+        '<td class="r csr-month-meta">' + m.stands + '</td>' +
+        '<td class="r">' + esc(fmtMoney(m.commission)) + '</td>' +
+      '</tr>';
+    }).join('');
+
+    html += '<tr class="total-row">' +
+      '<td colspan="4">Total awaiting a monthly invoice</td>' +
+      '<td class="r">' + esc(fmtMoney(monthTotal)) + '</td>' +
+    '</tr>';
+
+    body.innerHTML = html;
+  }
+
   function render() {
     var vf = state.filters.venue;
     function venuePass(code) { return vf === 'all' || code === vf; }
@@ -932,6 +1091,7 @@
     var main = state.mainRows.filter(function (r) { return venuePass(r.venue); });
     var red  = state.redRows.filter(function (r) { return venuePass(r.venue); });
     var de   = (state.deRows || []).filter(function (r) { return venuePass(r.venue); });
+    var months = (state.monthRows || []).filter(function (m) { return venuePass(m.venue); });
     var arOpen = state.arOpen.filter(function (r) { return venuePass(r.venue_code); });
 
     var csrTotal = 0, redTotal = 0, arTotal = 0, deTotal = 0, tipsTotal = 0;
@@ -948,13 +1108,14 @@
     if (deEl) deEl.textContent = fmtMoney(deTotal);
     var deSubEl = document.getElementById('statDeSub');
     if (deSubEl) {
-      var deEvSet = {};
-      de.forEach(function (r) { deEvSet[r.date] = true; });
-      var deEvCount = Object.keys(deEvSet).length;
-      deSubEl.textContent = de.length
-        ? (de.length + ' stand' + (de.length === 1 ? '' : 's') + ' · ' +
-           deEvCount + ' event' + (deEvCount === 1 ? '' : 's') + ' · monthly settlement')
-        : 'Monthly settlement · nothing pending';
+      var deDateSet = {};
+      de.forEach(function (r) { deDateSet[r.date] = true; });
+      var deDateCount = Object.keys(deDateSet).length;
+      deSubEl.textContent = months.length
+        ? (months.length + ' month' + (months.length === 1 ? '' : 's') + ' · ' +
+           deDateCount + ' event date' + (deDateCount === 1 ? '' : 's') +
+           ' · awaiting an invoice')
+        : 'Billed by calendar month · nothing pending';
     }
     var tipsEl = document.getElementById('statTips');
     if (tipsEl) tipsEl.textContent = fmtMoney(tipsTotal);
@@ -1060,6 +1221,7 @@
       redBody.innerHTML = redHtml;
     }
 
+    renderMonthTable(months, deTotal);
     renderDismissed();
   }
 
@@ -1124,9 +1286,43 @@
     }
   }
 
+  // =====================================================================
+  // FISCAL-YEAR FLOOR
+  //
+  // Resolve the start date of the CURRENT fiscal year via pc-fiscal.js.
+  // The current period carries a 'YYYY-MM' key; the FY-start is that
+  // year's January period. Falls back to calendar Jan 1 of the key's year
+  // with a visible warning if pcFiscal can't resolve it.
+  // =====================================================================
+  function resolveFiscalYearStart() {
+    try {
+      var cur = pcFiscal.getCurrentPeriod ? pcFiscal.getCurrentPeriod() : null;
+      if (!cur || !cur.key) throw new Error('no current period');
+      var year = cur.key.split('-')[0];
+      if (pcFiscal.getPeriodByKey) {
+        var jan = pcFiscal.getPeriodByKey(year + '-01');
+        if (jan && jan.start) return jan.start;
+      }
+      // Fallback within the try: use the current period's own start only if
+      // it IS January; otherwise drop to the calendar fallback below.
+      if (cur.name && cur.name.indexOf('January') === 0 && cur.start) return cur.start;
+      throw new Error('could not resolve FY-start period');
+    } catch (e) {
+      console.warn('[CSR] pcFiscal FY-start resolution failed, using calendar Jan 1:', e);
+      var d = new Date();
+      var warn = document.getElementById('csrWarn');
+      if (warn) {
+        warn.hidden = false;
+        warn.textContent = 'Fiscal-calendar lookup unavailable — using calendar Jan 1, ' +
+          d.getFullYear() + ' as the year start. Totals are otherwise accurate.';
+      }
+      return d.getFullYear() + '-01-01';
+    }
+  }
+
   // Re-fetch the date-bounded data (sales + events) and recompute. Coverage,
-  // aliases, AR-open, and dismissals don't depend on the date floor, so
-  // they're fetched once at boot and reused.
+  // aliases, AR-open, month claims, and dismissals don't depend on the date
+  // floor, so they're fetched once at boot and reused.
   function reload() {
     setLoading(true);
     return Promise.all([fetchSales(), fetchEvents()])
@@ -1170,9 +1366,14 @@
       fetchSales(),
       fetchEvents(),
       fetchInvoicedEventKeys(),
-      fetchDismissals()
+      fetchDismissals(),
+      fetchInvoicePeriods()
     ]).then(function (res) {
       // res[0], res[1] = ready() (undefined)
+
+      // Must run before compute(): decides which venues bill monthly.
+      loadSettlementVenues();
+
       (res[2] || []).forEach(function (row) {
         if (row.event_id && row.stand_id) {
           state.coveredSet[row.event_id + '||' + row.stand_id] = true;
@@ -1194,6 +1395,7 @@
         }
       });
       applyDismissalRows(res[9] || []);
+      applyPeriodRows(res[10] || []);
 
       populateVenueFilter();
       compute();
