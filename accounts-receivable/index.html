@@ -15,6 +15,7 @@
 <script src="/pc-nav.js"></script>
 <script src="/pc-activity.js"></script>
 <script src="/pc-catalog.js"></script>
+<script src="/pc-commission.js"></script>
 
 <style>
   /* ========================================================================
@@ -2570,7 +2571,9 @@
   var formState = null;
   var formCache = {
     items:  null,  // ar_items rows, fetched on first modal open
-    events: {}     // events by venue code; lazily fetched per venue
+    events: {},    // events by venue code; lazily fetched per venue
+    monthSales:    {},  // all sales rows, per settlement venue
+    claimedMonths: {}   // 'YYYY-MM' -> claiming invoice, per settlement venue
   };
 
   /** Build a fresh form-state shape. */
@@ -2600,6 +2603,9 @@
       coverage_event_id: '',  // event the picker last loaded for (stale-guard)
       _coverage_original: {}, // edit-mode snapshot of covered stand_ids (Session 2b diff)
       coverage_tips_by_stand: {}, // stand_name -> logged tip total (primary submission)
+      coverage_month: '',         // 'YYYY-MM' this invoice settles (month mode only)
+      _coverage_month_original: null, // edit-mode baseline for the month diff
+      _month_summary: null,       // cached summarizeMonth() result for the panel
       _tips_suppressed: false,    // true once the user removes the auto tips line
       _dirty: false           // any user input has happened — used for close confirm
     };
@@ -2761,6 +2767,15 @@
   function coverageTipsBreakdown() {
     var out = [];
     if (!formState) return out;
+    // Month mode: one entry for the whole month's logged tips.
+    if (isMonthMode()) {
+      if (!formState.coverage_month) return out;
+      var ms = formState._month_summary;
+      if (ms && Math.abs(ms.tips) > 0.005) {
+        out.push({ name: fmtMonthLabel(formState.coverage_month), amount: ms.tips });
+      }
+      return out;
+    }
     var byStand = formState.coverage_tips_by_stand || {};
     (formState.coverage_planned || []).forEach(function (p) {
       if (!p.stand_id) return;
@@ -2833,7 +2848,9 @@
   function renderCoverageTips() {
     var el = document.getElementById('arfCoverageTips');
     if (!el) return;
-    if (!formState || !formState.event_id) { el.hidden = true; el.innerHTML = ''; return; }
+    if (!formState || (!formState.event_id && !formState.coverage_month)) {
+      el.hidden = true; el.innerHTML = ''; return;
+    }
 
     var tipsItem = findTipsItem();
     if (!tipsItem) {
@@ -3185,6 +3202,441 @@
   }
 
   // =====================================================================
+  // SETTLEMENT (MONTHLY) BILLING MODE
+  //
+  // Venues flagged venues.settles_monthly (DE / Chase Fieldhouse) are
+  // billed as ONE lump per calendar month rather than per event, per
+  // stand. For those venues the form swaps three things:
+  //
+  //   Event field  -> "Covers month" dropdown
+  //   Stand field  -> hidden (a monthly settlement covers every stand)
+  //   Coverage box -> read-only verification panel for the picked month
+  //
+  // On save, one row lands in ar_invoice_periods claiming that month.
+  // The AR coverage page then drops every sales row inside it, whether
+  // that month was logged per-event or as a single lump row.
+  // =====================================================================
+
+  // Pseudo-stands that never carry a commission deal. Mirrors the coverage
+  // page's SKIP_SET so the month panel's estimate matches what that page
+  // shows for the same month.
+  var MONTH_SKIP_STANDS = {
+    'Support Staff': true,
+    'Hawking': true,
+    'Client Staffing Needs': true,
+    'Non-Event Labor': true,
+    'Overall': true
+  };
+
+  /** True when the currently-picked venue bills by calendar month. */
+  function isMonthMode() {
+    if (!formState || !formState.venue_code) return false;
+    try {
+      return !!(pcCatalog.isVenueSettlementBilled &&
+                pcCatalog.isVenueSettlementBilled(formState.venue_code));
+    } catch (e) {
+      console.warn('[AR month] settlement lookup failed:', e);
+      return false;
+    }
+  }
+
+  function monthKeyFromIso(iso) { return String(iso || '').slice(0, 7); }
+
+  /** 'YYYY-MM' -> { start: 'YYYY-MM-01', end: 'YYYY-MM-<last>' }. */
+  function monthBounds(mk) {
+    var parts = String(mk || '').split('-');
+    var y = parseInt(parts[0], 10);
+    var m = parseInt(parts[1], 10);
+    if (!y || !m) return null;
+    var last = new Date(y, m, 0).getDate();   // day 0 of next month = last of this
+    return { start: mk + '-01', end: mk + '-' + pad2(last) };
+  }
+
+  /** 'YYYY-MM' -> 'August 2026'. */
+  function fmtMonthLabel(mk) {
+    var parts = String(mk || '').split('-');
+    if (parts.length < 2) return mk || '';
+    var months = ['January','February','March','April','May','June',
+                  'July','August','September','October','November','December'];
+    return (months[parseInt(parts[1], 10) - 1] || '') + ' ' + parts[0];
+  }
+
+  /**
+   * Months already claimed at this venue, keyed 'YYYY-MM'. Voided
+   * invoices' claims are ignored rather than deleted, so voiding an
+   * invoice frees its month with no cleanup.
+   */
+  function fetchClaimedMonths(venueCode) {
+    if (!venueCode) return Promise.resolve({});
+    return AR.authFetch(
+      SB_REST + 'ar_invoice_periods?select=id,period_month,invoice_id,' +
+      'ar_invoices(internal_invoice_number,status)' +
+      '&venue_code=eq.' + encodeURIComponent(venueCode) +
+      '&deleted_at=is.null&limit=1000',
+      { headers: pcAuth.headers() }
+    ).then(function (rows) {
+      var out = {};
+      (rows || []).forEach(function (r) {
+        var inv = r.ar_invoices || {};
+        if (inv.status === 'voided') return;
+        if (!r.period_month) return;
+        out[monthKeyFromIso(r.period_month)] = {
+          invoice_id: r.invoice_id,
+          invoice_number: inv.internal_invoice_number || ''
+        };
+      });
+      formCache.claimedMonths[venueCode] = out;
+      return out;
+    });
+  }
+
+  /**
+   * All logged sales at a settlement venue, cached per venue. Only ever
+   * called for month-mode venues, which are low-volume by nature (DE is
+   * ~40 rows for the year) — the whole set is pulled once so the month
+   * dropdown and the verification panel can both be computed locally
+   * without a round-trip per month.
+   */
+  function fetchVenueSalesForMonths(venueCode) {
+    if (!venueCode) return Promise.resolve([]);
+    if (formCache.monthSales[venueCode]) {
+      return Promise.resolve(formCache.monthSales[venueCode]);
+    }
+    return AR.authFetch(
+      SB_REST + 'sales?select=stand,amount,tip_amount,event_date' +
+      '&venue=eq.' + encodeURIComponent(venueCode) +
+      '&event_date=lte.' + todayIso() +
+      '&order=event_date.desc&limit=20000',
+      { headers: pcAuth.headers() }
+    ).then(function (rows) {
+      formCache.monthSales[venueCode] = rows || [];
+      return formCache.monthSales[venueCode];
+    });
+  }
+
+  /** Distinct months with logged sales at a venue, newest first. */
+  function availableMonths(venueCode) {
+    var seen = {}, out = [];
+    (formCache.monthSales[venueCode] || []).forEach(function (r) {
+      var mk = monthKeyFromIso(r.event_date);
+      if (!mk || seen[mk]) return;
+      seen[mk] = true;
+      out.push(mk);
+    });
+    out.sort(function (a, b) { return a < b ? 1 : -1; });
+    return out;
+  }
+
+  /**
+   * Roll one month's sales into the numbers shown in the panel. Stands
+   * are aggregated first, then run through pcCommission once each — the
+   * same order the coverage page uses, so the two agree.
+   */
+  function summarizeMonth(venueCode, mk) {
+    var rows = (formCache.monthSales[venueCode] || []).filter(function (r) {
+      return monthKeyFromIso(r.event_date) === mk;
+    });
+    var byStand = {}, dates = {}, gross = 0, tips = 0;
+    rows.forEach(function (r) {
+      var st = r.stand || '(unknown)';
+      if (MONTH_SKIP_STANDS[st]) return;
+      var amt = parseFloat(r.amount) || 0;
+      var tip = parseFloat(r.tip_amount) || 0;
+      if (byStand[st] == null) byStand[st] = 0;
+      byStand[st] += amt;
+      gross += amt;
+      tips += tip;
+      if (r.event_date) dates[r.event_date] = true;
+    });
+
+    var commission = 0, dealMissing = [];
+    Object.keys(byStand).forEach(function (st) {
+      var c = null;
+      try { c = pcCommission.calcCommission(venueCode, st, byStand[st]); }
+      catch (e) { c = null; }
+      if (!c || c.dealType === null) { dealMissing.push(st); return; }
+      commission += c.commission;
+    });
+
+    return {
+      month:       mk,
+      eventDates:  Object.keys(dates).length,
+      stands:      Object.keys(byStand).length,
+      gross:       Math.round(gross * 100) / 100,
+      tips:        Math.round(tips * 100) / 100,
+      commission:  Math.round(commission * 100) / 100,
+      dealMissing: dealMissing
+    };
+  }
+
+  /** Build the month <select>, locking months claimed by other invoices. */
+  function renderMonthOptions() {
+    var sel = document.getElementById('arfMonth');
+    if (!sel || !formState) return;
+    var v = formState.venue_code;
+    var months = availableMonths(v);
+    var claimed = formCache.claimedMonths[v] || {};
+
+    // Keep a saved month visible even if its sales rows have since gone.
+    if (formState.coverage_month && months.indexOf(formState.coverage_month) === -1) {
+      months.unshift(formState.coverage_month);
+    }
+
+    sel.innerHTML = '<option value="">Select month…</option>' +
+      months.map(function (mk) {
+        var c = claimed[mk];
+        var mine = !!(c && formState._editing_id && c.invoice_id === formState._editing_id);
+        var locked = !!(c && !mine);
+        var label = fmtMonthLabel(mk) +
+          (locked ? ' \u00b7 on ' + (c.invoice_number || 'another invoice') : '');
+        return '<option value="' + esc(mk) + '"' + (locked ? ' disabled' : '') + '>' +
+          esc(label) + '</option>';
+      }).join('');
+    sel.value = formState.coverage_month || '';
+  }
+
+  /** Read-only verification panel for the picked month. */
+  function renderMonthPanel() {
+    var wrap  = document.getElementById('arfCoverageWrap');
+    var list  = document.getElementById('arfCoverageList');
+    var sub   = document.getElementById('arfCoverageSub');
+    var label = document.getElementById('arfCoverageLabel');
+    var hint  = document.getElementById('arfCoverageHint');
+    if (!wrap || !list || !formState) return;
+
+    wrap.hidden = false;
+    if (label) label.textContent = 'Month coverage';
+    if (hint) {
+      hint.textContent = 'This invoice settles the whole calendar month. ' +
+        'Every logged sale inside it clears from the coverage page.';
+    }
+
+    if (!formState.coverage_month) {
+      if (sub) sub.textContent = '';
+      list.innerHTML = '<div class="ar-coverage-loading">Pick the month this invoice covers.</div>';
+      formState._month_summary = null;
+      return;
+    }
+
+    var s = summarizeMonth(formState.venue_code, formState.coverage_month);
+    formState._month_summary = s;
+    if (sub) sub.textContent = fmtMonthLabel(formState.coverage_month);
+
+    var rowsHtml =
+      '<div class="ar-coverage-row"><span class="ar-coverage-name">Event dates</span>' +
+        '<span class="ar-coverage-tag is-locked">' + s.eventDates + '</span></div>' +
+      '<div class="ar-coverage-row"><span class="ar-coverage-name">Stands</span>' +
+        '<span class="ar-coverage-tag is-locked">' + s.stands + '</span></div>' +
+      '<div class="ar-coverage-row"><span class="ar-coverage-name">Logged gross</span>' +
+        '<span class="ar-coverage-tag is-locked">' + esc(fmtMoney(s.gross)) + '</span></div>' +
+      '<div class="ar-coverage-row"><span class="ar-coverage-name">Est. commission</span>' +
+        '<span class="ar-coverage-tag is-locked">' + esc(fmtMoney(s.commission)) + '</span></div>';
+
+    if (s.eventDates === 0) {
+      rowsHtml += '<div class="ar-coverage-row is-orphan">' +
+        '<span class="ar-coverage-name">No logged sales in this month</span>' +
+        '<span class="ar-coverage-tag is-orphan">check the month</span></div>';
+    }
+    if (s.dealMissing.length) {
+      rowsHtml += '<div class="ar-coverage-row is-orphan">' +
+        '<span class="ar-coverage-name">No deal configured: ' +
+          esc(s.dealMissing.join(', ')) + '</span>' +
+        '<span class="ar-coverage-tag is-orphan">not in estimate</span></div>';
+    }
+
+    list.innerHTML = rowsHtml;
+  }
+
+  /** Wire the month dropdown (called once, when the field is built). */
+  function wireMonthPicker() {
+    var sel = document.getElementById('arfMonth');
+    if (!sel || sel._wired) return;
+    sel._wired = true;
+    sel.addEventListener('change', function () {
+      formState.coverage_month = sel.value || '';
+      formState._dirty = true;
+      var hint = document.getElementById('arfMonthHint');
+      if (hint) {
+        hint.textContent = formState.coverage_month
+          ? ('Settles ' + fmtMonthLabel(formState.coverage_month) + ' in full')
+          : 'Billed as one lump per calendar month';
+      }
+      renderMonthPanel();
+      syncTipsLine();
+    });
+  }
+
+  /**
+   * Load everything month mode needs, then paint. Also recovers the
+   * saved month in edit mode by matching this invoice's own claim.
+   */
+  function loadMonthMode() {
+    var venue = formState && formState.venue_code;
+    if (!venue) return;
+    var list = document.getElementById('arfCoverageList');
+    var wrap = document.getElementById('arfCoverageWrap');
+    if (wrap) wrap.hidden = false;
+    if (list) list.innerHTML = '<div class="ar-coverage-loading">Loading months…</div>';
+
+    var readyP = (pcCommission && pcCommission.ready)
+      ? pcCommission.ready() : Promise.resolve();
+
+    Promise.all([
+      readyP,
+      fetchVenueSalesForMonths(venue),
+      fetchClaimedMonths(venue)
+    ]).then(function (res) {
+      // Stale guard: the venue may have changed while fetching.
+      if (!formState || formState.venue_code !== venue || !isMonthMode()) return;
+
+      var claimed = res[2] || {};
+
+      // Edit mode: recover this invoice's own claimed month.
+      if (formState._editing_id && !formState.coverage_month) {
+        Object.keys(claimed).forEach(function (mk) {
+          if (claimed[mk].invoice_id === formState._editing_id) {
+            formState.coverage_month = mk;
+          }
+        });
+      }
+      formState._coverage_month_original = formState.coverage_month || null;
+
+      // New invoice: default to the invoice date's month when it's free.
+      // These invoices are dated the last day of the month they cover, so
+      // this is right by construction and only needs overriding on a
+      // catch-up entry.
+      if (!formState._editing_id && !formState.coverage_month) {
+        var guess = monthKeyFromIso(formState.period_start);
+        if (guess && !claimed[guess]) formState.coverage_month = guess;
+      }
+
+      renderMonthOptions();
+      renderMonthPanel();
+      syncTipsLine();
+    }).catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      console.error('[AR month] load failed:', e);
+      var l = document.getElementById('arfCoverageList');
+      if (l) l.innerHTML = '<div class="ar-coverage-loading">Could not load months.</div>';
+    });
+  }
+
+  /** Drop month state when leaving month mode. */
+  function clearMonthPanel() {
+    if (formState) {
+      formState.coverage_month = '';
+      formState._month_summary = null;
+      for (var i = formState.lines.length - 1; i >= 0; i--) {
+        if (formState.lines[i]._auto_tips && !formState.lines[i]._tips_locked) {
+          formState.lines.splice(i, 1);
+        }
+      }
+    }
+    var label = document.getElementById('arfCoverageLabel');
+    if (label) label.textContent = 'Statement coverage';
+    var hint = document.getElementById('arfCoverageHint');
+    if (hint) {
+      hint.textContent = 'Tick the planned-open stands this statement accounts for. ' +
+        'Stands on another statement are locked.';
+    }
+  }
+
+  /**
+   * Swap the Event field between event mode and month mode, and hide the
+   * Stand field in month mode. Idempotent — re-rendering the field only
+   * happens when the mode actually flips, so listeners aren't stacked.
+   */
+  function applyFormMode() {
+    var eventField = document.getElementById('arfEventField');
+    var standField = document.getElementById('arfStandField');
+    var monthMode  = isMonthMode();
+
+    if (standField) standField.hidden = monthMode;
+    if (!eventField) return;
+
+    var cur = eventField.getAttribute('data-mode') || 'event';
+
+    if (monthMode) {
+      if (cur !== 'month') {
+        eventField.setAttribute('data-mode', 'month');
+        eventField.innerHTML =
+          '<label class="ar-label" for="arfMonth">Covers month <span class="req">*</span></label>' +
+          '<select id="arfMonth"><option value="">Select month…</option></select>' +
+          '<div class="ar-field-hint" id="arfMonthHint">Billed as one lump per calendar month</div>';
+        wireMonthPicker();
+      }
+      loadMonthMode();
+    } else {
+      if (cur === 'month') {
+        eventField.setAttribute('data-mode', 'event');
+        eventField.innerHTML =
+          '<label class="ar-label">Event</label>' +
+          '<input type="text" id="arfEvent" list="arfEventList" placeholder="Pick an event or type free text">' +
+          '<datalist id="arfEventList"></datalist>' +
+          '<div class="ar-field-hint" id="arfEventHint">No event linked</div>';
+        var evtInput = document.getElementById('arfEvent');
+        if (evtInput) evtInput.addEventListener('input', syncEventFromText);
+        refreshEventDatalist();
+      }
+      clearMonthPanel();
+    }
+  }
+
+  /**
+   * Persist the month claim. At most one live row per invoice (enforced
+   * by a partial unique index), so a change soft-deletes the old claim
+   * BEFORE inserting the new one — the order matters or the insert
+   * collides with the index.
+   */
+  function persistPeriod(invoiceId, venueCode, monthKey, baselineMonth) {
+    if (!invoiceId || !venueCode) return Promise.resolve();
+    var cur  = monthKey || null;
+    var base = baselineMonth || null;
+    if (cur === base) return Promise.resolve();
+
+    var actor = COVERAGE_ACTOR();
+    var hdrs = Object.assign({}, pcAuth.headers(), {
+      'Content-Type': 'application/json', 'Prefer': 'return=minimal'
+    });
+
+    var chain = Promise.resolve();
+    if (base) {
+      chain = AR.authFetch(
+        SB_REST + 'ar_invoice_periods?invoice_id=eq.' + encodeURIComponent(invoiceId) +
+        '&deleted_at=is.null',
+        {
+          method: 'PATCH', headers: hdrs,
+          body: JSON.stringify({ deleted_at: new Date().toISOString(), deleted_by: actor })
+        }
+      );
+    }
+    if (!cur) return chain;
+
+    var bounds = monthBounds(cur);
+    if (!bounds) return chain;
+
+    return chain.then(function () {
+      return AR.authFetch(SB_REST + 'ar_invoice_periods', {
+        method: 'POST', headers: hdrs,
+        body: JSON.stringify({
+          invoice_id:   invoiceId,
+          venue_code:   venueCode,
+          period_month: bounds.start,
+          created_by:   actor
+        })
+      });
+    });
+  }
+
+  /** True when the picked month differs from the edit-mode baseline. */
+  function monthHasChanges() {
+    if (!formState || !isMonthMode()) return false;
+    var base = formState._coverage_month_original || null;
+    var cur  = formState.coverage_month || null;
+    return base !== cur;
+  }
+
+  // =====================================================================
   // STAGE 2.2 — MODAL BUILDERS
   // =====================================================================
 
@@ -3217,11 +3669,11 @@
               '</div>' +
               '<div class="ar-field-hint" id="arfClientHint">Pick a venue first</div>' +
             '</div>' +
-            '<div class="ar-field">' +
+            '<div class="ar-field" id="arfStandField">' +
               '<label class="ar-label">Stand</label>' +
               '<select id="arfStand"><option value="">— no stand —</option></select>' +
             '</div>' +
-            '<div class="ar-field">' +
+            '<div class="ar-field" id="arfEventField" data-mode="event">' +
               '<label class="ar-label">Event</label>' +
               '<input type="text" id="arfEvent" list="arfEventList" placeholder="Pick an event or type free text">' +
               '<datalist id="arfEventList"></datalist>' +
@@ -3239,10 +3691,10 @@
 
           '<div class="ar-coverage-wrap" id="arfCoverageWrap" hidden>' +
             '<div class="ar-coverage-head">' +
-              '<div class="ar-section-label">Statement coverage</div>' +
+              '<div class="ar-section-label" id="arfCoverageLabel">Statement coverage</div>' +
               '<div class="ar-coverage-sub" id="arfCoverageSub"></div>' +
             '</div>' +
-            '<div class="ar-coverage-hint">Tick the planned-open stands this statement accounts for. Stands on another statement are locked.</div>' +
+            '<div class="ar-coverage-hint" id="arfCoverageHint">Tick the planned-open stands this statement accounts for. Stands on another statement are locked.</div>' +
             '<div class="ar-coverage-list" id="arfCoverageList"></div>' +
             '<div class="ar-coverage-tips" id="arfCoverageTips" hidden></div>' +
           '</div>' +
@@ -3573,9 +4025,12 @@
       if (hint) hint.textContent = 'No event linked';
 
       clearCoveragePicker();
+      formState.coverage_month = '';
+      formState._coverage_month_original = null;
 
       refreshClientDropdown();
       refreshStandDropdown();
+      applyFormMode();
 
       if (formState.venue_code) {
         fetchEventsForVenue(formState.venue_code)
@@ -3916,6 +4371,7 @@
         renderLines();
         wireModalEvents();
         applyVenueRequirementForCurrentClient();
+        applyFormMode();
       })
       .catch(function (e) {
         if (e && e.authFailed) { handleAuthFailure(); return; }
@@ -4114,6 +4570,7 @@
 
           // Evaluate venue requirement based on the loaded client.
           applyVenueRequirementForCurrentClient();
+          applyFormMode();
 
           // Re-enable save now that we're loaded.
           if (saveBtn) saveBtn.disabled = false;
@@ -4308,6 +4765,9 @@
       errors.push('Pick a venue');
     }
     if (!formState.client_id)  errors.push('Pick a client');
+    if (isMonthMode() && !formState.coverage_month) {
+      errors.push('Pick the month this invoice covers');
+    }
     if (!formState.period_start) errors.push('Set the invoice date');
 
     // Filter to lines with both item AND a numeric non-zero amount.
@@ -4509,7 +4969,18 @@
       });
     })
     .then(function () {
-      // ----- Step 2.5: statement coverage (only when an event is linked) -----
+      // ----- Step 2.5a: month claim (settlement venues) -----
+      if (isMonthMode()) {
+        return persistPeriod(savedInvoice.id, savedInvoice.venue_code,
+                             formState.coverage_month, null)
+          .catch(function (perErr) {
+            console.error('[AR month] claim write failed for invoice ' +
+              savedInvoice.id + ' (invoice saved, month not claimed):', perErr);
+            showToast('Invoice saved · month not claimed', 3200);
+          });
+      }
+
+      // ----- Step 2.5b: statement coverage (only when an event is linked) -----
       if (!savedInvoice.event_id) return;
       // New invoices have no prior coverage → baseline {}.
       return persistCoverage(savedInvoice.id, savedInvoice.event_id, {})
@@ -4757,7 +5228,7 @@
 
     var diff = buildEditDiff(validated);
 
-    if (!diff.hasAny && !coverageHasChanges()) {
+    if (!diff.hasAny && !coverageHasChanges() && !monthHasChanges()) {
       showToast('No changes', 1600);
       return;
     }
@@ -4825,7 +5296,22 @@
         return Promise.all(ops);
       })
       .then(function () {
-        // ----- Step 2.5: statement coverage diff (event-linked only) -----
+        // ----- Step 2.5a: month claim diff (settlement venues) -----
+        if (isMonthMode()) {
+          return persistPeriod(invoiceId, formState.venue_code,
+                               formState.coverage_month,
+                               formState._coverage_month_original)
+            .then(function () {
+              formState._coverage_month_original = formState.coverage_month || null;
+            })
+            .catch(function (perErr) {
+              console.error('[AR month] claim edit failed for invoice ' +
+                invoiceId + ':', perErr);
+              showToast('Saved · month claim not updated', 3200);
+            });
+        }
+
+        // ----- Step 2.5b: statement coverage diff (event-linked only) -----
         if (!formState.event_id) return;
         return persistCoverage(invoiceId, formState.event_id, formState._coverage_original || {})
           .then(function () {
@@ -5671,6 +6157,7 @@
 
     // Hide the coverage picker (no event picked after reset).
     clearCoveragePicker();
+    applyFormMode();
 
     // Restore last-saved indicator (we cleared formState but the subtitle
     // text we already set should persist visually — fix here if needed).
