@@ -205,7 +205,7 @@ header {
   background: rgba(255,255,255,0.5); padding: 1px 7px; border-radius: 4px;
 }
 .returned-actions {
-  grid-row: 2; grid-column: 1 / -1;
+  grid-row: 3; grid-column: 1 / -1;
   display: flex; gap: 6px; flex-wrap: wrap;
   margin-top: 6px;
   padding-top: 6px;
@@ -605,6 +605,13 @@ header {
       <label>Statement month</label>
       <input type="month" id="batch-month">
     </div>
+    <div class="month-row">
+      <label>Bank account</label>
+      <select id="batch-account" style="flex:1;padding:9px 12px;border:1px solid #e0e0e0;border-radius:10px;font-size:14px;color:#1a1a1a;background:#fafafa;font-family:inherit;">
+        <option value="">Loading...</option>
+      </select>
+    </div>
+    <div id="batch-account-error" style="display:none;color:#c0392b;font-size:12px;margin-top:-8px;margin-bottom:12px;"></div>
     <div class="field" style="margin-bottom:14px;">
       <label style="font-size:13px;font-weight:500;color:#555;display:block;margin-bottom:4px;">
         Note to managers <span style="color:#c0392b;">*</span>
@@ -746,6 +753,7 @@ var RETURN_REASON_LABELS = {
   'manager_upload': 'Manager receipt'
 };
 
+var BANK_ACCOUNTS = [];
 var KNOWN_VENDORS = [];
 var KNOWN_VENDORS_LIST = [];   // curated list from known_vendors table: [{id, display_name, aliases:[...]}, ...]
 var EXPENSE_CATEGORIES = [];
@@ -805,6 +813,33 @@ async function loadReferenceData() {
   } catch(e) {}
 }
 
+// ── Load bank accounts (upload routing) ──
+async function loadBankAccounts() {
+  try {
+    var res = await fetch(SUPA_URL + '/rest/v1/bank_accounts?select=id,code,bank,label,account_type,last4,sort_order&deleted_at=is.null&is_active=eq.true&order=sort_order.asc&limit=50', { headers: hdrs() });
+    var rows = await res.json();
+    BANK_ACCOUNTS = Array.isArray(rows) ? rows : [];
+  } catch(e) { BANK_ACCOUNTS = []; }
+  renderBankAccountSelect();
+}
+
+// No default selection here, unlike Check Writer. An upload could be any
+// account, and silently guessing wrong poisons every row in the batch.
+function renderBankAccountSelect() {
+  var sel = document.getElementById('batch-account');
+  if (!sel) return;
+  if (!BANK_ACCOUNTS.length) {
+    sel.innerHTML = '<option value="">-- No accounts configured --</option>';
+    return;
+  }
+  var html = '<option value="">-- Pick the account this statement is from --</option>';
+  for (var i = 0; i < BANK_ACCOUNTS.length; i++) {
+    var a = BANK_ACCOUNTS[i];
+    html += '<option value="' + escapeHtml(a.id) + '">' + escapeHtml(a.bank + ' - ' + a.label + ' (' + a.last4 + ')') + '</option>';
+  }
+  sel.innerHTML = html;
+}
+
 // ── Load curated known_vendors list ──
 async function loadKnownVendors() {
   try {
@@ -842,6 +877,17 @@ function handleFileUpload(input) {
 async function processFile(file) {
   var batchMonth = document.getElementById('batch-month').value;
   if (!batchMonth) { alert('Please select a statement month first.'); return; }
+
+  // Bank account is required — it's the real routing key for reconciliation.
+  var batchAccountId = document.getElementById('batch-account').value;
+  var acctErrEl = document.getElementById('batch-account-error');
+  acctErrEl.style.display = 'none';
+  if (!batchAccountId) {
+    acctErrEl.textContent = 'Please pick which bank account this statement is from.';
+    acctErrEl.style.display = 'block';
+    document.getElementById('batch-account').focus();
+    return;
+  }
 
   // Validate batch note — required field, enforced in app code (DB column is nullable)
   var batchNote = document.getElementById('batch-note').value.trim();
@@ -1233,6 +1279,7 @@ async function matchCharges(lines, batchMonth, fileName, fileType) {
 
   // Read the batch note from the upload card (already validated in processFile)
   var batchNote = (document.getElementById('batch-note').value || '').trim();
+  var batchAccountId = document.getElementById('batch-account').value || null;
 
   var filteredCount = 0;
   var filtered = [];
@@ -1381,6 +1428,7 @@ async function matchCharges(lines, batchMonth, fileName, fileType) {
           vendor_name: wc.vendor_name, category_id: wc.category_id,
           status: wc.status, matched_purchase_id: wc.matched_purchase_id,
           batch_month: wc.batch_month, batch_note: batchNote,
+          bank_account_id: batchAccountId,
           uploaded_by: wc.uploaded_by, uploaded_at: new Date().toISOString()
         })
       });
@@ -2760,6 +2808,7 @@ async function init(user) {
   document.getElementById('batch-month').value = thisMonth();
   setupDragDrop();
   await loadReferenceData();
+  await loadBankAccounts();
   await loadKnownVendors();
   renderKnownVendors();
   await loadReturned();
