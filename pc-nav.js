@@ -73,16 +73,19 @@
       { label: 'Popfax — Event history',        href: '/popfax/',             slug: 'popfax' },
       { label: 'Truck calendar',                href: '/truck-calendar/' }
     ],
-    admin: [
-      { label: 'Event master list',              href: '/events-admin/',           slug: 'events-admin' },
+    finance: [
       { label: 'Accounts receivable',            href: '/accounts-receivable/',    slug: 'accounts-receivable' },
       { label: 'Accounts payable',               href: '/accounts-payable/',       slug: 'accounts-payable' },
-      { label: 'Sales by item',                  href: '/sales-by-item/',          slug: 'sales-by-item' },
-      { label: 'Luciano payments',               href: '/luciano-payments/',       slug: 'luciano-payments' },
       { label: 'Expense reports',                href: '/expense-reports/',        slug: 'expense-reports' },
       { label: 'Check writer',                   href: '/checks/',                 slug: 'checks' },
       { label: 'Bank review',                    href: '/bank-review/',            slug: 'bank-review' },
+      { label: 'Bank accounts',                  href: '/bank-accounts/',          slug: 'bank-accounts' },
       { label: 'P&L overview',                   href: '/pl-overview/',            slug: 'pl-overview' },
+      { label: 'Sales by item',                  href: '/sales-by-item/',          slug: 'sales-by-item' },
+      { label: 'Luciano payments',               href: '/luciano-payments/',       slug: 'luciano-payments' }
+    ],
+    admin: [
+      { label: 'Event master list',              href: '/events-admin/',           slug: 'events-admin' },
       { label: 'Venue roles',                    href: '/manage-venue-roles/',     slug: 'manage-venue-roles' },
       { label: 'Par levels',                     href: '/par-levels/',             slug: 'par-levels' },
       { label: 'Deal structure',                 href: '/deal-structure/',         slug: 'deal-structure' },
@@ -113,10 +116,11 @@
     '.pc-nav-lane{position:relative;display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-size:13px;font-weight:500;padding:4px 2px;user-select:none;text-decoration:none;}',
     '.pc-nav-lane.lane-people{color:#639922;}',
     '.pc-nav-lane.lane-operations{color:#185FA5;}',
-    '.pc-nav-lane.lane-setup{color:#0F6E56;}',
+    '.pc-nav-lane.lane-setup{color:#0E6E7C;}',
     '.pc-nav-lane.lane-prep{color:#534AB7;}',
     '.pc-nav-lane.lane-dashboards{color:#BA7517;}',
-    '.pc-nav-lane.lane-admin{color:#BA7517;}',
+    '.pc-nav-lane.lane-finance{color:#1B7A4B;}',
+    '.pc-nav-lane.lane-admin{color:#6B6B66;}',
     '.pc-nav-lane-chevron{width:10px;height:10px;display:inline-block;transition:transform 0.15s ease;}',
     '.pc-nav-lane.pc-nav-open .pc-nav-lane-chevron{transform:rotate(180deg);}',
     '.pc-nav-dropdown{position:absolute;top:calc(100% + 8px);left:-8px;background:#fff;border:0.5px solid #d8d8d4;border-radius:8px;min-width:240px;padding:6px 0;box-shadow:0 4px 16px rgba(0,0,0,0.06);display:none;z-index:1001;}',
@@ -217,6 +221,7 @@
         buildLaneHTML('setup',       'Setup',      PC_NAV_CONFIG.setup) +
         buildLaneHTML('prep',        'Prep',       PC_NAV_CONFIG.prep) +
         buildLaneHTML('dashboards',  'Dashboards', PC_NAV_CONFIG.dashboards) +
+        buildLaneHTML('finance',     'Finance',    PC_NAV_CONFIG.finance) +
         buildLaneHTML('admin',       'Admin',      PC_NAV_CONFIG.admin) +
       '</nav>'
     );
@@ -285,6 +290,20 @@
           a.appendChild(suffix);
         }
       }
+    }
+
+    // Finance lane disappears entirely for anyone with access to none of it,
+    // rather than showing nine greyed rows. Scoped to Finance on purpose —
+    // every other lane keeps the existing grey-out behaviour. If a manager is
+    // later granted one page in here, the lane reappears with just that row.
+    var finLane = document.querySelector('.pc-nav-lane.lane-finance');
+    if (finLane) {
+      var finLinks = finLane.querySelectorAll('.pc-nav-dropdown a[data-pc-nav-slug]');
+      var anyGranted = false;
+      for (var m = 0; m < finLinks.length; m++) {
+        if (!finLinks[m].classList.contains('pc-nav-no-access')) { anyGranted = true; break; }
+      }
+      if (!anyGranted) finLane.style.display = 'none';
     }
   }
 
