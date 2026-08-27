@@ -481,10 +481,17 @@
           </div>
 
           <div class="field">
+            <label for="fldBankAccount">Bank account <span class="req">*</span></label>
+            <select id="fldBankAccount"></select>
+            <div class="field-hint" id="bankAccountHint">Which account this check draws on. The stock carries the routing and account numbers, so make sure the paper in the printer matches.</div>
+          </div>
+
+          <div class="field">
             <label for="fldCheckNum">Check number you're putting in the printer <span class="req">*</span></label>
             <input type="text" id="fldCheckNum" placeholder="e.g. 1622" inputmode="numeric" autocomplete="off">
             <div class="field-hint">Logged to the register — your stock is pre-printed, so this number is NOT printed onto the check.</div>
             <div class="field-warn" id="dupCheckWarn" hidden></div>
+            <div class="field-warn" id="rangeCheckWarn" hidden></div>
           </div>
 
           <div class="field" id="categoryField">
@@ -665,8 +672,19 @@
   // =====================================================================
   // STATE
   // =====================================================================
+  // Check-number series map, keyed by bank_accounts.code. Advisory only —
+  // drives a soft warning, never blocks a print. Accounts absent from this map
+  // (savings, card, DE Blue Coats, Business Checking) never warn.
+  var CHECK_SERIES = {
+    wf_operating:      [{ min: 1,     max: 1999 },   // retired handwritten stock
+                        { min: 2701,  max: 3700 }],  // CheckOMatic, 1000 qty
+    mt_satb_operating: [{ min: 2601,  max: 2700 }],  // CheckOMatic, 250 qty (2701+ shredded)
+    wf_payroll:        [{ min: 10000, max: 99999 }]
+  };
+
   var state = {
     isAdmin: false, currentUser: null,
+    bankAccounts: [],
     categories: [], payees: [],
     approvedReports: [],   // report loader options (admin only)
     approvedBills: [],     // AP bill loader options (admin only)
@@ -678,6 +696,7 @@
 
     apExtra: {},           // { billId: true } extra same-vendor bills checked in AP mode
     apAutoMemo: '',        // last auto-generated memo summary (so user edits aren't clobbered)
+    apVendorNote: '',      // vendor's check_memo_note (route/account #) prepended to the memo
 
     lastPrint: null
   };
@@ -853,6 +872,14 @@
       { headers: pcAuth.headers() }
     );
   }
+  function fetchBankAccounts() {
+    return authFetch(
+      SB_REST + 'bank_accounts?select=id,code,bank,label,account_type,last4,is_active,sort_order' +
+      '&deleted_at=is.null&is_active=eq.true&account_type=eq.checking' +
+      '&order=sort_order.asc&limit=50',
+      { headers: pcAuth.headers() }
+    );
+  }
   function fetchReport(reportId) {
     var sel = 'select=id,submitter_name,mailing_address,status,total_amount,line_count';
     return authFetch(
@@ -896,7 +923,7 @@
   // so we don't depend on a PostgREST FK embed being configured).
   function fetchVendorRemit(vendorId) {
     return authFetch(
-      SB_REST + 'known_vendors?id=eq.' + encodeURIComponent(vendorId) + '&select=id,remit_address',
+      SB_REST + 'known_vendors?id=eq.' + encodeURIComponent(vendorId) + '&select=id,remit_address,check_memo_note',
       { headers: pcAuth.headers() }
     );
   }
@@ -1052,6 +1079,59 @@
         return '<option value="' + esc(c.id) + '">' + esc(c.name) + '</option>';
       }).join('');
     if (current) sel.value = current;
+  }
+  function populateBankAccountSelect() {
+    var sel = document.getElementById('fldBankAccount');
+    if (!sel) return;
+    if (!state.bankAccounts.length) {
+      sel.innerHTML = '<option value="">— No accounts configured —</option>';
+      return;
+    }
+    sel.innerHTML = state.bankAccounts.map(function (a) {
+      var label = a.bank + ' · ' + a.label + ' (' + a.last4 + ')';
+      return '<option value="' + esc(a.id) + '" data-code="' + esc(a.code) + '">' + esc(label) + '</option>';
+    }).join('');
+    // Default to WF operating; fall back to the first account if it's missing.
+    var def = null;
+    for (var i = 0; i < state.bankAccounts.length; i++) {
+      if (state.bankAccounts[i].code === 'wf_operating') { def = state.bankAccounts[i]; break; }
+    }
+    sel.value = def ? def.id : state.bankAccounts[0].id;
+  }
+  function bankAccountById(id) {
+    for (var i = 0; i < state.bankAccounts.length; i++) {
+      if (String(state.bankAccounts[i].id) === String(id)) return state.bankAccounts[i];
+    }
+    return null;
+  }
+  function selectedBankAccount() {
+    var sel = document.getElementById('fldBankAccount');
+    return sel ? bankAccountById(sel.value) : null;
+  }
+  // Soft warning when the typed number falls outside the selected account's
+  // series. The check_register backfill assumes these ranges are honoured, so
+  // drifting out of them silently mis-attributes a check.
+  function updateRangeWarn() {
+    var warn = document.getElementById('rangeCheckWarn');
+    if (!warn) return;
+    warn.hidden = true;
+    var acct = selectedBankAccount();
+    var numEl = document.getElementById('fldCheckNum');
+    if (!acct || !numEl) return;
+    var raw = numEl.value.trim();
+    if (!raw) return;
+    if (!/^[0-9]+$/.test(raw)) return;
+    var ranges = CHECK_SERIES[acct.code];
+    if (!ranges) return;
+    var n = parseInt(raw, 10);
+    for (var i = 0; i < ranges.length; i++) {
+      if (n >= ranges[i].min && n <= ranges[i].max) return;
+    }
+    var expected = ranges.map(function (r) { return r.min + '–' + r.max; }).join(' or ');
+    warn.hidden = false;
+    warn.textContent = '⚠ Check #' + raw + ' is outside the ' + acct.bank + ' ' +
+      acct.label + ' series (' + expected + '). You can still print, but confirm ' +
+      'the stock in the printer matches the account you picked.';
   }
   function populatePayeeSelect() {
     var sel = document.getElementById('savedPayeeSelect');
@@ -1287,12 +1367,14 @@
     totalEl.textContent = n + ' invoice' + (n === 1 ? '' : 's') + ' selected · ' + fmtMoney(total);
   }
   function apMemoSummary(bills) {
+    var note = (state.apVendorNote || '').trim();
+    var prefix = note ? (note + ' · ') : '';
     var invs = bills.map(function (b) {
       return b.invoice_number ? ('#' + b.invoice_number) : null;
     }).filter(function (x) { return !!x; });
-    if (!invs.length) return 'AP bill payment';
-    if (invs.length <= MEMO_INV_CAP) return 'Inv ' + invs.join(', ');
-    return 'Inv ' + invs.slice(0, MEMO_INV_CAP).join(', ') + ' +' + (invs.length - MEMO_INV_CAP) + ' more';
+    if (!invs.length) return prefix + 'AP bill payment';
+    if (invs.length <= MEMO_INV_CAP) return prefix + 'Inv ' + invs.join(', ');
+    return prefix + 'Inv ' + invs.slice(0, MEMO_INV_CAP).join(', ') + ' +' + (invs.length - MEMO_INV_CAP) + ' more';
   }
   function updateApMemo(bills) {
     var memoEl = document.getElementById('fldMemo');
@@ -1323,6 +1405,7 @@
     var warn = document.getElementById('dupCheckWarn');
     var ckNum = document.getElementById('fldCheckNum').value.trim();
     updatePrintEnabled();
+    updateRangeWarn();
     if (warn) warn.hidden = true;
     clearTimeout(dupTimer);
     if (!ckNum) return;
@@ -1355,6 +1438,8 @@
     if (!isFinite(amt) || amt <= 0) return { ok: false, reason: 'Enter an amount over $0' };
     if (!dateV) return { ok: false, reason: 'Pick a date' };
     if (!ckNum) return { ok: false, reason: 'Enter the check number' };
+    var acctSel = document.getElementById('fldBankAccount');
+    if (!acctSel || !acctSel.value) return { ok: false, reason: 'Pick the bank account' };
     if (state.mode === 'standalone' && !catId) return { ok: false, reason: 'Pick an expense category' };
     return { ok: true, reason: '' };
   }
@@ -1385,6 +1470,7 @@
     var amt   = parseAmount(document.getElementById('fldAmount').value);
     var dateV = document.getElementById('fldDate').value;
     var ckNum = document.getElementById('fldCheckNum').value.trim();
+    var bankAcctId = document.getElementById('fldBankAccount').value || null;
     var catId = document.getElementById('fldCategory').value || null;
     var memo  = document.getElementById('fldMemo').value.trim() || null;
     var savePayee = document.getElementById('savePayeeCheck');
@@ -1403,6 +1489,7 @@
     var ctx = {
       registerId: null,
       checkNumber: ckNum,
+      bankAccountId: bankAcctId,
       amount: amt, payee: payee, addr: addr, dateV: dateV,
       memo: memo, catId: catId,
       reportId: state.mode === 'report' && state.fromReport ? state.fromReport.id : null,
@@ -1467,6 +1554,7 @@
               : 'standalone';
       var regRow = {
         check_number: ckNum, check_date: dateV,
+        bank_account_id: bankAcctId,
         payee_name: payee, mailing_address: addr || null,
         amount: amt, memo: memo,
         source: src,
@@ -1743,6 +1831,10 @@
       document.getElementById('fldDate').value      = lp.dateV || todayIso();
       document.getElementById('fldMemo').value      = lp.memo  || '';
       document.getElementById('fldCheckNum').value  = '';
+      if (lp.bankAccountId) {
+        var reAcctSel = document.getElementById('fldBankAccount');
+        if (reAcctSel) reAcctSel.value = lp.bankAccountId;
+      }
       if (lp.catId) {
         var catSel = document.getElementById('fldCategory');
         if (catSel) catSel.value = lp.catId;
@@ -1769,6 +1861,7 @@
       state.lastPrint = null;
       renderPostPrintBanner();
       renderPreview();
+      updateRangeWarn();
       updatePrintEnabled();
 
       var nf = document.getElementById('fldCheckNum');
@@ -2156,6 +2249,9 @@
     document.getElementById('fldMemo').value = '';
     var warn = document.getElementById('dupCheckWarn');
     if (warn) warn.hidden = true;
+    var rwarn = document.getElementById('rangeCheckWarn');
+    if (rwarn) rwarn.hidden = true;
+    populateBankAccountSelect();
     if (state.mode === 'report') exitReportMode();
     else if (state.mode === 'ap_bill') exitBillMode();
     var rls = document.getElementById('reportLoaderSelect');
@@ -2205,6 +2301,7 @@
     state.fromBill = null;
     state.apExtra = {};
     state.apAutoMemo = '';
+    state.apVendorNote = '';
     var als = document.getElementById('apLoaderSelect');
     if (als) als.value = '';
 
@@ -2309,6 +2406,7 @@
     state.mode = 'ap_bill';
     state.apExtra = {};        // fresh selection each time an anchor is loaded
     state.apAutoMemo = '';
+    state.apVendorNote = '';   // refilled by the vendor lookup below
 
     document.getElementById('fldPayee').value   = bill.vendor_name || '';
     document.getElementById('fldDate').value    = todayIso();
@@ -2366,10 +2464,16 @@
         .then(function (vrows) {
           // Guard against a later pick changing the active bill before this resolves.
           if (state.mode !== 'ap_bill' || !state.fromBill || String(state.fromBill.id) !== String(bill.id)) return;
-          var addr = (vrows && vrows[0]) ? vrows[0].remit_address : '';
+          var vrow = (vrows && vrows[0]) ? vrows[0] : null;
+          var addr = vrow ? vrow.remit_address : '';
           if (addr) {
             document.getElementById('fldAddress').value = normalizeAddress(addr);
             renderPreview();
+          }
+          var note = vrow ? (vrow.check_memo_note || '') : '';
+          if (note) {
+            state.apVendorNote = note;
+            recomputeApAmount();   // regenerates the memo with the route prefix
           }
         })
         .catch(function (e) { if (e && e.authFailed) handleAuthFailure(); });
@@ -2382,6 +2486,7 @@
     state.fromBill = null;
     state.apExtra = {};
     state.apAutoMemo = '';
+    state.apVendorNote = '';
     state.mode = 'standalone';
     restoreStandaloneUI();
     var als = document.getElementById('apLoaderSelect');
@@ -2462,6 +2567,11 @@
     if (ckNumEl) ckNumEl.addEventListener('input', onCheckNumInput);
     var catEl = document.getElementById('fldCategory');
     if (catEl) catEl.addEventListener('change', updatePrintEnabled);
+    var acctEl = document.getElementById('fldBankAccount');
+    if (acctEl) acctEl.addEventListener('change', function () {
+      updateRangeWarn();
+      updatePrintEnabled();
+    });
     var savedSel = document.getElementById('savedPayeeSelect');
     if (savedSel) savedSel.addEventListener('change', onSavedPayeePick);
     var rls = document.getElementById('reportLoaderSelect');
@@ -2513,7 +2623,8 @@
     var initialLoads = [
       fetchCategories(),
       fetchPayees(),
-      refreshRecentChecks()
+      refreshRecentChecks(),
+      fetchBankAccounts()
     ];
     if (state.isAdmin) {
       initialLoads.push(refreshApprovedReports());
@@ -2524,8 +2635,11 @@
       .then(function (res) {
         state.categories = res[0] || [];
         state.payees = res[1] || [];
+        state.bankAccounts = res[3] || [];
         populateCategorySelect();
         populatePayeeSelect();
+        populateBankAccountSelect();
+        updatePrintEnabled();
         renderPayeeManage();
         var reportId = getReportIdFromUrl();
         if (reportId) return loadFromReport(reportId);
