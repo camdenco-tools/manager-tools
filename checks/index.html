@@ -12,6 +12,7 @@
 <script src="/pc-auth.js"></script>
 <script src="/pc-nav.js"></script>
 <script src="/pc-activity.js"></script>
+<script src="/pc-banks.js"></script>
 
 <style>
   * { box-sizing: border-box; }
@@ -672,15 +673,9 @@
   // =====================================================================
   // STATE
   // =====================================================================
-  // Check-number series map, keyed by bank_accounts.code. Advisory only —
-  // drives a soft warning, never blocks a print. Accounts absent from this map
-  // (savings, card, DE Blue Coats, Business Checking) never warn.
-  var CHECK_SERIES = {
-    wf_operating:      [{ min: 1,     max: 1999 },   // retired handwritten stock
-                        { min: 2701,  max: 3700 }],  // CheckOMatic, 1000 qty
-    mt_satb_operating: [{ min: 2601,  max: 2700 }],  // CheckOMatic, 250 qty (2701+ shredded)
-    wf_payroll:        [{ min: 10000, max: 99999 }]
-  };
+  // Check-number series now live in bank_accounts.check_series (jsonb) and are
+  // read via pcBanks.checkSeriesFor() / pcBanks.isCheckNumberInSeries().
+  // Changing a range is a row edit, not a deploy.
 
   var state = {
     isAdmin: false, currentUser: null,
@@ -873,12 +868,9 @@
     );
   }
   function fetchBankAccounts() {
-    return authFetch(
-      SB_REST + 'bank_accounts?select=id,code,bank,label,account_type,last4,is_active,sort_order' +
-      '&deleted_at=is.null&is_active=eq.true&account_type=eq.checking' +
-      '&order=sort_order.asc&limit=50',
-      { headers: pcAuth.headers() }
-    );
+    return pcBanks.ready().then(function () {
+      return pcBanks.getAccounts({ type: 'checking' });
+    });
   }
   function fetchReport(reportId) {
     var sel = 'select=id,submitter_name,mailing_address,status,total_amount,line_count';
@@ -1088,7 +1080,7 @@
       return;
     }
     sel.innerHTML = state.bankAccounts.map(function (a) {
-      var label = a.bank + ' · ' + a.label + ' (' + a.last4 + ')';
+      var label = a.display;
       return '<option value="' + esc(a.id) + '" data-code="' + esc(a.code) + '">' + esc(label) + '</option>';
     }).join('');
     // Default to WF operating; fall back to the first account if it's missing.
@@ -1121,13 +1113,11 @@
     var raw = numEl.value.trim();
     if (!raw) return;
     if (!/^[0-9]+$/.test(raw)) return;
-    var ranges = CHECK_SERIES[acct.code];
-    if (!ranges) return;
-    var n = parseInt(raw, 10);
-    for (var i = 0; i < ranges.length; i++) {
-      if (n >= ranges[i].min && n <= ranges[i].max) return;
-    }
-    var expected = ranges.map(function (r) { return r.min + '–' + r.max; }).join(' or ');
+    var inSeries = pcBanks.isCheckNumberInSeries(acct.code, raw);
+    if (inSeries !== false) return;   // true = in range · null = no series on file
+    var expected = pcBanks.checkSeriesFor(acct.code).map(function (r) {
+      return r.min + '–' + r.max;
+    }).join(' or ');
     warn.hidden = false;
     warn.textContent = '⚠ Check #' + raw + ' is outside the ' + acct.bank + ' ' +
       acct.label + ' series (' + expected + '). You can still print, but confirm ' +
