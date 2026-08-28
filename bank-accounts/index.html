@@ -175,6 +175,35 @@
   .stmt-lines-pill.on  { background: #eaf3de; color: #27500A; }
   .stmt-lines-pill.off { background: #f4f3ee; color: #999; }
 
+  /* ============ MONTH COVERAGE STRIP ============
+     Twelve cells, January to December, one per account. Position implies the
+     month — same idea as a contribution graph — with the full month name and
+     state in the tooltip. Three states that matter: nothing uploaded, uploaded
+     but unread, uploaded and read. Future months and months after an account
+     closed are neutral, because they are not work owed. */
+  .mo-strip { display: flex; gap: 3px; align-items: center; margin-top: 7px; }
+  .mo-cell {
+    width: 19px; height: 19px; border-radius: 3px;
+    font-size: 10px; font-weight: 700; letter-spacing: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid transparent;
+    user-select: none; flex: 0 0 auto; box-sizing: border-box;
+  }
+  /* Missing is an empty box with a hard dark edge — the thing you are meant to
+     notice. The two done-ish states are solid fills with white text so they
+     read at a glance instead of asking the eye to compare pale tints. */
+  .mo-cell.is-none { background: #fff;    border: 2px solid #4a4945; color: #4a4945; }
+  .mo-cell.is-part { background: #C77C0A; border-color: #8F5806; color: #fff; }
+  .mo-cell.is-done { background: #3F7A1B; border-color: #2E5B13; color: #fff; }
+  /* Not owed: months in the future, or after the account closed. Recedes hard
+     so it never competes with an actual gap. */
+  .mo-cell.is-na   { background: #f4f3ef; border-color: #e8e6de; color: #c9c7bf; font-weight: 500; }
+  .mo-tail { font-size: 11px; font-weight: 600; color: #6b6a63; margin-left: 9px; white-space: nowrap; }
+  .mo-tail.is-clear { color: #3F7A1B; }
+  .mo-legend { display: inline-flex; gap: 13px; margin-left: 14px; align-items: center; }
+  .mo-legend span { display: inline-flex; gap: 5px; align-items: center; }
+  .mo-legend i { width: 13px; height: 13px; border-radius: 3px; }
+
   /* ============ MODAL ============ */
   .modal-overlay {
     display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.42);
@@ -935,6 +964,7 @@
               esc(a.account_type.replace('_', ' ')) + '</span> ' +
             '····' + esc(a.last4) + ' · <code>' + esc(a.code) + '</code>' +
           '</div>' +
+          renderMonthStrip(a, stmts) +
         '</div>' +
         '<div class="num col-hide-sm">' + inCell + '</div>' +
         '<div class="num col-hide-sm">' + outCell + '</div>' +
@@ -948,6 +978,105 @@
       '</div>';
     });
     return html;
+  }
+
+  // ---------------------------------------------------------------------
+  // MONTH COVERAGE STRIP
+  //
+  // A statement belongs to the month its period ENDS in, which is how the
+  // statement list already labels them. Card cycles close mid-month, so a
+  // cycle closing 12/11 counts as December even though most of its spending
+  // is November — the strip answers "is that cycle on file", not "which month
+  // did the money move".
+  //
+  // Everything here comes from data the page already loaded. No new fetch.
+  // ---------------------------------------------------------------------
+  var MONTH_INITIALS = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+  var MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
+                     'July', 'August', 'September', 'October', 'November', 'December'];
+
+  function coverageYear() {
+    return new Date().getFullYear();
+  }
+
+  // Returns the 0-based month for a date inside `year`, -1 for anything
+  // earlier and 12 for anything later, so callers can tell "before" from
+  // "after" without re-parsing.
+  function monthIndexOf(iso, year) {
+    if (!iso) return null;
+    var p = String(iso).substring(0, 10).split('-');
+    if (p.length !== 3) return null;
+    var y = parseInt(p[0], 10);
+    var m = parseInt(p[1], 10);
+    if (!isFinite(y) || !isFinite(m)) return null;
+    if (y !== year) return y < year ? -1 : 12;
+    return m - 1;
+  }
+
+  function renderMonthStrip(a, stmts) {
+    var year = coverageYear();
+    var now = new Date();
+    var curYear = now.getFullYear();
+    var curMonth = now.getMonth();
+
+    // A month with two statements on file counts as captured if EITHER is.
+    var byMonth = {};
+    (stmts || []).forEach(function (st) {
+      var mi = monthIndexOf(st.period_end, year);
+      if (mi === null || mi < 0 || mi > 11) return;
+      var captured = !!st.lines_captured_at;
+      if (!byMonth[mi] || (captured && !byMonth[mi].captured)) {
+        byMonth[mi] = { captured: captured };
+      }
+    });
+
+    var closedMi = null;
+    if (!a.is_active && a.closed_at) closedMi = monthIndexOf(a.closed_at, year);
+
+    var cells = '';
+    var missing = 0;
+    var pending = 0;
+    for (var m = 0; m < 12; m++) {
+      var hit = byMonth[m];
+      var future = (year > curYear) || (year === curYear && m > curMonth);
+      var afterClose = (closedMi !== null && closedMi !== 12 && m > closedMi);
+      var cls = 'mo-cell';
+      var label;
+      if (hit && hit.captured) {
+        cls += ' is-done';
+        label = 'statement on file, lines captured';
+      } else if (hit) {
+        cls += ' is-part';
+        label = 'statement on file \u2014 lines not captured yet';
+        pending++;
+      } else if (afterClose) {
+        cls += ' is-na';
+        label = 'account closed';
+      } else if (future) {
+        cls += ' is-na';
+        label = 'not yet';
+      } else {
+        cls += ' is-none';
+        label = 'no statement uploaded';
+        missing++;
+      }
+      cells += '<span class="' + cls + '" title="' +
+        esc(MONTH_NAMES[m] + ' ' + year + ' \u2014 ' + label) + '">' +
+        MONTH_INITIALS[m] + '</span>';
+    }
+
+    var tail;
+    if (missing || pending) {
+      var bits = [];
+      if (missing) bits.push(missing + ' missing');
+      if (pending) bits.push(pending + ' to read');
+      tail = '<span class="mo-tail">' + esc(bits.join(' \u00b7 ')) + '</span>';
+    } else {
+      tail = '<span class="mo-tail is-clear">complete</span>';
+    }
+
+    return '<div class="mo-strip" aria-label="Statement coverage by month">' +
+      cells + tail + '</div>';
   }
 
   function renderDetail(a, cs, gs, stmts) {
@@ -1518,7 +1647,12 @@
       if (unassignedChecks) bits.push(unassignedChecks + ' checks');
       txt += ' · ' + bits.join(' and ') + ' predate account tracking and stay unattributed';
     }
-    sub.textContent = txt;
+    sub.innerHTML = esc(txt) +
+      '<span class="mo-legend">' +
+        '<span><i class="mo-cell is-none"></i>no statement</span>' +
+        '<span><i class="mo-cell is-part"></i>uploaded</span>' +
+        '<span><i class="mo-cell is-done"></i>lines captured</span>' +
+      '</span>';
   }
 
   // =====================================================================
@@ -2179,29 +2313,133 @@
     return t;
   }
 
+  // An edge function is killed at 150 seconds. Reading ~90 transaction lines
+  // in one pass exceeds that — July operating does. When it happens the
+  // statement is read in page sections instead: several smaller calls whose
+  // results are concatenated. The per-bucket foot check runs over the COMBINED
+  // set, so a section that came back empty shows up as a bucket that does not
+  // tie. Sectioning changes how the lines are fetched, never how they are proved.
+  var CAP_SECTION_PAGES = 3;
+
+  function callLinesParser(pages) {
+    var payload = {
+      storage_path: capture.statement.storage_path,
+      mode: 'lines',
+      target: captureTarget()
+    };
+    if (pages) payload.pages = pages;
+    return authFetch(SB_URL + '/functions/v1/parse-statement-pdf', {
+      method: 'POST',
+      headers: Object.assign({}, pcAuth.headers(), { 'Content-Type': 'application/json' }),
+      body: JSON.stringify(payload)
+    });
+  }
+
+  // "Too much at once" is worth retrying smaller. Anything else is a real
+  // failure and must not be retried — an out-of-credits error retried four
+  // times is four failures and a confusing message.
+  function isSizeFailure(e) {
+    var m = (e && e.message) ? String(e.message) : '';
+    return m.indexOf('IDLE_TIMEOUT') !== -1 ||
+           m.indexOf('idle timeout') !== -1 ||
+           m.indexOf('more lines than the reader') !== -1 ||
+           m.indexOf('HTTP 504') !== -1 ||
+           m.indexOf('HTTP 546') !== -1;
+  }
+
+  function fetchPageCount() {
+    return authFetch(SB_URL + '/functions/v1/parse-statement-pdf', {
+      method: 'POST',
+      headers: Object.assign({}, pcAuth.headers(), { 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        storage_path: capture.statement.storage_path,
+        mode: 'pagecount'
+      })
+    }).then(function (res) {
+      var n = res && res.page_count;
+      return (isFinite(Number(n)) && Number(n) > 0) ? Math.round(Number(n)) : null;
+    }).catch(function () { return null; });
+  }
+
+  // Read one window, halving it if it is still too big. One page is the floor:
+  // if a single page times out, that is a genuine failure worth surfacing.
+  function captureSection(from, to, acc) {
+    setCapStatus('Reading pages ' + from + '\u2013' + to + '\u2026 ' +
+      acc.length + ' lines so far');
+    return callLinesParser([from, to])
+      .then(function (res) {
+        if (res && res.error) throw new Error(res.error);
+        var got = (res && res.lines) ? res.lines : [];
+        for (var i = 0; i < got.length; i++) acc.push(got[i]);
+      })
+      .catch(function (e) {
+        if (e && e.authFailed) throw e;
+        if (!isSizeFailure(e) || from >= to) throw e;
+        var mid = Math.floor((from + to) / 2);
+        return captureSection(from, mid, acc).then(function () {
+          return captureSection(mid + 1, to, acc);
+        });
+      });
+  }
+
+  function captureInSections() {
+    return fetchPageCount().then(function (count) {
+      // Counting pages from raw PDF bytes is a heuristic and fails on some
+      // compressed files. Rather than guess, ask — every bank prints the
+      // page count at the top of every page.
+      if (!count) {
+        var typed = window.prompt(
+          'This statement is too long for the reader to take in one pass, so it ' +
+          'has to be read in sections.\n\n' +
+          'How many pages does the PDF have? It is printed at the top of every ' +
+          'page \u2014 "Page 1 of 9".', '');
+        if (typed === null) throw new Error('Sectioned capture cancelled.');
+        count = parseInt(String(typed).trim(), 10);
+        if (!isFinite(count) || count < 1 || count > 60) {
+          throw new Error('That is not a page count the reader can work with.');
+        }
+      }
+      var acc = [];
+      var chain = Promise.resolve();
+      for (var p = 1; p <= count; p += CAP_SECTION_PAGES) {
+        chain = (function (from, to, prev) {
+          return prev.then(function () { return captureSection(from, to, acc); });
+        })(p, Math.min(p + CAP_SECTION_PAGES - 1, count), chain);
+      }
+      return chain.then(function () {
+        return { lines: acc, corrections: null, sectioned: true };
+      });
+    });
+  }
+
   function runCapture() {
     capture.busy = true;
     setCapStatus('Reading the statement — this can take a minute…');
     document.getElementById('capBody').innerHTML =
       '<div class="cap-status">Reading every transaction line. A four-page statement takes a while.</div>';
 
-    return authFetch(SB_URL + '/functions/v1/parse-statement-pdf', {
-      method: 'POST',
-      headers: Object.assign({}, pcAuth.headers(), { 'Content-Type': 'application/json' }),
-      body: JSON.stringify({
-        storage_path: capture.statement.storage_path,
-        mode: 'lines',
-        target: captureTarget()
-      })
-    })
+    return callLinesParser(null)
     .then(function (res) {
       if (res && res.error) throw new Error(res.error);
+      return res;
+    })
+    .catch(function (e) {
+      if (e && e.authFailed) throw e;
+      if (!isSizeFailure(e)) throw e;
+      setCapStatus('Too long for one pass \u2014 reading it in sections\u2026');
+      document.getElementById('capBody').innerHTML =
+        '<div class="cap-status">This statement is too long to read in one go, so it is ' +
+        'being read a few pages at a time. This takes longer.</div>';
+      return captureInSections();
+    })
+    .then(function (res) {
       var lines = (res && res.lines) ? res.lines : [];
       if (!lines.length) throw new Error('No transaction lines were found for this account.');
       capture.lines = lines.map(normaliseCaptureLine);
       capture.corrections = res.corrections || null;
       capture.busy = false;
-      setCapStatus(capture.lines.length + ' lines read');
+      setCapStatus(capture.lines.length + ' lines read' +
+        (res.sectioned ? ' \u2014 in sections' : ''));
       renderCaptureLines();
       renderCaptureFoot();
       renderCaptureCorrections();
@@ -2395,6 +2633,20 @@
       renderCaptureFoot();
       return;
     }
+    // The row tint reflects line_type, so it has to be repainted when the
+    // type changes. Done in place rather than by re-rendering the table —
+    // a full redraw would lose scroll position and focus mid-edit.
+    if (k === 'line_type') {
+      var tr = el.closest ? el.closest('tr') : null;
+      if (tr) {
+        tr.classList.remove('t-deposit', 't-transfer', 't-settlement', 't-funding');
+        var tint = tintFor(ln.line_type);
+        if (tint) tr.classList.add(tint);
+      }
+      updateCaptureSaveState();
+      return;
+    }
+
     if (k === 'amount') renderCaptureFoot();
     else updateCaptureSaveState();
   }
