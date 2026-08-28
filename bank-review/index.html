@@ -146,6 +146,18 @@ header {
   margin-left: 4px;
 }
 .batch-pill.purple { background: #F4F2FE; color: #3C3489; border-color: #CECBF6; }
+/* Invoiced-vendor marker. This line settles bills already in /purchases/ --
+   sending it for venue assignment books the same cost a second time. */
+.invoiced-pill {
+  display: inline-block;
+  font-size: 10px; font-weight: 700;
+  padding: 2px 7px; border-radius: 5px;
+  background: #FCEBEB; color: #A32D2D;
+  border: 1px solid #f0c0c0;
+  white-space: nowrap; flex-shrink: 0;
+  margin-left: 4px;
+}
+.food-row.is-invoiced { background: #FDF4F4; }
 .batch-pill.lavender { background: #EEEDFE; color: #3C3489; border-color: #AFA9EC; }
 .expense-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
 .expense-hint { font-size: 11px; color: #534AB7; opacity: 0.6; }
@@ -166,6 +178,21 @@ header {
 .food-cat { font-size: 11px; color: #854F0B; min-width: 100px; text-align: right; opacity: 0.6; }
 .food-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
 .food-hint { font-size: 11px; color: #854F0B; opacity: 0.6; }
+/* Venue assign bar. For a single-venue account there is nothing to ask a
+   manager -- pick the venue once and record every checked row as a purchase. */
+.venue-assign-bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 12px; margin-bottom: 8px;
+  background: #FFF7E8; border: 1px solid #EF9F27; border-radius: 8px;
+}
+.venue-assign-label { font-size: 12px; font-weight: 700; color: #854F0B; white-space: nowrap; }
+.venue-assign-sel {
+  flex: 1; min-width: 180px;
+  padding: 7px 10px; border: 1px solid #EF9F27; border-radius: 7px;
+  font-size: 13px; color: #633806; background: white;
+  font-family: inherit; font-weight: 500; cursor: pointer;
+}
+.venue-assign-bar .section-btn { padding: 7px 16px; font-size: 12px; }
 
 /* Returned section — redesigned to be a real working area */
 .returned-list { background: #EEEDFE; border-radius: 10px; overflow: hidden; }
@@ -764,6 +791,7 @@ var returnedChecked = {};
 var trashCharges = [];        // separate list — populated by loadTrash()
 var expenseChecked = {};
 var foodChecked = {};
+var foodVenueChoice = '';   // venue picked in the food section's assign bar
 var currentBatchId = null;
 var currentUser = null;
 
@@ -841,7 +869,7 @@ function renderBankAccountSelect() {
 // ── Load curated known_vendors list ──
 async function loadKnownVendors() {
   try {
-    var res = await fetch(SUPA_URL + '/rest/v1/known_vendors?select=id,display_name,aliases,notes&order=display_name.asc', { headers: hdrs() });
+    var res = await fetch(SUPA_URL + '/rest/v1/known_vendors?select=id,display_name,aliases,notes,payment_type&order=display_name.asc', { headers: hdrs() });
     var rows = await res.json();
     if (!Array.isArray(rows)) { KNOWN_VENDORS_LIST = []; return; }
     KNOWN_VENDORS_LIST = rows.map(function(r) {
@@ -849,7 +877,8 @@ async function loadKnownVendors() {
         id: r.id,
         display_name: r.display_name || '',
         aliases: Array.isArray(r.aliases) ? r.aliases : [],
-        notes: r.notes || ''
+        notes: r.notes || '',
+        payment_type: r.payment_type || null
       };
     });
   } catch(e) { KNOWN_VENDORS_LIST = []; }
@@ -1392,6 +1421,29 @@ function findCategoryByName(name) {
 }
 
 function isFoodCategory(cat) { return cat && cat.gl_group === 'cogs'; }
+
+// An invoiced vendor bills first and settles later, so their bank line is the
+// PAYMENT of invoices already entered in /purchases/ - the cost is on the books
+// and assigning a venue books it twice. A point_of_sale vendor is the opposite:
+// the swipe IS the purchase, nothing precedes it. Checks display_name first,
+// then aliases, because guessVendor() returns the canonical name on a hit but
+// falls back to the raw bank text when nothing matches.
+function vendorPaymentType(vendorName) {
+  var n = (vendorName || '').trim().toUpperCase();
+  if (!n) return null;
+  for (var i = 0; i < KNOWN_VENDORS_LIST.length; i++) {
+    var kv = KNOWN_VENDORS_LIST[i];
+    if ((kv.display_name || '').toUpperCase() === n) return kv.payment_type || null;
+  }
+  for (var j = 0; j < KNOWN_VENDORS_LIST.length; j++) {
+    var kv2 = KNOWN_VENDORS_LIST[j];
+    if (!kv2.aliases) continue;
+    for (var a = 0; a < kv2.aliases.length; a++) {
+      if ((kv2.aliases[a] || '').toUpperCase() === n) return kv2.payment_type || null;
+    }
+  }
+  return null;
+}
 
 // ── Match against existing purchases ──
 async function matchCharges(lines, ignoredMonth, fileName, fileType) {
@@ -1989,17 +2041,22 @@ function renderFood(items) {
   html += '<label for="food-select-all" style="cursor:pointer;">Select all (' + items.length + ')</label>';
   html += '</div>';
 
+  html += foodVenueBarHtml(items);
+
   html += '<div class="food-list">';
   for (var i = 0; i < items.length; i++) {
     var c = items[i];
     var ds = c.charge_date.slice(5,7) + '/' + c.charge_date.slice(8,10);
     var isCredit = c.amount < 0;
     var displayAmt = (isCredit ? '-' : '') + '$' + fmtMoney(c.amount);
-    html += '<div class="food-row has-raw-tooltip" data-raw="' + escapeHtml(c.raw_description || '') + '">';
+    var payType = vendorPaymentType(c.vendor_name);
+    var isInvoiced = (payType === 'invoiced');
+    html += '<div class="food-row has-raw-tooltip' + (isInvoiced ? ' is-invoiced' : '') + '" data-raw="' + escapeHtml(c.raw_description || '') + '">';
     html += '<input type="checkbox" class="expense-check" ' + (foodChecked[c.id] ? 'checked' : '') + ' onchange="toggleFoodCheck(\'' + c.id + '\', this.checked)" style="accent-color:#BA7517;">';
     html += '<span class="food-date">' + ds + '</span>';
     var batchPill = c.batch_note ? '<span class="batch-pill">' + escapeHtml(c.batch_note) + '</span>' : '';
-    html += '<span class="food-vendor">' + escapeHtml(c.vendor_name) + batchPill + '</span>';
+    var invPill = isInvoiced ? '<span class="invoiced-pill" title="This vendor bills first and is paid later. This line settles invoices already entered in Purchases - it is not a new cost.">INVOICED</span>' : '';
+    html += '<span class="food-vendor">' + escapeHtml(c.vendor_name) + batchPill + invPill + '</span>';
     html += '<span class="food-amount' + (isCredit ? ' credit' : '') + '">' + displayAmt + '</span>';
     html += '<span class="food-cat">' + escapeHtml(c.category_name || 'Food Purchases') + '</span>';
     html += '<button class="move-btn" onclick="moveToExpense(\'' + c.id + '\')" title="Reclassify as non-food (will appear in expenses section, save there)">&rarr; Expense</button>';
@@ -2011,7 +2068,11 @@ function renderFood(items) {
 
   var checkedCount = items.filter(function(c) { return foodChecked[c.id]; }).length;
   html += '<div class="food-footer">';
-  html += '<span class="food-hint">Uncheck any you don\'t want to send</span>';
+  var invCount = items.filter(function(c) { return vendorPaymentType(c.vendor_name) === 'invoiced'; }).length;
+  var hintTxt = invCount
+    ? invCount + ' row' + (invCount === 1 ? ' is' : 's are') + ' from invoiced vendors and start unchecked - those settle bills already in Purchases'
+    : 'Uncheck any you don\'t want to send';
+  html += '<span class="food-hint">' + hintTxt + '</span>';
   html += '<button class="section-btn amber" onclick="sendToManagers()"' + (checkedCount === 0 ? ' disabled' : '') + '>Send ' + checkedCount + ' to managers</button>';
   html += '</div>';
 
@@ -2088,6 +2149,204 @@ function renderReturned() {
 
   document.getElementById('returned-body').innerHTML = html;
   document.getElementById('returned-body').classList.add('open');
+}
+
+// ══════════════════════════════════════════════
+// ── Assign checked food rows to a venue ──
+// ══════════════════════════════════════════════
+// This is what a manager does on the Purchases page, done here instead. Some
+// accounts buy for one building and there is no question to ask; some buy for
+// several and there is. Picking a venue here is the first case; leaving the
+// picker empty and using "Send to managers" is the second.
+
+function onFoodVenueChange(v) {
+  foodVenueChoice = v || '';
+  renderFood(currentCharges.filter(function(c) { return c.status === 'food_pending'; }));
+}
+
+function foodVenueBarHtml(items) {
+  var checkedCount = items.filter(function(c) { return foodChecked[c.id]; }).length;
+  var html = '<div class="venue-assign-bar">';
+  html += '<span class="venue-assign-label">Assign to venue</span>';
+  html += '<select class="venue-assign-sel" id="food-venue-sel" onchange="onFoodVenueChange(this.value)">';
+  html += '<option value="">-- send to managers instead --</option>';
+  for (var v = 0; v < VENUE_OPTIONS.length; v++) {
+    html += '<option value="' + escapeHtml(VENUE_OPTIONS[v]) + '"' +
+            (foodVenueChoice === VENUE_OPTIONS[v] ? ' selected' : '') + '>' +
+            escapeHtml(VENUE_OPTIONS[v]) + '</option>';
+  }
+  html += '</select>';
+  var canAssign = (foodVenueChoice && checkedCount > 0);
+  html += '<button class="section-btn amber" id="food-assign-btn" onclick="assignCheckedToVenue()"' +
+          (canAssign ? '' : ' disabled') + '>' +
+          (foodVenueChoice ? 'Assign ' + checkedCount + ' to ' + escapeHtml(foodVenueChoice) : 'Pick a venue') +
+          '</button>';
+  html += '</div>';
+  return html;
+}
+
+// Resolves a bank-derived vendor name to a known_vendors id, creating the row
+// if it is genuinely new. New rows land as point_of_sale because the page has
+// no way to know otherwise -- they are reported afterward so you can check.
+async function resolveVendorId(vendorName, newVendorsOut) {
+  var n = (vendorName || '').trim();
+  if (!n) throw new Error('blank vendor name');
+  var up = n.toUpperCase();
+
+  for (var i = 0; i < KNOWN_VENDORS_LIST.length; i++) {
+    if ((KNOWN_VENDORS_LIST[i].display_name || '').toUpperCase() === up) return KNOWN_VENDORS_LIST[i].id;
+  }
+  for (var j = 0; j < KNOWN_VENDORS_LIST.length; j++) {
+    var kv = KNOWN_VENDORS_LIST[j];
+    if (!kv.aliases) continue;
+    for (var a = 0; a < kv.aliases.length; a++) {
+      if ((kv.aliases[a] || '').toUpperCase() === up) return kv.id;
+    }
+  }
+
+  // Refuse to create a vendor whose name is a fragment of one that already
+  // exists. guessVendor() falls back to the bare bank text when no alias
+  // matches, so 'PEPSI BOTTLING V PURCHASE' became 'Pepsi' -- which is not
+  // 'Pepsi Beverage Co', so no badge fired and a duplicate point-of-sale
+  // vendor got created for an invoiced one. Fail the row instead; the fix is
+  // to add the bank's spelling as an alias on the real vendor.
+  for (var g = 0; g < KNOWN_VENDORS_LIST.length; g++) {
+    var ex = (KNOWN_VENDORS_LIST[g].display_name || '').toUpperCase();
+    if (!ex || ex === up) continue;
+    if (ex.indexOf(up) !== -1 || up.indexOf(ex) !== -1) {
+      throw new Error('"' + n + '" looks like part of the existing vendor "'
+        + KNOWN_VENDORS_LIST[g].display_name + '". Add "' + n
+        + '" as an alias on that vendor instead, then re-run the assign.');
+    }
+  }
+
+  var res = await fetch(SUPA_URL + '/rest/v1/known_vendors', {
+    method: 'POST',
+    headers: Object.assign({}, hdrs(), {'Content-Type': 'application/json', 'Prefer': 'return=representation'}),
+    body: JSON.stringify({
+      display_name: n,
+      aliases: [up],
+      payment_type: 'point_of_sale',
+      created_by: currentUser ? currentUser.display_name : 'admin'
+    })
+  });
+  if (res.ok) {
+    var rows = await res.json();
+    if (Array.isArray(rows) && rows.length) {
+      KNOWN_VENDORS_LIST.push({
+        id: rows[0].id, display_name: rows[0].display_name,
+        aliases: rows[0].aliases || [up], notes: '',
+        payment_type: rows[0].payment_type || 'point_of_sale'
+      });
+      newVendorsOut.push(n);
+      return rows[0].id;
+    }
+  }
+
+  // display_name is UNIQUE. A conflict here means the row already exists under
+  // a name the in-memory list missed, so read it back rather than fail the row.
+  var look = await fetch(SUPA_URL + '/rest/v1/known_vendors?select=id,display_name,aliases,payment_type'
+    + '&display_name=eq.' + encodeURIComponent(n) + '&limit=1', { headers: hdrs() });
+  if (look.ok) {
+    var lr = await look.json();
+    if (Array.isArray(lr) && lr.length) {
+      KNOWN_VENDORS_LIST.push({
+        id: lr[0].id, display_name: lr[0].display_name,
+        aliases: lr[0].aliases || [], notes: '',
+        payment_type: lr[0].payment_type || null
+      });
+      return lr[0].id;
+    }
+  }
+  throw new Error('could not resolve or create vendor "' + n + '"');
+}
+
+async function assignCheckedToVenue() {
+  if (!foodVenueChoice) return;
+  var items = currentCharges.filter(function(c) { return c.status === 'food_pending' && foodChecked[c.id]; });
+  if (!items.length) return;
+
+  var invoiced = items.filter(function(c) { return vendorPaymentType(c.vendor_name) === 'invoiced'; });
+  var warn = '';
+  if (invoiced.length) {
+    warn = '\n\n(!) ' + invoiced.length + ' of these are INVOICED vendors. Their bills are already in Purchases, '
+         + 'so assigning them records the cost twice. Uncheck them unless you are sure.';
+  }
+  var total = items.reduce(function(s, c) { return s + Math.abs(c.amount); }, 0);
+  if (!confirm('Record ' + items.length + ' charge(s) totalling $' + fmtMoney(total)
+      + ' as purchases at ' + foodVenueChoice + '?' + warn)) return;
+
+  var btn = document.getElementById('food-assign-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Assigning...'; }
+
+  var actor = currentUser ? currentUser.display_name : 'admin';
+  var nowIso = new Date().toISOString();
+  var done = 0, newVendors = [], failed = [];
+
+  for (var i = 0; i < items.length; i++) {
+    var c = items[i];
+    try {
+      var vid = await resolveVendorId(c.vendor_name, newVendors);
+
+      var pRes = await fetch(SUPA_URL + '/rest/v1/purchases', {
+        method: 'POST',
+        headers: Object.assign({}, hdrs(), {'Content-Type': 'application/json', 'Prefer': 'return=representation'}),
+        body: JSON.stringify({
+          invoice_date: c.charge_date,
+          vendor: c.vendor_name,
+          vendor_id: vid,
+          venue: foodVenueChoice,
+          amount: c.amount,
+          type: 'invoice',
+          note: 'From bank statement reconciliation'
+        })
+      });
+      if (!pRes.ok) throw new Error(await pRes.text());
+      var pRows = await pRes.json();
+      if (!Array.isArray(pRows) || !pRows.length) throw new Error('the purchase insert returned no row');
+      var purchaseId = pRows[0].id;
+
+      // Guarded on the current status so a double-click or a re-run cannot
+      // touch a row that has already been handled.
+      var chRes = await fetch(SUPA_URL + '/rest/v1/bank_charges?id=eq.' + c.id + '&status=eq.food_pending', {
+        method: 'PATCH',
+        headers: Object.assign({}, hdrs(), {'Content-Type': 'application/json', 'Prefer': 'return=representation'}),
+        body: JSON.stringify({
+          venue: foodVenueChoice,
+          created_purchase_id: purchaseId,
+          status: 'reconciled',
+          reconciled_by: actor,
+          reconciled_at: nowIso
+        })
+      });
+      if (!chRes.ok) throw new Error(await chRes.text());
+      var chRows = await chRes.json();
+      if (!Array.isArray(chRows) || !chRows.length) {
+        throw new Error('purchase ' + purchaseId + ' was created but the charge did not update - '
+          + 'it may already have been handled. Check Purchases for a stray row.');
+      }
+      done++;
+    } catch (e) {
+      console.error('[bank-review] assign failed', c.vendor_name, e);
+      failed.push(c.vendor_name + ' $' + fmtMoney(c.amount) + ' - ' + String(e.message || e).substring(0, 90));
+    }
+  }
+
+  var msg = done + ' charge(s) recorded as purchases at ' + foodVenueChoice + '.';
+  if (newVendors.length) {
+    msg += '\n\nCreated ' + newVendors.length + ' new vendor(s), all marked point-of-sale:\n  '
+         + newVendors.join('\n  ')
+         + '\n\nIf any of these actually bill you and are paid later, open Known vendors and switch them to invoiced.';
+  }
+  if (failed.length) {
+    msg += '\n\n(!) ' + failed.length + ' FAILED and are still in the queue:\n  ' + failed.join('\n  ');
+  }
+  alert(msg);
+
+  await loadKnownVendors();
+  renderKnownVendors();
+  await loadPendingCharges();
+  renderSuggestions();
 }
 
 // ── Master toggle handlers ──
@@ -3217,7 +3476,10 @@ async function loadPendingCharges() {
     expenseChecked = {}; foodChecked = {};
     currentCharges.forEach(function(c) {
       if (c.status === 'expense_pending') expenseChecked[c.id] = true;
-      if (c.status === 'food_pending') foodChecked[c.id] = true;
+      // Invoiced vendors default to UNCHECKED. Their bank line settles bills
+      // already entered in /purchases/, so sending it for venue assignment
+      // books the same cost twice. Check it manually if you know otherwise.
+      if (c.status === 'food_pending') foodChecked[c.id] = (vendorPaymentType(c.vendor_name) !== 'invoiced');
     });
 
     document.getElementById('review-section').style.display = 'block';
