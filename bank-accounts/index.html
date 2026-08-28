@@ -1,0 +1,2598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bank Accounts · Popcorn Chez</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap">
+
+<script src="/pc-auth.js"></script>
+<script src="/pc-nav.js"></script>
+<script src="/pc-activity.js"></script>
+<script src="/pc-banks.js"></script>
+
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: #faf9f6; color: #1a1a1a;
+    font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 14px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page-title-row {
+    background: #faf9f6; border-bottom: 1px solid #e8e8e4;
+    padding: 18px 22px 16px;
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap;
+  }
+  .page-title { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; margin: 0; }
+  .page-title-meta { font-size: 12px; color: #888; font-weight: 500; }
+  .page-body { max-width: 1180px; margin: 0 auto; padding: 18px 22px 90px; }
+
+  .card {
+    background: #fff; border: 0.5px solid #e0dfd8;
+    border-radius: 10px; margin-bottom: 18px; overflow: hidden;
+  }
+  .card-head {
+    padding: 14px 18px; border-bottom: 1px solid #f0efe8;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; flex-wrap: wrap;
+  }
+  .card-title { font-size: 13px; font-weight: 600; margin: 0; }
+  .card-subtitle { font-size: 12px; color: #888; margin-top: 2px; }
+  .card-body { padding: 4px 0 0; }
+
+  .btn-primary {
+    background: #1a1a1a; color: #fff; border: 0;
+    font-family: inherit; font-size: 13px; font-weight: 500;
+    padding: 9px 16px; border-radius: 6px; cursor: pointer;
+  }
+  .btn-primary:hover { background: #2c2c2a; }
+  .btn-primary:disabled { background: #b4b2a9; cursor: not-allowed; }
+  .btn-secondary {
+    background: transparent; border: 1px solid #e0dfd8; color: #555;
+    font-family: inherit; font-size: 13px; font-weight: 500;
+    padding: 8px 13px; border-radius: 6px; cursor: pointer;
+  }
+  .btn-secondary:hover { background: #f1f0eb; color: #1a1a1a; }
+  .btn-danger {
+    background: transparent; border: 1px solid #e6c4c4; color: #791F1F;
+    font-family: inherit; font-size: 13px; font-weight: 500;
+    padding: 8px 13px; border-radius: 6px; cursor: pointer;
+  }
+  .btn-danger:hover { background: #fceaea; }
+
+  /* ============ ACCOUNT ROWS ============ */
+  .acct-row {
+    display: grid;
+    grid-template-columns: 22px 1fr 130px 110px 110px 150px 92px;
+    gap: 12px; align-items: center;
+    padding: 12px 18px; border-bottom: 1px solid #f0efe8;
+    cursor: pointer;
+  }
+  .acct-row:last-of-type { border-bottom: 0; }
+  .acct-row:hover { background: #fbfaf7; }
+  .acct-row.is-closed { background: #fcfcfa; }
+  .acct-row.is-closed .acct-name,
+  .acct-row.is-closed .acct-sub { color: #999; }
+
+  .acct-head {
+    display: grid;
+    grid-template-columns: 22px 1fr 130px 110px 110px 150px 92px;
+    gap: 12px; align-items: end;
+    padding: 10px 18px 8px; border-bottom: 1px solid #e8e8e4;
+    font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em;
+    text-transform: uppercase; color: #888;
+  }
+  .acct-head .num, .acct-row .num { text-align: right; }
+
+  .acct-caret {
+    font-size: 10px; color: #aaa; transition: transform 0.12s ease;
+    display: inline-block; user-select: none;
+  }
+  .acct-row.is-open .acct-caret { transform: rotate(90deg); }
+  .acct-name { font-weight: 600; font-size: 13.5px; }
+  .acct-sub { font-size: 11.5px; color: #888; margin-top: 1px; }
+  .acct-type {
+    font-size: 10px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.04em; padding: 2px 6px; border-radius: 3px;
+    display: inline-block;
+  }
+  .acct-type.t-checking { background: #e6f1fb; color: #0C447C; }
+  .acct-type.t-savings  { background: #eaf3de; color: #27500A; }
+  .acct-type.t-credit_card { background: #f3e9fb; color: #5B2A86; }
+  .num-big { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 13.5px; }
+  .num-sub { font-size: 11px; color: #888; font-variant-numeric: tabular-nums; }
+  .num-zero { color: #c2c0b8; font-weight: 500; }
+  .stmt-cell { font-size: 12px; }
+  .stmt-none { color: #c2c0b8; font-style: italic; }
+  .status-pill {
+    font-size: 10.5px; font-weight: 600; padding: 3px 8px; border-radius: 20px;
+    display: inline-block; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .status-pill.on  { background: #eaf3de; color: #27500A; }
+  .status-pill.off { background: #f1f0eb; color: #888; }
+
+  /* ============ EXPANDED DETAIL ============ */
+  .acct-detail {
+    background: #fbfaf7; border-bottom: 1px solid #f0efe8;
+    padding: 4px 18px 16px 52px; display: none;
+  }
+  .acct-detail.is-open { display: block; }
+  .detail-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 10px 22px; padding: 12px 0 14px;
+  }
+  .detail-item .dl {
+    font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em;
+    text-transform: uppercase; color: #999; margin-bottom: 2px;
+  }
+  .detail-item .dv { font-size: 13px; }
+  .detail-item .dv.empty { color: #c2c0b8; font-style: italic; }
+  .detail-actions { display: flex; gap: 8px; flex-wrap: wrap; padding-top: 4px; }
+
+  .stmt-block { margin-top: 16px; border-top: 1px solid #eceae2; padding-top: 12px; }
+  .stmt-block h4 {
+    margin: 0 0 8px; font-size: 11px; font-weight: 600;
+    letter-spacing: 0.05em; text-transform: uppercase; color: #888;
+  }
+  .stmt-list { border: 1px solid #e8e6de; border-radius: 7px; background: #fff; overflow: hidden; }
+  .stmt-item {
+    display: grid; grid-template-columns: 1fr 110px 92px 108px 92px;
+    gap: 10px; align-items: center;
+    padding: 8px 12px; border-bottom: 1px solid #f2f1ea; font-size: 12.5px;
+  }
+  .stmt-item:last-child { border-bottom: 0; }
+  .stmt-period { font-weight: 500; }
+  .stmt-shape { font-size: 11px; color: #888; }
+  .stmt-amt { font-variant-numeric: tabular-nums; text-align: right; font-weight: 600; }
+  .stmt-open {
+    background: transparent; border: 0; color: #0C447C; cursor: pointer;
+    font-family: inherit; font-size: 12px; font-weight: 600; padding: 0;
+    text-decoration: underline; text-underline-offset: 3px; text-align: right;
+  }
+  .stmt-open:hover { color: #053461; }
+  .stmt-open:disabled { color: #c2c0b8; cursor: not-allowed; text-decoration: none; }
+  .stmt-empty { font-size: 12px; color: #999; padding: 10px 12px; font-style: italic; }
+  .stmt-lines-pill {
+    font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 20px;
+    display: inline-block; text-transform: uppercase; letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+  .stmt-lines-pill.on  { background: #eaf3de; color: #27500A; }
+  .stmt-lines-pill.off { background: #f4f3ee; color: #999; }
+
+  /* ============ MODAL ============ */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.42);
+    z-index: 1200; justify-content: center; align-items: flex-start;
+    padding: 40px 16px; overflow-y: auto;
+  }
+  .modal-overlay.is-open { display: flex; }
+  .modal {
+    background: #fff; border-radius: 12px; width: 100%; max-width: 540px;
+    box-shadow: 0 8px 34px rgba(0,0,0,0.18); overflow: hidden;
+  }
+  .modal-head {
+    padding: 16px 20px; border-bottom: 1px solid #f0efe8;
+    display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  }
+  .modal-head h3 { margin: 0; font-size: 15px; font-weight: 600; }
+  .modal-head .mh-sub { font-size: 11.5px; color: #888; }
+  .modal-body { padding: 18px 20px; }
+  .modal-foot {
+    padding: 14px 20px; border-top: 1px solid #f0efe8;
+    display: flex; gap: 10px; align-items: center;
+  }
+  .modal-foot .spacer { flex: 1; }
+
+  .field { margin-bottom: 14px; }
+  .field:last-child { margin-bottom: 0; }
+  .field label {
+    display: block; font-size: 11px; font-weight: 500;
+    letter-spacing: 0.04em; text-transform: uppercase;
+    color: #666; margin-bottom: 5px;
+  }
+  .field label .req { color: #c33; }
+  .field label .opt { color: #aaa; text-transform: none; letter-spacing: 0; font-weight: 400; }
+  .field input, .field select, .field textarea {
+    width: 100%; font-family: inherit; font-size: 13px;
+    padding: 8px 10px; border: 1px solid #e0dfd8;
+    border-radius: 6px; background: #fff; color: #1a1a1a;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: #1a1a1a; }
+  .field input[readonly] { background: #f4f3ee; color: #666; cursor: default; }
+  .field textarea { resize: vertical; min-height: 52px; }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .field-hint { font-size: 11px; color: #888; margin-top: 5px; }
+  .modal-error {
+    font-size: 12.5px; color: #791F1F; background: #fceaea;
+    border: 1px solid #f0cccc; border-radius: 6px;
+    padding: 8px 11px; margin-bottom: 14px;
+  }
+  .modal-error[hidden] { display: none; }
+
+  /* check series editor */
+  .series-list { display: flex; flex-direction: column; gap: 7px; margin-bottom: 7px; }
+  .series-row { display: grid; grid-template-columns: 1fr 14px 1fr 30px; gap: 7px; align-items: center; }
+  .series-row .dash { text-align: center; color: #aaa; }
+  .series-row input { text-align: right; font-variant-numeric: tabular-nums; }
+  .series-del {
+    background: transparent; border: 0; color: #b0763a; cursor: pointer;
+    font-size: 15px; line-height: 1; padding: 4px;
+  }
+  .series-del:hover { color: #791F1F; }
+  .series-add {
+    background: transparent; border: 1px dashed #d8d6cc; color: #666;
+    font-family: inherit; font-size: 12px; padding: 6px 10px;
+    border-radius: 6px; cursor: pointer; width: 100%;
+  }
+  .series-add:hover { border-color: #b4b2a9; color: #1a1a1a; }
+  .series-empty { font-size: 12px; color: #999; font-style: italic; padding: 2px 0 6px; }
+
+  .modal.modal-wide { max-width: 720px; }
+  .modal.modal-xwide { max-width: 96vw; }
+  .up-block {
+    border: 1px solid #e0dfd8; border-radius: 9px;
+    padding: 14px 16px; margin-bottom: 14px; background: #fdfdfb;
+  }
+  .up-block.is-ok { border-color: #c5dba1; background: #fbfdf7; }
+  .up-block-head {
+    display: flex; align-items: baseline; gap: 10px;
+    margin-bottom: 12px; flex-wrap: wrap;
+  }
+  .up-block-n {
+    font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em;
+    text-transform: uppercase; color: #888;
+  }
+  .up-block-label { font-size: 11.5px; color: #aaa; }
+  .up-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .up-fields {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px; margin-bottom: 12px;
+  }
+  .up-field label {
+    display: block; font-size: 10.5px; font-weight: 500;
+    letter-spacing: 0.03em; text-transform: uppercase;
+    color: #666; margin-bottom: 4px;
+  }
+  .up-field input, .up-field select {
+    width: 100%; font-family: inherit; font-size: 13px;
+    padding: 7px 9px; border: 1px solid #e0dfd8;
+    border-radius: 6px; background: #fff; color: #1a1a1a;
+  }
+  .up-field input[type="text"] { text-align: right; font-variant-numeric: tabular-nums; }
+  .up-field input:focus, .up-field select:focus { outline: none; border-color: #1a1a1a; }
+  .up-route { font-size: 11px; color: #888; margin-top: 4px; }
+  .up-route.warn { color: #854F0B; }
+  .up-foot {
+    font-size: 12.5px; border-radius: 6px; padding: 8px 11px; line-height: 1.45;
+  }
+  .up-foot.ok      { background: #eaf3de; color: #27500A; border: 1px solid #c5dba1; }
+  .up-foot.bad     { background: #fceaea; color: #791F1F; border: 1px solid #f0cccc; }
+  .up-foot.pending { background: #f4f3ee; color: #888;    border: 1px solid #e8e6de; }
+  .up-save-note { font-size: 11.5px; color: #854F0B; margin-right: 6px; }
+
+  /* ============ LINE CAPTURE ============ */
+  .cap-summary {
+    background: #fbfaf7; border: 1px solid #e8e6de; border-radius: 8px;
+    padding: 11px 13px; margin-bottom: 14px; font-size: 12.5px; color: #555;
+  }
+  .cap-summary strong { color: #1a1a1a; }
+  .cap-intro { font-size: 12.5px; color: #666; line-height: 1.5; margin-bottom: 14px; }
+
+  .cap-foot-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 9px; margin-bottom: 14px;
+  }
+  .cap-foot-cell {
+    border-radius: 7px; padding: 9px 11px; font-size: 12px; line-height: 1.45;
+    border: 1px solid #e8e6de; background: #fdfdfb;
+  }
+  .cap-foot-cell.ok  { background: #eaf3de; border-color: #c5dba1; color: #27500A; }
+  .cap-foot-cell.bad { background: #fceaea; border-color: #f0cccc; color: #791F1F; }
+  .cap-foot-cell .cfl {
+    font-size: 10px; font-weight: 600; letter-spacing: 0.05em;
+    text-transform: uppercase; margin-bottom: 3px; opacity: 0.85;
+  }
+  .cap-foot-cell .cfn { font-variant-numeric: tabular-nums; }
+  .cap-foot-cell .cfd { font-weight: 600; margin-top: 2px; }
+
+  .cap-corrections {
+    font-size: 11.5px; color: #854F0B; background: #fef6ec;
+    border: 1px solid #f3d9a8; border-radius: 6px;
+    padding: 7px 10px; margin-bottom: 14px; line-height: 1.45;
+  }
+  .cap-corrections[hidden] { display: none; }
+
+  .cap-scroll {
+    max-height: 46vh; overflow-y: auto;
+    border: 1px solid #e8e6de; border-radius: 7px; background: #fff;
+  }
+  .cap-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .cap-table thead th {
+    position: sticky; top: 0; background: #f6f6f3; z-index: 2;
+    text-align: left; padding: 7px 8px; font-weight: 600;
+    font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase;
+    color: #888; border-bottom: 1px solid #e0dfd8; white-space: nowrap;
+  }
+  .cap-table thead th.is-amt { text-align: right; }
+  .cap-table td {
+    padding: 5px 8px; border-bottom: 1px solid #f2f1ea; vertical-align: middle;
+  }
+  .cap-table tr:last-child td { border-bottom: 0; }
+  .cap-table tr.is-manual { background: #fefbf5; }
+  .cap-table td.c-date { width: 96px; }
+  .cap-table td.c-date input { padding: 4px 2px; font-size: 11.5px; }
+  .cap-table td.c-desc { width: auto; min-width: 380px; }
+  .cap-table td.c-amt  { width: 100px; text-align: right; }
+  .cap-table td.c-bkt  { width: 92px; }
+  .cap-table td.c-typ  { width: 124px; }
+  .cap-table td.c-bkt select,
+  .cap-table td.c-typ select { padding: 4px 2px; font-size: 11.5px; }
+
+  /* Row tint by what the line MEANS. Debit is left plain — it is the
+     overwhelming majority, and colouring the default only adds noise.
+     Everything tinted is something worth a second look. */
+  .cap-table tr.t-deposit    { background: #dff0cb; }
+  .cap-table tr.t-transfer   { background: #d6e8f8; }
+  .cap-table tr.t-settlement { background: #e4e3dc; }
+  .cap-table tr.t-funding    { background: #fbe6bd; }
+  .cap-table tr.is-manual    { background: #fdf3dc; }
+
+  /* A colour bar on the first cell, so the row reads at a glance without
+     relying on the tint alone. Debit gets none — it is the majority and
+     marking the default only adds noise. */
+  .cap-table tr.t-deposit    td:first-child { box-shadow: inset 4px 0 0 #4E8B21; }
+  .cap-table tr.t-transfer   td:first-child { box-shadow: inset 4px 0 0 #1E6DA8; }
+  .cap-table tr.t-settlement td:first-child { box-shadow: inset 4px 0 0 #8A887C; }
+  .cap-table tr.t-funding    td:first-child { box-shadow: inset 4px 0 0 #C77C0A; }
+
+  /* Inputs inside a tinted row keep a white field so the text stays readable
+     against the stronger background. */
+  .cap-table tr.t-deposit input,    .cap-table tr.t-deposit select,
+  .cap-table tr.t-transfer input,   .cap-table tr.t-transfer select,
+  .cap-table tr.t-settlement input, .cap-table tr.t-settlement select,
+  .cap-table tr.t-funding input,    .cap-table tr.t-funding select,
+  .cap-table tr.t-deposit textarea, .cap-table tr.t-transfer textarea,
+  .cap-table tr.t-settlement textarea, .cap-table tr.t-funding textarea {
+    background: #fff;
+  }
+
+  .cap-legend {
+    display: flex; gap: 14px; flex-wrap: wrap;
+    font-size: 11px; color: #888; margin: 9px 2px 0;
+  }
+  .cap-legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .cap-legend i {
+    width: 11px; height: 11px; border-radius: 3px;
+    border: 1px solid rgba(0,0,0,0.08); display: inline-block;
+  }
+  .cap-table td.c-desc textarea {
+    width: 100%; font-family: inherit; font-size: 12px; line-height: 1.35;
+    padding: 4px 6px; border: 1px solid #e6e4dc; border-radius: 5px;
+    background: #fff; color: #1a1a1a; resize: vertical;
+    min-height: 30px; overflow-y: hidden;
+  }
+  .cap-table td.c-desc textarea:focus { outline: none; border-color: #1a1a1a; }
+  .cap-table td.c-bkt select,
+  .cap-table td.c-typ select { text-overflow: ellipsis; }
+  .cap-table td.c-pg   { width: 44px; color: #b4b2a9; text-align: right; font-variant-numeric: tabular-nums; }
+  .cap-table td.c-rm   { width: 30px; text-align: center; }
+  .cap-table input, .cap-table select {
+    width: 100%; font-family: inherit; font-size: 12px;
+    padding: 4px 6px; border: 1px solid #e6e4dc;
+    border-radius: 5px; background: #fff; color: #1a1a1a;
+  }
+  .cap-table input:focus, .cap-table select:focus { outline: none; border-color: #1a1a1a; }
+  .cap-table input.c-money {
+    text-align: right; font-variant-numeric: tabular-nums; font-weight: 500;
+  }
+  .cap-rm {
+    background: transparent; border: 0; color: #b4b2a9; cursor: pointer;
+    font-size: 15px; line-height: 1; padding: 2px 4px;
+  }
+  .cap-rm:hover { color: #791F1F; }
+  .cap-add {
+    background: transparent; border: 1px dashed #d8d6cc; color: #666;
+    font-family: inherit; font-size: 12px; padding: 7px 10px;
+    border-radius: 6px; cursor: pointer; width: 100%; margin-top: 10px;
+  }
+  .cap-add:hover { border-color: #b4b2a9; color: #1a1a1a; }
+  .cap-status { font-size: 12px; color: #888; padding: 26px 12px; text-align: center; }
+
+  .pc-toast-host {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    z-index: 2000; pointer-events: none;
+  }
+  .pc-toast {
+    background: #1a1a1a; color: #fff; font-size: 13px; font-weight: 500;
+    padding: 11px 18px; border-radius: 24px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+    opacity: 0; transform: translateY(8px);
+    transition: opacity 0.18s ease, transform 0.18s ease;
+  }
+  .pc-toast.is-shown { opacity: 1; transform: translateY(0); }
+
+  .loading-note { padding: 22px 18px; font-size: 13px; color: #888; }
+
+  body.pre-auth .page-body,
+  body.pre-auth .page-title-row { display: none; }
+
+  @media (max-width: 900px) {
+    .acct-head { display: none; }
+    .acct-row { grid-template-columns: 20px 1fr 90px; grid-row-gap: 4px; }
+    .acct-row .col-hide-sm { display: none; }
+    .acct-detail { padding-left: 18px; }
+    .stmt-item { grid-template-columns: 1fr 100px; }
+    .stmt-item .col-hide-sm { display: none; }
+  }
+</style>
+</head>
+
+<body class="pre-auth">
+
+  <div class="page-title-row" aria-hidden="true">
+    <h1 class="page-title">Bank Accounts</h1>
+    <span class="page-title-meta" id="pageTitleMeta">Catalog &amp; statements</span>
+  </div>
+
+  <main class="page-body">
+
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <h2 class="card-title">Accounts</h2>
+          <div class="card-subtitle" id="acctSubtitle">Loading…</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button type="button" class="btn-secondary" id="btnUploadStatement">Upload statement</button>
+          <button type="button" class="btn-primary" id="btnAddAccount">+ Add account</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="acct-head">
+          <span></span>
+          <span>Account</span>
+          <span>Check series</span>
+          <span class="num">Checks</span>
+          <span class="num">Charges</span>
+          <span>Last statement</span>
+          <span>Status</span>
+        </div>
+        <div id="acctList"><div class="loading-note">Loading accounts…</div></div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ============ EDIT / ADD MODAL ============ -->
+  <div class="modal-overlay" id="acctModal">
+    <div class="modal">
+      <div class="modal-head">
+        <h3 id="acctModalTitle">Edit account</h3>
+        <span class="mh-sub" id="acctModalSub"></span>
+      </div>
+      <div class="modal-body">
+        <div class="modal-error" id="acctModalError" hidden></div>
+
+        <div class="field">
+          <label for="fCode">Code <span class="req">*</span> <span class="opt">— stable key, never changes</span></label>
+          <input type="text" id="fCode" placeholder="e.g. wf_reserve" autocomplete="off">
+          <div class="field-hint" id="codeHint">Lowercase letters, numbers and underscores. Used by every other page to refer to this account.</div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="fBank">Bank <span class="req">*</span></label>
+            <input type="text" id="fBank" placeholder="Wells Fargo" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="fLabel">Label <span class="req">*</span></label>
+            <input type="text" id="fLabel" placeholder="Operating" autocomplete="off">
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="fType">Type <span class="req">*</span></label>
+            <select id="fType">
+              <option value="checking">Checking</option>
+              <option value="savings">Savings</option>
+              <option value="credit_card">Credit card</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="fLast4">Last 4 <span class="req">*</span></label>
+            <input type="text" id="fLast4" placeholder="2927" inputmode="numeric" maxlength="4" autocomplete="off">
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="fAcctNum">Full account number <span class="opt">— optional, digits only</span></label>
+          <input type="text" id="fAcctNum" placeholder="2608572927" inputmode="numeric" autocomplete="off">
+          <div class="field-hint">Statement routing matches on this first — it can't collide the way a last-4 can. Leave blank for credit cards; never store a full card number.</div>
+        </div>
+
+        <div class="field">
+          <label for="fAltLast4">Other last-4s <span class="opt">— comma separated, for reissued cards / subaccounts</span></label>
+          <input type="text" id="fAltLast4" placeholder="3218" autocomplete="off">
+        </div>
+
+        <div class="field">
+          <label>Check series <span class="opt">— number ranges of physical stock</span></label>
+          <div class="series-list" id="seriesList"></div>
+          <button type="button" class="series-add" id="btnSeriesAdd">+ Add a range</button>
+          <div class="field-hint">Drives the Check Writer's out-of-range warning. Leave empty for accounts with no check stock.</div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="fSort">Sort order</label>
+            <input type="number" id="fSort" value="99" step="1">
+          </div>
+          <div class="field">
+            <label for="fClosedAt">Closed on <span class="opt">— only if inactive</span></label>
+            <input type="date" id="fClosedAt">
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="fNotes">Notes <span class="opt">— what this account is actually for</span></label>
+          <textarea id="fNotes" rows="2" placeholder="e.g. Float pre-funded for cash flow — despite the name, payroll does not run through here."></textarea>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn-secondary" id="btnModalCancel">Cancel</button>
+        <div class="spacer"></div>
+        <button type="button" class="btn-primary" id="btnModalSave">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ UPLOAD STATEMENT MODAL ============ -->
+  <div class="modal-overlay" id="uploadModal">
+    <div class="modal modal-wide">
+      <div class="modal-head">
+        <h3>Upload a statement</h3>
+        <span class="mh-sub" id="uploadStatus"></span>
+      </div>
+      <div class="modal-body">
+        <div class="modal-error" id="uploadError" hidden></div>
+
+        <div id="upStep1">
+          <div class="field">
+            <label for="upFileInput">Statement PDF <span class="req">*</span></label>
+            <input type="file" id="upFileInput" accept="application/pdf,.pdf">
+            <div class="field-hint">
+              The PDF from the bank, not a CSV export. A Wells Fargo combined statement
+              covers three accounts in one file and will be split automatically.
+              The file is saved first and read second, so a statement the reader
+              can't handle still gets stored with its totals typed by hand.
+            </div>
+          </div>
+        </div>
+
+        <div id="upStep2" style="display:none;">
+          <div id="upResults"></div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn-secondary" id="btnUploadCancel">Cancel</button>
+        <div class="spacer"></div>
+        <span class="up-save-note" id="upSaveNote"></span>
+        <button type="button" class="btn-primary" id="btnUploadParse" disabled>Upload &amp; read</button>
+        <button type="button" class="btn-primary" id="btnUploadSave" style="display:none;" disabled>Save statement</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ CAPTURE LINES MODAL ============ -->
+  <div class="modal-overlay" id="linesModal">
+    <div class="modal modal-xwide">
+      <div class="modal-head">
+        <h3 id="capTitle">Capture statement lines</h3>
+        <span class="mh-sub" id="capStatus"></span>
+      </div>
+      <div class="modal-body">
+        <div class="modal-error" id="capError" hidden></div>
+        <div class="cap-summary" id="capSummary"></div>
+        <div class="cap-corrections" id="capCorrections" hidden></div>
+        <div class="cap-foot-grid" id="capFootGrid"></div>
+        <div id="capBody">
+          <div class="cap-status" id="capPlaceholder">Reading the statement…</div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn-secondary" id="btnCapCancel">Cancel</button>
+        <div class="spacer"></div>
+        <span class="up-save-note" id="capSaveNote"></span>
+        <button type="button" class="btn-primary" id="btnCapSave" disabled>Save lines</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="pc-toast-host" id="pcToastHost" aria-live="polite" aria-atomic="true"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var SB_URL  = 'https://aoazlttdjowhlfcksoyl.supabase.co';
+  var SB_REST = SB_URL + '/rest/v1/';
+  var SB_STORAGE = SB_URL + '/storage/v1';
+  var BUCKET = 'bank-statements';
+
+  var state = {
+    isAdmin: false,
+    accounts: [],        // from pcBanks, includeClosed
+    checkStats: {},      // bank_account_id -> { count, voided, total }
+    chargeStats: {},     // bank_account_id -> { count, total }
+    statements: {},      // bank_account_id -> [rows]
+    openRows: {},        // bank_account_id -> true
+    editing: null,       // account object, or null when adding
+    saving: false
+  };
+
+  // =====================================================================
+  // UTILITIES
+  // =====================================================================
+  function esc(s) {
+    if (s == null) return '';
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  function fmtMoney(n) {
+    if (n == null || isNaN(n)) n = 0;
+    var sign = n < 0 ? '-' : '';
+    return sign + '$' + Math.abs(n).toLocaleString('en-US', {
+      minimumFractionDigits: 2, maximumFractionDigits: 2
+    });
+  }
+  function fmtDateShort(iso) {
+    if (!iso) return '';
+    var p = String(iso).substring(0, 10).split('-');
+    if (p.length !== 3) return iso;
+    return parseInt(p[1], 10) + '/' + parseInt(p[2], 10) + '/' + p[0].substring(2);
+  }
+  function fmtPeriod(startIso, endIso) {
+    if (!endIso) return '—';
+    var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var e = String(endIso).substring(0, 10).split('-');
+    if (e.length !== 3) return endIso;
+    var label = months[parseInt(e[1], 10) - 1] + ' ' + e[0];
+    // A cycle that doesn't sit inside one calendar month gets explicit dates,
+    // which is how the Signify card's 4/10 and 5/11 closes stay readable.
+    if (startIso) {
+      var s = String(startIso).substring(0, 10).split('-');
+      if (s.length === 3 && (s[1] !== e[1] || s[0] !== e[0])) {
+        return fmtDateShort(startIso) + ' – ' + fmtDateShort(endIso);
+      }
+    }
+    return label;
+  }
+  function showToast(msg, ms) {
+    ms = ms || 2400;
+    var host = document.getElementById('pcToastHost');
+    if (!host) return;
+    var el = document.createElement('div');
+    el.className = 'pc-toast';
+    el.textContent = msg;
+    host.appendChild(el);
+    requestAnimationFrame(function () { el.classList.add('is-shown'); });
+    setTimeout(function () {
+      el.classList.remove('is-shown');
+      setTimeout(function () { el.remove(); }, 260);
+    }, ms);
+  }
+  function handleAuthFailure() {
+    try {
+      localStorage.removeItem('sb_access_token');
+      localStorage.removeItem('sb_refresh_token');
+    } catch (e) {}
+    showToast('Session expired. Reloading…', 1600);
+    setTimeout(function () { window.location.reload(); }, 1600);
+  }
+  function authFetch(url, options) {
+    return fetch(url, options).then(function (r) {
+      if (!r.ok) {
+        return r.text().then(function (t) {
+          if (r.status === 401 || (t && t.indexOf('JWT expired') !== -1)) {
+            var e = new Error('JWT expired'); e.authFailed = true; throw e;
+          }
+          throw new Error(t || ('HTTP ' + r.status));
+        });
+      }
+      return r.text().then(function (t) {
+        if (!t) return [];
+        try { return JSON.parse(t); } catch (e) { return []; }
+      });
+    });
+  }
+  function actorName() {
+    try {
+      var u = pcAuth.getUser();
+      return (u && u.display_name) || (u && u.email) || 'unknown';
+    } catch (e) { return 'unknown'; }
+  }
+  function writeHeaders(preferRepresentation) {
+    return Object.assign({}, pcAuth.headers(), {
+      'Content-Type': 'application/json',
+      'Prefer': preferRepresentation ? 'return=representation' : 'return=minimal'
+    });
+  }
+
+  // =====================================================================
+  // FETCHES
+  //
+  // Counts are aggregated client-side from minimal column sets rather than
+  // asked of PostgREST as a GROUP BY. The register is 63 rows and charges
+  // 446 — trivially small — and this keeps one round trip per table with no
+  // view to maintain.
+  // =====================================================================
+  function fetchCheckRows() {
+    return authFetch(
+      SB_REST + 'check_register?select=bank_account_id,amount,voided&limit=50000',
+      { headers: pcAuth.headers() }
+    );
+  }
+  function fetchChargeRows() {
+    return authFetch(
+      SB_REST + 'bank_charges?select=bank_account_id,amount&limit=50000',
+      { headers: pcAuth.headers() }
+    );
+  }
+  function fetchStatementRows() {
+    return authFetch(
+      SB_REST + 'bank_statements?select=id,bank_account_id,statement_shape,' +
+      'period_start,period_end,closing_balance,new_balance,storage_path,' +
+      'source_file_name,uploaded_at,created_at,lines_captured_at,lines_captured_by' +
+      '&deleted_at=is.null&order=period_end.desc&limit=5000',
+      { headers: pcAuth.headers() }
+    );
+  }
+  // Everything on one statement, for the line-capture target. select=* is
+  // deliberate: the target payload needs all thirteen total columns and
+  // naming them here would be a second place to keep in step with the table.
+  function fetchStatementFull(id) {
+    return authFetch(
+      SB_REST + 'bank_statements?id=eq.' + encodeURIComponent(id) +
+      '&select=*&limit=1',
+      { headers: pcAuth.headers() }
+    );
+  }
+
+  function aggregateChecks(rows) {
+    var out = {};
+    (rows || []).forEach(function (r) {
+      var k = r.bank_account_id || '__unassigned__';
+      if (!out[k]) out[k] = { count: 0, voided: 0, total: 0 };
+      out[k].count += 1;
+      if (r.voided) out[k].voided += 1;
+      else out[k].total += Number(r.amount || 0);
+    });
+    return out;
+  }
+  function aggregateCharges(rows) {
+    var out = {};
+    (rows || []).forEach(function (r) {
+      var k = r.bank_account_id || '__unassigned__';
+      if (!out[k]) out[k] = { count: 0, total: 0 };
+      out[k].count += 1;
+      out[k].total += Number(r.amount || 0);
+    });
+    return out;
+  }
+  function groupStatements(rows) {
+    var out = {};
+    (rows || []).forEach(function (r) {
+      var k = r.bank_account_id;
+      if (!k) return;
+      if (!out[k]) out[k] = [];
+      out[k].push(r);
+    });
+    return out;
+  }
+
+  // =====================================================================
+  // RENDER — account list
+  // =====================================================================
+  function statementEndingBalance(st) {
+    if (!st) return null;
+    var v = (st.statement_shape === 'card') ? st.new_balance : st.closing_balance;
+    return v == null ? null : Number(v);
+  }
+
+  function renderAccounts() {
+    var host = document.getElementById('acctList');
+    if (!host) return;
+
+    if (!state.accounts.length) {
+      host.innerHTML = '<div class="loading-note">No accounts yet. Add the first one above.</div>';
+      return;
+    }
+
+    var html = '';
+    state.accounts.forEach(function (a) {
+      var cs = state.checkStats[a.id] || { count: 0, voided: 0, total: 0 };
+      var gs = state.chargeStats[a.id] || { count: 0, total: 0 };
+      var stmts = state.statements[a.id] || [];
+      var latest = stmts.length ? stmts[0] : null;
+      var isOpen = !!state.openRows[a.id];
+
+      var seriesTxt = a.check_series.length
+        ? a.check_series.map(function (r) { return r.min + '–' + r.max; }).join(', ')
+        : '<span class="num-zero">—</span>';
+
+      var checksCell = cs.count
+        ? '<div class="num-big">' + cs.count + '</div>' +
+          '<div class="num-sub">' + esc(fmtMoney(cs.total)) +
+          (cs.voided ? ' · ' + cs.voided + ' void' : '') + '</div>'
+        : '<div class="num-big num-zero">0</div>';
+
+      var chargesCell = gs.count
+        ? '<div class="num-big">' + gs.count + '</div>' +
+          '<div class="num-sub">' + esc(fmtMoney(gs.total)) + '</div>'
+        : '<div class="num-big num-zero">0</div>';
+
+      var stmtCell = latest
+        ? '<div>' + esc(fmtPeriod(latest.period_start, latest.period_end)) + '</div>' +
+          '<div class="num-sub">' + stmts.length + ' on file</div>'
+        : '<span class="stmt-none">none</span>';
+
+      html += '<div class="acct-row' + (isOpen ? ' is-open' : '') +
+              (a.is_active ? '' : ' is-closed') + '" data-acct-row="' + esc(a.id) + '">' +
+        '<span class="acct-caret">&#9654;</span>' +
+        '<div>' +
+          '<div class="acct-name">' + esc(a.bank + ' ' + a.label) + '</div>' +
+          '<div class="acct-sub">' +
+            '<span class="acct-type t-' + esc(a.account_type) + '">' +
+              esc(a.account_type.replace('_', ' ')) + '</span> ' +
+            '····' + esc(a.last4) + ' · <code>' + esc(a.code) + '</code>' +
+          '</div>' +
+        '</div>' +
+        '<div class="col-hide-sm">' + seriesTxt + '</div>' +
+        '<div class="num col-hide-sm">' + checksCell + '</div>' +
+        '<div class="num col-hide-sm">' + chargesCell + '</div>' +
+        '<div class="stmt-cell col-hide-sm">' + stmtCell + '</div>' +
+        '<div><span class="status-pill ' + (a.is_active ? 'on' : 'off') + '">' +
+          (a.is_active ? 'Active' : 'Closed') + '</span></div>' +
+      '</div>' +
+      '<div class="acct-detail' + (isOpen ? ' is-open' : '') + '" data-acct-detail="' + esc(a.id) + '">' +
+        renderDetail(a, cs, gs, stmts) +
+      '</div>';
+    });
+
+    host.innerHTML = html;
+    wireAccountRows();
+  }
+
+  function renderDetail(a, cs, gs, stmts) {
+    var closedTxt = a.closed_at ? fmtDateShort(a.closed_at) : null;
+
+    var html = '<div class="detail-grid">' +
+      detailItem('Full account number', a.account_number || null, 'not stored') +
+      detailItem('Other last-4s', a.alt_last4.length ? a.alt_last4.join(', ') : null, 'none') +
+      detailItem('Sort order', String(a.sort_order), '') +
+      detailItem('Closed on', closedTxt, a.is_active ? 'still open' : 'no date recorded') +
+      detailItem('Notes', a.notes || null, 'none') +
+    '</div>';
+
+    html += '<div class="detail-actions">' +
+      '<button type="button" class="btn-secondary" data-edit-acct="' + esc(a.id) + '">Edit</button>' +
+      (a.is_active
+        ? '<button type="button" class="btn-danger" data-close-acct="' + esc(a.id) + '">Close account</button>'
+        : '<button type="button" class="btn-secondary" data-reopen-acct="' + esc(a.id) + '">Reopen</button>') +
+    '</div>';
+
+    html += '<div class="stmt-block">' +
+      '<h4>Statements on file</h4>' +
+      '<div class="stmt-list">' + renderStatementList(stmts) + '</div>' +
+    '</div>';
+
+    return html;
+  }
+
+  function detailItem(label, value, emptyText) {
+    var body = value
+      ? '<div class="dv">' + esc(value) + '</div>'
+      : '<div class="dv empty">' + esc(emptyText || '—') + '</div>';
+    return '<div class="detail-item"><div class="dl">' + esc(label) + '</div>' + body + '</div>';
+  }
+
+  function renderStatementList(stmts) {
+    if (!stmts || !stmts.length) {
+      return '<div class="stmt-empty">No statements uploaded for this account yet.</div>';
+    }
+    return stmts.map(function (st) {
+      var bal = statementEndingBalance(st);
+      var balTxt = bal == null ? '—' : fmtMoney(bal);
+      var hasFile = !!st.storage_path;
+      var captured = !!st.lines_captured_at;
+      var pill = captured
+        ? '<span class="stmt-lines-pill on">Lines ✓</span>'
+        : '<span class="stmt-lines-pill off">No lines</span>';
+      return '<div class="stmt-item">' +
+        '<div>' +
+          '<div class="stmt-period">' + esc(fmtPeriod(st.period_start, st.period_end)) + '</div>' +
+          '<div class="stmt-shape">' + esc(shapeLabel(st.statement_shape)) +
+            (st.source_file_name ? ' · ' + esc(st.source_file_name) : '') + '</div>' +
+        '</div>' +
+        '<div class="stmt-amt col-hide-sm">' + esc(balTxt) + '</div>' +
+        '<div class="col-hide-sm">' + pill + '</div>' +
+        '<div class="col-hide-sm">' +
+          (hasFile
+            ? '<button type="button" class="stmt-open" data-capture-stmt="' + esc(st.id) + '">' +
+              (captured ? 'Recapture' : 'Capture lines') + '</button>'
+            : '<button type="button" class="stmt-open" disabled title="No file to read">—</button>') +
+        '</div>' +
+        '<div>' +
+          (hasFile
+            ? '<button type="button" class="stmt-open" data-open-stmt="' + esc(st.storage_path) + '">Open PDF</button>'
+            : '<button type="button" class="stmt-open" disabled title="No file attached">No file</button>') +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  function shapeLabel(shape) {
+    if (shape === 'wf_checking') return 'Wells Fargo checking';
+    if (shape === 'mt_checking') return 'M&T checking';
+    if (shape === 'mt_savings')  return 'M&T savings';
+    if (shape === 'card')        return 'Credit card cycle';
+    return shape || '';
+  }
+
+  function wireAccountRows() {
+    var rows = document.querySelectorAll('[data-acct-row]');
+    for (var i = 0; i < rows.length; i++) {
+      (function (row) {
+        row.addEventListener('click', function () {
+          toggleRow(row.getAttribute('data-acct-row'));
+        });
+      })(rows[i]);
+    }
+    bindAll('[data-edit-acct]', 'click', function (btn, ev) {
+      ev.stopPropagation();
+      openEditModal(btn.getAttribute('data-edit-acct'));
+    });
+    bindAll('[data-close-acct]', 'click', function (btn, ev) {
+      ev.stopPropagation();
+      closeAccount(btn.getAttribute('data-close-acct'));
+    });
+    bindAll('[data-reopen-acct]', 'click', function (btn, ev) {
+      ev.stopPropagation();
+      reopenAccount(btn.getAttribute('data-reopen-acct'));
+    });
+    bindAll('[data-open-stmt]', 'click', function (btn, ev) {
+      ev.stopPropagation();
+      openStatement(btn.getAttribute('data-open-stmt'), btn);
+    });
+    bindAll('[data-capture-stmt]', 'click', function (btn, ev) {
+      ev.stopPropagation();
+      openCaptureModal(btn.getAttribute('data-capture-stmt'));
+    });
+  }
+  function bindAll(selector, evt, handler) {
+    var els = document.querySelectorAll(selector);
+    for (var i = 0; i < els.length; i++) {
+      (function (el) {
+        el.addEventListener(evt, function (ev) { handler(el, ev); });
+      })(els[i]);
+    }
+  }
+
+  function toggleRow(acctId) {
+    if (state.openRows[acctId]) delete state.openRows[acctId];
+    else state.openRows[acctId] = true;
+    renderAccounts();
+  }
+
+  // =====================================================================
+  // STATEMENT PDF — signed URL, opened in a new tab
+  //
+  // The bucket is private, so there is no permanent URL to link to. Each
+  // click mints a short-lived signed link. That is the point: the file is
+  // reachable in one click from the account it belongs to, without the
+  // document itself being publicly addressable.
+  // =====================================================================
+  function openStatement(path, btn) {
+    if (!path) return;
+    var original = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = 'Opening…'; }
+
+    // Open the tab synchronously so the browser attributes it to the click
+    // and does not treat it as a popup.
+    var tab = window.open('', '_blank');
+
+    authFetch(SB_STORAGE + '/object/sign/' + BUCKET + '/' + encodeURI(path), {
+      method: 'POST',
+      headers: writeHeaders(false),
+      body: JSON.stringify({ expiresIn: 3600 })
+    })
+    .then(function (res) {
+      var signed = res && res.signedURL ? res.signedURL : (res && res.signedUrl);
+      if (!signed) throw new Error('No signed URL returned');
+      var full = SB_STORAGE + signed;
+      if (tab) tab.location.href = full;
+      else window.location.href = full;
+    })
+    .catch(function (e) {
+      if (tab) tab.close();
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      console.error('[bank-accounts] sign failed:', e);
+      showToast('Could not open the statement · ' + ((e && e.message) || 'unknown'), 3600);
+    })
+    .then(function () {
+      if (btn) { btn.disabled = false; btn.textContent = original; }
+    });
+  }
+
+  // =====================================================================
+  // MODAL — add / edit
+  // =====================================================================
+  var seriesDraft = [];
+
+  function renderSeriesEditor() {
+    var host = document.getElementById('seriesList');
+    if (!host) return;
+    if (!seriesDraft.length) {
+      host.innerHTML = '<div class="series-empty">No ranges — this account has no check stock.</div>';
+      return;
+    }
+    host.innerHTML = seriesDraft.map(function (r, idx) {
+      return '<div class="series-row">' +
+        '<input type="number" step="1" min="1" data-series-idx="' + idx + '" data-series-key="min" value="' + esc(r.min) + '" placeholder="from">' +
+        '<span class="dash">–</span>' +
+        '<input type="number" step="1" min="1" data-series-idx="' + idx + '" data-series-key="max" value="' + esc(r.max) + '" placeholder="to">' +
+        '<button type="button" class="series-del" data-series-del="' + idx + '" title="Remove range">&times;</button>' +
+      '</div>';
+    }).join('');
+
+    bindAll('[data-series-idx]', 'input', function (inp) {
+      var idx = parseInt(inp.getAttribute('data-series-idx'), 10);
+      var key = inp.getAttribute('data-series-key');
+      if (seriesDraft[idx]) seriesDraft[idx][key] = inp.value;
+    });
+    bindAll('[data-series-del]', 'click', function (btn) {
+      var idx = parseInt(btn.getAttribute('data-series-del'), 10);
+      seriesDraft.splice(idx, 1);
+      renderSeriesEditor();
+    });
+  }
+
+  function acctById(id) {
+    for (var i = 0; i < state.accounts.length; i++) {
+      if (String(state.accounts[i].id) === String(id)) return state.accounts[i];
+    }
+    return null;
+  }
+
+  function openEditModal(acctId) {
+    var a = acctById(acctId);
+    if (!a) return;
+    state.editing = a;
+    setModalError('');
+    document.getElementById('acctModalTitle').textContent = 'Edit account';
+    document.getElementById('acctModalSub').textContent = a.bank + ' · ' + a.label;
+
+    var codeEl = document.getElementById('fCode');
+    codeEl.value = a.code;
+    codeEl.readOnly = true;
+    document.getElementById('codeHint').textContent =
+      'Locked. Other pages and the check backfill refer to this account by code, so it never changes.';
+
+    document.getElementById('fBank').value = a.bank || '';
+    document.getElementById('fLabel').value = a.label || '';
+    document.getElementById('fType').value = a.account_type || 'checking';
+    document.getElementById('fLast4').value = a.last4 || '';
+    document.getElementById('fAcctNum').value = a.account_number || '';
+    document.getElementById('fAltLast4').value = a.alt_last4.join(', ');
+    document.getElementById('fSort').value = a.sort_order;
+    document.getElementById('fClosedAt').value = a.closed_at || '';
+    document.getElementById('fNotes').value = a.notes || '';
+
+    seriesDraft = a.check_series.map(function (r) { return { min: r.min, max: r.max }; });
+    renderSeriesEditor();
+
+    document.getElementById('acctModal').classList.add('is-open');
+  }
+
+  function openAddModal() {
+    state.editing = null;
+    setModalError('');
+    document.getElementById('acctModalTitle').textContent = 'Add account';
+    document.getElementById('acctModalSub').textContent = '';
+
+    var codeEl = document.getElementById('fCode');
+    codeEl.value = '';
+    codeEl.readOnly = false;
+    document.getElementById('codeHint').textContent =
+      'Lowercase letters, numbers and underscores. Used by every other page to refer to this account.';
+
+    document.getElementById('fBank').value = '';
+    document.getElementById('fLabel').value = '';
+    document.getElementById('fType').value = 'checking';
+    document.getElementById('fLast4').value = '';
+    document.getElementById('fAcctNum').value = '';
+    document.getElementById('fAltLast4').value = '';
+    document.getElementById('fSort').value = nextSortOrder();
+    document.getElementById('fClosedAt').value = '';
+    document.getElementById('fNotes').value = '';
+
+    seriesDraft = [];
+    renderSeriesEditor();
+
+    document.getElementById('acctModal').classList.add('is-open');
+  }
+
+  function nextSortOrder() {
+    var max = 0;
+    state.accounts.forEach(function (a) {
+      if (a.sort_order > max && a.sort_order < 9999) max = a.sort_order;
+    });
+    return max + 1;
+  }
+
+  function closeModal() {
+    document.getElementById('acctModal').classList.remove('is-open');
+    state.editing = null;
+  }
+  function setModalError(msg) {
+    var el = document.getElementById('acctModalError');
+    if (!el) return;
+    if (!msg) { el.hidden = true; el.textContent = ''; return; }
+    el.hidden = false;
+    el.textContent = msg;
+  }
+
+  // Reads the modal into a payload, or returns { error } describing the first
+  // problem. Mirrors the table's CHECK constraints so a bad value is caught
+  // here with a readable message instead of coming back as a Postgres error.
+  function collectModal() {
+    var code = document.getElementById('fCode').value.trim();
+    var bank = document.getElementById('fBank').value.trim();
+    var label = document.getElementById('fLabel').value.trim();
+    var type = document.getElementById('fType').value;
+    var last4 = document.getElementById('fLast4').value.trim();
+    var acctNum = document.getElementById('fAcctNum').value.trim();
+    var altRaw = document.getElementById('fAltLast4').value.trim();
+    var sort = parseInt(document.getElementById('fSort').value, 10);
+    var closedAt = document.getElementById('fClosedAt').value || null;
+    var notes = document.getElementById('fNotes').value.trim();
+
+    if (!code) return { error: 'Code is required.' };
+    if (!/^[a-z0-9_]+$/.test(code)) {
+      return { error: 'Code can only contain lowercase letters, numbers and underscores.' };
+    }
+    if (!state.editing) {
+      for (var i = 0; i < state.accounts.length; i++) {
+        if (state.accounts[i].code === code) {
+          return { error: 'An account with the code "' + code + '" already exists.' };
+        }
+      }
+    }
+    if (!bank) return { error: 'Bank is required.' };
+    if (!label) return { error: 'Label is required.' };
+    if (!/^[0-9]{4}$/.test(last4)) return { error: 'Last 4 must be exactly four digits.' };
+    if (acctNum && !/^[0-9]+$/.test(acctNum)) {
+      return { error: 'Full account number must be digits only — no spaces or dashes.' };
+    }
+
+    var alt = [];
+    if (altRaw) {
+      var parts = altRaw.split(',');
+      for (var j = 0; j < parts.length; j++) {
+        var p = parts[j].replace(/[^0-9]/g, '');
+        if (!p) continue;
+        if (!/^[0-9]{4}$/.test(p)) {
+          return { error: 'Every "other last-4" must be exactly four digits.' };
+        }
+        alt.push(p);
+      }
+    }
+
+    var series = [];
+    for (var k = 0; k < seriesDraft.length; k++) {
+      var mn = parseInt(seriesDraft[k].min, 10);
+      var mx = parseInt(seriesDraft[k].max, 10);
+      if (!isFinite(mn) || !isFinite(mx)) {
+        return { error: 'Every check range needs both a start and an end number.' };
+      }
+      if (mn < 1 || mx < 1) return { error: 'Check numbers must be positive.' };
+      if (mx < mn) return { error: 'A check range cannot end before it starts (' + mn + '–' + mx + ').' };
+      series.push({ min: mn, max: mx });
+    }
+    // Overlapping ranges on one account are fine; overlapping ACROSS accounts
+    // is what breaks routing, so check the whole catalog.
+    var overlap = findCrossAccountOverlap(series, state.editing ? state.editing.code : null);
+    if (overlap) {
+      return { error: 'Range ' + overlap.range + ' overlaps ' + overlap.code +
+        ' (' + overlap.other + '). Check numbers must map to exactly one account.' };
+    }
+
+    var payload = {
+      code: code,
+      bank: bank,
+      label: label,
+      account_type: type,
+      account_number: acctNum || null,
+      last4: last4,
+      alt_last4: alt,
+      check_series: series,
+      sort_order: isFinite(sort) ? sort : 99,
+      notes: notes || null
+    };
+
+    // The table's CHECK allows closed_at only when is_active is false, so the
+    // date field is meaningful on edit and ignored on create.
+    if (state.editing) {
+      if (state.editing.is_active && closedAt) {
+        return { error: 'Clear the closed date, or close the account first — an open account cannot carry a closing date.' };
+      }
+      if (!state.editing.is_active) payload.closed_at = closedAt;
+    } else {
+      payload.is_active = true;
+    }
+
+    return { payload: payload };
+  }
+
+  function findCrossAccountOverlap(series, ownCode) {
+    for (var i = 0; i < series.length; i++) {
+      for (var j = 0; j < state.accounts.length; j++) {
+        var other = state.accounts[j];
+        if (ownCode && other.code === ownCode) continue;
+        for (var k = 0; k < other.check_series.length; k++) {
+          var o = other.check_series[k];
+          if (series[i].min <= o.max && o.min <= series[i].max) {
+            return {
+              range: series[i].min + '–' + series[i].max,
+              code: other.code,
+              other: o.min + '–' + o.max
+            };
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  function saveModal() {
+    if (state.saving) return;
+    var res = collectModal();
+    if (res.error) { setModalError(res.error); return; }
+    setModalError('');
+
+    var actor = actorName();
+    var nowIso = new Date().toISOString();
+    var payload = res.payload;
+    var btn = document.getElementById('btnModalSave');
+
+    state.saving = true;
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
+    var req;
+    if (state.editing) {
+      payload.updated_by = actor;
+      payload.updated_at = nowIso;
+      req = authFetch(
+        SB_REST + 'bank_accounts?id=eq.' + encodeURIComponent(state.editing.id),
+        { method: 'PATCH', headers: writeHeaders(true), body: JSON.stringify(payload) }
+      );
+    } else {
+      payload.created_by = actor;
+      req = authFetch(
+        SB_REST + 'bank_accounts',
+        { method: 'POST', headers: writeHeaders(true), body: JSON.stringify(payload) }
+      );
+    }
+
+    req
+      .then(function (rows) {
+        // return=representation makes the write subject to the SELECT policy,
+        // so an empty array here means the row did not come back — never treat
+        // that silence as success.
+        if (!rows || !rows.length) {
+          throw new Error('The save returned no row. Check that you are signed in as an admin.');
+        }
+        showToast(state.editing ? 'Account updated' : 'Account added', 2000);
+        closeModal();
+        return reloadAll();
+      })
+      .catch(function (e) {
+        if (e && e.authFailed) { handleAuthFailure(); return; }
+        console.error('[bank-accounts] save failed:', e);
+        setModalError((e && e.message) ? String(e.message).substring(0, 300) : 'Save failed.');
+      })
+      .then(function () {
+        state.saving = false;
+        if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
+      });
+  }
+
+  // =====================================================================
+  // CLOSE / REOPEN
+  //
+  // Closing never deletes. A closed account keeps every check, charge and
+  // statement attached to it — the tax year runs Jan–Dec regardless of what
+  // is open in September.
+  // =====================================================================
+  function closeAccount(acctId) {
+    var a = acctById(acctId);
+    if (!a) return;
+    var cs = state.checkStats[a.id] || { count: 0 };
+    var gs = state.chargeStats[a.id] || { count: 0 };
+    var stmts = state.statements[a.id] || [];
+
+    var msg = 'Close ' + a.bank + ' ' + a.label + ' (····' + a.last4 + ')?\n\n' +
+      'Attached to this account: ' + cs.count + ' check' + (cs.count === 1 ? '' : 's') + ', ' +
+      gs.count + ' charge' + (gs.count === 1 ? '' : 's') + ', ' +
+      stmts.length + ' statement' + (stmts.length === 1 ? '' : 's') + '.\n\n' +
+      'Nothing is deleted. The account stops appearing in pickers but keeps all its history.\n\n' +
+      'Closing date (YYYY-MM-DD):';
+
+    var today = new Date().toISOString().substring(0, 10);
+    var closedAt = window.prompt(msg, today);
+    if (closedAt == null) return;
+    closedAt = String(closedAt).trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(closedAt)) {
+      showToast('Enter the date as YYYY-MM-DD', 2600);
+      return;
+    }
+
+    patchAccount(a.id, {
+      is_active: false,
+      closed_at: closedAt,
+      updated_by: actorName(),
+      updated_at: new Date().toISOString()
+    }, 'Account closed');
+  }
+
+  function reopenAccount(acctId) {
+    var a = acctById(acctId);
+    if (!a) return;
+    if (!window.confirm('Reopen ' + a.bank + ' ' + a.label + '? It will appear in pickers again.')) return;
+    patchAccount(a.id, {
+      is_active: true,
+      closed_at: null,
+      updated_by: actorName(),
+      updated_at: new Date().toISOString()
+    }, 'Account reopened');
+  }
+
+  function patchAccount(id, body, successMsg) {
+    authFetch(
+      SB_REST + 'bank_accounts?id=eq.' + encodeURIComponent(id),
+      { method: 'PATCH', headers: writeHeaders(true), body: JSON.stringify(body) }
+    )
+    .then(function (rows) {
+      if (!rows || !rows.length) {
+        throw new Error('No row came back — the change may not have saved.');
+      }
+      showToast(successMsg, 2000);
+      return reloadAll();
+    })
+    .catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      console.error('[bank-accounts] patch failed:', e);
+      showToast('Failed · ' + ((e && e.message) || 'unknown'), 4000);
+    });
+  }
+
+  // =====================================================================
+  // LOAD
+  // =====================================================================
+  function reloadAll() {
+    return pcBanks.refresh()
+      .then(function () {
+        return Promise.all([fetchCheckRows(), fetchChargeRows(), fetchStatementRows()]);
+      })
+      .then(function (res) {
+        state.accounts = pcBanks.getAccounts({ includeClosed: true });
+        state.checkStats = aggregateChecks(res[0]);
+        state.chargeStats = aggregateCharges(res[1]);
+        state.statements = groupStatements(res[2]);
+        renderAccounts();
+        renderSubtitle(res[0], res[1]);
+      })
+      .catch(function (e) {
+        if (e && e.authFailed) { handleAuthFailure(); return; }
+        console.error('[bank-accounts] load failed:', e);
+        var host = document.getElementById('acctList');
+        if (host) {
+          host.innerHTML = '<div class="loading-note">Could not load accounts · ' +
+            esc((e && e.message) || 'unknown') + '</div>';
+        }
+      });
+  }
+
+  function renderSubtitle(checkRows, chargeRows) {
+    var sub = document.getElementById('acctSubtitle');
+    if (!sub) return;
+    var active = 0, closed = 0;
+    state.accounts.forEach(function (a) { if (a.is_active) active++; else closed++; });
+
+    var unassignedCharges = (state.chargeStats.__unassigned__ || { count: 0 }).count;
+    var unassignedChecks  = (state.checkStats.__unassigned__ || { count: 0 }).count;
+
+    var txt = active + ' active';
+    if (closed) txt += ' · ' + closed + ' closed';
+    if (unassignedCharges || unassignedChecks) {
+      var bits = [];
+      if (unassignedCharges) bits.push(unassignedCharges + ' charges');
+      if (unassignedChecks) bits.push(unassignedChecks + ' checks');
+      txt += ' · ' + bits.join(' and ') + ' predate account tracking and stay unattributed';
+    }
+    sub.textContent = txt;
+  }
+
+  // =====================================================================
+  // STATEMENT UPLOAD → PARSE → CONFIRM → SAVE
+  //
+  // Order matters: the file lands in the bucket FIRST, then gets parsed.
+  // A statement whose layout the reader cannot handle is still on record
+  // with its totals typed by hand. The parser is a convenience, not a gate.
+  //
+  // Nothing here writes to `expenses` or `bank_charges`. Statement totals
+  // are a proof layer beside the P&L, never an input to it, which is why
+  // uploading a statement cannot double-count anything.
+  // =====================================================================
+  var DEPOSIT_FIELDS = [
+    { key: 'opening_balance',       label: 'Beginning balance',  sign: '+' },
+    { key: 'deposits_total',        label: 'Deposits / credits', sign: '+' },
+    { key: 'debits_total',          label: 'Withdrawals / debits', sign: '\u2212' },
+    { key: 'service_charges_total', label: 'Service charges',    sign: '\u2212' },
+    { key: 'interest_paid',         label: 'Interest paid',      sign: '+' },
+    { key: 'closing_balance',       label: 'Ending balance',     sign: '=' }
+  ];
+  var CARD_FIELDS = [
+    { key: 'previous_balance',      label: 'Previous balance',   sign: '+' },
+    { key: 'credits_total',         label: 'Credits',            sign: '\u2212' },
+    { key: 'payments_total',        label: 'Payments',           sign: '\u2212' },
+    { key: 'purchases_total',       label: 'Purchases & charges', sign: '+' },
+    { key: 'cash_advances_total',   label: 'Cash advances',      sign: '+' },
+    { key: 'finance_charges_total', label: 'Finance charges',    sign: '+' },
+    { key: 'new_balance',           label: 'New balance',        sign: '=' }
+  ];
+
+  var upload = {
+    file: null,
+    storagePath: null,
+    sourceName: null,
+    fileSize: null,
+    blocks: [],       // one per account found in the PDF
+    rawParse: null,
+    busy: false
+  };
+
+  function fieldsForShape(shape) {
+    return shape === 'card' ? CARD_FIELDS : DEPOSIT_FIELDS;
+  }
+
+  function numOrNull(v) {
+    if (v === '' || v == null) return null;
+    var n = Number(String(v).replace(/[$,\s]/g, ''));
+    return isFinite(n) ? n : null;
+  }
+
+  // Same two equations the edge function runs and the database CHECK
+  // enforces. Three copies on purpose — the operator sees it live, the
+  // parser reports it, and the table refuses anything that fails it.
+  function footBlock(b) {
+    function n(v) { var x = numOrNull(v); return x == null ? 0 : x; }
+    if (b.statement_shape === 'card') {
+      var nb = numOrNull(b.new_balance);
+      if (nb == null) return { ok: false, diff: null };
+      var calcC = n(b.previous_balance) - n(b.credits_total) - n(b.payments_total) +
+                  n(b.purchases_total) + n(b.cash_advances_total) + n(b.finance_charges_total);
+      var dC = Math.round((calcC - nb) * 100) / 100;
+      return { ok: dC === 0, diff: dC, calc: calcC };
+    }
+    var cb = numOrNull(b.closing_balance);
+    if (cb == null) return { ok: false, diff: null };
+    var calcD = n(b.opening_balance) + n(b.deposits_total) - n(b.debits_total) -
+                n(b.service_charges_total) + n(b.interest_paid);
+    var dD = Math.round((calcD - cb) * 100) / 100;
+    return { ok: dD === 0, diff: dD, calc: calcD };
+  }
+
+  function openUploadModal() {
+    upload = { file: null, storagePath: null, sourceName: null,
+               fileSize: null, blocks: [], rawParse: null, busy: false };
+    document.getElementById('upFileInput').value = '';
+    document.getElementById('upStep1').style.display = '';
+    document.getElementById('upStep2').style.display = 'none';
+    document.getElementById('upResults').innerHTML = '';
+    setUploadError('');
+    setUploadStatus('');
+    var saveBtn = document.getElementById('btnUploadSave');
+    saveBtn.style.display = 'none';
+    saveBtn.disabled = true;
+    document.getElementById('btnUploadParse').style.display = '';
+    document.getElementById('btnUploadParse').disabled = true;
+    document.getElementById('uploadModal').classList.add('is-open');
+  }
+  function closeUploadModal() {
+    if (upload.busy) return;
+    document.getElementById('uploadModal').classList.remove('is-open');
+  }
+  function setUploadError(msg) {
+    var el = document.getElementById('uploadError');
+    if (!el) return;
+    if (!msg) { el.hidden = true; el.textContent = ''; return; }
+    el.hidden = false;
+    el.textContent = msg;
+  }
+  function setUploadStatus(msg) {
+    var el = document.getElementById('uploadStatus');
+    if (el) el.textContent = msg || '';
+  }
+
+  function onFilePick() {
+    setUploadError('');
+    var input = document.getElementById('upFileInput');
+    var f = input.files && input.files[0];
+    var parseBtn = document.getElementById('btnUploadParse');
+    if (!f) { upload.file = null; parseBtn.disabled = true; return; }
+
+    var name = (f.name || '').toLowerCase();
+    // The bucket enforces application/pdf server-side, but catching it here
+    // gives a readable reason instead of an opaque storage rejection.
+    if (name.slice(-4) !== '.pdf') {
+      upload.file = null;
+      parseBtn.disabled = true;
+      input.value = '';
+      setUploadError('Statements must be PDFs. Download the PDF from the bank rather than exporting a CSV — the CSV has no summary box, and the summary is what proves the statement is complete.');
+      return;
+    }
+    if (f.size > 26214400) {
+      upload.file = null;
+      parseBtn.disabled = true;
+      input.value = '';
+      setUploadError('That file is larger than 25 MB.');
+      return;
+    }
+    upload.file = f;
+    parseBtn.disabled = false;
+    setUploadStatus(f.name + ' · ' + Math.round(f.size / 1024) + ' KB');
+  }
+
+  function sanitizeName(n) {
+    return String(n || 'statement.pdf')
+      .replace(/[^A-Za-z0-9._-]/g, '-')
+      .replace(/-+/g, '-')
+      .slice(-80);
+  }
+
+  function uploadToBucket(file) {
+    var path = 'inbox/' + Date.now() + '-' + sanitizeName(file.name);
+    var hdrs = Object.assign({}, pcAuth.headers(), {
+      'Content-Type': 'application/pdf',
+      'x-upsert': 'true'
+    });
+    return authFetch(SB_STORAGE + '/object/' + BUCKET + '/' + encodeURI(path), {
+      method: 'POST', headers: hdrs, body: file
+    }).then(function () { return path; });
+  }
+
+  function callParser(path) {
+    return authFetch(SB_URL + '/functions/v1/parse-statement-pdf', {
+      method: 'POST',
+      headers: Object.assign({}, pcAuth.headers(), { 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ storage_path: path })
+    });
+  }
+
+  function doUploadAndParse() {
+    if (upload.busy || !upload.file) return;
+    upload.busy = true;
+    var btn = document.getElementById('btnUploadParse');
+    btn.disabled = true;
+    setUploadError('');
+    setUploadStatus('Uploading…');
+
+    uploadToBucket(upload.file)
+      .then(function (path) {
+        upload.storagePath = path;
+        upload.sourceName = upload.file.name;
+        upload.fileSize = upload.file.size;
+        setUploadStatus('Uploaded. Reading the statement…');
+        return callParser(path);
+      })
+      .then(function (res) {
+        if (res && res.error) throw new Error(res.error);
+        var list = (res && res.statements) ? res.statements : [];
+        if (!list.length) throw new Error('No account summary was found in that PDF.');
+        upload.rawParse = res;
+        upload.blocks = list.map(prepareBlock);
+        showResults();
+      })
+      .catch(function (e) {
+        if (e && e.authFailed) { handleAuthFailure(); return; }
+        console.error('[bank-accounts] parse failed:', e);
+        // The file is already in the bucket at this point. If parsing is what
+        // failed, fall through to hand entry rather than throwing the upload
+        // away — that is the whole reason the upload happens first.
+        if (upload.storagePath) {
+          setUploadError(((e && e.message) || 'The reader could not process this PDF.') +
+            ' The file is saved — enter the totals by hand below.');
+          upload.blocks = [prepareBlock({})];
+          showResults();
+        } else {
+          setUploadError((e && e.message) || 'Upload failed.');
+        }
+      })
+      .then(function () {
+        upload.busy = false;
+        var b = document.getElementById('btnUploadParse');
+        if (b) b.disabled = false;
+      });
+  }
+
+  // Routes a parsed block to one of the nine accounts. Full account number
+  // first because it cannot collide; last-4 only as a fallback.
+  function routeAccount(b) {
+    var acct = null;
+    try {
+      if (b.account_number) acct = pcBanks.getByAccountNumber(b.account_number);
+      if (!acct && b.last4) acct = pcBanks.getByLast4(b.last4);
+    } catch (e) {
+      // getByLast4 throws on an ambiguous match rather than guessing.
+      acct = null;
+    }
+    return acct;
+  }
+
+  function prepareBlock(b) {
+    var acct = routeAccount(b);
+    var shape = b.statement_shape || (acct && acct.account_type === 'credit_card' ? 'card' : 'wf_checking');
+    var out = {
+      bank_account_id: acct ? acct.id : '',
+      statement_shape: shape,
+      period_start: b.period_start || '',
+      period_end: b.period_end || '',
+      parsed_account_number: b.account_number || null,
+      parsed_last4: b.last4 || null,
+      parsed_label: b.account_label || null,
+      routed_automatically: !!acct
+    };
+    var all = DEPOSIT_FIELDS.concat(CARD_FIELDS);
+    all.forEach(function (f) {
+      out[f.key] = (b[f.key] == null) ? '' : String(b[f.key]);
+    });
+    return out;
+  }
+
+  function showResults() {
+    document.getElementById('upStep1').style.display = 'none';
+    document.getElementById('upStep2').style.display = '';
+    document.getElementById('btnUploadParse').style.display = 'none';
+    document.getElementById('btnUploadSave').style.display = '';
+    renderResults();
+  }
+
+  function accountOptionsHtml(selectedId) {
+    var opts = '<option value="">— pick the account —</option>';
+    pcBanks.getAccounts({ includeClosed: true }).forEach(function (a) {
+      opts += '<option value="' + esc(a.id) + '"' +
+        (String(a.id) === String(selectedId) ? ' selected' : '') + '>' +
+        esc(a.display) + '</option>';
+    });
+    return opts;
+  }
+
+  function renderResults() {
+    var host = document.getElementById('upResults');
+    if (!host) return;
+
+    host.innerHTML = upload.blocks.map(function (b, i) {
+      var f = footBlock(b);
+      var fields = fieldsForShape(b.statement_shape);
+
+      var routeNote = '';
+      if (b.routed_automatically) {
+        routeNote = '<div class="up-route">Matched on ' +
+          (b.parsed_account_number ? 'account number ' + esc(b.parsed_account_number)
+                                   : 'last 4 ' + esc(b.parsed_last4 || '')) + '</div>';
+      } else if (b.parsed_account_number || b.parsed_last4) {
+        routeNote = '<div class="up-route warn">No account matched ' +
+          esc(b.parsed_account_number || b.parsed_last4) + ' — pick it manually.</div>';
+      }
+
+      var fieldHtml = fields.map(function (fd) {
+        return '<div class="up-field">' +
+          '<label>' + esc(fd.sign) + ' ' + esc(fd.label) + '</label>' +
+          '<input type="text" inputmode="decimal" data-blk="' + i + '" data-key="' + fd.key + '"' +
+          ' value="' + esc(b[fd.key]) + '" placeholder="—">' +
+        '</div>';
+      }).join('');
+
+      var footHtml;
+      if (f.diff == null) {
+        footHtml = '<div class="up-foot pending">Enter the ending balance to check this statement.</div>';
+      } else if (f.ok) {
+        footHtml = '<div class="up-foot ok">✓ Foots to the penny — every line on this statement is accounted for.</div>';
+      } else {
+        var over = f.diff > 0;
+        footHtml = '<div class="up-foot bad">✗ Off by ' + esc(fmtMoney(Math.abs(f.diff))) + '. ' +
+          'The numbers add to ' + esc(fmtMoney(f.calc)) + ' but the statement ends at ' +
+          esc(fmtMoney(numOrNull(b.statement_shape === 'card' ? b.new_balance : b.closing_balance))) + '. ' +
+          (over ? 'Something charged is missing or too small.' : 'Something is too large or double-counted.') +
+          '</div>';
+      }
+
+      return '<div class="up-block' + (f.ok ? ' is-ok' : '') + '">' +
+        '<div class="up-block-head">' +
+          '<span class="up-block-n">Account ' + (i + 1) + ' of ' + upload.blocks.length + '</span>' +
+          (b.parsed_label ? '<span class="up-block-label">' + esc(b.parsed_label) + '</span>' : '') +
+        '</div>' +
+        '<div class="up-row2">' +
+          '<div class="up-field wide">' +
+            '<label>Account</label>' +
+            '<select data-blk="' + i + '" data-key="bank_account_id">' + accountOptionsHtml(b.bank_account_id) + '</select>' +
+            routeNote +
+          '</div>' +
+          '<div class="up-field">' +
+            '<label>Statement type</label>' +
+            '<select data-blk="' + i + '" data-key="statement_shape">' +
+              '<option value="wf_checking"' + (b.statement_shape === 'wf_checking' ? ' selected' : '') + '>Wells Fargo checking</option>' +
+              '<option value="mt_checking"' + (b.statement_shape === 'mt_checking' ? ' selected' : '') + '>M&amp;T checking</option>' +
+              '<option value="mt_savings"' + (b.statement_shape === 'mt_savings' ? ' selected' : '') + '>M&amp;T savings</option>' +
+              '<option value="card"' + (b.statement_shape === 'card' ? ' selected' : '') + '>Credit card cycle</option>' +
+            '</select>' +
+          '</div>' +
+        '</div>' +
+        '<div class="up-row2">' +
+          '<div class="up-field"><label>Period start</label>' +
+            '<input type="date" data-blk="' + i + '" data-key="period_start" value="' + esc(b.period_start) + '"></div>' +
+          '<div class="up-field"><label>Period end</label>' +
+            '<input type="date" data-blk="' + i + '" data-key="period_end" value="' + esc(b.period_end) + '"></div>' +
+        '</div>' +
+        '<div class="up-fields">' + fieldHtml + '</div>' +
+        footHtml +
+      '</div>';
+    }).join('');
+
+    bindAll('#upResults [data-blk]', 'input', onBlockFieldChange);
+    bindAll('#upResults select[data-blk]', 'change', onBlockFieldChange);
+    updateSaveState();
+  }
+
+  function onBlockFieldChange(el) {
+    var i = parseInt(el.getAttribute('data-blk'), 10);
+    var key = el.getAttribute('data-key');
+    if (!upload.blocks[i]) return;
+    upload.blocks[i][key] = el.value;
+    if (key === 'statement_shape') { renderResults(); return; }
+    // Re-render only the foot line so the caret stays where it is.
+    refreshFootLine(i);
+    updateSaveState();
+  }
+
+  function refreshFootLine(i) {
+    var host = document.getElementById('upResults');
+    if (!host) return;
+    var blocks = host.querySelectorAll('.up-block');
+    if (!blocks[i]) return;
+    var b = upload.blocks[i];
+    var f = footBlock(b);
+    var el = blocks[i].querySelector('.up-foot');
+    if (!el) return;
+    blocks[i].classList.toggle('is-ok', !!f.ok);
+    if (f.diff == null) {
+      el.className = 'up-foot pending';
+      el.textContent = 'Enter the ending balance to check this statement.';
+    } else if (f.ok) {
+      el.className = 'up-foot ok';
+      el.textContent = '✓ Foots to the penny — every line on this statement is accounted for.';
+    } else {
+      el.className = 'up-foot bad';
+      el.textContent = '✗ Off by ' + fmtMoney(Math.abs(f.diff)) + '. The numbers add to ' +
+        fmtMoney(f.calc) + ' but the statement ends at ' +
+        fmtMoney(numOrNull(b.statement_shape === 'card' ? b.new_balance : b.closing_balance)) + '. ' +
+        (f.diff > 0 ? 'Something charged is missing or too small.' : 'Something is too large or double-counted.');
+    }
+  }
+
+  // The blocker. Save stays disabled until every block has an account, a
+  // period, and foots to the penny — the same rule the split modal uses.
+  function updateSaveState() {
+    var btn = document.getElementById('btnUploadSave');
+    var note = document.getElementById('upSaveNote');
+    if (!btn) return;
+    var problems = [];
+    upload.blocks.forEach(function (b, i) {
+      var who = 'Account ' + (i + 1);
+      if (!b.bank_account_id) problems.push(who + ' needs an account');
+      else if (!b.period_start || !b.period_end) problems.push(who + ' needs both period dates');
+      else if (b.period_end < b.period_start) problems.push(who + ' ends before it starts');
+      else if (!footBlock(b).ok) problems.push(who + " doesn't foot");
+    });
+    btn.disabled = problems.length > 0;
+    if (note) note.textContent = problems.length ? problems.join(' · ') : '';
+  }
+
+  function saveStatements() {
+    if (upload.busy) return;
+    var btn = document.getElementById('btnUploadSave');
+    upload.busy = true;
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+    setUploadError('');
+
+    var actor = actorName();
+    var nowIso = new Date().toISOString();
+
+    finalStoragePath()
+      .then(function (path) {
+        var rows = upload.blocks.map(function (b) {
+          var row = {
+            bank_account_id: b.bank_account_id,
+            statement_shape: b.statement_shape,
+            period_start: b.period_start,
+            period_end: b.period_end,
+            storage_path: path,
+            source_file_name: upload.sourceName,
+            uploaded_file_size: upload.fileSize,
+            uploaded_at: nowIso,
+            uploaded_by: actor,
+            created_by: actor,
+            raw_parse: upload.rawParse || null
+          };
+          DEPOSIT_FIELDS.concat(CARD_FIELDS).forEach(function (f) {
+            row[f.key] = numOrNull(b[f.key]);
+          });
+          return row;
+        });
+        return authFetch(SB_REST + 'bank_statements', {
+          method: 'POST', headers: writeHeaders(true), body: JSON.stringify(rows)
+        });
+      })
+      .then(function (inserted) {
+        if (!inserted || !inserted.length) {
+          throw new Error('The save returned no rows. Check that you are signed in as an admin.');
+        }
+        showToast(inserted.length + ' statement' + (inserted.length === 1 ? '' : 's') + ' saved', 2400);
+        document.getElementById('uploadModal').classList.remove('is-open');
+        return reloadAll();
+      })
+      .catch(function (e) {
+        if (e && e.authFailed) { handleAuthFailure(); return; }
+        console.error('[bank-accounts] statement save failed:', e);
+        var msg = (e && e.message) ? String(e.message) : 'Save failed.';
+        if (msg.indexOf('bank_statements_uniq') !== -1 || msg.indexOf('duplicate key') !== -1) {
+          msg = 'That statement period is already on file for this account. ' +
+                'Delete the existing one first if you meant to replace it.';
+        } else if (msg.indexOf('bank_statements_foots_chk') !== -1) {
+          msg = 'The database rejected this because it does not foot. ' +
+                'Check the numbers against the statement.';
+        }
+        setUploadError(msg.substring(0, 400));
+      })
+      .then(function () {
+        upload.busy = false;
+        var b2 = document.getElementById('btnUploadSave');
+        if (b2) { b2.textContent = 'Save statement'; }
+        updateSaveState();
+      });
+  }
+
+  // Files land in inbox/ so parsing can happen before the period is known.
+  // On save we know the period, so move it somewhere a human can navigate.
+  // A combined PDF covering three accounts stays as ONE file that all three
+  // rows point at. If the move fails for any reason the inbox path is kept —
+  // a slightly ugly path beats a lost document.
+  function finalStoragePath() {
+    var first = upload.blocks[0];
+    if (!upload.storagePath || !first || !first.period_end) {
+      return Promise.resolve(upload.storagePath);
+    }
+    var acct = acctById(first.bank_account_id);
+    var folder = (upload.blocks.length > 1 || !acct) ? 'combined' : acct.code;
+    var dest = folder + '/' + first.period_end + '-' + sanitizeName(upload.sourceName);
+
+    if (dest === upload.storagePath) return Promise.resolve(dest);
+
+    return authFetch(SB_STORAGE + '/object/move', {
+      method: 'POST',
+      headers: Object.assign({}, pcAuth.headers(), { 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        bucketId: BUCKET,
+        sourceKey: upload.storagePath,
+        destinationKey: dest
+      })
+    })
+    .then(function () { upload.storagePath = dest; return dest; })
+    .catch(function (e) {
+      console.warn('[bank-accounts] move failed, keeping inbox path:', e && e.message);
+      return upload.storagePath;
+    });
+  }
+
+  // =====================================================================
+  // LINE CAPTURE
+  //
+  // The header totals prove the statement is internally consistent. The
+  // LINES prove the reader didn't drop anything mid-page: sum the captured
+  // lines per bucket and they must equal the header totals already verified.
+  //
+  // Two columns do two different jobs, deliberately:
+  //   foot_bucket — which summary-box total this line rolls into. A property
+  //                 of how the BANK prints its statement. M&T breaks service
+  //                 charges out; Wells Fargo folds them into debits. Same
+  //                 fee, different bucket.
+  //   line_type   — what the money movement MEANS. Drives Session 8: only
+  //                 'debit' is ever a candidate for becoming an expense.
+  //
+  // direction is derived from the bucket and never entered, so it cannot
+  // contradict bank_statement_lines_bucket_direction_chk.
+  // =====================================================================
+  var BUCKETS_BY_SHAPE = {
+    wf_checking: ['deposits', 'debits'],
+    mt_checking: ['deposits', 'debits', 'service_charges'],
+    mt_savings:  ['deposits', 'debits', 'service_charges', 'interest'],
+    card:        ['purchases', 'payments', 'credits', 'cash_advances', 'finance']
+  };
+  var IN_BUCKETS = ['deposits', 'interest', 'credits', 'payments'];
+  var HEADER_COL_FOR_BUCKET = {
+    deposits:        'deposits_total',
+    debits:          'debits_total',
+    service_charges: 'service_charges_total',
+    interest:        'interest_paid',
+    purchases:       'purchases_total',
+    payments:        'payments_total',
+    credits:         'credits_total',
+    cash_advances:   'cash_advances_total',
+    finance:         'finance_charges_total'
+  };
+  var BUCKET_LABELS = {
+    deposits:        'Deposits',
+    debits:          'Debits',
+    service_charges: 'Service charges',
+    interest:        'Interest',
+    purchases:       'Purchases',
+    payments:        'Payments',
+    credits:         'Credits',
+    cash_advances:   'Cash advances',
+    finance:         'Finance charges'
+  };
+  // Types valid for money coming IN, money going OUT, and both.
+  var TYPES_IN  = [
+    { v: 'deposit',     l: 'Deposit — in from outside' },
+    { v: 'transfer_in', l: 'Transfer in — our own account' },
+    { v: 'funding_in',  l: 'Funding in — money lent to us' },
+    { v: 'settlement',  l: 'Settlement — pays something booked' }
+  ];
+  var TYPES_OUT = [
+    { v: 'debit',        l: 'Debit — out to an outside party' },
+    { v: 'transfer_out', l: 'Transfer out — our own account' },
+    { v: 'funding_out',  l: 'Funding out — principal repaid' },
+    { v: 'settlement',   l: 'Settlement — pays something booked' }
+  ];
+
+  var capture = {
+    statement: null,   // the full bank_statements row
+    account: null,     // the pcBanks account object
+    lines: [],
+    busy: false,
+    corrections: null
+  };
+
+  function directionFor(bucket) {
+    return IN_BUCKETS.indexOf(bucket) !== -1 ? 'in' : 'out';
+  }
+  function typesForDirection(dir) {
+    return dir === 'in' ? TYPES_IN : TYPES_OUT;
+  }
+  function isTypeValidFor(type, dir) {
+    var list = typesForDirection(dir);
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].v === type) return true;
+    }
+    return false;
+  }
+  function defaultTypeFor(dir) {
+    return dir === 'in' ? 'deposit' : 'debit';
+  }
+
+  function setCapError(msg) {
+    var el = document.getElementById('capError');
+    if (!el) return;
+    if (!msg) { el.hidden = true; el.textContent = ''; return; }
+    el.hidden = false;
+    el.textContent = msg;
+  }
+  function setCapStatus(msg) {
+    var el = document.getElementById('capStatus');
+    if (el) el.textContent = msg || '';
+  }
+
+  function openCaptureModal(statementId) {
+    capture = { statement: null, account: null, lines: [], busy: true, corrections: null };
+    setCapError('');
+    setCapStatus('Loading…');
+    document.getElementById('capTitle').textContent = 'Capture statement lines';
+    document.getElementById('capSummary').innerHTML = '';
+    document.getElementById('capFootGrid').innerHTML = '';
+    document.getElementById('capCorrections').hidden = true;
+    document.getElementById('capBody').innerHTML =
+      '<div class="cap-status">Loading the statement…</div>';
+    document.getElementById('capSaveNote').textContent = '';
+    document.getElementById('btnCapSave').disabled = true;
+    document.getElementById('linesModal').classList.add('is-open');
+
+    fetchStatementFull(statementId)
+      .then(function (rows) {
+        var st = rows && rows[0];
+        if (!st) throw new Error('That statement could not be loaded.');
+        if (!st.storage_path) throw new Error('This statement has no PDF attached, so there is nothing to read.');
+        capture.statement = st;
+        capture.account = acctById(st.bank_account_id);
+        renderCaptureSummary();
+        return runCapture();
+      })
+      .catch(function (e) {
+        if (e && e.authFailed) { handleAuthFailure(); return; }
+        console.error('[bank-accounts] capture load failed:', e);
+        capture.busy = false;
+        setCapStatus('');
+        setCapError((e && e.message) || 'Could not start the capture.');
+        document.getElementById('capBody').innerHTML =
+          '<div class="cap-status">Nothing to show.</div>';
+      });
+  }
+
+  function closeCaptureModal() {
+    if (capture.busy) return;
+    document.getElementById('linesModal').classList.remove('is-open');
+  }
+
+  function renderCaptureSummary() {
+    var st = capture.statement;
+    var host = document.getElementById('capSummary');
+    if (!host || !st) return;
+    var who = capture.account ? capture.account.display : '(unknown account)';
+    var already = st.lines_captured_at
+      ? ' · <strong>Lines already captured</strong> ' + esc(fmtDateShort(st.lines_captured_at)) +
+        ' — saving replaces them'
+      : '';
+    host.innerHTML = '<strong>' + esc(who) + '</strong> · ' +
+      esc(fmtPeriod(st.period_start, st.period_end)) + ' · ' +
+      esc(shapeLabel(st.statement_shape)) + already;
+  }
+
+  // Builds the payload the edge function needs. Everything comes off the
+  // saved statement row, so the totals the lines are checked against are the
+  // ones already verified by the header foot check.
+  function captureTarget() {
+    var st = capture.statement;
+    var a = capture.account;
+    var t = {
+      statement_id: st.id,
+      bank_account_id: st.bank_account_id,
+      statement_shape: st.statement_shape,
+      period_start: st.period_start,
+      period_end: st.period_end,
+      account_number: a ? (a.account_number || null) : null,
+      last4: a ? a.last4 : null,
+      account_label: a ? (a.bank + ' ' + a.label) : null
+    };
+    Object.keys(HEADER_COL_FOR_BUCKET).forEach(function (b) {
+      var col = HEADER_COL_FOR_BUCKET[b];
+      t[col] = st[col];
+    });
+    return t;
+  }
+
+  function runCapture() {
+    capture.busy = true;
+    setCapStatus('Reading the statement — this can take a minute…');
+    document.getElementById('capBody').innerHTML =
+      '<div class="cap-status">Reading every transaction line. A four-page statement takes a while.</div>';
+
+    return authFetch(SB_URL + '/functions/v1/parse-statement-pdf', {
+      method: 'POST',
+      headers: Object.assign({}, pcAuth.headers(), { 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        storage_path: capture.statement.storage_path,
+        mode: 'lines',
+        target: captureTarget()
+      })
+    })
+    .then(function (res) {
+      if (res && res.error) throw new Error(res.error);
+      var lines = (res && res.lines) ? res.lines : [];
+      if (!lines.length) throw new Error('No transaction lines were found for this account.');
+      capture.lines = lines.map(normaliseCaptureLine);
+      capture.corrections = res.corrections || null;
+      capture.busy = false;
+      setCapStatus(capture.lines.length + ' lines read');
+      renderCaptureLines();
+      renderCaptureFoot();
+      renderCaptureCorrections();
+    })
+    .catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      console.error('[bank-accounts] line capture failed:', e);
+      capture.busy = false;
+      setCapStatus('');
+      setCapError((e && e.message) || 'The reader could not process this statement.');
+      // Start from an empty set rather than a dead end — lines can be typed
+      // in by hand and the foot check still proves the result.
+      capture.lines = [];
+      renderCaptureLines();
+      renderCaptureFoot();
+    });
+  }
+
+  // Trusts nothing from the wire. Direction is recomputed from the bucket and
+  // the type is forced to agree with it, so every row can pass the table's
+  // CHECK constraints before it is ever sent.
+  function normaliseCaptureLine(r) {
+    var allowed = BUCKETS_BY_SHAPE[capture.statement.statement_shape] || [];
+    var bucket = r && r.foot_bucket ? String(r.foot_bucket) : '';
+    if (allowed.indexOf(bucket) === -1) {
+      bucket = capture.statement.statement_shape === 'card' ? 'purchases' : 'debits';
+    }
+    var dir = directionFor(bucket);
+    var type = r && r.line_type ? String(r.line_type) : '';
+    if (!isTypeValidFor(type, dir)) type = defaultTypeFor(dir);
+
+    var amt = Number(r && r.amount);
+    if (!isFinite(amt)) amt = 0;
+    amt = Math.round(Math.abs(amt) * 100) / 100;
+
+    return {
+      txn_date: (r && r.txn_date) || '',
+      description: (r && r.description) ? String(r.description) : '',
+      raw_text: (r && r.raw_text) ? String(r.raw_text) : null,
+      amount: String(amt),
+      foot_bucket: bucket,
+      line_type: type,
+      check_number: (r && r.check_number) ? String(r.check_number) : null,
+      reference: (r && r.reference) ? String(r.reference) : null,
+      subaccount_last4: (r && r.subaccount_last4) ? String(r.subaccount_last4) : null,
+      running_balance: (r && r.running_balance != null && isFinite(Number(r.running_balance)))
+        ? Number(r.running_balance) : null,
+      page_number: (r && r.page_number != null && isFinite(Number(r.page_number)))
+        ? Math.round(Number(r.page_number)) : null,
+      source: 'parsed'
+    };
+  }
+
+  // Amounts are stored as plain strings so they stay easy to type, but a bare
+  // "9000" reads as ambiguous next to "39.4". Show them as money; strip the
+  // formatting back off whenever the value is read.
+  function displayAmount(v) {
+    var n = numOrNull(v);
+    if (n == null) return v == null ? '' : String(v);
+    return Math.abs(n).toLocaleString('en-US', {
+      minimumFractionDigits: 2, maximumFractionDigits: 2
+    });
+  }
+
+  function blankCaptureLine() {
+    var shape = capture.statement.statement_shape;
+    var bucket = (BUCKETS_BY_SHAPE[shape] || ['debits'])[0];
+    var dir = directionFor(bucket);
+    return {
+      txn_date: capture.statement.period_end || '',
+      description: '',
+      raw_text: null,
+      amount: '',
+      foot_bucket: bucket,
+      line_type: defaultTypeFor(dir),
+      check_number: null,
+      reference: null,
+      subaccount_last4: null,
+      running_balance: null,
+      page_number: null,
+      source: 'manual'
+    };
+  }
+
+  // Debit returns null deliberately — the default gets no tint.
+  function tintFor(type) {
+    if (type === 'deposit') return 't-deposit';
+    if (type === 'transfer_in' || type === 'transfer_out') return 't-transfer';
+    if (type === 'settlement') return 't-settlement';
+    if (type === 'funding_in' || type === 'funding_out') return 't-funding';
+    return null;
+  }
+
+  function bucketOptionsHtml(shape, selected) {
+    return (BUCKETS_BY_SHAPE[shape] || []).map(function (b) {
+      return '<option value="' + esc(b) + '"' + (b === selected ? ' selected' : '') + '>' +
+        esc(BUCKET_LABELS[b] || b) + '</option>';
+    }).join('');
+  }
+  function typeOptionsHtml(dir, selected) {
+    return typesForDirection(dir).map(function (t) {
+      return '<option value="' + esc(t.v) + '"' + (t.v === selected ? ' selected' : '') + '>' +
+        esc(t.l) + '</option>';
+    }).join('');
+  }
+
+  function renderCaptureLines() {
+    var host = document.getElementById('capBody');
+    if (!host) return;
+    var shape = capture.statement.statement_shape;
+
+    var rows = capture.lines.map(function (ln, i) {
+      var dir = directionFor(ln.foot_bucket);
+      var cls = [];
+      if (ln.source === 'manual') cls.push('is-manual');
+      var tint = tintFor(ln.line_type);
+      if (tint) cls.push(tint);
+      return '<tr' + (cls.length ? ' class="' + cls.join(' ') + '"' : '') + '>' +
+        '<td class="c-date"><input type="date" data-cap="' + i + '" data-k="txn_date" value="' +
+          esc(String(ln.txn_date).substring(0, 10)) + '"></td>' +
+        '<td class="c-desc"><textarea rows="1" data-cap="' + i + '" data-k="description" ' +
+          'placeholder="Description">' + esc(ln.description) + '</textarea></td>' +
+        '<td class="c-amt"><input type="text" class="c-money" inputmode="decimal" data-cap="' + i +
+          '" data-k="amount" value="' + esc(displayAmount(ln.amount)) + '" placeholder="0.00"></td>' +
+        '<td class="c-bkt"><select data-cap="' + i + '" data-k="foot_bucket">' +
+          bucketOptionsHtml(shape, ln.foot_bucket) + '</select></td>' +
+        '<td class="c-typ"><select data-cap="' + i + '" data-k="line_type">' +
+          typeOptionsHtml(dir, ln.line_type) + '</select></td>' +
+        '<td class="c-pg">' + (ln.page_number == null ? '' : esc(ln.page_number)) + '</td>' +
+        '<td class="c-rm"><button type="button" class="cap-rm" data-cap-rm="' + i +
+          '" title="Remove this line">&times;</button></td>' +
+      '</tr>';
+    }).join('');
+
+    var body = rows
+      ? '<div class="cap-scroll"><table class="cap-table">' +
+        '<thead><tr>' +
+          '<th>Date</th><th>Description</th><th class="is-amt">Amount</th>' +
+          '<th>Rolls into</th><th>What it means</th><th>Pg</th><th></th>' +
+        '</tr></thead><tbody>' + rows + '</tbody></table></div>'
+      : '<div class="cap-status">No lines yet. Add them by hand below, or cancel and try the reader again.</div>';
+
+    host.innerHTML =
+      '<div class="cap-intro">Every line the reader found. <strong>Rolls into</strong> is which ' +
+      'summary-box total the line belongs to — the bank decides that, not you. ' +
+      '<strong>What it means</strong> is what drives reconciliation later: only ' +
+      '<em>Debit</em> is ever treated as a possible missing expense. Funding wires and ' +
+      'their repayments are the two the reader cannot recognise on its own — set those here.</div>' +
+      body +
+      '<div class="cap-legend">' +
+        '<span><i style="background:#fff;"></i> Debit — real spend</span>' +
+        '<span><i style="background:#dff0cb;border-left:4px solid #4E8B21;"></i> Deposit</span>' +
+        '<span><i style="background:#d6e8f8;border-left:4px solid #1E6DA8;"></i> Transfer</span>' +
+        '<span><i style="background:#e4e3dc;border-left:4px solid #8A887C;"></i> Settlement</span>' +
+        '<span><i style="background:#fbe6bd;border-left:4px solid #C77C0A;"></i> Funding</span>' +
+      '</div>' +
+      '<button type="button" class="cap-add" id="btnCapAddLine">+ Add a line by hand</button>';
+
+    bindAll('#capBody [data-cap]', 'input', onCaptureFieldChange);
+    bindAll('#capBody select[data-cap]', 'change', onCaptureFieldChange);
+    bindAll('#capBody [data-cap-rm]', 'click', function (btn) {
+      var idx = parseInt(btn.getAttribute('data-cap-rm'), 10);
+      if (isNaN(idx)) return;
+      capture.lines.splice(idx, 1);
+      renderCaptureLines();
+      renderCaptureFoot();
+    });
+    var addBtn = document.getElementById('btnCapAddLine');
+    if (addBtn) addBtn.addEventListener('click', function () {
+      capture.lines.push(blankCaptureLine());
+      renderCaptureLines();
+      renderCaptureFoot();
+      var host2 = document.querySelector('.cap-scroll');
+      if (host2) host2.scrollTop = host2.scrollHeight;
+    });
+  }
+
+  function onCaptureFieldChange(el) {
+    var i = parseInt(el.getAttribute('data-cap'), 10);
+    var k = el.getAttribute('data-k');
+    var ln = capture.lines[i];
+    if (!ln) return;
+    ln[k] = el.value;
+
+    // Changing the bucket changes the direction, which can invalidate the
+    // type. Fix it rather than letting the database reject the whole batch.
+    if (k === 'foot_bucket') {
+      var dir = directionFor(ln.foot_bucket);
+      if (!isTypeValidFor(ln.line_type, dir)) ln.line_type = defaultTypeFor(dir);
+      renderCaptureLines();
+      renderCaptureFoot();
+      return;
+    }
+    if (k === 'amount') renderCaptureFoot();
+    else updateCaptureSaveState();
+  }
+
+  // Sum the captured lines per bucket against the header totals already
+  // verified when the statement was saved. A bucket that is off names the
+  // exact size of what is missing.
+  function captureFoot() {
+    var st = capture.statement;
+    var buckets = BUCKETS_BY_SHAPE[st.statement_shape] || [];
+    var out = [];
+    var allOk = true;
+
+    buckets.forEach(function (b) {
+      var col = HEADER_COL_FOR_BUCKET[b];
+      var headerRaw = st[col];
+      var header = headerRaw == null ? 0 : Number(headerRaw);
+      var sum = 0;
+      capture.lines.forEach(function (ln) {
+        if (ln.foot_bucket !== b) return;
+        var n = numOrNull(ln.amount);
+        if (n != null) sum += Math.abs(n);
+      });
+      sum = Math.round(sum * 100) / 100;
+      var diff = Math.round((sum - header) * 100) / 100;
+      if (diff !== 0) allOk = false;
+      out.push({
+        bucket: b, header: header, sum: sum, diff: diff, ok: diff === 0,
+        headerMissing: headerRaw == null
+      });
+    });
+
+    return { ok: allOk && capture.lines.length > 0, buckets: out };
+  }
+
+  function renderCaptureFoot() {
+    var host = document.getElementById('capFootGrid');
+    if (!host) return;
+    var f = captureFoot();
+
+    host.innerHTML = f.buckets.map(function (b) {
+      var cls = b.ok ? 'ok' : 'bad';
+      var detail;
+      if (b.ok) {
+        detail = '<div class="cfd">✓ Ties</div>';
+      } else if (b.diff < 0) {
+        detail = '<div class="cfd">Short ' + esc(fmtMoney(Math.abs(b.diff))) +
+          ' — a line is missing</div>';
+      } else {
+        detail = '<div class="cfd">Over by ' + esc(fmtMoney(b.diff)) +
+          ' — a line is duplicated or too large</div>';
+      }
+      return '<div class="cap-foot-cell ' + cls + '">' +
+        '<div class="cfl">' + esc(BUCKET_LABELS[b.bucket] || b.bucket) + '</div>' +
+        '<div class="cfn">Lines ' + esc(fmtMoney(b.sum)) + ' vs statement ' +
+          esc(fmtMoney(b.header)) + (b.headerMissing ? ' (not printed)' : '') + '</div>' +
+        detail +
+      '</div>';
+    }).join('');
+
+    updateCaptureSaveState();
+  }
+
+  function renderCaptureCorrections() {
+    var el = document.getElementById('capCorrections');
+    if (!el) return;
+    var c = capture.corrections;
+    if (!c) { el.hidden = true; return; }
+    var bits = [];
+    if (c.bucket_corrected) bits.push(c.bucket_corrected + ' had an unrecognised bucket');
+    if (c.type_corrected) bits.push(c.type_corrected + ' had a type that contradicted its bucket');
+    if (c.sign_corrected) bits.push(c.sign_corrected + ' came back negative');
+    if (c.dropped_no_date) bits.push(c.dropped_no_date + ' were dropped for having no date');
+    if (!bits.length) { el.hidden = true; return; }
+    el.hidden = false;
+    el.textContent = 'The reader needed correcting on some lines: ' + bits.join(', ') +
+      '. They were fixed automatically — check them against the PDF before saving.';
+  }
+
+  // The blocker, same discipline as the header foot check and the split
+  // modal. Nothing saves until every bucket ties to the penny.
+  function updateCaptureSaveState() {
+    var btn = document.getElementById('btnCapSave');
+    var note = document.getElementById('capSaveNote');
+    if (!btn) return;
+
+    var problems = [];
+    if (!capture.lines.length) {
+      problems.push('No lines to save');
+    } else {
+      var missingDate = 0, badAmount = 0;
+      capture.lines.forEach(function (ln) {
+        if (!ln.txn_date) missingDate++;
+        var n = numOrNull(ln.amount);
+        if (n == null || n < 0) badAmount++;
+      });
+      if (missingDate) problems.push(missingDate + ' line' + (missingDate === 1 ? '' : 's') + ' missing a date');
+      if (badAmount) problems.push(badAmount + ' line' + (badAmount === 1 ? '' : 's') + ' with a bad amount');
+      var f = captureFoot();
+      f.buckets.forEach(function (b) {
+        if (!b.ok) problems.push((BUCKET_LABELS[b.bucket] || b.bucket) + " doesn't tie");
+      });
+    }
+
+    btn.disabled = problems.length > 0 || capture.busy;
+    if (note) note.textContent = problems.length ? problems.join(' · ') : '';
+  }
+
+  // Soft-delete then insert, in that order and never in parallel: the unique
+  // index on (statement_id, line_index) is partial on deleted_at IS NULL, so
+  // the old rows have to be out of the way before the new ones land.
+  function saveCaptureLines() {
+    if (capture.busy) return;
+    var btn = document.getElementById('btnCapSave');
+    capture.busy = true;
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+    setCapError('');
+
+    var actor = actorName();
+    var nowIso = new Date().toISOString();
+    var st = capture.statement;
+
+    var rows = capture.lines.map(function (ln, i) {
+      var bucket = ln.foot_bucket;
+      var dir = directionFor(bucket);
+      return {
+        statement_id: st.id,
+        bank_account_id: st.bank_account_id,
+        txn_date: String(ln.txn_date).substring(0, 10),
+        description: (ln.description || '').substring(0, 500) || '(no description)',
+        raw_text: ln.raw_text || null,
+        amount: Math.abs(numOrNull(ln.amount) || 0),
+        direction: dir,
+        foot_bucket: bucket,
+        line_type: ln.line_type,
+        check_number: ln.check_number || null,
+        reference: ln.reference || null,
+        subaccount_last4: ln.subaccount_last4 || null,
+        running_balance: ln.running_balance,
+        page_number: ln.page_number,
+        line_index: i + 1,
+        source: ln.source === 'manual' ? 'manual' : 'parsed',
+        created_by: actor
+      };
+    });
+
+    authFetch(
+      SB_REST + 'bank_statement_lines?statement_id=eq.' + encodeURIComponent(st.id) +
+      '&deleted_at=is.null',
+      {
+        method: 'PATCH', headers: writeHeaders(false),
+        body: JSON.stringify({ deleted_at: nowIso, updated_by: actor, updated_at: nowIso })
+      }
+    )
+    .then(function () {
+      return authFetch(SB_REST + 'bank_statement_lines', {
+        method: 'POST', headers: writeHeaders(true), body: JSON.stringify(rows)
+      });
+    })
+    .then(function (inserted) {
+      if (!inserted || !inserted.length) {
+        throw new Error('The save returned no rows. Check that you are signed in as an admin.');
+      }
+      // Stamped only now — after the lines are in AND they tied. An unfooted
+      // capture must never sit there looking finished.
+      return authFetch(
+        SB_REST + 'bank_statements?id=eq.' + encodeURIComponent(st.id),
+        {
+          method: 'PATCH', headers: writeHeaders(true),
+          body: JSON.stringify({
+            lines_captured_at: nowIso,
+            lines_captured_by: actor,
+            updated_at: nowIso,
+            updated_by: actor
+          })
+        }
+      ).then(function () { return inserted.length; });
+    })
+    .then(function (n) {
+      showToast(n + ' line' + (n === 1 ? '' : 's') + ' captured and footed', 2600);
+      document.getElementById('linesModal').classList.remove('is-open');
+      return reloadAll();
+    })
+    .catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      console.error('[bank-accounts] line save failed:', e);
+      var msg = (e && e.message) ? String(e.message) : 'Save failed.';
+      if (msg.indexOf('bucket_direction_chk') !== -1) {
+        msg = 'A line has a type that contradicts its bucket. Check the "what it means" column.';
+      } else if (msg.indexOf('type_direction_chk') !== -1) {
+        msg = 'A line has a type that does not match the direction money moved.';
+      } else if (msg.indexOf('stmt_idx_uniq') !== -1) {
+        msg = 'The previous lines for this statement were not cleared. Try again.';
+      }
+      setCapError(msg.substring(0, 400));
+    })
+    .then(function () {
+      capture.busy = false;
+      var b2 = document.getElementById('btnCapSave');
+      if (b2) b2.textContent = 'Save lines';
+      updateCaptureSaveState();
+    });
+  }
+
+  // =====================================================================
+  // WIRE
+  // =====================================================================
+  function wire() {
+    var upBtn = document.getElementById('btnUploadStatement');
+    if (upBtn) upBtn.addEventListener('click', openUploadModal);
+    var upFile = document.getElementById('upFileInput');
+    if (upFile) upFile.addEventListener('change', onFilePick);
+    var upParse = document.getElementById('btnUploadParse');
+    if (upParse) upParse.addEventListener('click', doUploadAndParse);
+    var upSave = document.getElementById('btnUploadSave');
+    if (upSave) upSave.addEventListener('click', saveStatements);
+    var upCancel = document.getElementById('btnUploadCancel');
+    if (upCancel) upCancel.addEventListener('click', closeUploadModal);
+    var upOverlay = document.getElementById('uploadModal');
+    if (upOverlay) upOverlay.addEventListener('click', function (ev) {
+      if (ev.target === upOverlay) closeUploadModal();
+    });
+    var capSave = document.getElementById('btnCapSave');
+    if (capSave) capSave.addEventListener('click', saveCaptureLines);
+    var capCancel = document.getElementById('btnCapCancel');
+    if (capCancel) capCancel.addEventListener('click', closeCaptureModal);
+    var capOverlay = document.getElementById('linesModal');
+    if (capOverlay) capOverlay.addEventListener('click', function (ev) {
+      if (ev.target === capOverlay) closeCaptureModal();
+    });
+    var addBtn = document.getElementById('btnAddAccount');
+    if (addBtn) addBtn.addEventListener('click', openAddModal);
+    var cancelBtn = document.getElementById('btnModalCancel');
+    if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+    var saveBtn = document.getElementById('btnModalSave');
+    if (saveBtn) saveBtn.addEventListener('click', saveModal);
+    var seriesAdd = document.getElementById('btnSeriesAdd');
+    if (seriesAdd) seriesAdd.addEventListener('click', function () {
+      seriesDraft.push({ min: '', max: '' });
+      renderSeriesEditor();
+    });
+    var overlay = document.getElementById('acctModal');
+    if (overlay) overlay.addEventListener('click', function (ev) {
+      if (ev.target === overlay) closeModal();
+    });
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape') { closeModal(); closeCaptureModal(); }
+    });
+  }
+
+  // =====================================================================
+  // BOOT
+  // =====================================================================
+  function onAuthReady(user) {
+    if (typeof pcActivity !== 'undefined' && pcActivity.init) pcActivity.init('bank-accounts');
+    document.body.classList.remove('pre-auth');
+    state.isAdmin = (pcAuth && pcAuth.isAdmin) ? pcAuth.isAdmin() : false;
+
+    wire();
+
+    if (!state.isAdmin) {
+      var host = document.getElementById('acctList');
+      if (host) {
+        host.innerHTML = '<div class="loading-note">This page is admin-only. ' +
+          'Bank account records can only be viewed and edited by an administrator.</div>';
+      }
+      var addBtn = document.getElementById('btnAddAccount');
+      if (addBtn) addBtn.style.display = 'none';
+      var sub = document.getElementById('acctSubtitle');
+      if (sub) sub.textContent = 'Admin access required';
+      return;
+    }
+
+    reloadAll();
+  }
+
+  if (typeof pcAuth === 'undefined' || !pcAuth.require) {
+    document.body.innerHTML =
+      '<div style="padding:60px 22px;font-family:DM Sans,sans-serif;">' +
+      '<h1>Authentication unavailable</h1>' +
+      '<p>pc-auth.js failed to load. Check the network tab.</p></div>';
+  } else {
+    pcAuth.require({ pageSlug: 'bank-accounts', onReady: onAuthReady });
+  }
+})();
+</script>
+
+</body>
+</html>
