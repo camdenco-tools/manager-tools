@@ -69,11 +69,17 @@
   /* ============ ACCOUNT ROWS ============ */
   .acct-row {
     display: grid;
-    grid-template-columns: 22px 1fr 130px 110px 110px 150px 92px;
+    grid-template-columns: 22px 1fr 128px 128px 128px 104px 92px;
     gap: 12px; align-items: center;
     padding: 12px 18px; border-bottom: 1px solid #f0efe8;
     cursor: pointer;
   }
+  /* A balance more than 60 days old is still the latest on file, but it is not
+     current. Greyed so the difference reads without having to check the date. */
+  .num-stale { color: #b4b2a9; }
+  .num-owed  { color: #791F1F; }
+  .stmt-asof { font-size: 11px; color: #888; }
+  .stmt-asof.is-stale { color: #c2c0b8; font-style: italic; }
   .acct-row:last-of-type { border-bottom: 0; }
   .acct-row:hover { background: #fbfaf7; }
   .acct-row.is-closed { background: #fcfcfa; }
@@ -82,13 +88,16 @@
 
   .acct-head {
     display: grid;
-    grid-template-columns: 22px 1fr 130px 110px 110px 150px 92px;
+    grid-template-columns: 22px 1fr 128px 128px 128px 104px 92px;
     gap: 12px; align-items: end;
     padding: 10px 18px 8px; border-bottom: 1px solid #e8e8e4;
     font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em;
     text-transform: uppercase; color: #888;
   }
   .acct-head .num, .acct-row .num { text-align: right; }
+  /* Balance right-aligns and "As of" left-aligns, so without this they meet in
+     the middle with no visual break between two unrelated values. */
+  .acct-head > :nth-child(6), .acct-row > :nth-child(6) { padding-left: 14px; }
 
   .acct-caret {
     font-size: 10px; color: #aaa; transition: transform 0.12s ease;
@@ -458,13 +467,34 @@
         <div class="acct-head">
           <span></span>
           <span>Account</span>
-          <span>Check series</span>
-          <span class="num">Checks</span>
-          <span class="num">Charges</span>
-          <span>Last statement</span>
+          <span class="num">In</span>
+          <span class="num">Out</span>
+          <span class="num">Balance</span>
+          <span>As of</span>
           <span>Status</span>
         </div>
         <div id="acctList"><div class="loading-note">Loading accounts…</div></div>
+      </div>
+    </div>
+
+    <div class="card" id="cardSection" style="display:none;">
+      <div class="card-head">
+        <div>
+          <h2 class="card-title">Credit cards</h2>
+          <div class="card-subtitle" id="cardSubtitle"></div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="acct-head">
+          <span></span>
+          <span>Card</span>
+          <span class="num">Charged</span>
+          <span class="num">Paid</span>
+          <span class="num">Owed</span>
+          <span>Cycle</span>
+          <span>Status</span>
+        </div>
+        <div id="cardList"></div>
       </div>
     </div>
 
@@ -750,7 +780,8 @@
   function fetchStatementRows() {
     return authFetch(
       SB_REST + 'bank_statements?select=id,bank_account_id,statement_shape,' +
-      'period_start,period_end,closing_balance,new_balance,storage_path,' +
+      'period_start,period_end,closing_balance,new_balance,' +
+      'deposits_total,debits_total,purchases_total,payments_total,storage_path,' +
       'source_file_name,uploaded_at,created_at,lines_captured_at,lines_captured_by' +
       '&deleted_at=is.null&order=period_end.desc&limit=5000',
       { headers: pcAuth.headers() }
@@ -817,31 +848,80 @@
       return;
     }
 
-    var html = '';
+    var deposits = [], cards = [];
     state.accounts.forEach(function (a) {
+      if (a.account_type === 'credit_card') cards.push(a);
+      else deposits.push(a);
+    });
+
+    host.innerHTML = deposits.map(renderAccountRow).join('') ||
+      '<div class="loading-note">No deposit accounts yet.</div>';
+
+    var cardHost = document.getElementById('cardList');
+    var cardSec = document.getElementById('cardSection');
+    if (cardHost && cardSec) {
+      cardSec.style.display = cards.length ? '' : 'none';
+      cardHost.innerHTML = cards.map(renderAccountRow).join('');
+      var cardSub = document.getElementById('cardSubtitle');
+      if (cardSub) {
+        cardSub.textContent = cards.length +
+          (cards.length === 1 ? ' card' : ' cards') +
+          ' · balances are what is owed, not held';
+      }
+    }
+
+    wireAccountRows();
+  }
+
+  // Days between an ISO date and today. Used only to decide whether a balance
+  // is current enough to show in full colour.
+  function daysSince(iso) {
+    if (!iso) return null;
+    var then = new Date(String(iso).substring(0, 10) + 'T00:00:00Z');
+    if (isNaN(then.getTime())) return null;
+    return Math.floor((Date.now() - then.getTime()) / 86400000);
+  }
+
+  function renderAccountRow(a) {
+    var html = '';
+    [a].forEach(function (a) {
       var cs = state.checkStats[a.id] || { count: 0, voided: 0, total: 0 };
       var gs = state.chargeStats[a.id] || { count: 0, total: 0 };
       var stmts = state.statements[a.id] || [];
       var latest = stmts.length ? stmts[0] : null;
       var isOpen = !!state.openRows[a.id];
 
-      var seriesTxt = a.check_series.length
-        ? a.check_series.map(function (r) { return r.min + '–' + r.max; }).join(', ')
-        : '<span class="num-zero">—</span>';
+      // Everything in these three columns comes from the MOST RECENT statement
+      // on file — one period, not a running total. The old check-count columns
+      // showed all-time figures next to a month label, which read as if that
+      // month's activity.
+      var isCard = a.account_type === 'credit_card';
+      var age = latest ? daysSince(latest.period_end) : null;
+      var stale = age != null && age > 60;
+      var staleCls = stale ? ' num-stale' : '';
 
-      var checksCell = cs.count
-        ? '<div class="num-big">' + cs.count + '</div>' +
-          '<div class="num-sub">' + esc(fmtMoney(cs.total)) +
-          (cs.voided ? ' · ' + cs.voided + ' void' : '') + '</div>'
-        : '<div class="num-big num-zero">0</div>';
+      function moneyCell(v, extraCls) {
+        if (v == null) return '<div class="num-big num-zero">—</div>';
+        return '<div class="num-big' + staleCls + (extraCls || '') + '">' +
+          esc(fmtMoney(Number(v))) + '</div>';
+      }
 
-      var chargesCell = gs.count
-        ? '<div class="num-big">' + gs.count + '</div>' +
-          '<div class="num-sub">' + esc(fmtMoney(gs.total)) + '</div>'
-        : '<div class="num-big num-zero">0</div>';
+      var inCell, outCell, balCell;
+      if (!latest) {
+        inCell = outCell = balCell = '<div class="num-big num-zero">—</div>';
+      } else if (isCard) {
+        inCell  = moneyCell(latest.purchases_total);
+        outCell = moneyCell(latest.payments_total);
+        balCell = moneyCell(latest.new_balance, stale ? '' : ' num-owed');
+      } else {
+        inCell  = moneyCell(latest.deposits_total);
+        outCell = moneyCell(latest.debits_total);
+        balCell = moneyCell(latest.closing_balance);
+      }
 
       var stmtCell = latest
-        ? '<div>' + esc(fmtPeriod(latest.period_start, latest.period_end)) + '</div>' +
+        ? '<div class="stmt-asof' + (stale ? ' is-stale' : '') + '">' +
+            esc(fmtPeriod(latest.period_start, latest.period_end)) + '</div>' +
           '<div class="num-sub">' + stmts.length + ' on file</div>'
         : '<span class="stmt-none">none</span>';
 
@@ -856,9 +936,9 @@
             '····' + esc(a.last4) + ' · <code>' + esc(a.code) + '</code>' +
           '</div>' +
         '</div>' +
-        '<div class="col-hide-sm">' + seriesTxt + '</div>' +
-        '<div class="num col-hide-sm">' + checksCell + '</div>' +
-        '<div class="num col-hide-sm">' + chargesCell + '</div>' +
+        '<div class="num col-hide-sm">' + inCell + '</div>' +
+        '<div class="num col-hide-sm">' + outCell + '</div>' +
+        '<div class="num col-hide-sm">' + balCell + '</div>' +
         '<div class="stmt-cell col-hide-sm">' + stmtCell + '</div>' +
         '<div><span class="status-pill ' + (a.is_active ? 'on' : 'off') + '">' +
           (a.is_active ? 'Active' : 'Closed') + '</span></div>' +
@@ -867,15 +947,24 @@
         renderDetail(a, cs, gs, stmts) +
       '</div>';
     });
-
-    host.innerHTML = html;
-    wireAccountRows();
+    return html;
   }
 
   function renderDetail(a, cs, gs, stmts) {
     var closedTxt = a.closed_at ? fmtDateShort(a.closed_at) : null;
 
+    var seriesTxt = a.check_series.length
+      ? a.check_series.map(function (r) { return r.min + '–' + r.max; }).join(', ')
+      : null;
+    var checkTxt = cs.count
+      ? cs.count + ' · ' + fmtMoney(cs.total) + (cs.voided ? ' · ' + cs.voided + ' void' : '')
+      : null;
+    var chargeTxt = gs.count ? gs.count + ' · ' + fmtMoney(gs.total) : null;
+
     var html = '<div class="detail-grid">' +
+      detailItem('Check series', seriesTxt, 'no check stock') +
+      detailItem('Checks written (all time)', checkTxt, 'none') +
+      detailItem('Charges captured (all time)', chargeTxt, 'none') +
       detailItem('Full account number', a.account_number || null, 'not stored') +
       detailItem('Other last-4s', a.alt_last4.length ? a.alt_last4.join(', ') : null, 'none') +
       detailItem('Sort order', String(a.sort_order), '') +
