@@ -1605,7 +1605,10 @@ async function matchCharges(lines, ignoredMonth, fileName, fileType) {
       for (var p = 0; p < existingPurchases.length; p++) {
         var purch = existingPurchases[p];
         if (matchedPurchaseIds[purch.id]) continue;
-        var purchAmount = Math.abs(parseFloat(purch.amount));
+        // A refund is not a purchase. abs() here matched a $194.72 debit to a
+        // -$193.85 credit memo.
+        var purchAmount = parseFloat(purch.amount);
+        if (!(purchAmount > 0)) continue;
         var amountDiff = Math.abs(l.amount - purchAmount);
         if (amountDiff > Math.max(l.amount * 0.03, 2)) continue;
         var dayDiff = Math.abs((new Date(l.txn_date) - new Date(purch.invoice_date)) / 86400000);
@@ -1614,7 +1617,11 @@ async function matchCharges(lines, ignoredMonth, fileName, fileType) {
         var gv = vendorName.toLowerCase();
         var vendorMatch = pv.indexOf(gv) !== -1 || gv.indexOf(pv) !== -1 ||
                           pv.split(/\s+/)[0] === gv.split(/\s+/)[0];
-        if (vendorMatch || amountDiff < 1) {
+        // Vendor must agree. The old rule also matched on "amountDiff < 1"
+        // alone, which paired a Sunoco fill with a Restaurant Depot run and an
+        // overdraft fee with a Philadelphia Extract invoice - 24 of 58 matches
+        // were wrong. A coincidence of amount is not evidence.
+        if (vendorMatch) {
           matched = purch; matchedPurchaseIds[purch.id] = true; break;
         }
       }
