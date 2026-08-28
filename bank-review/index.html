@@ -1968,7 +1968,7 @@ function renderExpenses(items) {
 
   var checkedCount = items.filter(function(c) { return expenseChecked[c.id]; }).length;
   html += '<div class="expense-footer">';
-  html += '<span class="expense-hint">Uncheck any that should go to managers instead</span>';
+  html += '<span class="expense-hint">Uncheck any you are not ready to save. To send one to managers, use its &rarr; Food button.</span>';
   html += '<button class="section-btn purple" onclick="saveExpenses()"' + (checkedCount === 0 ? ' disabled' : '') + '>Save ' + checkedCount + ' expense' + (checkedCount !== 1 ? 's' : '') + '</button>';
   html += '</div>';
 
@@ -3054,9 +3054,11 @@ async function saveExpenses() {
 }
 
 async function sendToManagers() {
+  // Only the checked food rows. Unchecking a non-food row means WITHHOLD it,
+  // not "send it to managers" - the old version concatenated unchecked
+  // expenses in here, so the button sent rows its own count never mentioned.
+  // To send a non-food row to managers, use its "-> Food" button first.
   var toSend = currentCharges.filter(function(c) { return c.status === 'food_pending' && foodChecked[c.id]; });
-  var uncheckedExpenses = currentCharges.filter(function(c) { return c.status === 'expense_pending' && !expenseChecked[c.id]; });
-  toSend = toSend.concat(uncheckedExpenses);
   if (!toSend.length) return;
 
   var btn = document.querySelector('#food-section .section-btn');
