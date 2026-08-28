@@ -1130,6 +1130,36 @@ var knownVendors = [];
 var knownVendorsReady = false;
 var vendorDropdownFocusedIdx = -1;
 
+// For an invoiced vendor the cost was already recognised when the manager
+// logged the invoice — the bank charge is settlement, not a new cost.
+// Creating a purchase from it books the same food twice and pins a lump
+// payment to one arbitrary venue. Point-of-sale vendors are the opposite:
+// there will never be an invoice, so the charge IS the record.
+function vendorPaymentTypeById(vendorId) {
+  if (!vendorId) return null;
+  for (var i = 0; i < knownVendors.length; i++) {
+    if (knownVendors[i].id === vendorId) return knownVendors[i].payment_type || null;
+  }
+  return null;
+}
+
+// Matches a bank charge's vendor_name to a known vendor the same way the
+// picker does — exact display_name first, then aliases.
+function vendorForChargeName(name) {
+  var n = String(name == null ? '' : name).trim().toLowerCase();
+  if (!n) return null;
+  for (var i = 0; i < knownVendors.length; i++) {
+    if ((knownVendors[i].display_name || '').toLowerCase() === n) return knownVendors[i];
+  }
+  for (var j = 0; j < knownVendors.length; j++) {
+    var al = knownVendors[j].aliases || [];
+    for (var a = 0; a < al.length; a++) {
+      if ((al[a] || '').toLowerCase() === n) return knownVendors[j];
+    }
+  }
+  return null;
+}
+
 // ── Auth helpers (ungated pattern) ──
 function apiHeaders() {
   if (typeof pcAuth !== 'undefined') {
@@ -3672,6 +3702,27 @@ async function saveReconAssignments() {
     var c0 = clean[s];
     if (c0.kind !== 'single') continue;
     try {
+      var vend0 = vendorForChargeName(c0.charge.vendor_name);
+      var isInvoiced0 = vend0 && vend0.payment_type === 'invoiced';
+
+      // Settlement only — no purchase row. The invoice is the cost record.
+      if (isInvoiced0) {
+        var setRes = await fetch(SUPA_URL + '/rest/v1/bank_charges?id=eq.' + c0.charge.id, {
+          method: 'PATCH',
+          headers: Object.assign({}, hdrs, {'Content-Type': 'application/json', 'Prefer': 'return=minimal'}),
+          body: JSON.stringify({
+            status: 'reconciled',
+            venue: c0.venue,
+            reconciled_by: userName || 'unknown',
+            reconciled_at: new Date().toISOString(),
+            notes: 'Settlement for ' + vend0.display_name + ' — cost recorded on the invoice, no purchase created'
+          })
+        });
+        if (!setRes.ok) throw new Error();
+        savedIds.push(c0.chargeId);
+        continue;
+      }
+
       var purchaseId = crypto.randomUUID();
       var purchaseRes = await fetch(SUPA_URL + '/rest/v1/purchases', {
         method: 'POST',
@@ -3708,6 +3759,24 @@ async function saveReconAssignments() {
     var splitItem = clean[sp];
     if (splitItem.kind !== 'split') continue;
     try {
+      var vendS = vendorForChargeName(splitItem.charge.vendor_name);
+      if (vendS && vendS.payment_type === 'invoiced') {
+        var setResS = await fetch(SUPA_URL + '/rest/v1/bank_charges?id=eq.' + splitItem.charge.id, {
+          method: 'PATCH',
+          headers: Object.assign({}, hdrs, {'Content-Type': 'application/json', 'Prefer': 'return=minimal'}),
+          body: JSON.stringify({
+            status: 'reconciled',
+            venue: splitItem.split.v1,
+            reconciled_by: userName || 'unknown',
+            reconciled_at: new Date().toISOString(),
+            notes: 'Settlement for ' + vendS.display_name + ' — cost recorded on the invoice, no purchase created'
+          })
+        });
+        if (!setResS.ok) throw new Error();
+        savedIds.push(splitItem.chargeId);
+        continue;
+      }
+
       var groupId = crypto.randomUUID();
       var pId1 = crypto.randomUUID();
       var pId2 = crypto.randomUUID();
