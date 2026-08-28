@@ -45,7 +45,8 @@
   // ---------------------------------------------------------------------
   var _accounts = null;       // [{ id, code, bank, label, account_type,
                               //    account_number, last4, alt_last4,
-                              //    is_active, closed_at, notes, sort_order,
+                              //    is_active, opened_at, closed_at, notes,
+                              //    sort_order,
                               //    check_series, display }, ...]
   var _readyPromise = null;   // the in-flight or settled load promise
 
@@ -105,7 +106,7 @@
   function loadAll() {
     return sbGet(
       'bank_accounts?select=id,code,bank,label,account_type,account_number,' +
-      'last4,alt_last4,is_active,closed_at,notes,sort_order,check_series' +
+      'last4,alt_last4,is_active,opened_at,closed_at,notes,sort_order,check_series' +
       '&deleted_at=is.null&order=sort_order.asc,code.asc'
     ).then(function (rows) {
       _accounts = (rows || []).map(function (a) {
@@ -138,6 +139,7 @@
           last4: last4,
           alt_last4: alt,
           is_active: a.is_active !== false,
+          opened_at: a.opened_at || null,
           closed_at: a.closed_at || null,
           notes: a.notes || null,
           sort_order: typeof a.sort_order === 'number' ? a.sort_order : 9999,
