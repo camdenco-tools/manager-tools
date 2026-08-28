@@ -1300,7 +1300,19 @@ function guessVendor(rawDesc) {
   }
 
   // ── Try to map raw vendor to a known vendor name (preserves canonical casing)
+  // A partial word is not evidence. The old rule matched a vendor's first word
+  // as a bare substring, so 'Phila Water Ice' claimed '2398-HILTON PHILAD' on
+  // the fragment 'phila' and a hotel stay came through as a food purchase.
+  // Now: the full name as a substring wins outright. Failing that, a
+  // multi-word vendor must hit its first TWO words as whole words, and a
+  // single-word vendor must hit that word whole. 'Gold Medal' no longer
+  // claims Golden Corral; 'Delta Trenton' no longer claims Delta Air Lines.
   var rawLower = raw.toLowerCase();
+  var rawWords = rawLower.split(/[^a-z0-9]+/).filter(Boolean);
+  function hasWholeWord(w) {
+    for (var q = 0; q < rawWords.length; q++) if (rawWords[q] === w) return true;
+    return false;
+  }
   var bestMatch = null;
   var bestScore = 0;
   for (var i = 0; i < KNOWN_VENDORS.length; i++) {
@@ -1308,10 +1320,16 @@ function guessVendor(rawDesc) {
     var vendorLower = vendor.toLowerCase();
     if (rawLower.indexOf(vendorLower) !== -1) {
       if (vendor.length > bestScore) { bestMatch = vendor; bestScore = vendor.length; }
+      continue;
     }
-    var vendorFirst = vendorLower.split(/\s+/)[0];
-    if (vendorFirst.length > 3 && rawLower.indexOf(vendorFirst) !== -1) {
-      if (!bestMatch || vendor.length > bestScore) { bestMatch = vendor; bestScore = vendor.length; }
+    var vWords = vendorLower.split(/[^a-z0-9]+/).filter(Boolean);
+    var need = Math.min(2, vWords.length);
+    if (!need) continue;
+    if (vWords[0].length < 4) continue;
+    var got = 0;
+    for (var n = 0; n < need; n++) if (hasWholeWord(vWords[n])) got++;
+    if (got === need) {
+      if (vendor.length > bestScore) { bestMatch = vendor; bestScore = vendor.length; }
     }
   }
   if (bestMatch) return bestMatch;
@@ -3203,7 +3221,20 @@ async function loadPendingCharges() {
     document.getElementById('review-section').style.display = 'block';
     renderReview();
     updateResumeBanner();
-  } catch(e) {}
+  } catch(e) {
+    // A swallowed failure here hides the review section entirely, so the page
+    // looks like there is no work left when there is. Say so instead.
+    console.error('[bank-review] loadPendingCharges failed', e);
+    var rs = document.getElementById('review-section');
+    if (rs && !document.getElementById('pc-load-error')) {
+      rs.style.display = 'block';
+      rs.insertAdjacentHTML('afterbegin',
+        '<div id="pc-load-error" style="background:#FCEBEB;border:1px solid #f0c0c0;' +
+        'border-radius:12px;padding:12px 16px;margin-bottom:12px;font-size:13px;color:#A32D2D;">' +
+        'Could not load the charges waiting for review - refresh the page. ' +
+        'Nothing is lost; the list is still in the database.</div>');
+    }
+  }
 }
 
 // ── Init ──
