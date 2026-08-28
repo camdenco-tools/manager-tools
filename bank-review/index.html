@@ -601,10 +601,7 @@ header {
   <!-- Upload card -->
   <div class="card" id="upload-card">
     <div class="card-title">Upload bank statement</div>
-    <div class="month-row">
-      <label>Statement month</label>
-      <input type="month" id="batch-month">
-    </div>
+    <div id="captured-through" style="display:none;font-size:12px;color:#555;background:#f4f3ee;border:1px solid #e8e6de;border-radius:8px;padding:9px 12px;margin-bottom:16px;line-height:1.45;"></div>
     <div class="month-row">
       <label>Bank account</label>
       <select id="batch-account" style="flex:1;padding:9px 12px;border:1px solid #e0e0e0;border-radius:10px;font-size:14px;color:#1a1a1a;background:#fafafa;font-family:inherit;">
@@ -838,6 +835,7 @@ function renderBankAccountSelect() {
     html += '<option value="' + escapeHtml(a.id) + '">' + escapeHtml(a.bank + ' - ' + a.label + ' (' + a.last4 + ')') + '</option>';
   }
   sel.innerHTML = html;
+  sel.onchange = renderCapturedThrough;
 }
 
 // ── Load curated known_vendors list ──
@@ -875,9 +873,6 @@ function handleFileUpload(input) {
 }
 
 async function processFile(file) {
-  var batchMonth = document.getElementById('batch-month').value;
-  if (!batchMonth) { alert('Please select a statement month first.'); return; }
-
   // Bank account is required — it's the real routing key for reconciliation.
   var batchAccountId = document.getElementById('batch-account').value;
   var acctErrEl = document.getElementById('batch-account-error');
@@ -932,8 +927,8 @@ async function processFile(file) {
       return;
     }
 
-    document.getElementById('processing-step').textContent = 'Matching against existing purchases (' + lines.length + ' charges)...';
-    await matchCharges(lines, batchMonth, file.name, isImage ? 'image' : (isCSV ? 'csv' : 'xlsx'));
+    document.getElementById('processing-step').textContent = 'Reading ' + lines.length + ' lines...';
+    await matchCharges(lines, null, file.name, isImage ? 'image' : (isCSV ? 'csv' : 'xlsx'));
 
   } catch(e) {
     console.error(e);
@@ -960,103 +955,211 @@ async function processFile(file) {
 // debit/credit exclusivity pattern. Once detected, the rest of the file is
 // parsed as Format B. If the first row doesn't fit, every row falls back to
 // the legacy single-column scanning loop (Format A).
+var csvParseNotes = null;   // set by parseCSV, read when reporting the upload
+
+var CSV_TRANSFER_PATTERNS = /online transfer|transfer to|transfer from|xfer to|xfer from|wire transfer|web xfer/i;
+var CSV_CARD_PAYMENT_PATTERNS = /online payment thank you|payment thank you/i;
+
+// WF checking AND card: 5 columns with a DATE header, single signed amount,
+//   check number in its own column, STATUS on every row.
+// M&T: 6 columns, NO header: row#, date, description, debit, credit, balance.
+//   Check numbers are buried in the description and need a regex.
+function detectCsvFormat(rows) {
+  if (!rows.length) return null;
+  var first = parseCSVRow(rows[0]).map(function (c) {
+    return c.trim().replace(/^"|"$/g, '').toUpperCase();
+  });
+  if (first.length === 5 && first[0] === 'DATE' && first[1] === 'DESCRIPTION') {
+    return { format: 'wf', hasHeader: true };
+  }
+  for (var probe = 0; probe < Math.min(3, rows.length); probe++) {
+    var cols = parseCSVRow(rows[probe]);
+    if (cols.length !== 6) continue;
+    var debit = cols[3].trim().replace(/^"|"$/g, '');
+    var credit = cols[4].trim().replace(/^"|"$/g, '');
+    var debitNum = debit && /^-?\$?[\d,]+\.?\d*$/.test(debit.replace(/[()]/g, ''));
+    var creditNum = credit && /^-?\$?[\d,]+\.?\d*$/.test(credit.replace(/[()]/g, ''));
+    if ((debitNum && !credit) || (!debit && creditNum)) {
+      return { format: 'mt', hasHeader: probe > 0 };
+    }
+  }
+  return null;
+}
+
+function cleanMoney(raw) {
+  var s = String(raw == null ? '' : raw).trim().replace(/^"|"$/g, '');
+  if (!s) return null;
+  var neg = s.indexOf('(') !== -1;
+  var n = parseFloat(s.replace(/[$,()\s]/g, ''));
+  if (isNaN(n)) return null;
+  return neg ? -Math.abs(n) : n;
+}
+
+function extractCheckNumber(desc) {
+  var m = String(desc || '').match(/\bCHECK\s+#?\s*(\d{3,7})\b/i);
+  return m ? m[1] : null;
+}
+
+function extractReference(desc) {
+  var d = String(desc || '');
+  var m = d.match(/\bS\d{12,}\b/);
+  if (m) return m[0];
+  m = d.match(/REF\s*#\s*([A-Z0-9]{6,})/i);
+  if (m) return 'REF#' + m[1].toUpperCase();
+  m = d.match(/\bACH\d{5,}\b/i);
+  if (m) return m[0].toUpperCase();
+  return null;
+}
+
+// foot_bucket follows how the BANK prints its summary box. line_type follows
+// what the movement MEANS. Neither is derivable from the other.
+//
+// The M&T trap: M&T lumps the monthly fee into the debit column but breaks it
+// out separately in the summary box. Mapping debit-column to 'debits' fails the
+// foot check by exactly the fee on every M&T account every month.
+function classifyCsvLine(row, account) {
+  var isCard = account && account.account_type === 'credit_card';
+  var isSavings = account && account.account_type === 'savings';
+  var isMT = account && /m&t/i.test(account.bank || '');
+  var desc = String(row.description || '');
+  var bucket, type, direction;
+
+  if (isMT && /^SERVICE\s+CHARGE\s+FOR\s+ACCOUNT/i.test(desc.trim())) {
+    bucket = 'service_charges'; direction = 'out'; type = 'debit';
+  } else if (isMT && isSavings && /INTEREST/i.test(desc)) {
+    bucket = 'interest'; direction = 'in'; type = 'deposit';
+  } else if (isCard) {
+    if (row.amount < 0) {
+      bucket = 'purchases'; direction = 'out'; type = 'debit';
+    } else if (CSV_CARD_PAYMENT_PATTERNS.test(desc)) {
+      bucket = 'payments'; direction = 'in'; type = 'settlement';
+    } else {
+      bucket = 'credits'; direction = 'in'; type = 'deposit';
+    }
+  } else if (row.amount < 0) {
+    bucket = 'debits'; direction = 'out';
+    if (CSV_TRANSFER_PATTERNS.test(desc)) type = 'transfer_out';
+    else if (CSV_CARD_PAYMENT_PATTERNS.test(desc)) type = 'settlement';
+    else type = 'debit';
+  } else {
+    bucket = 'deposits'; direction = 'in';
+    if (CSV_TRANSFER_PATTERNS.test(desc)) type = 'transfer_in';
+    else type = 'deposit';
+  }
+
+  return { foot_bucket: bucket, line_type: type, direction: direction };
+}
+
+// The old rule asked "does a row with this date and amount exist?" and dropped
+// the incoming one. MICROTEL GEORGETOWN on 6/1 at $243.09 appears FOUR times
+// legitimately. Count per group instead: how many in the file, how many on
+// record, insert the difference. Scoped by account, because a transfer leaving
+// one account and landing in another is the same date and amount twice.
+function dedupeKey(accountId, line) {
+  return [
+    accountId,
+    String(line.txn_date).substring(0, 10),
+    Math.round(Math.abs(Number(line.amount)) * 100),
+    String(line.description || '').trim().toUpperCase().replace(/\s+/g, ' ')
+  ].join('|');
+}
+
+function countingDedupe(accountId, incoming, existing) {
+  var seenRefs = {};
+  existing.forEach(function (e) {
+    if (e.source_reference) seenRefs[e.source_reference] = true;
+  });
+
+  var existingCounts = {};
+  existing.forEach(function (e) {
+    var k = dedupeKey(accountId, e);
+    existingCounts[k] = (existingCounts[k] || 0) + 1;
+  });
+
+  var used = {};
+  var toInsert = [];
+  var duplicates = 0;
+
+  incoming.forEach(function (line) {
+    if (line.reference && seenRefs[line.reference]) { duplicates++; return; }
+    var k = dedupeKey(accountId, line);
+    var onRecord = existingCounts[k] || 0;
+    var takenSoFar = used[k] || 0;
+    if (takenSoFar < onRecord) { used[k] = takenSoFar + 1; duplicates++; return; }
+    used[k] = takenSoFar + 1;
+    toInsert.push(line);
+  });
+
+  return { toInsert: toInsert, duplicates: duplicates };
+}
+
+// A line carrying a check number is looked up in check_register BEFORE it can
+// be queued. Already in the register means the cost was booked when the bill
+// was entered. Not in the register is a real gap, so it queues.
+function indexCheckRegister(rows) {
+  var idx = {};
+  (rows || []).forEach(function (r) {
+    var n = String(r.check_number == null ? '' : r.check_number).trim();
+    if (n) idx[n] = r;
+  });
+  return idx;
+}
+
 function parseCSV(file) {
-  return new Promise(function(resolve, reject) {
+  return new Promise(function (resolve, reject) {
     var reader = new FileReader();
-    reader.onload = function(e) {
-      var text = e.target.result;
-      var rows = text.split('\n').map(function(r) { return r.trim(); }).filter(function(r) { return r; });
-      if (rows.length < 1) { resolve([]); return; }
-
-      // ── Format detection: scan first few data rows for the 2-column pattern.
-      // We DON'T assume rows[0] is a header — Citizens-style exports have no
-      // header. So check rows[0..2] and look for the exclusive D/E signature.
-      var isFormatB = false;
-      var hasHeader = false;
-      for (var probe = 0; probe < Math.min(3, rows.length); probe++) {
-        var pCols = parseCSVRow(rows[probe]);
-        if (pCols.length !== 6) continue;
-        var pDebit = pCols[3].trim().replace(/^"|"$/g, '');
-        var pCredit = pCols[4].trim().replace(/^"|"$/g, '');
-        var debitIsNum = pDebit && /^-?\$?[\d,]+\.?\d*$/.test(pDebit.replace(/[()]/g, ''));
-        var creditIsNum = pCredit && /^-?\$?[\d,]+\.?\d*$/.test(pCredit.replace(/[()]/g, ''));
-        // Exclusive: exactly one of D/E is a number, the other is blank.
-        if ((debitIsNum && !pCredit) || (!pDebit && creditIsNum)) {
-          isFormatB = true;
-          // If we detected on row 0, there's no header. If we detected on row 1+,
-          // earlier rows were probably the header — skip them.
-          hasHeader = (probe > 0);
-          break;
-        }
-      }
-
-      var lines = [];
-      var startIdx = hasHeader ? 1 : 0;
-
-      if (isFormatB) {
-        // ── Format B: 6 cols = [row#, date, description, debit, credit, balance]
-        for (var i = startIdx; i < rows.length; i++) {
-          var cols = parseCSVRow(rows[i]);
-          if (cols.length !== 6) continue;
-          var dateRaw = cols[1].trim().replace(/^"|"$/g, '');
-          var descRaw = cols[2].trim().replace(/^"|"$/g, '');
-          var debitRaw = cols[3].trim().replace(/^"|"$/g, '');
-          var creditRaw = cols[4].trim().replace(/^"|"$/g, '');
-
-          if (!/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(dateRaw)) continue;
-          if (!descRaw) continue;
-
-          // Skip credits entirely — deposits and refunds aren't reconciled here.
-          if (!debitRaw && creditRaw) continue;
-          if (!debitRaw) continue;
-
-          var debitClean = debitRaw.replace(/[$,()]/g, '').trim();
-          if (!debitClean || isNaN(parseFloat(debitClean))) continue;
-          var amt = parseFloat(debitClean);
-          if (debitRaw.indexOf('(') !== -1) amt = -amt;
-
-          // matchCharges() filters out positive amounts as deposits/transfers,
-          // so a debit listed as a positive number in col D needs to be flipped
-          // to negative here to survive that filter. Citizens uses negatives
-          // (-82.99) directly, so this is a safety net.
-          if (amt > 0) amt = -amt;
-
-          lines.push({
-            date: normalizeDate(dateRaw),
-            description: descRaw,
-            amount: amt
-          });
-        }
-        resolve(lines);
-        return;
-      }
-
-      // ── Format A: legacy single-column scan. Assume rows[0] is header.
-      for (var i = 1; i < rows.length; i++) {
-        var cols = parseCSVRow(rows[i]);
-        if (cols.length < 3) continue;
-        var dateVal = null, descVal = null, amountVal = null;
-        for (var c = 0; c < cols.length; c++) {
-          var val = cols[c].trim().replace(/^"|"$/g, '');
-          if (!dateVal && /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(val)) {
-            dateVal = normalizeDate(val);
-          } else if (!amountVal && /^-?\$?[\d,]+\.?\d*$/.test(val.replace(/[()]/g, ''))) {
-            var numStr = val.replace(/[$,()]/g, '').trim();
-            if (numStr && !isNaN(parseFloat(numStr))) {
-              amountVal = parseFloat(numStr);
-              if (val.indexOf('(') !== -1) amountVal = -amountVal;
-            }
-          } else if (!descVal && val.length > 5 && !/^\d+$/.test(val)) {
-            descVal = val;
-          }
-        }
-        if (dateVal && descVal && amountVal !== null) {
-          lines.push({ date: dateVal, description: descVal, amount: amountVal });
-        }
-      }
-      resolve(lines);
-    };
     reader.onerror = reject;
+    reader.onload = function (e) {
+      var rows = String(e.target.result).split('\n').map(function (r) { return r.trim(); })
+        .filter(function (r) { return r; });
+      if (!rows.length) { resolve([]); return; }
+      var det = detectCsvFormat(rows);
+      if (!det) { resolve([]); return; }
+
+      var out = [];
+      var skipped = 0, pending = 0;
+      var start = det.hasHeader ? 1 : 0;
+
+      for (var i = start; i < rows.length; i++) {
+        var cols = parseCSVRow(rows[i]);
+        var dateRaw, desc, amount, checkNum;
+
+        if (det.format === 'wf') {
+          if (cols.length < 5) { skipped++; continue; }
+          dateRaw = cols[0].trim().replace(/^"|"$/g, '');
+          desc = cols[1].trim().replace(/^"|"$/g, '');
+          amount = cleanMoney(cols[2]);
+          checkNum = cols[3].trim().replace(/^"|"$/g, '') || null;
+          var status = cols[4].trim().replace(/^"|"$/g, '');
+          if (status && status.toLowerCase() !== 'posted') { pending++; continue; }
+        } else {
+          if (cols.length !== 6) { skipped++; continue; }
+          dateRaw = cols[1].trim().replace(/^"|"$/g, '');
+          desc = cols[2].trim().replace(/^"|"$/g, '');
+          var debit = cleanMoney(cols[3]);
+          var credit = cleanMoney(cols[4]);
+          if (debit != null && debit !== 0) amount = -Math.abs(debit);
+          else if (credit != null && credit !== 0) amount = Math.abs(credit);
+          else amount = null;
+          checkNum = extractCheckNumber(desc);
+        }
+
+        if (!/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(dateRaw)) { skipped++; continue; }
+        if (!desc) { skipped++; continue; }
+        if (amount == null) { skipped++; continue; }
+
+        out.push({
+          date: normalizeDate(dateRaw),
+          txn_date: normalizeDate(dateRaw),
+          description: desc,
+          amount: amount,
+          check_number: checkNum || null,
+          reference: extractReference(desc)
+        });
+      }
+      csvParseNotes = { format: det.format, skipped: skipped, pending: pending };
+      resolve(out);
+    };
     reader.readAsText(file);
   });
 }
@@ -1273,33 +1376,319 @@ function findCategoryByName(name) {
 function isFoodCategory(cat) { return cat && cat.gl_group === 'cogs'; }
 
 // ── Match against existing purchases ──
-async function matchCharges(lines, batchMonth, fileName, fileType) {
-  var TRANSFER_PATTERNS = /online transfer|transfer to|transfer from|xfer to|xfer from|wire transfer|online payment thank you|payment thank you/i;
-  var DEPOSIT_PATTERNS = /ach paymen|ach credit|ach deposit|direct dep|payroll dep/i;
-
-  // Read the batch note from the upload card (already validated in processFile)
+async function matchCharges(lines, ignoredMonth, fileName, fileType) {
   var batchNote = (document.getElementById('batch-note').value || '').trim();
   var batchAccountId = document.getElementById('batch-account').value || null;
 
-  var filteredCount = 0;
-  var filtered = [];
-  for (var f = 0; f < lines.length; f++) {
-    var ln = lines[f];
-    if (ln.amount > 0) { filteredCount++; continue; }
-    if (TRANSFER_PATTERNS.test(ln.description)) { filteredCount++; continue; }
-    if (DEPOSIT_PATTERNS.test(ln.description)) { filteredCount++; continue; }
-    filtered.push({ date: ln.date, description: ln.description, amount: Math.abs(ln.amount) });
+  var account = null;
+  for (var ai = 0; ai < BANK_ACCOUNTS.length; ai++) {
+    if (BANK_ACCOUNTS[ai].id === batchAccountId) { account = BANK_ACCOUNTS[ai]; break; }
   }
-  lines = filtered;
-  if (filteredCount > 0) console.log('Filtered out ' + filteredCount + ' deposits/transfers');
+  if (!account) { abortUpload('Pick the bank account this file came from.'); return; }
 
-  if (!lines.length) {
-    document.getElementById('upload-card').style.display = 'block';
-    document.getElementById('processing-card').style.display = 'none';
-    alert('All transactions were deposits or transfers -- nothing to reconcile.');
+  // Classify every line. Nothing is discarded — a filtered-out line is a line
+  // that can never be proven.
+  var classified = lines.map(function (raw) {
+    var c = classifyCsvLine(raw, account);
+    return {
+      txn_date: raw.txn_date || raw.date,
+      description: raw.description,
+      amount: Math.abs(Number(raw.amount)),
+      check_number: raw.check_number || null,
+      reference: raw.reference || null,
+      foot_bucket: c.foot_bucket,
+      line_type: c.line_type,
+      direction: c.direction
+    };
+  });
+
+  var allDates = classified.map(function (l) { return l.txn_date; }).filter(Boolean).sort();
+  if (!allDates.length) { abortUpload('No usable dates in that file.'); return; }
+  var rangeStart = allDates[0];
+  var rangeEnd = allDates[allDates.length - 1];
+
+  // Existing CSV lines only. Parsed PDF lines are an independent reading of the
+  // same month — deduping against them would destroy that independence, and
+  // their descriptions are truncated differently anyway.
+  document.getElementById('processing-step').textContent = 'Checking what is already on record...';
+  var existingLines = [];
+  try {
+    var exRes = await fetch(SUPA_URL + '/rest/v1/bank_statement_lines'
+      + '?bank_account_id=eq.' + encodeURIComponent(batchAccountId)
+      + '&source=eq.csv&deleted_at=is.null'
+      + '&txn_date=gte.' + rangeStart + '&txn_date=lte.' + rangeEnd
+      + '&select=txn_date,description,amount,source_reference&limit=50000',
+      { headers: hdrs() });
+    if (!exRes.ok) throw new Error(await exRes.text());
+    existingLines = await exRes.json();
+    if (!Array.isArray(existingLines)) existingLines = [];
+  } catch (e) {
+    abortUpload('Could not read what is already on record, so nothing was uploaded.\n\n' + (e.message || ''));
     return;
   }
 
+  var dd = countingDedupe(batchAccountId, classified, existingLines);
+  if (!dd.toInsert.length) {
+    abortUpload('Every line in this file is already on record (' + dd.duplicates + ' duplicate' +
+      (dd.duplicates === 1 ? '' : 's') + ').');
+    await loadPendingCharges(); await loadReturned(); await loadTrash();
+    return;
+  }
+
+  var uploadBatchId = crypto.randomUUID();
+  currentBatchId = uploadBatchId;
+  var actor = currentUser ? currentUser.display_name : 'admin';
+  var nowIso = new Date().toISOString();
+
+  // 1. Land every line as the record of what the bank said. statement_id stays
+  //    NULL forever: the PDF capture path soft-deletes by statement_id, so a
+  //    CSV line carrying one would be wiped on the next Recapture.
+  document.getElementById('processing-step').textContent =
+    'Recording ' + dd.toInsert.length + ' lines from the bank...';
+  var linePayload = dd.toInsert.map(function (l) {
+    return {
+      statement_id: null,
+      line_index: null,
+      bank_account_id: batchAccountId,
+      txn_date: l.txn_date,
+      description: String(l.description).substring(0, 500),
+      amount: l.amount,
+      direction: l.direction,
+      foot_bucket: l.foot_bucket,
+      line_type: l.line_type,
+      check_number: l.check_number,
+      reference: l.reference,
+      source: 'csv',
+      upload_batch_id: uploadBatchId,
+      source_reference: l.reference,
+      created_by: actor
+    };
+  });
+
+  try {
+    var lRes = await fetch(SUPA_URL + '/rest/v1/bank_statement_lines', {
+      method: 'POST',
+      headers: Object.assign({}, hdrs(), {'Content-Type': 'application/json', 'Prefer': 'return=representation'}),
+      body: JSON.stringify(linePayload)
+    });
+    if (!lRes.ok) throw new Error(await lRes.text());
+    var insertedLines = await lRes.json();
+    if (!Array.isArray(insertedLines) || !insertedLines.length) {
+      throw new Error('The insert returned no rows. Check that you are signed in as an admin.');
+    }
+  } catch (e) {
+    abortUpload('The bank lines did not save, so nothing was recorded.\n\n' + (e.message || ''));
+    return;
+  }
+
+  // 2. Check numbers are looked up BEFORE anything is queued.
+  var checkIdx = {};
+  var checkNums = [];
+  dd.toInsert.forEach(function (l) {
+    if (l.check_number && /^[0-9]+$/.test(l.check_number)) checkNums.push(l.check_number);
+  });
+  if (checkNums.length) {
+    try {
+      var cRes = await fetch(SUPA_URL + '/rest/v1/check_register'
+        + '?select=check_number,amount,payee_name,voided,bank_account_id'
+        + '&bank_account_id=eq.' + encodeURIComponent(batchAccountId)
+        + '&check_number=in.(' + checkNums.join(',') + ')&limit=5000', { headers: hdrs() });
+      if (!cRes.ok) throw new Error(await cRes.text());
+      checkIdx = indexCheckRegister(await cRes.json());
+    } catch (e) {
+      // Fail loud. A silent empty index queues every check as if it were a gap.
+      abortUpload('Could not read the check register, so nothing was queued.\n\n' +
+        'The bank lines were saved. Fix this and re-run the upload.\n\n' + (e.message || ''));
+      return;
+    }
+  }
+
+  // 3. Only real debits go on to the manager queue.
+  var toPromote = [];
+  var settledChecks = 0;
+  dd.toInsert.forEach(function (l) {
+    if (l.line_type !== 'debit') return;
+    if (l.check_number && checkIdx[l.check_number]) { settledChecks++; return; }
+    toPromote.push(l);
+  });
+
+  var charges = [];
+  if (toPromote.length) {
+    var pFrom = new Date(rangeStart); pFrom.setDate(pFrom.getDate() - 7);
+    var pTo = new Date(rangeEnd); pTo.setDate(pTo.getDate() + 7);
+    var existingPurchases = [];
+    try {
+      var pRes = await fetch(SUPA_URL + '/rest/v1/purchases?deleted_at=is.null&type=eq.invoice'
+        + '&invoice_date=gte.' + pFrom.toISOString().slice(0, 10)
+        + '&invoice_date=lte.' + pTo.toISOString().slice(0, 10)
+        + '&select=id,invoice_date,vendor,venue,amount,note&limit=5000', { headers: hdrs() });
+      if (pRes.ok) existingPurchases = await pRes.json();
+      if (!Array.isArray(existingPurchases)) existingPurchases = [];
+    } catch (e) { existingPurchases = []; }
+
+    var matchedPurchaseIds = {};
+    toPromote.forEach(function (l) {
+      var vendorName = guessVendor(l.description);
+      var category = guessCategory(vendorName);
+      var isFood = !category || isFoodCategory(category);
+      var matched = null;
+      for (var p = 0; p < existingPurchases.length; p++) {
+        var purch = existingPurchases[p];
+        if (matchedPurchaseIds[purch.id]) continue;
+        var purchAmount = Math.abs(parseFloat(purch.amount));
+        var amountDiff = Math.abs(l.amount - purchAmount);
+        if (amountDiff > Math.max(l.amount * 0.03, 2)) continue;
+        var dayDiff = Math.abs((new Date(l.txn_date) - new Date(purch.invoice_date)) / 86400000);
+        if (dayDiff > 5) continue;
+        var pv = (purch.vendor || '').toLowerCase();
+        var gv = vendorName.toLowerCase();
+        var vendorMatch = pv.indexOf(gv) !== -1 || gv.indexOf(pv) !== -1 ||
+                          pv.split(/\s+/)[0] === gv.split(/\s+/)[0];
+        if (vendorMatch || amountDiff < 1) {
+          matched = purch; matchedPurchaseIds[purch.id] = true; break;
+        }
+      }
+      charges.push({
+        id: crypto.randomUUID(),
+        batch_id: uploadBatchId,
+        charge_date: l.txn_date,
+        raw_description: l.description,
+        amount: l.amount,
+        vendor_name: vendorName,
+        category_id: category ? category.id : (findCategoryByName('Food Purchases') || {}).id,
+        status: matched ? 'matched' : (isFood ? 'food_pending' : 'expense_pending'),
+        matched_purchase_id: matched ? matched.id : null,
+        batch_month: String(l.txn_date).substring(0, 7),
+        batch_note: batchNote,
+        bank_account_id: batchAccountId,
+        uploaded_by: actor,
+        uploaded_at: nowIso
+      });
+    });
+  }
+
+  // A rejected insert comes back as a 400, not a throw. Silence is not success.
+  var writeErrors = 0;
+  if (charges.length) {
+    document.getElementById('processing-step').textContent =
+      'Sending ' + charges.length + ' charges for review...';
+    for (var w = 0; w < charges.length; w += 50) {
+      var slice = charges.slice(w, w + 50);
+      try {
+        var chRes = await fetch(SUPA_URL + '/rest/v1/bank_charges', {
+          method: 'POST',
+          headers: Object.assign({}, hdrs(), {'Content-Type': 'application/json', 'Prefer': 'return=representation'}),
+          body: JSON.stringify(slice)
+        });
+        if (!chRes.ok) throw new Error(await chRes.text());
+        var back = await chRes.json();
+        if (!Array.isArray(back) || back.length !== slice.length) {
+          throw new Error('Returned ' + (Array.isArray(back) ? back.length : 0) + ' of ' + slice.length);
+        }
+      } catch (e) {
+        writeErrors += slice.length;
+        console.error('[bank-review] charge insert failed', e);
+      }
+    }
+  }
+
+  // 4. Record the upload itself, with the account and the range actually pulled.
+  try {
+    await fetch(SUPA_URL + '/rest/v1/bank_upload_batches', {
+      method: 'POST',
+      headers: Object.assign({}, hdrs(), {'Content-Type': 'application/json', 'Prefer': 'return=minimal'}),
+      body: JSON.stringify({
+        id: uploadBatchId,
+        bank_account_id: batchAccountId,
+        range_start: rangeStart,
+        range_end: rangeEnd,
+        file_name: fileName,
+        file_type: fileType,
+        batch_note: batchNote,
+        total_charges: dd.toInsert.length,
+        total_amount: dd.toInsert.reduce(function (s, l) { return s + l.amount; }, 0),
+        matched_count: charges.filter(function (c) { return c.status === 'matched'; }).length,
+        expense_count: charges.filter(function (c) { return c.status === 'expense_pending'; }).length,
+        pending_count: charges.filter(function (c) { return c.status === 'food_pending'; }).length,
+        uploaded_by: actor,
+        status: 'reviewed'
+      })
+    });
+  } catch (e) { console.warn('[bank-review] batch record failed', e); }
+
+  document.getElementById('processing-card').style.display = 'none';
+  document.getElementById('upload-card').style.display = 'block';
+  document.getElementById('batch-note').value = '';
+
+  var msg = dd.toInsert.length + ' line' + (dd.toInsert.length === 1 ? '' : 's') + ' recorded from the bank';
+  if (dd.duplicates) msg += '\n' + dd.duplicates + ' already on record, skipped';
+  if (csvParseNotes && csvParseNotes.pending) msg += '\n' + csvParseNotes.pending + ' still pending at the bank, skipped';
+  if (csvParseNotes && csvParseNotes.skipped) msg += '\n' + csvParseNotes.skipped + ' unreadable row(s) skipped';
+  msg += '\n' + charges.length + ' sent for review';
+  if (settledChecks) msg += '\n' + settledChecks + ' check(s) already in the register - recorded, not queued';
+  if (writeErrors) msg += '\n\n(!) ' + writeErrors + ' charge(s) FAILED to save. Tell someone.';
+  alert(msg);
+
+  await loadPendingCharges();
+  await loadReturned();
+  await loadTrash();
+  await renderCapturedThrough();
+  renderSuggestions();
+  loadHistory();
+  return;
+}
+
+function abortUpload(message) {
+  document.getElementById('upload-card').style.display = 'block';
+  document.getElementById('processing-card').style.display = 'none';
+  alert(message);
+}
+
+// Reads back what has already been captured for the picked account, so the next
+// pull can overlap deliberately rather than by guesswork.
+async function renderCapturedThrough() {
+  var el = document.getElementById('captured-through');
+  if (!el) return;
+  var acctId = document.getElementById('batch-account').value;
+  if (!acctId) { el.style.display = 'none'; return; }
+  try {
+    var res = await fetch(SUPA_URL + '/rest/v1/bank_upload_batches'
+      + '?bank_account_id=eq.' + encodeURIComponent(acctId)
+      + '&deleted_at=is.null&select=range_start,range_end,uploaded_at'
+      + '&order=range_end.desc&limit=1', { headers: hdrs() });
+    if (!res.ok) throw new Error();
+    var rows = await res.json();
+    if (!Array.isArray(rows) || !rows.length || !rows[0].range_end) {
+      el.innerHTML = 'No prior upload on record for this account. Pull as far back as you need.';
+      el.style.display = 'block';
+      return;
+    }
+    var end = String(rows[0].range_end).substring(0, 10);
+    var sug = new Date(end + 'T00:00:00');
+    sug.setDate(sug.getDate() - 7);
+    var ep = end.split('-');
+    var endStr = parseInt(ep[1], 10) + '/' + parseInt(ep[2], 10) + '/' + ep[0].substring(2);
+    var sugStr = (sug.getMonth() + 1) + '/' + sug.getDate() + '/' +
+                 String(sug.getFullYear()).substring(2);
+    el.innerHTML = 'Captured through <strong>' + escapeHtml(endStr) + '</strong> for this account. ' +
+      'Suggested pull from <strong>' + escapeHtml(sugStr) + '</strong> - the overlap catches charges ' +
+      'that were pending last time and posted with an earlier date.';
+    el.style.display = 'block';
+  } catch (e) {
+    el.style.display = 'none';
+  }
+}
+
+// Dead code from the previous version of matchCharges. Never called — the new
+// intake replaced it. Left in place so the braces balance; delete the whole
+// deadOldMatchTail function whenever you feel like tidying up.
+async function deadOldMatchTail() {
+  var lines = [];
+  var batchMonth = null;
+  var batchNote = null;
+  var batchAccountId = null;
+  var fileName = null;
+  var fileType = null;
   var dates = lines.map(function(l) { return l.date; }).filter(Boolean).sort();
   var minDate = dates[0]; var maxDate = dates[dates.length - 1];
   var min = new Date(minDate); min.setDate(min.getDate() - 7);
@@ -2730,22 +3119,40 @@ function updateResumeBanner() {
 // ── Upload history ──
 async function loadHistory() {
   try {
-    var res = await fetch(SUPA_URL + '/rest/v1/bank_upload_batches?select=*&order=uploaded_at.desc&limit=10', { headers: hdrs() });
+    var res = await fetch(SUPA_URL + '/rest/v1/bank_upload_batches?select=*&deleted_at=is.null&order=uploaded_at.desc&limit=10', { headers: hdrs() });
     var rows = await res.json();
     if (!Array.isArray(rows) || !rows.length) {
       document.getElementById('history-list').innerHTML = '<div class="empty-state">No uploads yet.</div>';
       return;
     }
     var html = '';
+    function shortDate(iso) {
+      var p = String(iso).substring(0, 10).split('-');
+      if (p.length !== 3) return iso;
+      return parseInt(p[1], 10) + '/' + parseInt(p[2], 10) + '/' + p[0].substring(2);
+    }
     rows.forEach(function(b) {
-      var mp = b.batch_month.split('-');
-      var monthLabel = new Date(parseInt(mp[0]), parseInt(mp[1])-1, 1).toLocaleString('en-US', {month:'long', year:'numeric'});
+      var monthLabel;
+      if (b.range_start && b.range_end) {
+        monthLabel = shortDate(b.range_start) + ' - ' + shortDate(b.range_end);
+      } else if (b.batch_month) {
+        var mp = b.batch_month.split('-');
+        monthLabel = new Date(parseInt(mp[0]), parseInt(mp[1])-1, 1).toLocaleString('en-US', {month:'long', year:'numeric'});
+      } else {
+        monthLabel = 'Untitled upload';
+      }
       var dateStr = new Date(b.uploaded_at).toLocaleDateString('en-US');
       var statusClass = b.pending_count > 0 ? 'active' : 'complete';
       var statusLabel = b.pending_count > 0 ? b.pending_count + ' pending' : 'Complete';
       html += '<div class="history-item">';
       html += '<div><div class="history-name">' + monthLabel + '</div>';
-      html += '<div class="history-meta">Uploaded ' + dateStr + ' by ' + escapeHtml(b.uploaded_by) + ' -- ' + b.total_charges + ' charges, $' + fmtMoneyRound(Math.abs(b.total_amount)) + '</div></div>';
+      var lineLabel = b.range_start
+        ? b.total_charges + ' bank lines, $' + fmtMoneyRound(Math.abs(b.total_amount))
+        : b.total_charges + ' charges, $' + fmtMoneyRound(Math.abs(b.total_amount));
+      var sentLabel = b.range_start
+        ? ' -- ' + ((b.matched_count || 0) + (b.expense_count || 0) + (b.pending_count || 0)) + ' sent for review'
+        : '';
+      html += '<div class="history-meta">Uploaded ' + dateStr + ' by ' + escapeHtml(b.uploaded_by) + ' -- ' + lineLabel + sentLabel + '</div></div>';
       html += '<span class="history-status ' + statusClass + '">' + statusLabel + '</span>';
       html += '</div>';
     });
@@ -2805,7 +3212,6 @@ async function init(user) {
   document.getElementById('app').style.display = 'block';
   // Header + user pill painted by pc-nav.js — no manual setup here.
   pcActivity.init('bank-review');
-  document.getElementById('batch-month').value = thisMonth();
   setupDragDrop();
   await loadReferenceData();
   await loadBankAccounts();
