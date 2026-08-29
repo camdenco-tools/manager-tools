@@ -1982,6 +1982,53 @@ function renderMatched(items) {
   document.getElementById('matched-body').innerHTML = html;
 }
 
+// The expense dropdown listed only gl_group='expense', so there was no way to
+// route a bank line to a below-the-line or settlement category from this page
+// -- it had to be fixed in SQL afterward. The P&L page's own Category modal
+// offers all four groups; this now matches it. Groups are LABELLED because
+// the choice is not cosmetic: cogs and expense hit net income, non_pl renders
+// below the line, and settlement is excluded from v_pl_transactions entirely.
+var GL_GROUP_LABELS = {
+  cogs:       'Cost of sales',
+  expense:    'Operating expense',
+  non_pl:     'Non-P&L (below the line)',
+  settlement: 'Settlement (off the P&L)'
+};
+var GL_GROUP_ORDER = ['expense', 'cogs', 'non_pl', 'settlement'];
+
+function categoryOptionsHtml(selectedId) {
+  var byGroup = {};
+  for (var i = 0; i < ALL_CATEGORIES.length; i++) {
+    var c = ALL_CATEGORIES[i];
+    var g = c.gl_group || 'expense';
+    if (!byGroup[g]) byGroup[g] = [];
+    byGroup[g].push(c);
+  }
+  var html = '';
+  for (var o = 0; o < GL_GROUP_ORDER.length; o++) {
+    var key = GL_GROUP_ORDER[o];
+    if (!byGroup[key]) continue;
+    html += '<optgroup label="' + escapeHtml(GL_GROUP_LABELS[key] || key) + '">';
+    for (var j = 0; j < byGroup[key].length; j++) {
+      var cat = byGroup[key][j];
+      html += '<option value="' + cat.id + '"' + (selectedId === cat.id ? ' selected' : '') + '>' + escapeHtml(cat.name) + '</option>';
+    }
+    html += '</optgroup>';
+  }
+  // A gl_group that is not one of the four known ones still has to appear.
+  // Silently dropping it would hide categories that exist in the table.
+  for (var k in byGroup) {
+    if (GL_GROUP_ORDER.indexOf(k) !== -1) continue;
+    html += '<optgroup label="' + escapeHtml(k) + '">';
+    for (var m = 0; m < byGroup[k].length; m++) {
+      var c2 = byGroup[k][m];
+      html += '<option value="' + c2.id + '"' + (selectedId === c2.id ? ' selected' : '') + '>' + escapeHtml(c2.name) + '</option>';
+    }
+    html += '</optgroup>';
+  }
+  return html;
+}
+
 function renderExpenses(items) {
   var sec = document.getElementById('expense-section');
   if (!items.length) { sec.style.display = 'none'; return; }
@@ -2014,9 +2061,7 @@ function renderExpenses(items) {
     if (!c.category_id) {
       html += '<option value="" selected disabled>&mdash; pick category &mdash;</option>';
     }
-    for (var e = 0; e < EXPENSE_CATEGORIES.length; e++) {
-      html += '<option value="' + EXPENSE_CATEGORIES[e].id + '"' + (c.category_id === EXPENSE_CATEGORIES[e].id ? ' selected' : '') + '>' + escapeHtml(EXPENSE_CATEGORIES[e].name) + '</option>';
-    }
+    html += categoryOptionsHtml(c.category_id);
     html += '</select>';
     html += '<button class="move-btn" onclick="moveToFood(\'' + c.id + '\')" title="Reclassify as food (will appear in food section, save there)">&rarr; Food</button>';
     html += '<button class="move-btn" onclick="openAskModal(\'' + c.id + '\', \'expense\')" title="Ask managers about this charge" style="color:#534AB7;border-color:#CECBF6;">? Ask</button>';
@@ -2134,9 +2179,7 @@ function renderReturned() {
     // Action row: category select + per-row buttons
     html += '<div class="returned-actions">';
     html += '<select class="returned-cat-sel" id="ret-cat-' + c.id + '" onchange="changeReturnedCategory(\'' + c.id + '\', this.value)">';
-    for (var e = 0; e < ALL_CATEGORIES.length; e++) {
-      html += '<option value="' + ALL_CATEGORIES[e].id + '"' + (c.category_id === ALL_CATEGORIES[e].id ? ' selected' : '') + '>' + escapeHtml(ALL_CATEGORIES[e].name) + '</option>';
-    }
+    html += categoryOptionsHtml(c.category_id);
     html += '</select>';
     html += '<button class="row-action-btn send-back" onclick="openSendBackModal(\'' + c.id + '\')" title="Send back to managers with a note">&larr; Send back</button>';
     html += '<button class="row-action-btn" style="color:#534AB7;border-color:#CECBF6;" onclick="openAskModal(\'' + c.id + '\', \'returned\')" title="Ask managers about this charge">? Ask managers</button>';
