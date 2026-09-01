@@ -30,11 +30,22 @@
  * admin page uses. RLS on `venues` and `stands` (SELECT for authenticated)
  * governs access.
  *
- * Ground truth as of 2026-05-25 (post stand cleanup migration):
- *   venues — 11 active: ACCC, BWH, Cure, DE, FMP, Kirkwood, Mann, Montage,
- *            SATB, Subaru, Villanova.
- *   stands — Active counts per venue: ACCC 5, BWH 7, Cure 6, DE 8, FMP 19,
+ * Ground truth as of 2026-09-01:
+ *   venues — 12 active: ACCC, BWH, Cure, DE, FMP, Kirkwood, Mann, Montage,
+ *            SATB, Special, Subaru, Villanova.
+ *
+ *            'Special' (Special Events, sort_order 999) is a bucket venue for
+ *            one-off shows with no fixed building — the actual location lives
+ *            in the event name. revenue_model = 'direct' (we sell over the
+ *            counter and keep the money); latitude/longitude are deliberately
+ *            NULL, so it will not appear on Weather Impacts.
+ *
+ *   stands — Active counts per venue, as counted 2026-05-25 (post stand
+ *            cleanup migration) and NOT re-verified since — stands have been
+ *            added through /stand-setup/ in the interim, so treat these as
+ *            historical, not current: ACCC 5, BWH 7, Cure 6, DE 8, FMP 19,
  *            Kirkwood 4, Mann 26, Montage 15, SATB 8, Subaru 4, Villanova 3.
+ *            Special 2 (Stand 1, Support Staff) added 2026-09-01.
  *            (~33 inactive rows kept as historical anchors so Sales History
  *             joins keep working.)
  */
