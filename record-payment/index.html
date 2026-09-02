@@ -47,10 +47,11 @@
   .step-num {
     display: inline-flex; align-items: center; justify-content: center;
     width: 20px; height: 20px; border-radius: 50%;
-    background: #1a1a1a; color: #fff; font-size: 11px; font-weight: 700;
+    background: #1a1a1a; color: #fff; font-size: 11px; font-weight: 700; flex-shrink: 0;
   }
   .section-card.is-locked { opacity: 0.5; }
   .section-card.is-locked .section-card-body { pointer-events: none; }
+  .section-card.is-hidden { display: none; }
 
   .fld label {
     display: block; font-size: 11px; font-weight: 500;
@@ -65,6 +66,7 @@
   }
   .fld input:focus, .fld select:focus, .fld textarea:focus { outline: none; border-color: #1a1a1a; }
   .fld input.money { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .fld input.is-auto { background: #f6faf2; border-color: #c5dba1; }
   .fld-hint { font-size: 11px; color: #888; margin-top: 5px; }
   .fld-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .fld-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
@@ -91,6 +93,29 @@
   }
   .link-quiet:hover { color: #791F1F; background: #fceaea; }
 
+  /* ── Screenshot drop ── */
+  .drop-zone {
+    border: 2px dashed #d8d8d4; border-radius: 10px;
+    padding: 26px 18px; text-align: center; cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+  .drop-zone:hover, .drop-zone.is-over { border-color: #1a1a1a; background: #f8f8f4; }
+  .drop-zone .dz-main { font-size: 14px; font-weight: 500; }
+  .drop-zone .dz-sub { font-size: 12px; color: #888; margin-top: 3px; }
+  .parse-state {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 13px; padding: 10px 12px; border-radius: 8px; margin-top: 12px;
+  }
+  .parse-state.working { background: #f4f3ee; color: #555; }
+  .parse-state.ok { background: #f0faf5; color: #27500A; border: 1px solid #97C459; }
+  .parse-state.partial { background: #fef6ec; color: #633806; border: 1px solid #f3d9a8; }
+  .parse-state.bad { background: #fceaea; color: #791F1F; border: 1px solid #f3a8a8; }
+  .spinner {
+    width: 15px; height: 15px; border: 2px solid #ddd; border-top-color: #555;
+    border-radius: 50%; animation: spin 0.8s linear infinite; flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
   /* ── Bill rows ── */
   .bill-row {
     display: grid; grid-template-columns: auto 1fr 120px 120px;
@@ -104,6 +129,13 @@
   .bill-main .inv { font-size: 14px; font-weight: 600; }
   .bill-main .inv .noinv { color: #854F0B; font-style: italic; font-weight: 500; }
   .bill-main .meta { font-size: 12px; color: #888; margin-top: 1px; }
+  .match-tag {
+    display: inline-block; font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.04em;
+    padding: 1px 6px; border-radius: 4px; margin-left: 6px; vertical-align: 1px;
+  }
+  .match-tag.by-number { background: #eaf3de; color: #27500A; }
+  .match-tag.by-amount { background: #fef6ec; color: #854F0B; }
   .bill-bal { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
   .bill-apply input {
     width: 100%; font-family: inherit; font-size: 13px; text-align: right;
@@ -115,7 +147,7 @@
   .bill-invfix { grid-column: 2 / -1; margin-top: 6px; }
   .bill-invfix input {
     font-family: inherit; font-size: 12px; padding: 5px 8px;
-    border: 1px solid #f3d9a8; border-radius: 5px; background: #fffdf7; width: 220px;
+    border: 1px solid #f3d9a8; border-radius: 5px; background: #fffdf7; width: 240px;
   }
   .bill-invfix .lbl { font-size: 11px; color: #854F0B; margin-bottom: 3px; display: block; }
 
@@ -127,20 +159,10 @@
   }
   .row-list-head .r { text-align: right; }
 
-  /* ── Credit + new invoice rows ── */
-  .mini-row {
-    display: grid; grid-template-columns: 1fr 120px auto;
-    gap: 10px; align-items: center; margin-bottom: 8px;
-  }
-  .mini-row-3 {
-    display: grid; grid-template-columns: 1fr 1fr 120px auto;
-    gap: 10px; align-items: center; margin-bottom: 8px;
-  }
-  @media (max-width: 720px) {
-    .mini-row, .mini-row-3 { grid-template-columns: 1fr; }
-  }
-  .mini-row input, .mini-row select,
-  .mini-row-3 input, .mini-row-3 select {
+  .mini-row { display: grid; grid-template-columns: 1fr 120px auto; gap: 10px; align-items: center; margin-bottom: 8px; }
+  .mini-row-3 { display: grid; grid-template-columns: 1fr 1fr 120px auto; gap: 10px; align-items: center; margin-bottom: 8px; }
+  @media (max-width: 720px) { .mini-row, .mini-row-3 { grid-template-columns: 1fr; } }
+  .mini-row input, .mini-row select, .mini-row-3 input, .mini-row-3 select {
     font-family: inherit; font-size: 13px; padding: 7px 9px;
     border: 1px solid #e0dfd8; border-radius: 6px; background: #fff; width: 100%;
   }
@@ -148,20 +170,10 @@
   .mini-row select:focus, .mini-row-3 select:focus { outline: none; border-color: #1a1a1a; }
   .mini-row input.money, .mini-row-3 input.money { text-align: right; font-variant-numeric: tabular-nums; }
 
-  .warn-box {
-    background: #fef6ec; border: 1px solid #f3d9a8; border-radius: 8px;
-    padding: 10px 12px; font-size: 12px; color: #633806; line-height: 1.5; margin-bottom: 12px;
-  }
-  .info-box {
-    background: #e6f1fb; border: 1px solid #b9d6f0; border-radius: 8px;
-    padding: 10px 12px; font-size: 12px; color: #0C447C; line-height: 1.5; margin-bottom: 12px;
-  }
-  .danger-box {
-    background: #fceaea; border: 1px solid #f3a8a8; border-radius: 8px;
-    padding: 10px 12px; font-size: 12px; color: #791F1F; line-height: 1.5; margin-bottom: 12px;
-  }
+  .warn-box { background: #fef6ec; border: 1px solid #f3d9a8; border-radius: 8px; padding: 10px 12px; font-size: 12px; color: #633806; line-height: 1.5; margin-bottom: 12px; }
+  .info-box { background: #e6f1fb; border: 1px solid #b9d6f0; border-radius: 8px; padding: 10px 12px; font-size: 12px; color: #0C447C; line-height: 1.5; margin-bottom: 12px; }
+  .danger-box { background: #fceaea; border: 1px solid #f3a8a8; border-radius: 8px; padding: 10px 12px; font-size: 12px; color: #791F1F; line-height: 1.5; margin-bottom: 12px; }
 
-  /* ── Balance bar ── */
   .balance-bar {
     position: sticky; bottom: 0; z-index: 40;
     background: #fff; border-top: 1px solid #e0dfd8;
@@ -179,16 +191,6 @@
   .balance-msg.ok { color: #27500A; }
   .balance-msg.off { color: #791F1F; }
 
-  .file-pick { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .file-chosen {
-    font-size: 12px; color: #27500A; background: #f0faf5;
-    border: 1px solid #97C459; border-radius: 6px; padding: 6px 10px;
-  }
-  .file-err {
-    font-size: 12px; color: #791F1F; background: #fceaea;
-    border: 1px solid #f3a8a8; border-radius: 6px; padding: 6px 10px;
-  }
-
   .empty { padding: 22px 10px; text-align: center; color: #888; font-size: 13px; }
   .loading { padding: 22px 10px; text-align: center; color: #aaa; font-size: 13px; }
 
@@ -196,8 +198,7 @@
   .pc-toast {
     background: #1a1a1a; color: #fff; font-size: 13px; font-weight: 500;
     padding: 11px 18px; border-radius: 24px; box-shadow: 0 4px 14px rgba(0,0,0,0.18);
-    opacity: 0; transform: translateY(8px); transition: opacity 0.18s ease, transform 0.18s ease;
-    max-width: 90vw;
+    opacity: 0; transform: translateY(8px); transition: opacity 0.18s ease, transform 0.18s ease; max-width: 90vw;
   }
   .pc-toast.is-shown { opacity: 1; transform: translateY(0); }
 
@@ -211,15 +212,15 @@
 
   <div class="page-title-row" aria-hidden="true">
     <h1 class="page-title">Record Portal Payment</h1>
-    <span class="page-title-meta" id="pageTitleMeta">v1</span>
+    <span class="page-title-meta" id="pageTitleMeta">v2</span>
   </div>
 
   <main class="page-body" id="pageBody">
 
     <div class="info-box">
-      For payments you made on a vendor's own website — Sysco, PFG, Pepsi. Pick the vendor,
-      enter what you paid, tick the invoices it covered, and attach the screenshot of the
-      payment. The bills come off Accounts Payable and the cost stays exactly where it was.
+      For payments made on a vendor's own website — Sysco, PFG, Pepsi. Pick the vendor, drop in
+      the screenshot, check what it read, and record. The bills come off Accounts Payable and the
+      cost stays exactly where it already was.
     </div>
 
     <!-- STEP 1 — vendor -->
@@ -236,17 +237,37 @@
       </div>
     </div>
 
-    <!-- STEP 2 — payment header -->
+    <!-- STEP 2 — screenshot -->
+    <div class="section-card is-locked" id="cardFile">
+      <div class="section-card-head">
+        <h2 class="section-card-title"><span class="step-num">2</span> Drop in the screenshot</h2>
+        <span class="section-card-subtitle">The checkout page, or the payment detail if you're recording an old one</span>
+      </div>
+      <div class="section-card-body">
+        <div class="drop-zone" id="dropZone">
+          <div class="dz-main" id="dzMain">Drop a screenshot here, or click to choose</div>
+          <div class="dz-sub">PNG or JPG. iPhone screenshots are fine — HEIC photos are not.</div>
+        </div>
+        <input type="file" id="fFile" accept="image/png,image/jpeg,image/webp" style="display:none;">
+        <div id="parseState"></div>
+        <div class="fld-hint" style="margin-top:10px;">
+          No screenshot? Fill the rest in by hand — everything below still works.
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 3 — payment header -->
     <div class="section-card is-locked" id="cardHeader">
       <div class="section-card-head">
-        <h2 class="section-card-title"><span class="step-num">2</span> What did you pay?</h2>
-        <span class="section-card-subtitle">Copy these off the payment confirmation</span>
+        <h2 class="section-card-title"><span class="step-num">3</span> The payment</h2>
+        <span class="section-card-subtitle" id="headerSubtitle">Total fills itself from what you tick below</span>
       </div>
       <div class="section-card-body">
         <div class="fld-grid-3">
           <div class="fld">
             <label for="fAmount">Total paid <span class="req">*</span></label>
             <input type="text" id="fAmount" class="money" placeholder="0.00" inputmode="decimal" autocomplete="off">
+            <div class="fld-hint" id="amountHint">Adds up from the ticked invoices. Type over it if the portal says something different.</div>
           </div>
           <div class="fld">
             <label for="fDate">Payment date <span class="req">*</span></label>
@@ -265,22 +286,23 @@
         </div>
         <div class="fld-grid" style="margin-top:12px;">
           <div class="fld">
-            <label for="fRef">Payment reference <span class="opt">— from the portal</span></label>
+            <label for="fRef">Payment reference <span class="opt">— the confirmation number</span></label>
             <input type="text" id="fRef" placeholder="e.g. 260820-MFkYy9Ab" autocomplete="off">
-            <div class="fld-hint" id="refDupHint"></div>
+            <div class="fld-hint" id="refDupHint">A checkout screenshot has no confirmation yet — add it after you pay.</div>
           </div>
           <div class="fld">
             <label for="fAccount">Paid from <span class="opt">— which bank account</span></label>
             <select id="fAccount"><option value="">— not recorded —</option></select>
+            <div class="fld-hint" id="acctHint"></div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- STEP 3 — bills -->
+    <!-- STEP 4 — bills -->
     <div class="section-card is-locked" id="cardBills">
       <div class="section-card-head">
-        <h2 class="section-card-title"><span class="step-num">3</span> Which invoices did it cover?</h2>
+        <h2 class="section-card-title"><span class="step-num">4</span> Which invoices did it cover?</h2>
         <span class="section-card-subtitle" id="billsSubtitle"></span>
       </div>
       <div class="section-card-body" id="billsBody">
@@ -288,25 +310,27 @@
       </div>
     </div>
 
-    <!-- STEP 4 — credits -->
+    <!-- STEP 5 — credits -->
     <div class="section-card is-locked" id="cardCredits">
       <div class="section-card-head">
-        <h2 class="section-card-title"><span class="step-num">4</span> Credits on this payment <span class="section-card-subtitle">— only if there were any</span></h2>
+        <h2 class="section-card-title"><span class="step-num">5</span> Credits on this payment</h2>
+        <span class="section-card-subtitle">Negative lines on the remittance</span>
       </div>
       <div class="section-card-body">
         <div class="fld-hint" style="margin-top:0;margin-bottom:10px;">
-          A credit shows on the remittance as a negative line. There is no bill behind it, so
-          record it here — it counts toward the total but nothing is marked paid.
+          A credit has no bill behind it, so it is recorded as a note. It counts toward the total
+          but nothing gets marked paid.
         </div>
         <div id="creditList"></div>
         <button type="button" class="btn-secondary" id="btnAddCredit">+ Add a credit</button>
       </div>
     </div>
 
-    <!-- STEP 5 — invoices not in the system -->
+    <!-- STEP 6 — invoices not in the system -->
     <div class="section-card is-locked" id="cardNew">
       <div class="section-card-head">
-        <h2 class="section-card-title"><span class="step-num">5</span> Invoices not in the system <span class="section-card-subtitle">— only if the remittance shows one that isn't listed above</span></h2>
+        <h2 class="section-card-title"><span class="step-num">6</span> Invoices not in the system</h2>
+        <span class="section-card-subtitle">On the remittance but never logged</span>
       </div>
       <div class="section-card-body">
         <div class="warn-box">
@@ -320,25 +344,6 @@
         </div>
         <div id="newInvList"></div>
         <button type="button" class="btn-secondary" id="btnAddNew">+ Add an invoice</button>
-      </div>
-    </div>
-
-    <!-- STEP 6 — screenshot -->
-    <div class="section-card is-locked" id="cardFile">
-      <div class="section-card-head">
-        <h2 class="section-card-title"><span class="step-num">6</span> Attach the screenshot</h2>
-      </div>
-      <div class="section-card-body">
-        <div class="warn-box" id="heicWarn">
-          iPhone screenshots are fine. A <strong>photo</strong> taken on an iPhone may be HEIC,
-          which will be rejected — take a screenshot instead, or set
-          Settings &rarr; Camera &rarr; Formats &rarr; Most Compatible.
-        </div>
-        <div class="file-pick">
-          <button type="button" class="btn-secondary" id="btnPickFile">Choose screenshot</button>
-          <span id="fileState" class="fld-hint">No file chosen — you can save without one, but attaching it is the whole point.</span>
-        </div>
-        <input type="file" id="fFile" accept="image/png,image/jpeg,image/webp,application/pdf" style="display:none;">
       </div>
     </div>
 
@@ -366,24 +371,25 @@
   var SB_URL  = 'https://aoazlttdjowhlfcksoyl.supabase.co';
   var SB_REST = SB_URL + '/rest/v1/';
   var BUCKET  = 'ach-payments';
+  var PARSE_FN = SB_URL + '/functions/v1/parse-remittance';
 
   var VENUE_OPTIONS = ['ACCC','Boardwalk Hall','Mann Music Center','FMP','Cure Insurance Arena','DE Chase Field House','Subaru Park','Villanova','Montage','Sports at the Beach'];
   var BLOCKED_EXT = ['heic','heif'];
 
   var state = {
     isAdmin: false,
-    vendors: [],
-    accounts: [],
-    bills: [],
+    vendors: [], accounts: [], bills: [],
     vendorId: '', vendorName: '', vendorTerms: 30,
-    checked: {},      // billId -> true
-    applied: {},      // billId -> string the user typed
-    invFix: {},       // billId -> invoice number to write back onto the bill
-    credits: [],      // { amount: '', note: '' }
-    newInvs: [],      // { invoice_number: '', amount: '', venue: '' }
+    checked: {},        // billId -> true
+    applied: {},        // billId -> string typed
+    matchedBy: {},      // billId -> 'number' | 'amount'
+    invFix: {},         // billId -> invoice number to write onto the bill
+    credits: [],        // { amount, note }
+    newInvs: [],        // { invoice_number, amount, venue }
     file: null,
-    busy: false,
-    loadingBills: false
+    amountTouched: false,   // true once the user types over the auto total
+    parsed: null,
+    busy: false
   };
 
   // ── utilities ──
@@ -423,6 +429,8 @@
     if (isFinite(v)) return v;
     return Number(b.total_amount || 0) - Number(b.amount_paid || 0);
   }
+  // Bills store bare numbers (6308236); portals print them decorated (#6324492).
+  function normInv(s) { return String(s == null ? '' : s).toUpperCase().replace(/[^A-Z0-9]/g, ''); }
 
   function showToast(msg, ms) {
     ms = ms || 2600;
@@ -455,12 +463,6 @@
     return Object.assign({}, pcAuth.headers(), { 'Content-Type': 'application/json', 'Prefer': prefer || 'return=minimal' });
   }
 
-  // Invoice numbers are stored bare (6308236) but portals print them decorated
-  // (#6324492). Compare on letters and digits only so the two agree.
-  function normInv(s) {
-    return String(s == null ? '' : s).toUpperCase().replace(/[^A-Z0-9]/g, '');
-  }
-
   // ── loads ──
   function loadVendors() {
     return authFetch(
@@ -468,10 +470,10 @@
       { headers: pcAuth.headers() }
     ).then(function (rows) {
       state.vendors = rows || [];
-      var sel = document.getElementById('fVendor');
-      sel.innerHTML = '<option value="">Select vendor…</option>' + state.vendors.map(function (v) {
-        return '<option value="' + esc(v.id) + '">' + esc(v.display_name) + '</option>';
-      }).join('');
+      document.getElementById('fVendor').innerHTML =
+        '<option value="">Select vendor…</option>' + state.vendors.map(function (v) {
+          return '<option value="' + esc(v.id) + '">' + esc(v.display_name) + '</option>';
+        }).join('');
     });
   }
 
@@ -481,15 +483,14 @@
       { headers: pcAuth.headers() }
     ).then(function (rows) {
       state.accounts = rows || [];
-      var sel = document.getElementById('fAccount');
-      sel.innerHTML = '<option value="">— not recorded —</option>' + state.accounts.map(function (a) {
-        return '<option value="' + esc(a.id) + '">' + esc(a.bank + ' · ' + a.label + ' (' + a.last4 + ')') + '</option>';
-      }).join('');
+      document.getElementById('fAccount').innerHTML =
+        '<option value="">— not recorded —</option>' + state.accounts.map(function (a) {
+          return '<option value="' + esc(a.id) + '">' + esc(a.bank + ' · ' + a.label + ' (' + a.last4 + ')') + '</option>';
+        }).join('');
     });
   }
 
   function loadBillsForVendor(vendorId) {
-    state.loadingBills = true;
     document.getElementById('billsBody').innerHTML = '<div class="loading">Loading open bills…</div>';
     return authFetch(
       SB_REST + 'ap_bills?deleted_at=is.null&status=in.(unpaid,partial)&vendor_id=eq.' + encodeURIComponent(vendorId) +
@@ -498,10 +499,200 @@
       { headers: pcAuth.headers() }
     ).then(function (rows) {
       state.bills = rows || [];
-      state.loadingBills = false;
       renderBills();
       recompute();
     });
+  }
+
+  // ══════════════════════════════════════════════
+  // SCREENSHOT → PARSE → FILL
+  // ══════════════════════════════════════════════
+  function setParseState(cls, html) {
+    var el = document.getElementById('parseState');
+    if (!el) return;
+    if (!cls) { el.innerHTML = ''; return; }
+    el.innerHTML = '<div class="parse-state ' + cls + '">' +
+      (cls === 'working' ? '<span class="spinner"></span>' : '') +
+      '<span>' + html + '</span></div>';
+  }
+
+  function fileToBase64(f) {
+    return new Promise(function (resolve, reject) {
+      var r = new FileReader();
+      r.onload = function () { resolve(String(r.result).split(',')[1]); };
+      r.onerror = function () { reject(new Error('Could not read the file.')); };
+      r.readAsDataURL(f);
+    });
+  }
+
+  function onFileChosen(f) {
+    if (!f) return;
+    var ext = (f.name || '').toLowerCase().split('.').pop();
+    var mime = (f.type || '').toLowerCase();
+    if (BLOCKED_EXT.indexOf(ext) !== -1 || mime.indexOf('heic') !== -1 || mime.indexOf('heif') !== -1) {
+      state.file = null;
+      setParseState('bad', 'HEIC/HEIF is not supported. Take a screenshot instead, or switch ' +
+        'Settings &rarr; Camera &rarr; Formats &rarr; Most Compatible.');
+      return;
+    }
+    state.file = f;
+    document.getElementById('dzMain').textContent = f.name;
+    if (!state.vendorId) {
+      setParseState('partial', 'Screenshot attached. Pick a vendor and it will be read.');
+      return;
+    }
+    runParse();
+  }
+
+  function runParse() {
+    if (!state.file || !state.vendorId) return;
+    setParseState('working', 'Reading the screenshot…');
+    fileToBase64(state.file)
+      .then(function (b64) {
+        return fetch(PARSE_FN, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': pcAuth.headers()['Authorization'] },
+          body: JSON.stringify({ image_base64: b64, media_type: state.file.type || 'image/png' })
+        });
+      })
+      .then(function (r) {
+        return r.text().then(function (t) {
+          var d; try { d = JSON.parse(t); } catch (e) { d = null; }
+          if (!r.ok) throw new Error((d && d.error) ? d.error : ('HTTP ' + r.status));
+          return d;
+        });
+      })
+      .then(applyParse)
+      .catch(function (e) {
+        console.error('[record-payment] parse failed', e);
+        setParseState('bad', 'Could not read it: ' + esc(String(e.message || e)).slice(0, 220) +
+          '<br>Fill the rest in by hand — the screenshot is still attached and will be saved.');
+      });
+  }
+
+  function applyParse(d) {
+    state.parsed = d;
+    if (!d || d.shape === 'unreadable') {
+      setParseState('bad', 'That image could not be read.' +
+        (d && d.notes ? ' ' + esc(d.notes) : '') + ' Fill it in by hand, or try a clearer screenshot.');
+      return;
+    }
+
+    // Header fields the caller can always trust when present.
+    if (d.payment_date) document.getElementById('fDate').value = d.payment_date;
+    if (d.payment_reference) {
+      document.getElementById('fRef').value = d.payment_reference;
+      checkRefDuplicate();
+    }
+    matchBankAccount(d.bank_account_hint);
+
+    if (d.shape === 'payment_summary') {
+      // The image lists payments, not invoices. Saying which bills it covered
+      // would be a guess, so it is left to the user rather than invented.
+      setParseState('partial',
+        'That is a payment <strong>summary</strong> — it shows what you paid but not which invoices. ' +
+        (d.notes ? esc(d.notes) + ' ' : '') +
+        'Open the payment in the portal, screenshot the invoice detail, or tick the bills below by hand.');
+      recompute();
+      return;
+    }
+
+    // invoice_list — match every line to an open bill.
+    var lines = Array.isArray(d.lines) ? d.lines : [];
+    state.checked = {}; state.applied = {}; state.matchedBy = {};
+    state.credits = []; state.newInvs = [];
+
+    var usedBills = {};
+    var unmatched = [];
+    var creditLines = [];
+
+    lines.forEach(function (ln) {
+      if (ln.amount < 0) { creditLines.push(ln); return; }
+      var hit = findBillForLine(ln, usedBills);
+      if (hit) {
+        usedBills[hit.bill.id] = true;
+        state.checked[hit.bill.id] = true;
+        state.applied[hit.bill.id] = String(ln.amount.toFixed(2));
+        state.matchedBy[hit.bill.id] = hit.how;
+      } else {
+        unmatched.push(ln);
+      }
+    });
+
+    creditLines.forEach(function (ln) {
+      state.credits.push({
+        amount: String(Math.abs(ln.amount).toFixed(2)),
+        note: 'Credit on invoice ' + ln.invoice_number
+      });
+    });
+
+    var venueHint = d.venue_hint || '';
+    if (venueHint) document.getElementById('fDefaultVenue').value = venueHint;
+    unmatched.forEach(function (ln) {
+      state.newInvs.push({
+        invoice_number: ln.invoice_number,
+        amount: String(ln.amount.toFixed(2)),
+        venue: venueHint
+      });
+    });
+
+    // The portal's own total wins over the sum of the ticks when it is given —
+    // a difference between the two is exactly what the balance bar is for.
+    if (d.payment_total != null) {
+      document.getElementById('fAmount').value = String(d.payment_total.toFixed(2));
+      state.amountTouched = true;
+    } else {
+      state.amountTouched = false;
+    }
+
+    renderBills(); renderCredits(); renderNewInvs();
+    recompute();
+
+    var nMatched = Object.keys(state.checked).length;
+    var bits = [];
+    bits.push('Read ' + lines.length + ' line' + (lines.length === 1 ? '' : 's') + '.');
+    bits.push(nMatched + ' matched to open bills.');
+    if (unmatched.length) bits.push('<strong>' + unmatched.length + ' not in the system</strong> — see step 6.');
+    if (creditLines.length) bits.push(creditLines.length + ' credit' + (creditLines.length === 1 ? '' : 's') + ' picked up.');
+    if (d.notes) bits.push(esc(d.notes));
+    bits.push('Check it before recording.');
+    setParseState(unmatched.length ? 'partial' : 'ok', bits.join(' '));
+  }
+
+  // Invoice number first — that is an exact fact. Amount is a fallback for the
+  // bills that have no number on record, and it is labelled as such on the row
+  // so a coincidence of amount is never mistaken for a confirmed match.
+  function findBillForLine(ln, usedBills) {
+    var target = normInv(ln.invoice_number);
+    var i, b;
+    for (i = 0; i < state.bills.length; i++) {
+      b = state.bills[i];
+      if (usedBills[b.id]) continue;
+      if (b.invoice_number && normInv(b.invoice_number) === target) return { bill: b, how: 'number' };
+    }
+    for (i = 0; i < state.bills.length; i++) {
+      b = state.bills[i];
+      if (usedBills[b.id]) continue;
+      if (b.invoice_number) continue;           // has a number and it did not match
+      if (Math.abs(billBalance(b) - ln.amount) < 0.005) return { bill: b, how: 'amount' };
+    }
+    return null;
+  }
+
+  // "Wells Op 2927" / "SATB (ACH - 3986)" → the account whose last4 appears.
+  function matchBankAccount(hint) {
+    var hintEl = document.getElementById('acctHint');
+    if (hintEl) hintEl.textContent = '';
+    if (!hint) return;
+    var digits = String(hint).match(/\d{4}/g) || [];
+    for (var i = 0; i < state.accounts.length; i++) {
+      if (digits.indexOf(String(state.accounts[i].last4)) !== -1) {
+        document.getElementById('fAccount').value = state.accounts[i].id;
+        if (hintEl) hintEl.textContent = 'Read from the screenshot: "' + hint + '"';
+        return;
+      }
+    }
+    if (hintEl) hintEl.textContent = 'Screenshot said "' + hint + '" but no account matches — pick one.';
   }
 
   // ── render: bills ──
@@ -515,7 +706,7 @@
     }
     if (!state.bills.length) {
       body.innerHTML = '<div class="empty">No open bills for ' + esc(state.vendorName) +
-        '. If the remittance lists invoices, add them in step 5.</div>';
+        '. If the remittance lists invoices, they belong in step 6.</div>';
       if (sub) sub.textContent = '0 open bills';
       return;
     }
@@ -525,23 +716,24 @@
     var html = '';
     if (noNumber) {
       html += '<div class="warn-box">' + noNumber + ' of these bills have no invoice number on record, ' +
-        'so you have to match them by amount. If you can see the number on the remittance, type it in ' +
-        'when you tick the bill and it gets written back — the gap closes as you go.</div>';
+        'so they can only be matched by amount. If the remittance shows the number, type it in when ' +
+        'you tick the bill and it gets written back — the gap closes as you work.</div>';
     }
-
     html += '<div class="row-list-head"><div></div><div>Invoice</div><div class="r">Balance</div><div class="r">Applying</div></div>';
 
     state.bills.forEach(function (b) {
       var on = !!state.checked[b.id];
       var bal = billBalance(b);
       var applyVal = state.applied[b.id] != null ? state.applied[b.id] : '';
-      var invLabel = b.invoice_number
-        ? '#' + esc(b.invoice_number)
-        : '<span class="noinv">no invoice number</span>';
+      var invLabel = b.invoice_number ? '#' + esc(b.invoice_number) : '<span class="noinv">no invoice number</span>';
+      var tag = '';
+      if (on && state.matchedBy[b.id] === 'number') tag = '<span class="match-tag by-number">matched by number</span>';
+      if (on && state.matchedBy[b.id] === 'amount') tag = '<span class="match-tag by-amount">matched by amount only</span>';
+
       html += '<div class="bill-row' + (on ? ' is-on' : '') + '">' +
         '<input type="checkbox" data-bill="' + esc(b.id) + '"' + (on ? ' checked' : '') + '>' +
         '<div class="bill-main">' +
-          '<div class="inv">' + invLabel + '</div>' +
+          '<div class="inv">' + invLabel + tag + '</div>' +
           '<div class="meta">' + esc(b.venue || 'no venue') + ' · billed ' + esc(fmtDate(b.bill_date)) +
             ' · due ' + esc(fmtDate(b.due_date)) +
             (Number(b.amount_paid) > 0.005 ? ' · ' + esc(fmtMoney(Number(b.amount_paid))) + ' already applied' : '') +
@@ -564,17 +756,15 @@
         var id = cb.getAttribute('data-bill');
         if (cb.checked) {
           state.checked[id] = true;
-          if (state.applied[id] == null || state.applied[id] === '') {
+          if (!state.applied[id]) {
             var bill = billById(id);
             if (bill) state.applied[id] = String(billBalance(bill).toFixed(2));
           }
         } else {
-          delete state.checked[id];
-          delete state.applied[id];
-          delete state.invFix[id];
+          delete state.checked[id]; delete state.applied[id];
+          delete state.invFix[id]; delete state.matchedBy[id];
         }
-        renderBills();
-        recompute();
+        renderBills(); recompute();
       });
     });
     body.querySelectorAll('input[data-apply]').forEach(function (inp) {
@@ -584,9 +774,7 @@
       });
     });
     body.querySelectorAll('input[data-invfix]').forEach(function (inp) {
-      inp.addEventListener('input', function () {
-        state.invFix[inp.getAttribute('data-invfix')] = inp.value;
-      });
+      inp.addEventListener('input', function () { state.invFix[inp.getAttribute('data-invfix')] = inp.value; });
     });
   }
 
@@ -601,7 +789,7 @@
     if (!wrap) return;
     wrap.innerHTML = state.credits.map(function (c, i) {
       return '<div class="mini-row">' +
-        '<input type="text" data-credit-note="' + i + '" value="' + esc(c.note) + '" placeholder="What was the credit for? (e.g. return on invoice 590564243)">' +
+        '<input type="text" data-credit-note="' + i + '" value="' + esc(c.note) + '" placeholder="What was the credit for?">' +
         '<input type="text" class="money" data-credit-amt="' + i + '" value="' + esc(c.amount) + '" placeholder="0.00" inputmode="decimal">' +
         '<button type="button" class="link-quiet" data-credit-del="' + i + '">Remove</button>' +
       '</div>';
@@ -661,9 +849,7 @@
   }
 
   // ── arithmetic ──
-  // applied (existing bills + brand-new invoices) minus credits must equal the
-  // payment. A remittance that nets a credit cannot be made to sum otherwise.
-  function totals() {
+  function appliedTotal() {
     var applied = 0;
     Object.keys(state.checked).forEach(function (id) {
       var v = parseAmount(state.applied[id]);
@@ -673,62 +859,72 @@
       var v = parseAmount(n.amount);
       if (isFinite(v)) applied += v;
     });
-    var credits = 0;
-    state.credits.forEach(function (c) {
-      var v = parseAmount(c.amount);
-      if (isFinite(v)) credits += Math.abs(v);
+    return Math.round(applied * 100) / 100;
+  }
+  function creditTotal() {
+    var c = 0;
+    state.credits.forEach(function (x) {
+      var v = parseAmount(x.amount);
+      if (isFinite(v)) c += Math.abs(v);
     });
+    return Math.round(c * 100) / 100;
+  }
+  function totals() {
+    var applied = appliedTotal();
+    var credits = creditTotal();
     var paid = parseAmount(document.getElementById('fAmount').value);
     if (!isFinite(paid)) paid = 0;
     return {
       paid: Math.round(paid * 100) / 100,
-      applied: Math.round(applied * 100) / 100,
-      credits: Math.round(credits * 100) / 100,
+      applied: applied, credits: credits,
       diff: Math.round((applied - credits - paid) * 100) / 100
     };
+  }
+
+  // Until the user types over it, the total is whatever the ticks add up to.
+  function syncAutoAmount() {
+    if (state.amountTouched) return;
+    var el = document.getElementById('fAmount');
+    var v = Math.round((appliedTotal() - creditTotal()) * 100) / 100;
+    el.value = v > 0 ? v.toFixed(2) : '';
+    el.classList.toggle('is-auto', v > 0);
   }
 
   function validate() {
     var t = totals();
     if (!state.vendorId) return { ok: false, msg: 'Pick a vendor' };
-    if (!(t.paid > 0)) return { ok: false, msg: 'Enter what you paid' };
+    if (!(t.paid > 0)) return { ok: false, msg: 'Tick the invoices, or enter what you paid' };
     if (!document.getElementById('fDate').value) return { ok: false, msg: 'Pick the payment date' };
+    if (!Object.keys(state.checked).length && !state.newInvs.length) return { ok: false, msg: 'Tick at least one invoice' };
 
-    var nChecked = Object.keys(state.checked).length;
-    if (!nChecked && !state.newInvs.length) return { ok: false, msg: 'Tick at least one invoice' };
-
-    // Over-applying against a bill would push its balance negative.
-    var over = null;
+    var bad = null;
     Object.keys(state.checked).forEach(function (id) {
-      if (over) return;
-      var b = billById(id);
-      if (!b) return;
+      if (bad) return;
+      var b = billById(id); if (!b) return;
       var v = parseAmount(state.applied[id]);
-      if (!isFinite(v) || v <= 0) { over = 'Enter an amount for every ticked invoice'; return; }
+      if (!isFinite(v) || v <= 0) { bad = 'Enter an amount for every ticked invoice'; return; }
       if (v - billBalance(b) > 0.005) {
-        over = 'Applying more than the balance on ' + (b.invoice_number ? '#' + b.invoice_number : 'a bill with no number');
+        bad = 'Applying more than the balance on ' + (b.invoice_number ? '#' + b.invoice_number : 'a bill with no number');
       }
     });
-    if (over) return { ok: false, msg: over };
+    if (bad) return { ok: false, msg: bad };
 
-    var badNew = null;
     state.newInvs.forEach(function (n, i) {
-      if (badNew) return;
+      if (bad) return;
       var v = parseAmount(n.amount);
-      if (!isFinite(v) || v <= 0) { badNew = 'New invoice ' + (i+1) + ' needs an amount'; return; }
-      if (!n.venue) { badNew = 'New invoice ' + (i+1) + ' needs a venue'; return; }
-      if (!String(n.invoice_number || '').trim()) { badNew = 'New invoice ' + (i+1) + ' needs an invoice number'; return; }
+      if (!String(n.invoice_number || '').trim()) { bad = 'New invoice ' + (i+1) + ' needs an invoice number'; return; }
+      if (!isFinite(v) || v <= 0) { bad = 'New invoice ' + (i+1) + ' needs an amount'; return; }
+      if (!n.venue) { bad = 'New invoice ' + (i+1) + ' needs a venue'; return; }
     });
-    if (badNew) return { ok: false, msg: badNew };
+    if (bad) return { ok: false, msg: bad };
 
-    var badCredit = null;
     state.credits.forEach(function (c, i) {
-      if (badCredit) return;
+      if (bad) return;
       var v = parseAmount(c.amount);
-      if (!isFinite(v) || v <= 0) { badCredit = 'Credit ' + (i+1) + ' needs an amount'; return; }
-      if (!String(c.note || '').trim()) { badCredit = 'Credit ' + (i+1) + ' needs a note saying what it was'; return; }
+      if (!isFinite(v) || v <= 0) { bad = 'Credit ' + (i+1) + ' needs an amount'; return; }
+      if (!String(c.note || '').trim()) { bad = 'Credit ' + (i+1) + ' needs a note saying what it was'; return; }
     });
-    if (badCredit) return { ok: false, msg: badCredit };
+    if (bad) return { ok: false, msg: bad };
 
     if (Math.abs(t.diff) > 0.005) {
       return { ok: false, msg: t.diff > 0
@@ -739,15 +935,15 @@
   }
 
   function recompute() {
+    syncAutoAmount();
     var t = totals();
     document.getElementById('figPaid').textContent = fmtMoney(t.paid);
     document.getElementById('figApplied').textContent = fmtMoney(t.applied);
     document.getElementById('figCredits').textContent = fmtMoney(t.credits);
     document.getElementById('figDiff').textContent = fmtMoney(t.diff);
 
-    var wrap = document.getElementById('figDiffWrap');
     var balanced = Math.abs(t.diff) < 0.005 && t.paid > 0;
-    wrap.className = 'bfig' + (t.paid > 0 ? (balanced ? ' is-ok' : ' is-off') : '');
+    document.getElementById('figDiffWrap').className = 'bfig' + (t.paid > 0 ? (balanced ? ' is-ok' : ' is-off') : '');
 
     var v = validate();
     var msgEl = document.getElementById('balanceMsg');
@@ -755,60 +951,48 @@
     msgEl.className = 'balance-msg ' + (v.ok ? 'ok' : 'off');
     document.getElementById('btnSave').disabled = !v.ok || state.busy;
 
-    setLocked('cardHeader', !state.vendorId);
-    setLocked('cardBills', !state.vendorId);
-    setLocked('cardCredits', !state.vendorId);
-    setLocked('cardNew', !state.vendorId);
-    setLocked('cardFile', !state.vendorId);
-  }
-  function setLocked(id, locked) {
-    var el = document.getElementById(id);
-    if (el) el.classList.toggle('is-locked', !!locked);
+    ['cardFile','cardHeader','cardBills','cardCredits','cardNew'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.classList.toggle('is-locked', !state.vendorId);
+    });
   }
 
   // ── duplicate reference guard ──
   var refTimer = null;
-  function onRefInput() {
+  function checkRefDuplicate() {
     var hint = document.getElementById('refDupHint');
     var ref = document.getElementById('fRef').value.trim();
-    if (hint) { hint.textContent = ''; hint.style.color = '#888'; }
     clearTimeout(refTimer);
-    if (!ref) return;
+    if (!ref) {
+      hint.style.color = '#888';
+      hint.textContent = 'A checkout screenshot has no confirmation yet — add it after you pay.';
+      return;
+    }
+    hint.style.color = '#888';
+    hint.textContent = 'Checking…';
     refTimer = setTimeout(function () {
       authFetch(
         SB_REST + 'vendor_payments?deleted_at=is.null&payment_reference=eq.' + encodeURIComponent(ref) +
         '&select=id,payment_date,amount&limit=3',
         { headers: pcAuth.headers() }
       ).then(function (rows) {
-        if (!hint) return;
         if (rows && rows.length) {
           hint.style.color = '#791F1F';
-          hint.textContent = 'This reference is already recorded (' + fmtMoney(Number(rows[0].amount || 0)) +
-            ' on ' + fmtDate(rows[0].payment_date) + '). Recording it again would pay the same bills twice.';
+          hint.textContent = 'Already recorded — ' + fmtMoney(Number(rows[0].amount || 0)) +
+            ' on ' + fmtDate(rows[0].payment_date) + '. Recording it again would pay the same bills twice.';
+        } else {
+          hint.style.color = '#27500A';
+          hint.textContent = 'Not recorded before.';
         }
-      }).catch(function (e) { if (e && e.authFailed) handleAuthFailure(); });
+      }).catch(function (e) {
+        if (e && e.authFailed) { handleAuthFailure(); return; }
+        hint.style.color = '#854F0B';
+        hint.textContent = 'Could not check for a duplicate — look at Accounts Payable before recording.';
+      });
     }, 450);
   }
 
-  // ── file pick ──
-  function onFilePicked(input) {
-    var stateEl = document.getElementById('fileState');
-    if (!input.files || !input.files[0]) return;
-    var f = input.files[0];
-    var ext = (f.name || '').toLowerCase().split('.').pop();
-    var mime = (f.type || '').toLowerCase();
-    if (BLOCKED_EXT.indexOf(ext) !== -1 || mime.indexOf('heic') !== -1 || mime.indexOf('heif') !== -1) {
-      state.file = null;
-      input.value = '';
-      stateEl.className = 'file-err';
-      stateEl.textContent = 'HEIC/HEIF is not supported. Take a screenshot instead, or switch Settings → Camera → Formats → Most Compatible.';
-      return;
-    }
-    state.file = f;
-    stateEl.className = 'file-chosen';
-    stateEl.textContent = f.name;
-  }
-
+  // ── upload ──
   function uploadRemittance(paymentId) {
     if (!state.file) return Promise.resolve(null);
     var ext = (state.file.name || 'png').toLowerCase().split('.').pop();
@@ -819,9 +1003,7 @@
       headers: { 'Authorization': h['Authorization'], 'Content-Type': state.file.type || 'application/octet-stream' },
       body: state.file
     }).then(function (r) {
-      if (!r.ok) {
-        return r.text().then(function (t) { throw new Error('Screenshot upload failed: ' + (t || r.status)); });
-      }
+      if (!r.ok) return r.text().then(function (t) { throw new Error('Screenshot upload failed: ' + (t || r.status)); });
       return path;
     });
   }
@@ -836,32 +1018,32 @@
     var payDate = document.getElementById('fDate').value;
     var method = document.getElementById('fMethod').value || 'portal';
     var ref = document.getElementById('fRef').value.trim();
-    var acctId = document.getElementById('fAccount').value || null;
     var actor = actorName();
 
     var nBills = Object.keys(state.checked).length;
-    var confirmMsg = 'Record ' + fmtMoney(t.paid) + ' to ' + state.vendorName + '?\n\n' +
+    var msg = 'Record ' + fmtMoney(t.paid) + ' to ' + state.vendorName + '?\n\n' +
       nBills + ' existing bill' + (nBills === 1 ? '' : 's') + ' will be marked paid.';
     if (state.newInvs.length) {
-      confirmMsg += '\n\n' + state.newInvs.length + ' invoice(s) will be CREATED, which books the food cost ' +
-        'to the P&L immediately:\n' +
+      msg += '\n\n' + state.newInvs.length + ' invoice(s) will be CREATED, booking the food cost to the P&L immediately:\n' +
         state.newInvs.map(function (n) {
           return '  #' + n.invoice_number + ' · ' + fmtMoney(parseAmount(n.amount)) + ' · ' + n.venue;
         }).join('\n');
     }
     if (state.credits.length) {
-      confirmMsg += '\n\n' + state.credits.length + ' credit(s) totalling ' + fmtMoney(t.credits) +
-        ' recorded as a note only — no bill is affected.';
+      msg += '\n\n' + state.credits.length + ' credit(s) totalling ' + fmtMoney(t.credits) + ' recorded as a note only.';
     }
-    if (!state.file) confirmMsg += '\n\nNo screenshot attached.';
-    if (!window.confirm(confirmMsg)) return;
+    if (!state.file) msg += '\n\nNo screenshot attached.';
+    if (!window.confirm(msg)) return;
 
     state.busy = true;
     var btn = document.getElementById('btnSave');
     btn.disabled = true; btn.textContent = 'Recording…';
 
-    var paymentId = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : null;
-    if (!paymentId) { finishError(new Error('This browser cannot generate an id. Use Chrome or Safari.')); return; }
+    if (!(window.crypto && crypto.randomUUID)) {
+      finishError(new Error('This browser cannot generate an id. Use Chrome or Safari.'));
+      state.busy = false; btn.textContent = 'Record payment'; return;
+    }
+    var paymentId = crypto.randomUUID();
 
     var creditNote = state.credits.length
       ? 'Credits on this payment: ' + state.credits.map(function (c) {
@@ -869,10 +1051,8 @@
         }).join(' | ')
       : null;
 
-    // 1. screenshot first: if it fails, nothing has been written yet.
     uploadRemittance(paymentId)
       .then(function (path) {
-        // 2. the payment record
         return authFetch(SB_REST + 'vendor_payments', {
           method: 'POST', headers: jsonHdrs('return=representation'),
           body: JSON.stringify({
@@ -885,43 +1065,28 @@
             payment_reference: ref || null,
             remittance_url: path,
             notes: creditNote,
-            created_by: actor,
-            updated_by: actor
+            created_by: actor, updated_by: actor
           })
         }).then(function (rows) {
           if (!rows || !rows.length) throw new Error('The payment record did not save.');
           return rows[0];
         });
       })
-      // 3. create any invoices that were not in the system
       .then(function () { return createNewInvoices(paymentId, payDate, ref, actor); })
-      // 4. allocations for both existing and newly created bills
       .then(function (createdBills) {
         var allocs = [];
         Object.keys(state.checked).forEach(function (id) {
-          allocs.push({
-            vendor_payment_id: paymentId,
-            ap_bill_id: id,
-            amount_applied: parseAmount(state.applied[id]),
-            created_by: actor
-          });
+          allocs.push({ vendor_payment_id: paymentId, ap_bill_id: id, amount_applied: parseAmount(state.applied[id]), created_by: actor });
         });
         createdBills.forEach(function (cb) {
-          allocs.push({
-            vendor_payment_id: paymentId,
-            ap_bill_id: cb.id,
-            amount_applied: cb.amount,
-            created_by: actor
-          });
+          allocs.push({ vendor_payment_id: paymentId, ap_bill_id: cb.id, amount_applied: cb.amount, created_by: actor });
         });
         if (!allocs.length) return;
         return authFetch(SB_REST + 'payment_bill_allocations', {
           method: 'POST', headers: jsonHdrs('return=minimal'), body: JSON.stringify(allocs)
         });
       })
-      // 5. mark the existing bills paid
       .then(function () { return markBillsPaid(payDate, method, ref, actor); })
-      // 6. write back any invoice numbers that were missing
       .then(function () { return writeBackInvoiceNumbers(actor); })
       .then(function () {
         showToast('Recorded ' + fmtMoney(t.paid) + ' to ' + state.vendorName, 3200);
@@ -939,13 +1104,11 @@
   function finishError(e) {
     if (e && e.authFailed) { handleAuthFailure(); return; }
     console.error('[record-payment] save failed', e);
-    var msg = (e && e.message) ? String(e.message).slice(0, 220) : 'Unknown error';
-    window.alert('The payment did NOT save cleanly.\n\n' + msg +
+    window.alert('The payment did NOT save cleanly.\n\n' +
+      ((e && e.message) ? String(e.message).slice(0, 220) : 'Unknown error') +
       '\n\nCheck Accounts Payable before trying again — some steps may have gone through.');
   }
 
-  // A missing invoice needs both halves: the purchase (which is the food cost and
-  // shows on the P&L straight away) and the bill (which this payment settles).
   function createNewInvoices(paymentId, payDate, ref, actor) {
     if (!state.newInvs.length) return Promise.resolve([]);
     var out = [];
@@ -957,13 +1120,9 @@
         return authFetch(SB_REST + 'purchases', {
           method: 'POST', headers: jsonHdrs('return=representation'),
           body: JSON.stringify({
-            id: purchaseId,
-            type: 'invoice',
-            invoice_date: payDate,
-            vendor: state.vendorName,
-            vendor_id: state.vendorId,
-            venue: n.venue,
-            amount: amt,
+            id: purchaseId, type: 'invoice', invoice_date: payDate,
+            vendor: state.vendorName, vendor_id: state.vendorId,
+            venue: n.venue, amount: amt,
             invoice_number: String(n.invoice_number).trim(),
             note: 'Backfilled from a portal remittance — invoice was never logged'
           })
@@ -973,24 +1132,15 @@
           return authFetch(SB_REST + 'ap_bills', {
             method: 'POST', headers: jsonHdrs('return=representation'),
             body: JSON.stringify({
-              id: billId,
-              vendor_id: state.vendorId,
-              vendor_name: state.vendorName,
+              id: billId, vendor_id: state.vendorId, vendor_name: state.vendorName,
               invoice_number: String(n.invoice_number).trim(),
-              bill_date: payDate,
-              due_date: addDays(payDate, state.vendorTerms || 30),
-              total_amount: amt,
-              amount_paid: amt,
-              status: 'paid',
-              venue: n.venue,
-              purchase_id: purchaseId,
-              paid_at: payDate,
-              payment_method: 'portal',
-              payment_reference: ref || null,
-              paid_by: actor,
+              bill_date: payDate, due_date: addDays(payDate, state.vendorTerms || 30),
+              total_amount: amt, amount_paid: amt, status: 'paid',
+              venue: n.venue, purchase_id: purchaseId,
+              paid_at: payDate, payment_method: 'portal',
+              payment_reference: ref || null, paid_by: actor,
               notes: 'Created from a portal remittance — this invoice was not in the system',
-              created_by: actor,
-              updated_by: actor
+              created_by: actor, updated_by: actor
             })
           }).then(function (brows) {
             if (!brows || !brows.length) throw new Error('Could not create the bill for #' + n.invoice_number);
@@ -1010,29 +1160,23 @@
     var chain = Promise.resolve();
     ids.forEach(function (id) {
       chain = chain.then(function () {
-        var b = billById(id);
-        if (!b) return;
+        var b = billById(id); if (!b) return;
         var applied = parseAmount(state.applied[id]);
         var newPaid = Math.round((Number(b.amount_paid || 0) + applied) * 100) / 100;
-        var total = Number(b.total_amount || 0);
-        var fullyPaid = (total - newPaid) <= 0.005;
+        var fullyPaid = (Number(b.total_amount || 0) - newPaid) <= 0.005;
         var patch = {
           amount_paid: newPaid,
           status: fullyPaid ? 'paid' : 'partial',
-          payment_method: method,
-          payment_reference: ref || null,
-          updated_by: actor,
-          updated_at: new Date().toISOString()
+          payment_method: method, payment_reference: ref || null,
+          updated_by: actor, updated_at: new Date().toISOString()
         };
         if (fullyPaid) { patch.paid_at = payDate; patch.paid_by = actor; }
-        // Guarded on the status we read, so a re-run cannot touch a bill that
-        // has already been settled by something else in the meantime.
         return authFetch(
           SB_REST + 'ap_bills?id=eq.' + encodeURIComponent(id) + '&status=in.(unpaid,partial)',
           { method: 'PATCH', headers: jsonHdrs('return=representation'), body: JSON.stringify(patch) }
         ).then(function (rows) {
           if (!rows || !rows.length) {
-            throw new Error('Bill ' + (b.invoice_number ? '#' + b.invoice_number : id.slice(0,8)) +
+            throw new Error('Bill ' + (b.invoice_number ? '#' + b.invoice_number : String(id).slice(0,8)) +
               ' did not update — it may already have been paid. Check Accounts Payable.');
           }
         });
@@ -1051,33 +1195,24 @@
       chain = chain.then(function () {
         return authFetch(
           SB_REST + 'ap_bills?id=eq.' + encodeURIComponent(id) + '&invoice_number=is.null',
-          {
-            method: 'PATCH', headers: jsonHdrs('return=minimal'),
-            body: JSON.stringify({
-              invoice_number: String(state.invFix[id]).trim(),
-              updated_by: actor,
-              updated_at: new Date().toISOString()
-            })
-          }
-        ).catch(function (e) {
-          // Never fail a recorded payment over a convenience write-back.
-          console.warn('[record-payment] invoice number write-back failed', e);
-        });
+          { method: 'PATCH', headers: jsonHdrs('return=minimal'),
+            body: JSON.stringify({ invoice_number: String(state.invFix[id]).trim(), updated_by: actor, updated_at: new Date().toISOString() }) }
+        ).catch(function (e) { console.warn('[record-payment] invoice write-back failed', e); });
       });
     });
     return chain;
   }
 
   function resetAfterSave() {
-    state.checked = {}; state.applied = {}; state.invFix = {};
+    state.checked = {}; state.applied = {}; state.invFix = {}; state.matchedBy = {};
     state.credits = []; state.newInvs = []; state.file = null;
+    state.amountTouched = false; state.parsed = null;
     document.getElementById('fAmount').value = '';
     document.getElementById('fRef').value = '';
-    document.getElementById('refDupHint').textContent = '';
-    var fs = document.getElementById('fileState');
-    fs.className = 'fld-hint';
-    fs.textContent = 'No file chosen — you can save without one, but attaching it is the whole point.';
     document.getElementById('fFile').value = '';
+    document.getElementById('dzMain').textContent = 'Drop a screenshot here, or click to choose';
+    setParseState('', '');
+    checkRefDuplicate();
     renderCredits(); renderNewInvs();
     if (state.vendorId) loadBillsForVendor(state.vendorId);
   }
@@ -1087,14 +1222,17 @@
     document.getElementById('fVendor').addEventListener('change', function () {
       var id = this.value;
       state.vendorId = id;
-      state.checked = {}; state.applied = {}; state.invFix = {};
+      state.checked = {}; state.applied = {}; state.invFix = {}; state.matchedBy = {};
       var v = null;
       for (var i = 0; i < state.vendors.length; i++) if (state.vendors[i].id === id) { v = state.vendors[i]; break; }
       state.vendorName = v ? v.display_name : '';
       state.vendorTerms = (v && v.default_terms_days != null) ? Number(v.default_terms_days) : 30;
       if (!isFinite(state.vendorTerms)) state.vendorTerms = 30;
       if (!id) { state.bills = []; renderBills(); recompute(); return; }
-      loadBillsForVendor(id).catch(function (e) {
+      loadBillsForVendor(id).then(function () {
+        // A screenshot dropped before the vendor was picked gets read now.
+        if (state.file && !state.parsed) runParse();
+      }).catch(function (e) {
         if (e && e.authFailed) { handleAuthFailure(); return; }
         console.error('[record-payment] bill load failed', e);
         document.getElementById('billsBody').innerHTML =
@@ -1103,35 +1241,45 @@
       });
     });
 
-    document.getElementById('fAmount').addEventListener('input', recompute);
+    var amtEl = document.getElementById('fAmount');
+    amtEl.addEventListener('input', function () {
+      state.amountTouched = (this.value.trim() !== '');
+      this.classList.remove('is-auto');
+      recompute();
+    });
+
     document.getElementById('fDate').addEventListener('change', recompute);
-    document.getElementById('fRef').addEventListener('input', onRefInput);
+    document.getElementById('fRef').addEventListener('input', checkRefDuplicate);
+
+    var dz = document.getElementById('dropZone');
+    var fi = document.getElementById('fFile');
+    dz.addEventListener('click', function () { fi.click(); });
+    dz.addEventListener('dragover', function (e) { e.preventDefault(); dz.classList.add('is-over'); });
+    dz.addEventListener('dragleave', function () { dz.classList.remove('is-over'); });
+    dz.addEventListener('drop', function (e) {
+      e.preventDefault(); dz.classList.remove('is-over');
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) onFileChosen(e.dataTransfer.files[0]);
+    });
+    fi.addEventListener('change', function () { if (this.files && this.files[0]) onFileChosen(this.files[0]); });
 
     document.getElementById('btnAddCredit').addEventListener('click', function () {
-      state.credits.push({ amount: '', note: '' });
-      renderCredits(); recompute();
+      state.credits.push({ amount: '', note: '' }); renderCredits(); recompute();
     });
     document.getElementById('btnAddNew').addEventListener('click', function () {
       state.newInvs.push({ invoice_number: '', amount: '', venue: document.getElementById('fDefaultVenue').value || '' });
       renderNewInvs(); recompute();
     });
     document.getElementById('fDefaultVenue').addEventListener('change', function () {
-      var v = this.value;
-      if (!v) return;
+      var v = this.value; if (!v) return;
       state.newInvs.forEach(function (n) { if (!n.venue) n.venue = v; });
       renderNewInvs(); recompute();
     });
-
-    document.getElementById('btnPickFile').addEventListener('click', function () {
-      document.getElementById('fFile').click();
-    });
-    document.getElementById('fFile').addEventListener('change', function () { onFilePicked(this); });
 
     document.getElementById('btnSave').addEventListener('click', doSave);
   }
 
   // ── boot ──
-  function onAuthReady(user) {
+  function onAuthReady() {
     if (typeof pcActivity !== 'undefined' && pcActivity.init) pcActivity.init('record-payment');
     document.body.classList.remove('pre-auth');
     state.isAdmin = (pcAuth && pcAuth.isAdmin) ? pcAuth.isAdmin() : false;
@@ -1145,21 +1293,18 @@
     }
 
     var meta = document.getElementById('pageTitleMeta');
-    if (meta) meta.textContent = 'Admin · v1';
+    if (meta) meta.textContent = 'Admin · v2';
 
     document.getElementById('fDate').value = todayIso();
     document.getElementById('fDefaultVenue').innerHTML = venueOptionsHtml('');
     wire();
-    renderCredits();
-    renderNewInvs();
-    recompute();
+    renderCredits(); renderNewInvs(); recompute();
 
-    Promise.all([loadVendors(), loadAccounts()])
-      .catch(function (e) {
-        if (e && e.authFailed) { handleAuthFailure(); return; }
-        console.error('[record-payment] init load failed', e);
-        showToast('Could not load vendors or accounts — refresh the page', 4000);
-      });
+    Promise.all([loadVendors(), loadAccounts()]).catch(function (e) {
+      if (e && e.authFailed) { handleAuthFailure(); return; }
+      console.error('[record-payment] init load failed', e);
+      showToast('Could not load vendors or accounts — refresh the page', 4000);
+    });
   }
 
   if (typeof pcAuth === 'undefined' || !pcAuth.require) {
