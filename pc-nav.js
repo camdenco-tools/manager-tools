@@ -76,6 +76,7 @@
     finance: [
       { label: 'Accounts receivable',            href: '/accounts-receivable/',    slug: 'accounts-receivable' },
       { label: 'Accounts payable',               href: '/accounts-payable/',       slug: 'accounts-payable' },
+      { label: 'Record portal payment',          href: '/record-payment/',         slug: 'record-payment' },
       { label: 'Expense reports',                href: '/expense-reports/',        slug: 'expense-reports' },
       { label: 'Check writer',                   href: '/checks/',                 slug: 'checks' },
       { label: 'Bank review',                    href: '/bank-review/',            slug: 'bank-review' },
