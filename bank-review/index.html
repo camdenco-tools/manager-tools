@@ -68,17 +68,19 @@ header {
 .processing-card .step { font-size: 12px; color: #bbb; margin-top: 6px; }
 
 /* Stats strip */
-.stats-strip { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 16px; }
+.stats-strip { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-bottom: 16px; }
 .stat-box { background: white; border-radius: 12px; padding: 10px; text-align: center; border: 1px solid #eee; }
 .stat-box.green { border-color: #97C459; }
 .stat-box.purple { border-color: #CECBF6; }
 .stat-box.amber { border-color: #EF9F27; }
 .stat-box.lavender { border-color: #AFA9EC; }
+.stat-box.rose { border-color: #f0c0c0; }
 .stat-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 3px; }
 .stat-label.green { color: #3B6D11; }
 .stat-label.purple { color: #534AB7; }
 .stat-label.amber { color: #854F0B; }
 .stat-label.lavender { color: #3C3489; }
+.stat-label.rose { color: #A32D2D; }
 .stat-label.gray { color: #999; }
 .stat-val { font-size: 18px; font-weight: 700; color: #1a1a1a; }
 .stat-sub { font-size: 11px; color: #bbb; margin-top: 1px; }
@@ -178,6 +180,18 @@ header {
 .food-cat { font-size: 11px; color: #854F0B; min-width: 100px; text-align: right; opacity: 0.6; }
 .food-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
 .food-hint { font-size: 11px; color: #854F0B; opacity: 0.6; }
+
+/* Payments against invoices. No checkbox by design -- the cost is already on
+   the books from the invoice, so there is no venue assignment to make here. */
+.invoiced-list { background: #FCEBEB; border-radius: 10px; overflow: hidden; }
+.invoiced-row { display: flex; align-items: center; padding: 9px 12px; gap: 8px; border-bottom: 1px solid rgba(0,0,0,0.06); }
+.invoiced-row:last-child { border-bottom: none; }
+.invoiced-date { font-size: 12px; color: #A32D2D; min-width: 42px; flex-shrink: 0; }
+.invoiced-vendor { font-size: 13px; font-weight: 600; color: #7A2020; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.invoiced-amount { font-size: 13px; font-weight: 700; color: #7A2020; min-width: 60px; text-align: right; flex-shrink: 0; }
+.invoiced-amount.credit { color: #27500A; }
+.invoiced-cat { font-size: 11px; color: #A32D2D; min-width: 100px; text-align: right; opacity: 0.6; }
+.invoiced-note { font-size: 11px; color: #A32D2D; margin-top: 10px; line-height: 1.45; opacity: 0.85; }
 /* Venue assign bar. For a single-venue account there is nothing to ask a
    manager -- pick the venue once and record every checked row as a purchase. */
 .venue-assign-bar {
@@ -712,6 +726,18 @@ header {
         <span class="section-action" style="color:#BA7517;">&#9660;</span>
       </div>
       <div class="section-body" id="food-body"></div>
+    </div>
+
+    <div class="section-card" id="invoiced-section" style="display:none;">
+      <div class="section-header" onclick="toggleSection('invoiced')">
+        <div class="section-title-area">
+          <span class="section-dot" style="background:#A32D2D;"></span>
+          <span class="section-title" style="color:#A32D2D;">Payments against invoices -- awaiting application</span>
+          <span class="section-meta" style="color:#A32D2D;" id="invoiced-meta"></span>
+        </div>
+        <span class="section-action" style="color:#A32D2D;">&#9660;</span>
+      </div>
+      <div class="section-body" id="invoiced-body"></div>
     </div>
 
     <div class="section-card" id="expense-section" style="display:none;">
@@ -1937,28 +1963,37 @@ async function deadOldMatchTail() {
 function renderReview() {
   var matched = currentCharges.filter(function(c) { return c.status === 'matched'; });
   var expenses = currentCharges.filter(function(c) { return c.status === 'expense_pending'; });
-  var food = currentCharges.filter(function(c) { return c.status === 'food_pending'; });
+
+  // food_pending splits two ways. An invoiced vendor's line is the PAYMENT of
+  // invoices already logged in /purchases/, so no venue assignment applies and
+  // it does not belong under a heading that asks for one.
+  var foodAll = currentCharges.filter(function(c) { return c.status === 'food_pending'; });
+  var invoiced = foodAll.filter(function(c) { return vendorPaymentType(c.vendor_name) === 'invoiced'; });
+  var food = foodAll.filter(function(c) { return vendorPaymentType(c.vendor_name) !== 'invoiced'; });
 
   var matchedTotal = matched.reduce(function(s, c) { return s + Math.abs(c.amount); }, 0);
   var expenseTotal = expenses.reduce(function(s, c) { return s + Math.abs(c.amount); }, 0);
   var foodTotal = food.reduce(function(s, c) { return s + Math.abs(c.amount); }, 0);
+  var invoicedTotal = invoiced.reduce(function(s, c) { return s + Math.abs(c.amount); }, 0);
 
   // Returned totals come from the returnedCharges list (separate from currentCharges)
   var returnedTotal = returnedCharges.reduce(function(s, c) { return s + Math.abs(parseFloat(c.amount)); }, 0);
 
   // Grand total includes ALL active workflow buckets so it matches what's displayed
-  var grandTotal = matchedTotal + expenseTotal + foodTotal + returnedTotal;
-  var grandCount = matched.length + expenses.length + food.length + returnedCharges.length;
+  var grandTotal = matchedTotal + expenseTotal + foodTotal + invoicedTotal + returnedTotal;
+  var grandCount = matched.length + expenses.length + food.length + invoiced.length + returnedCharges.length;
 
   document.getElementById('stats-strip').innerHTML =
     '<div class="stat-box"><div class="stat-label gray">Total</div><div class="stat-val">$' + fmtMoneyRound(grandTotal) + '</div><div class="stat-sub">' + grandCount + ' charges</div></div>' +
     '<div class="stat-box green"><div class="stat-label green">Matched</div><div class="stat-val" style="color:#3B6D11;">$' + fmtMoneyRound(matchedTotal) + '</div><div class="stat-sub">' + matched.length + ' charges</div></div>' +
     '<div class="stat-box amber"><div class="stat-label amber">To managers</div><div class="stat-val" style="color:#BA7517;">$' + fmtMoneyRound(foodTotal) + '</div><div class="stat-sub">' + food.length + ' charges</div></div>' +
+    '<div class="stat-box rose"><div class="stat-label rose">Invoiced</div><div class="stat-val" style="color:#A32D2D;">$' + fmtMoneyRound(invoicedTotal) + '</div><div class="stat-sub">' + invoiced.length + ' payment' + (invoiced.length === 1 ? '' : 's') + '</div></div>' +
     '<div class="stat-box purple"><div class="stat-label purple">Expenses</div><div class="stat-val" style="color:#534AB7;">$' + fmtMoneyRound(expenseTotal) + '</div><div class="stat-sub">' + expenses.length + ' charges</div></div>' +
     '<div class="stat-box lavender"><div class="stat-label lavender">Returned</div><div class="stat-val" style="color:#3C3489;">$' + fmtMoneyRound(returnedTotal) + '</div><div class="stat-sub">' + returnedCharges.length + ' charges</div></div>';
 
   renderMatched(matched);
-  renderFood(food);
+  renderFood();
+  renderInvoiced();
   renderExpenses(expenses);
   renderReturned();
 }
@@ -2080,7 +2115,13 @@ function renderExpenses(items) {
   document.getElementById('expense-body').classList.add('open');
 }
 
-function renderFood(items) {
+// Builds its own list rather than trusting the caller, so the rows on screen
+// and the count on the Send button can never disagree. Invoiced rows are
+// handled by renderInvoiced() and never appear here.
+function renderFood() {
+  var items = currentCharges.filter(function(c) {
+    return c.status === 'food_pending' && vendorPaymentType(c.vendor_name) !== 'invoiced';
+  });
   var sec = document.getElementById('food-section');
   if (!items.length) { sec.style.display = 'none'; return; }
   sec.style.display = 'block';
@@ -2101,14 +2142,11 @@ function renderFood(items) {
     var ds = c.charge_date.slice(5,7) + '/' + c.charge_date.slice(8,10);
     var isCredit = c.amount < 0;
     var displayAmt = (isCredit ? '-' : '') + '$' + fmtMoney(c.amount);
-    var payType = vendorPaymentType(c.vendor_name);
-    var isInvoiced = (payType === 'invoiced');
-    html += '<div class="food-row has-raw-tooltip' + (isInvoiced ? ' is-invoiced' : '') + '" data-raw="' + escapeHtml(c.raw_description || '') + '">';
+    html += '<div class="food-row has-raw-tooltip" data-raw="' + escapeHtml(c.raw_description || '') + '">';
     html += '<input type="checkbox" class="expense-check" ' + (foodChecked[c.id] ? 'checked' : '') + ' onchange="toggleFoodCheck(\'' + c.id + '\', this.checked)" style="accent-color:#BA7517;">';
     html += '<span class="food-date">' + ds + '</span>';
     var batchPill = c.batch_note ? '<span class="batch-pill">' + escapeHtml(c.batch_note) + '</span>' : '';
-    var invPill = isInvoiced ? '<span class="invoiced-pill" title="This vendor bills first and is paid later. This line settles invoices already entered in Purchases - it is not a new cost.">INVOICED</span>' : '';
-    html += '<span class="food-vendor">' + escapeHtml(c.vendor_name) + batchPill + invPill + '</span>';
+    html += '<span class="food-vendor">' + escapeHtml(c.vendor_name) + batchPill + '</span>';
     html += '<span class="food-amount' + (isCredit ? ' credit' : '') + '">' + displayAmt + '</span>';
     html += '<span class="food-cat">' + escapeHtml(c.category_name || 'Food Purchases') + '</span>';
     html += '<button class="move-btn" onclick="moveToExpense(\'' + c.id + '\')" title="Reclassify as non-food (will appear in expenses section, save there)">&rarr; Expense</button>';
@@ -2120,16 +2158,49 @@ function renderFood(items) {
 
   var checkedCount = items.filter(function(c) { return foodChecked[c.id]; }).length;
   html += '<div class="food-footer">';
-  var invCount = items.filter(function(c) { return vendorPaymentType(c.vendor_name) === 'invoiced'; }).length;
-  var hintTxt = invCount
-    ? invCount + ' row' + (invCount === 1 ? ' is' : 's are') + ' from invoiced vendors and start unchecked - those settle bills already in Purchases'
-    : 'Uncheck any you don\'t want to send';
-  html += '<span class="food-hint">' + hintTxt + '</span>';
+  html += '<span class="food-hint">Uncheck any you don\'t want to send</span>';
   html += '<button class="section-btn amber" onclick="sendToManagers()"' + (checkedCount === 0 ? ' disabled' : '') + '>Send ' + checkedCount + ' to managers</button>';
   html += '</div>';
 
   document.getElementById('food-body').innerHTML = html;
   document.getElementById('food-body').classList.add('open');
+}
+
+// Bank payments to vendors who bill first. No checkbox and no venue picker:
+// the cost was recognised when the invoice was logged, so there is nothing to
+// assign. They leave this list when the payment is applied to specific bills,
+// or by the three per-row exits.
+function renderInvoiced() {
+  var items = currentCharges.filter(function(c) {
+    return c.status === 'food_pending' && vendorPaymentType(c.vendor_name) === 'invoiced';
+  });
+  var sec = document.getElementById('invoiced-section');
+  if (!items.length) { sec.style.display = 'none'; return; }
+  sec.style.display = 'block';
+  document.getElementById('invoiced-meta').textContent = items.length + ' payment' + (items.length === 1 ? '' : 's') + ' -- $' + fmtMoneyRound(items.reduce(function(s,c) { return s + Math.abs(c.amount); }, 0));
+
+  var html = '<div class="invoiced-list">';
+  for (var i = 0; i < items.length; i++) {
+    var c = items[i];
+    var ds = c.charge_date.slice(5,7) + '/' + c.charge_date.slice(8,10);
+    var isCredit = c.amount < 0;
+    var displayAmt = (isCredit ? '-' : '') + '$' + fmtMoney(c.amount);
+    html += '<div class="invoiced-row has-raw-tooltip" data-raw="' + escapeHtml(c.raw_description || '') + '">';
+    html += '<span class="invoiced-date">' + ds + '</span>';
+    var batchPill = c.batch_note ? '<span class="batch-pill">' + escapeHtml(c.batch_note) + '</span>' : '';
+    html += '<span class="invoiced-vendor">' + escapeHtml(c.vendor_name) + batchPill + '</span>';
+    html += '<span class="invoiced-amount' + (isCredit ? ' credit' : '') + '">' + displayAmt + '</span>';
+    html += '<span class="invoiced-cat">' + escapeHtml(c.category_name || 'Food Purchases') + '</span>';
+    html += '<button class="move-btn" onclick="moveToExpense(\'' + c.id + '\')" title="Reclassify as non-food (will appear in expenses section, save there)">&rarr; Expense</button>';
+    html += '<button class="move-btn" onclick="openAskModal(\'' + c.id + '\', \'food\')" title="Ask managers about this charge" style="color:#534AB7;border-color:#CECBF6;">? Ask</button>';
+    html += '<button class="move-btn" onclick="openDiscardModal(\'' + c.id + '\', \'food\')" title="Discard charge" style="color:#A32D2D;border-color:#f0c0c0;">&#128465;</button>';
+    html += '</div>';
+  }
+  html += '</div>';
+  html += '<div class="invoiced-note">These vendors bill first and are paid later, so the cost is already on the books from the invoice logged in Purchases. Assigning a venue would record it a second time. They stay here until the payment is applied to specific bills.</div>';
+
+  document.getElementById('invoiced-body').innerHTML = html;
+  document.getElementById('invoiced-body').classList.add('open');
 }
 
 // ══════════════════════════════════════════════
@@ -2406,9 +2477,11 @@ function toggleAllExpenses(checked) {
   renderExpenses(expenses);
 }
 function toggleAllFood(checked) {
-  var food = currentCharges.filter(function(c) { return c.status === 'food_pending'; });
+  var food = currentCharges.filter(function(c) {
+    return c.status === 'food_pending' && vendorPaymentType(c.vendor_name) !== 'invoiced';
+  });
   food.forEach(function(c) { foodChecked[c.id] = checked; });
-  renderFood(food);
+  renderFood();
 }
 function toggleAllReturned(checked) {
   returnedCharges.forEach(function(c) { returnedChecked[c.id] = checked; });
