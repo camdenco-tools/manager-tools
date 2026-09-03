@@ -38,6 +38,13 @@
     font-size: 12.5px; font-weight: 500; padding: 7px 14px; border-radius: 6px;
   }
   .hdr-btn:hover { background: #2c2c2a; }
+  button.hdr-btn { font-family: inherit; border: 0; cursor: pointer; line-height: 1.5; }
+  /* Proof, not data entry — outlined so it doesn't compete with the two
+     buttons that change what the statement says. */
+  .hdr-btn.is-quiet {
+    background: transparent; color: #555; border: 1px solid #d8d6cc;
+  }
+  .hdr-btn.is-quiet:hover { background: #f1f0eb; color: #1a1a1a; border-color: #b4b2a9; }
   
 
   .page-body { max-width: 1040px; margin: 0 auto; padding: 18px 22px 80px; }
@@ -294,6 +301,66 @@
     .stmt-table td.col-pct { display: none; }
     .detail-table td.d-venue, .detail-table td.d-src { display: none; }
   }
+
+  /* Statement header — print only. */
+  .print-head { display: none; }
+
+  /* ── Print / Save-as-PDF ──
+     Prints the statement and nothing else. Drill-down is suppressed by CSS
+     rather than collapsed in state, so the printed page is identical no
+     matter what the reader had expanded on screen. */
+  @media print {
+    @page { size: letter portrait; margin: 0.6in 0.65in; }
+
+    html, body { background: #fff !important; font-size: 11pt; }
+
+    #pc-nav-root,
+    #pc-nav-totop,
+    .page-title-row,
+    .chip-row,
+    .range-banner,
+    .warn-strip,
+    .pc-toast-host,
+    .modal-backdrop { display: none !important; }
+
+    .page-body { max-width: none; margin: 0; padding: 0; }
+
+    .print-head { display: block; text-align: center; margin: 0 0 20px; }
+    .ph-co    { font-size: 15pt; font-weight: 700; letter-spacing: -0.01em; }
+    .ph-title { font-size: 13pt; font-weight: 600; margin-top: 2px; }
+    .ph-basis { font-size: 10pt; color: #444; margin-top: 3px; }
+    .ph-range { font-size: 10pt; color: #444; margin-top: 1px; }
+
+    .stmt-card {
+      border: 0; border-radius: 0; overflow: visible;
+      background: transparent; margin-bottom: 12px;
+    }
+    .stmt-table { font-size: 10pt; }
+    .stmt-table td { padding: 4px 0; }
+    .stmt-table td.col-amt { width: 120px; }
+    .stmt-table td.col-pct { width: 62px; }
+
+    tr.sec-head td { background: transparent; padding: 11px 0 4px; font-size: 8.5pt; }
+    tr.net-row td  { background: transparent; font-size: 11.5pt; }
+    tr.line-row { cursor: default; }
+    tr.line-row td.col-label { padding-left: 14px; }
+
+    /* Drill-down, chevrons, txn counts, row actions never print. */
+    tr.detail-row,
+    tr.line-row .chev,
+    .txn-count,
+    .mini-btn { display: none !important; }
+
+    /* Keep a heading with its first line; keep a subtotal with its section. */
+    tr { break-inside: avoid; page-break-inside: avoid; }
+    tr.sec-head { break-after: avoid; page-break-after: avoid; }
+    tr.subtotal-row, tr.net-row { break-before: avoid; page-break-before: avoid; }
+
+    /* Parentheses already carry the sign — red ink adds nothing on paper. */
+    .is-negative { color: #000; }
+
+    .footnote { font-size: 8.5pt; color: #555; margin-top: 14px; }
+  }
 </style>
 </head>
 
@@ -303,12 +370,21 @@
     <h1 class="page-title">P&amp;L overview</h1>
     <span class="page-title-meta">
       <span class="hdr-basis">Accrual · calendar year</span>
+      <button type="button" class="hdr-btn" id="printBtn">Print / PDF</button>
+      <a class="hdr-btn is-quiet" href="/statement-review/">Statement review</a>
       <a class="hdr-btn" href="/pl-overview/payroll/">Payroll upload</a>
       <a class="hdr-btn" href="/pl-overview/categories/">Categories</a>
     </span>
   </div>
 
   <main class="page-body" id="pageBody">
+
+    <div class="print-head" id="printHead">
+      <div class="ph-co">Popcorn Chez LLC</div>
+      <div class="ph-title">Profit &amp; Loss</div>
+      <div class="ph-basis">Accrual Basis</div>
+      <div class="ph-range" id="printRange"></div>
+    </div>
 
     <div class="chip-row" id="chipRow">
       <button type="button" class="chip is-active" data-chip="ytd">Year to date</button>
@@ -349,17 +425,25 @@
 
   var DETAIL_CAP = 60;   // rows shown per expanded line before "+N more"
 
-  // Revenue sub-categories come from ar_items.income_category, which is a
-  // different vocabulary from expense_categories. Labels only.
+  // Two vocabularies live in this map. 2026+ revenue keys off
+  // ar_items.income_category (lowercase snake). 2025 was loaded as
+  // pl_manual_entries against expense_categories, so its keys are the
+  // category names themselves. Both have to resolve or the statement
+  // prints raw category names.
   var REVENUE_LABELS = {
     sales:               'Sales',
     labor_reimbursement: 'Labor reimbursement',
     tips:                'Tips (pass-through)',
     fees:                'Fees',
     tax:                 'Tax',
-    adjustment:          'Adjustments'
+    adjustment:          'Adjustments',
+    'Food Sales':            'Food sales',
+    'Service Sales - Other': 'Service sales \u2014 other',
+    'Employee Tips':         'Employee tips'
   };
-  var REVENUE_ORDER = ['sales', 'labor_reimbursement', 'tips', 'fees', 'tax', 'adjustment'];
+  var REVENUE_ORDER = ['sales', 'Food Sales', 'labor_reimbursement',
+                       'Service Sales - Other', 'tips', 'Employee Tips',
+                       'fees', 'tax', 'adjustment'];
 
   // Labor lines are synthesized by the view with these exact category names.
   // Also the display order for the Labor section — fixed order beats sorting
@@ -635,7 +719,7 @@
 
     var html = '<tr class="line-row' + (isOpen ? ' is-open' : '') + '" data-key="' + esc(key) + '">' +
       '<td class="col-label"><span class="chev">&#9654;</span>' + esc(group.label) +
-        ' <span class="is-muted" style="font-size:11.5px;">' + count +
+        ' <span class="is-muted txn-count" style="font-size:11.5px;">' + count +
         (count === 1 ? ' txn' : ' txns') + '</span></td>' +
       '<td class="col-amt' + (neg ? ' is-negative' : '') + '">' + esc(fmtMoney(group.total)) + '</td>' +
       '<td class="col-pct">' + pctOfRevenue(group.total, revenueTotal) + '</td>' +
@@ -849,6 +933,12 @@
   }
 
   function renderRangeBanner(range) {
+    var pr = document.getElementById('printRange');
+    if (pr) {
+      pr.textContent = range
+        ? 'For the period ' + fmtDate(range.from) + ' through ' + fmtDate(range.to)
+        : '';
+    }
     var el = document.getElementById('rangeBanner');
     if (!el) return;
     if (!range) { el.textContent = 'Pick a custom date range to load the report.'; return; }
@@ -1375,6 +1465,9 @@
     wireExpand();
     wireDetailActions();
     wireModal();
+
+    var printBtn = document.getElementById('printBtn');
+    if (printBtn) printBtn.addEventListener('click', function () { window.print(); });
 
     fetchCategories().catch(function (e) {
       if (e && e.authFailed) { handleAuthFailure(); return; }
