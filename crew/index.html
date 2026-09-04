@@ -349,7 +349,7 @@ body {
   margin: 0 auto 16px;
   padding: 0 20px;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 12px;
 }
 .scorecard-card {
@@ -525,6 +525,27 @@ body {
 .status-pill.inactive { background: var(--border-lt); color: var(--muted); }
 .status-pill.minor { background: #fff3cd; color: #856404; margin-left: 6px; }
 .status-pill.legacy { background: var(--blue-50); color: var(--blue-600); margin-left: 6px; }
+
+/* ============================================================
+   SEASONAL HOLD  (Sep 4, 2026)
+   Blue throughout, deliberately: amber is the low-engagement
+   tile's colour and means "needs attention". A seasonal hold is
+   not a problem to fix — it is a pool to draw from.
+   ============================================================ */
+.status-pill.seasonal { background: var(--blue-50); color: var(--blue-600); }
+.scorecard-card.seasonal-hold {
+  background: var(--blue-50);
+  border-color: var(--blue-600);
+}
+.scorecard-card.seasonal-hold .scorecard-num { color: var(--blue-600); }
+.scorecard-card.seasonal-hold .scorecard-num.is-zero { color: var(--muted); opacity: 0.55; }
+/* Tel link on inactive roster rows — the emergency call-in path. */
+.vr-row-phone {
+  font-size: 12px; color: var(--blue-600);
+  text-decoration: none; font-weight: 600;
+  white-space: nowrap;
+}
+.vr-row-phone:hover { text-decoration: underline; }
 
 .card-section {
   padding: 14px 18px;
@@ -1774,6 +1795,11 @@ body {
   .scorecard-card.low-engagement {
     border-left: 3px solid var(--amber-400);
   }
+  /* Same treatment for the seasonal tile — the venue tiles set
+     border-left-color inline, which doesn't reach these two. */
+  .scorecard-card.seasonal-hold {
+    border-left: 3px solid var(--blue-600);
+  }
   .scorecard-head {
     flex: 1;
     flex-direction: column;
@@ -1950,6 +1976,33 @@ body {
     { value: 'seasonal', label: 'Seasonal end' },
     { value: 'other', label: 'Other' }
   ];
+
+  // ============================================================
+  // SEASONAL HOLD  (Sep 4, 2026)
+  // ------------------------------------------------------------
+  // employees.inactive_kind is 'seasonal' | 'ended' | null, and a DB CHECK
+  // constraint forces it to NULL whenever is_active = true. NULL on an
+  // INACTIVE row means "deactivated before this column existed" -- 81 rows
+  // at build time -- and it READS AS ENDED everywhere on this page. Nobody
+  // lands in the callback pool by accident; you opt people into it.
+  //
+  // THIS IS NOT A SIXTH DEACTIVATION REASON, and that is deliberate. The
+  // audit of the existing five-bucket picker found 50 of 81 rows sitting in
+  // 'other'. When a required field collects 62% of everything in its escape
+  // hatch, it is a toll being paid, not a choice being made. So the hold
+  // gets its own button and asks for NOTHING: no category, no rehire
+  // question, no typed confirm. The only fact recorded is "not working right
+  // now, want them back" -- which the button already says. Adding fields
+  // would recreate the 'other' problem on a brand new column.
+  // ============================================================
+  var KIND_SEASONAL = 'seasonal';
+  var KIND_ENDED = 'ended';
+
+  function isSeasonalHold(emp) {
+    if (!emp) return false;
+    if (emp.is_active !== false) return false;
+    return emp.inactive_kind === KIND_SEASONAL;
+  }
 
   // -------------------------------------------------------------
   // PERFORMANCE SIGNALS CONFIG
@@ -2251,6 +2304,9 @@ body {
     var url = SUPABASE_URL +
       '/rest/v1/employees' +
       '?select=id,first_name,last_name,punch_id,phone,is_active,home_venue,shirt_size,' +
+      // Seasonal hold (Sep 4). Decides which of the three tabs a row lands on,
+      // and whether the availability page lets them in read-only.
+      'inactive_kind,' +
       // Non-event day availability roster (Aug 12). This flag ALONE decides who
       // appears on the day-availability pages. It is deliberately NOT derived
       // from employee_venue_roles: two of the eight people on it do prep and
@@ -2630,10 +2686,16 @@ body {
     if (!state.filter) return true;
     return fullName(emp).toLowerCase().indexOf(state.filter) !== -1;
   }
+  // Three tabs off one fetch. 'inactive' deliberately catches inactive_kind
+  // NULL as well as 'ended' -- see the KIND_ constants above for why an
+  // unclassified row is not a seasonal one.
   function visibleEmployees() {
-    var wantActive = state.statusTab === 'active';
+    var tab = state.statusTab;
     return state.employees.filter(function(e) {
-      return (e.is_active === true) === wantActive;
+      if (tab === 'active') return e.is_active === true;
+      if (e.is_active !== false) return false;
+      if (tab === 'seasonal') return e.inactive_kind === KIND_SEASONAL;
+      return e.inactive_kind !== KIND_SEASONAL;
     });
   }
 
@@ -3140,10 +3202,17 @@ body {
   // -------------------------------------------------------------
   function renderStatusTabs() {
     var actCount = state.employees.filter(function(e) { return e.is_active === true; }).length;
-    var inactCount = state.employees.filter(function(e) { return e.is_active === false; }).length;
+    var seasCount = state.employees.filter(isSeasonalHold).length;
+    var inactCount = state.employees.filter(function(e) {
+      if (e.is_active !== false) return false;
+      return e.inactive_kind !== KIND_SEASONAL;
+    }).length;
     var html =
       '<button class="status-tab' + (state.statusTab === 'active' ? ' active' : '') + '" data-tab="active">' +
         'Active <span class="status-tab-count">' + actCount + '</span>' +
+      '</button>' +
+      '<button class="status-tab' + (state.statusTab === 'seasonal' ? ' active' : '') + '" data-tab="seasonal">' +
+        'Seasonal hold <span class="status-tab-count">' + seasCount + '</span>' +
       '</button>' +
       '<button class="status-tab' + (state.statusTab === 'inactive' ? ' active' : '') + '" data-tab="inactive">' +
         'Inactive <span class="status-tab-count">' + inactCount + '</span>' +
@@ -3287,7 +3356,7 @@ body {
     // Inactive view: don't bother grouping by unset/assigned. Inactive
     // employees don't need a home venue assigned, so the "unset worklist"
     // concept doesn't apply. Just show them all alphabetically.
-    if (state.statusTab === 'inactive') {
+    if (state.statusTab !== 'active') {
       var html = '';
       for (var i = 0; i < visible.length; i++) html += renderRow(visible[i]);
       area.innerHTML = html;
@@ -3346,6 +3415,10 @@ body {
     var total = visible.length;
     var el = document.getElementById('counts');
     if (total === 0) { el.innerHTML = ''; return; }
+    if (state.statusTab === 'seasonal') {
+      el.innerHTML = total + ' on seasonal hold';
+      return;
+    }
     if (state.statusTab === 'inactive') {
       el.innerHTML = total + ' inactive';
       return;
@@ -3416,7 +3489,29 @@ body {
       '<div class="scorecard-pct">includes unset home venues</div>' +
     '</div>';
 
+    // Fifth tile — seasonal hold. The callback pool, and the emergency
+    // call-in list: people who are off the schedule but still ours. Counts
+    // ONLY 'seasonal', never NULL-kind rows, so a manager scanning this at
+    // 4pm for someone to call never dials somebody who was fired in June.
+    var seasCount = state.employees.filter(isSeasonalHold).length;
+    html += '<div class="scorecard-card seasonal-hold" data-roster-seasonal="1">' +
+      '<div class="scorecard-head">' +
+        '<span class="scorecard-venue">Seasonal hold</span>' +
+        '<span class="scorecard-par">off-season pool</span>' +
+      '</div>' +
+      '<div class="scorecard-num' + (seasCount === 0 ? ' is-zero' : '') + '">' + seasCount + '</div>' +
+      '<div class="scorecard-label">want back next season</div>' +
+      '<div class="scorecard-bar">' +
+        '<div class="scorecard-bar-fill" style="width:100%;background:var(--blue-600);"></div>' +
+      '</div>' +
+      '<div class="scorecard-pct">click to see who to call</div>' +
+    '</div>';
+
     strip.innerHTML = html;
+    var seasCard = strip.querySelector('[data-roster-seasonal]');
+    if (seasCard) {
+      seasCard.addEventListener('click', function() { openSeasonalRosterModal(); });
+    }
     // Wire click handlers — venue tiles open the venue roster, low-engagement
     // tile opens the same roster modal in low-engagement mode.
     var venueCards = strip.querySelectorAll('[data-roster-venue]');
@@ -3651,9 +3746,14 @@ body {
     var initials = getInitials(emp.first_name, emp.last_name);
     var isLegacy = cand && cand.legacy_import === true;
     var isMinor = cand && cand.is_minor === true;
-    var statusPill = emp.is_active
-      ? '<span class="status-pill active">Active</span>'
-      : '<span class="status-pill inactive">Inactive</span>';
+    var statusPill;
+    if (emp.is_active) {
+      statusPill = '<span class="status-pill active">Active</span>';
+    } else if (isSeasonalHold(emp)) {
+      statusPill = '<span class="status-pill seasonal">Seasonal hold</span>';
+    } else {
+      statusPill = '<span class="status-pill inactive">Inactive</span>';
+    }
     var minorPill = isMinor ? '<span class="status-pill minor">Minor</span>' : '';
     var legacyPill = isLegacy ? '<span class="status-pill legacy">Legacy</span>' : '';
 
@@ -5180,7 +5280,14 @@ body {
     phone: 'Phone',
     shirt_size: 'Uniform shirt size',
     candidate_record: 'Candidate record',
-    is_non_event_staff: 'Non-event day staff'
+    is_non_event_staff: 'Non-event day staff',
+    employment_state: 'Employment status'
+  };
+
+  var EMPLOYMENT_STATE_LABELS = {
+    active: 'Active',
+    seasonal: 'Seasonal hold',
+    ended: 'Inactive'
   };
 
   function formatHistoryValue(fieldName, value) {
@@ -5188,6 +5295,9 @@ body {
       if (value == null || value === '') return 'venue default';
       var n = Number(value);
       return isNaN(n) ? value : '$' + n.toFixed(2);
+    }
+    if (fieldName === 'employment_state') {
+      return EMPLOYMENT_STATE_LABELS[value] || value;
     }
     if (fieldName === 'is_non_event_staff') {
       // Stored as String(bool) by logCardChange, so 'false' is a real value,
@@ -5239,6 +5349,13 @@ body {
     renderRosterModal();
   }
 
+  function openSeasonalRosterModal() {
+    state.rosterModalVenue = null;
+    state.rosterModalShowInactive = false;
+    state.rosterModalMode = 'seasonal';
+    renderRosterModal();
+  }
+
   function closeRosterModal() {
     state.rosterModalVenue = null;
     state.rosterModalShowInactive = false;
@@ -5251,12 +5368,41 @@ body {
     // low-engagement mode. Both reuse the same shell with different
     // filter + header logic.
     var isLowEng = state.rosterModalMode === 'low-engagement';
-    if (!isLowEng && !state.rosterModalVenue) return;
+    var isSeasonal = state.rosterModalMode === 'seasonal';
+    if (!isLowEng && !isSeasonal && !state.rosterModalVenue) return;
 
     var includeInactive = state.rosterModalShowInactive;
     var matched, headerHtml, emptyMsg, inactiveCount;
 
-    if (isLowEng) {
+    if (isSeasonal) {
+      // Seasonal-hold mode. Defaults to seasonal ONLY. The "include ended"
+      // toggle reuses rosterModalShowInactive and puts fired / quit / NCNS
+      // people one extra click away, so nobody gets called by accident
+      // during a scramble.
+      matched = state.employees.filter(function(e) {
+        if (e.is_active !== false) return false;
+        if (isSeasonalHold(e)) return true;
+        return includeInactive;
+      });
+      matched.sort(function(a, b) {
+        var sa = isSeasonalHold(a), sb = isSeasonalHold(b);
+        if (sa !== sb) return sa ? -1 : 1;
+        return fullName(a).localeCompare(fullName(b));
+      });
+      var seasTotal = state.employees.filter(isSeasonalHold).length;
+      inactiveCount = state.employees.filter(function(e) {
+        if (e.is_active !== false) return false;
+        return e.inactive_kind !== KIND_SEASONAL;
+      }).length;
+      headerHtml =
+        '<div class="vr-modal-header">' +
+          '<span class="vr-venue-dot" style="background:var(--blue-600);"></span>' +
+          '<span class="vr-venue-name">Seasonal hold</span>' +
+          '<span class="vr-venue-count">' + seasTotal + ' on hold</span>' +
+          '<button class="card-header-close" data-close-roster title="Close">&times;</button>' +
+        '</div>';
+      emptyMsg = 'Nobody is on seasonal hold yet.';
+    } else if (isLowEng) {
       // Low-engagement mode: every active non-NA employee with signup
       // count <= threshold, regardless of home venue.
       matched = state.employees.filter(function(e) {
@@ -5364,7 +5510,9 @@ body {
       ? '<div class="vr-toggle-row">' +
           '<label>' +
             '<input type="checkbox" data-roster-toggle-inactive' + (includeInactive ? ' checked' : '') + ' />' +
-            'Include inactive employees (' + inactiveCount + ')' +
+            (isSeasonal
+              ? 'Include ended employees \u2014 quit, fired, no-call no-show (' + inactiveCount + ')'
+              : 'Include inactive employees (' + inactiveCount + ')') +
           '</label>' +
         '</div>'
       : '';
@@ -5387,6 +5535,9 @@ body {
   }
 
   function renderRosterRow(emp) {
+    // Active / ended only. Seasonal rows never reach this — kindPill below
+    // catches them first and renders the shorter "Seasonal" label, which
+    // fits the tighter roster row better than the card header's version.
     var statusPill = emp.is_active
       ? '<span class="status-pill active">Active</span>'
       : '<span class="status-pill inactive">Inactive</span>';
@@ -5427,10 +5578,23 @@ body {
       }
     }
 
+    // Inactive rows carry a tel: link. The seasonal tile exists so somebody
+    // can find a person to call when a stand is short, and a roster you have
+    // to cross-reference against another page to get a number is not that.
+    var phoneLink = '';
+    if (!emp.is_active && emp.phone) {
+      phoneLink = '<a class="vr-row-phone" href="tel:' + escapeHtml(emp.phone) + '">' +
+        escapeHtml(formatPhone(emp.phone)) + '</a>';
+    }
+    var kindPill = isSeasonalHold(emp)
+      ? '<span class="status-pill seasonal">Seasonal</span>'
+      : statusPill;
+
     return '<div class="' + rowClass + '">' +
       '<span class="vr-row-name">' + escapeHtml(fullName(emp)) + '</span>' +
       signupBadge +
-      statusPill +
+      phoneLink +
+      kindPill +
       venueSelect +
       '<button class="card-btn" data-roster-card="' + emp.id + '" title="Open employee card">' +
         '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
@@ -5494,13 +5658,20 @@ body {
   // ---- Footer ----
   function renderCardFooter(emp, cand) {
     if (emp.is_active) {
+      // Hold sits LEFT of deactivate and is not styled as a danger action,
+      // because it is not one -- it is reversible in a click and says nothing
+      // about the person. Deactivate keeps its typed-DEACTIVATE gate.
       return '<div class="card-footer">' +
-        '<button class="btn btn-danger" data-deactivate>Deactivate employee</button>' +
+        '<div style="display:flex;gap:8px;">' +
+          '<button class="btn" data-seasonal-hold>Seasonal hold</button>' +
+          '<button class="btn btn-danger" data-deactivate>Deactivate</button>' +
+        '</div>' +
         '<button class="btn" data-close-modal>Close</button>' +
       '</div>';
     }
+    var backLabel = isSeasonalHold(emp) ? 'Bring back' : 'Reactivate employee';
     return '<div class="card-footer">' +
-      '<button class="btn btn-green" data-reactivate>Reactivate employee</button>' +
+      '<button class="btn btn-green" data-reactivate>' + backLabel + '</button>' +
       '<button class="btn" data-close-modal>Close</button>' +
     '</div>';
   }
@@ -5666,6 +5837,12 @@ body {
       });
     }
     // Deactivate / reactivate
+    var hold = root.querySelector('[data-seasonal-hold]');
+    if (hold) {
+      hold.addEventListener('click', function() {
+        openSeasonalHoldModal(emp, cand);
+      });
+    }
     var deact = root.querySelector('[data-deactivate]');
     if (deact) {
       deact.addEventListener('click', function() {
@@ -6620,11 +6797,17 @@ body {
       };
       ops.push(patchCandidate(cand.id, candBody));
     }
-    ops.push(patchEmployee(emp.id, { is_active: false, updated_at: now }));
+    ops.push(patchEmployee(emp.id, {
+      is_active: false,
+      inactive_kind: KIND_ENDED,
+      updated_at: now
+    }));
 
     Promise.all(ops).then(function() {
       // Update local state
       emp.is_active = false;
+      emp.inactive_kind = KIND_ENDED;
+      logCardChange(emp.id, 'employment_state', 'active', KIND_ENDED);
       if (cand) {
         cand.pipeline_stage = 'inactive';
         cand.deactivation_category = deactState.category;
@@ -6680,6 +6863,172 @@ body {
       console.error('Deactivate failed:', err);
       if (errEl) errEl.textContent = 'Failed to deactivate. ' + (err.message || 'Try again.');
       if (btn) { btn.disabled = false; btn.textContent = 'Deactivate'; }
+    });
+  }
+
+  // ============================================================
+  // SEASONAL HOLD — light confirm, no interrogation
+  // ------------------------------------------------------------
+  // Runs the SAME placement release and signup cleanup as deactivation, via
+  // the same two functions, so nobody on hold is left sitting on next
+  // Friday's grid. What it does NOT do is ask why: see the KIND_ block at
+  // the top of this file.
+  // ============================================================
+  var holdState = null;
+
+  function openSeasonalHoldModal(emp, cand) {
+    holdState = { emp: emp, cand: cand, placements: null, signups: null, previewError: false };
+    renderSeasonalHoldModal();
+    Promise.all([
+      releaseUpcomingPlacements(emp, { commit: false }),
+      removeUpcomingSignups(emp, { commit: false })
+    ]).then(function(res) {
+      if (!holdState || holdState.emp !== emp) return;
+      holdState.placements = (res[0] && res[0].placements) || [];
+      holdState.signups = (res[1] && res[1].signups) || [];
+      renderSeasonalHoldModal();
+    }).catch(function(err) {
+      if (err && err.authFailed) { handleAuthFailure(); return; }
+      console.warn('Hold preview failed (non-blocking):', err);
+      if (!holdState || holdState.emp !== emp) return;
+      holdState.placements = [];
+      holdState.signups = [];
+      holdState.previewError = true;
+      renderSeasonalHoldModal();
+    });
+  }
+
+  function closeSeasonalHoldModal() {
+    holdState = null;
+    document.getElementById('deactModalRoot').innerHTML = '';
+  }
+
+  function renderSeasonalHoldModal() {
+    var root = document.getElementById('deactModalRoot');
+    if (!holdState) { root.innerHTML = ''; return; }
+    var emp = holdState.emp;
+    var name = fullName(emp);
+
+    var previewHtml = '';
+    if (holdState.placements === null) {
+      previewHtml = '<div class="deact-release-block loading">Checking upcoming shifts\u2026</div>';
+    } else if (holdState.previewError) {
+      previewHtml = '<div class="deact-release-block warn">Couldn\u2019t check upcoming shifts. ' +
+        'The hold will still proceed and clear anything not yet started.</div>';
+    } else {
+      var pc = holdState.placements.length;
+      var sc = holdState.signups.length;
+      if (pc > 0 || sc > 0) {
+        var bits = [];
+        if (pc > 0) bits.push(pc + ' placement' + (pc === 1 ? '' : 's'));
+        if (sc > 0) bits.push(sc + ' future signup' + (sc === 1 ? '' : 's'));
+        var rows = holdState.placements.map(formatReleasePreviewRow).join('');
+        previewHtml = '<div class="deact-release-block">' +
+          '<div class="deact-release-head">Clearing ' + bits.join(' and ') + ':</div>' +
+          (rows ? '<ul class="deact-release-list">' + rows + '</ul>' : '') +
+        '</div>';
+      }
+    }
+
+    root.innerHTML =
+      '<div class="deact-overlay" data-hold-bg>' +
+        '<div class="deact-modal">' +
+          '<h3>Put ' + escapeHtml(name) + ' on seasonal hold?</h3>' +
+          '<p>They come off the schedule, the availability sign-up list and the ' +
+          'staffing pool \u2014 but stay in the Seasonal hold list so you can invite ' +
+          'them back next season. Their record, ratings, certifications and text ' +
+          'consent are all kept.</p>' +
+          previewHtml +
+          '<div class="deact-actions">' +
+            '<button class="btn" style="flex:1;" data-hold-cancel>Cancel</button>' +
+            '<button class="btn btn-primary" style="flex:1;" data-hold-confirm>Put on hold</button>' +
+          '</div>' +
+          '<div class="deact-err" data-hold-err></div>' +
+        '</div>' +
+      '</div>';
+
+    var bg = root.querySelector('[data-hold-bg]');
+    if (bg) {
+      bg.addEventListener('click', function(ev) {
+        if (ev.target === bg) closeSeasonalHoldModal();
+      });
+    }
+    var cancel = root.querySelector('[data-hold-cancel]');
+    if (cancel) cancel.addEventListener('click', closeSeasonalHoldModal);
+    var ok = root.querySelector('[data-hold-confirm]');
+    if (ok) ok.addEventListener('click', performSeasonalHold);
+  }
+
+  function performSeasonalHold() {
+    if (!holdState) return;
+    var emp = holdState.emp;
+    var cand = holdState.cand;
+    var btn = document.querySelector('[data-hold-confirm]');
+    var errEl = document.querySelector('[data-hold-err]');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving\u2026'; }
+    if (errEl) errEl.textContent = '';
+
+    var actor = (pcAuth.getUser && pcAuth.getUser()) || null;
+    var actorName = actor ? (actor.display_name || actor.email || 'Unknown') : 'Unknown';
+    var now = new Date().toISOString();
+
+    var ops = [patchEmployee(emp.id, {
+      is_active: false,
+      inactive_kind: KIND_SEASONAL,
+      updated_at: now
+    })];
+    if (cand && cand.id) {
+      // pipeline_stage is mirrored so the pipeline page agrees about who is
+      // working. deactivation_category is deliberately NOT written -- a hold
+      // has no reason, and stamping one would put seasonal people back into
+      // the same bucket this feature exists to get them out of.
+      ops.push(patchCandidate(cand.id, {
+        pipeline_stage: 'inactive',
+        stage_updated_at: now,
+        stage_updated_by: actorName,
+        updated_at: now
+      }));
+    }
+
+    Promise.all(ops).then(function() {
+      emp.is_active = false;
+      emp.inactive_kind = KIND_SEASONAL;
+      if (cand) { cand.pipeline_stage = 'inactive'; cand.stage_updated_at = now; }
+      logCardChange(emp.id, 'employment_state', 'active', KIND_SEASONAL);
+      return Promise.all([
+        releaseUpcomingPlacements(emp, { commit: true }).catch(function(err) {
+          if (err && err.authFailed) throw err;
+          console.warn('Hold release failed (non-blocking):', err);
+          return { released: 0, failed: true };
+        }),
+        removeUpcomingSignups(emp, { commit: true }).catch(function(err) {
+          if (err && err.authFailed) throw err;
+          console.warn('Hold signup cleanup failed (non-blocking):', err);
+          return { removed: 0, failed: true };
+        })
+      ]);
+    }).then(function(res) {
+      var rel = res[0] || { released: 0 };
+      var sig = res[1] || { removed: 0 };
+      closeSeasonalHoldModal();
+      if (rel.failed || sig.failed) {
+        showToast('On hold, but some cleanup failed \u2014 check Event Workspace', 'error');
+      } else {
+        var parts = [];
+        if (rel.released > 0) parts.push('released ' + rel.released + ' placement' + (rel.released === 1 ? '' : 's'));
+        if (sig.removed > 0) parts.push('cleared ' + sig.removed + ' signup' + (sig.removed === 1 ? '' : 's'));
+        showToast(parts.length ? ('On seasonal hold \u00b7 ' + parts.join(', ')) : 'On seasonal hold', 'success');
+      }
+      renderStatusTabs();
+      renderList();
+      renderCounts();
+      renderScorecard();
+      renderCardModal();
+    }).catch(function(err) {
+      if (err && err.authFailed) { handleAuthFailure(); return; }
+      console.error('Seasonal hold failed:', err);
+      if (errEl) errEl.textContent = 'Failed. ' + (err.message || 'Try again.');
+      if (btn) { btn.disabled = false; btn.textContent = 'Put on hold'; }
     });
   }
 
@@ -6740,10 +7089,21 @@ body {
       };
       ops.push(patchCandidate(cand.id, candBody));
     }
-    ops.push(patchEmployee(emp.id, { is_active: true, updated_at: now }));
+    // inactive_kind MUST go to NULL in the SAME patch. The CHECK constraint
+    // forbids (is_active = true AND inactive_kind IS NOT NULL), so sending
+    // is_active on its own is rejected with a 23514 and reactivation fails
+    // for every person this feature puts on hold.
+    ops.push(patchEmployee(emp.id, {
+      is_active: true,
+      inactive_kind: null,
+      updated_at: now
+    }));
 
     Promise.all(ops).then(function() {
+      var priorKind = emp.inactive_kind || KIND_ENDED;
       emp.is_active = true;
+      emp.inactive_kind = null;
+      logCardChange(emp.id, 'employment_state', priorKind, 'active');
       if (cand) {
         cand.pipeline_stage = 'active';
         cand.deactivation_category = null;
@@ -6784,9 +7144,10 @@ body {
       document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
           if (document.getElementById('deactModalRoot').innerHTML) {
+            closeSeasonalHoldModal();
             closeDeactivateModal();
             closeReactivateModal();
-          } else if (state.rosterModalVenue) {
+          } else if (state.rosterModalVenue || state.rosterModalMode !== 'venue') {
             closeRosterModal();
           } else if (state.modalEmpId) {
             closeCardModal();
