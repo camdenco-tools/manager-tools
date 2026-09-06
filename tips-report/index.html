@@ -477,6 +477,21 @@ var removedRows = {};
 var addingForSaleId = null;
 var addPending = null;
 
+// Load-generation token (Sep 2026). Every entry into loadEventsForVenue() and
+// loadEvent() bumps this and captures the value; after each await the run bails
+// if a newer load has started, and loadEvent commits nothing until the very end.
+//
+// Without it, two overlapping loadEvent() runs each reset assignmentsData = {}
+// at the top and then both push the same rows in several awaits later, so every
+// name renders twice and the pool denominator doubles. Seen at FMP on
+// 09/02/2026: tips held at $2,802 while headcount went 28 -> 56 and the rate
+// read $50.04 instead of $100.07. The database was never wrong — one X struck
+// both copies of a name because both rendered rows were the SAME row object.
+// The window opens because loadEventsForVenue() fires loadEvent() without
+// awaiting it, so a venue-pill click or dropdown change during the initial
+// auto-load starts a second run on top of the first.
+var loadSeq = 0;
+
 // ── Tip-out state (Jul 2026; widened beyond Barback Jul 21, 2026) ───────────
 // Tip-out earners are placed on the event via the Event Workspace
 // (position_assignments). They are NOT sales-stand workers and normally never
@@ -740,6 +755,7 @@ function codesForLabel(label) {
 }
 
 async function loadEventsForVenue(label) {
+  var mySeq = ++loadSeq;
   var sel = document.getElementById('event-select');
   sel.innerHTML = '<option value="">Loading...</option>';
   try {
@@ -751,7 +767,12 @@ async function loadEventsForVenue(label) {
       SUPA_URL + '/rest/v1/sales?' + venueFilter + '&select=event_date,event_name&order=event_date.desc',
       { headers: apiHeaders() }
     );
+    // A newer venue click (or a dropdown change) landed while this was in
+    // flight — drop out rather than repainting the dropdown for a venue the
+    // manager already moved off of.
+    if (mySeq !== loadSeq) return;
     var rows = await res.json();
+    if (mySeq !== loadSeq) return;
     var seen = {};
     var events = [];
     if (Array.isArray(rows)) {
@@ -781,18 +802,32 @@ async function loadEventsForVenue(label) {
 }
 
 async function loadEvent() {
+  var mySeq = ++loadSeq;
   var sel = document.getElementById('event-select');
   var val = sel.value;
   if (!val) return;
   var parts = val.split('||');
   currentEventDate = parts[0];
   currentEventName = parts[1] || null;
-  editingRowId = null; pendingEdits = {}; removedRows = {}; addingForSaleId = null; addPending = null;
-  currentEventId = null; barbacks = []; coverage = []; barbackModalName = null; barbackModalPending = {};
+  editingRowId = null; pendingEdits = {}; addingForSaleId = null; addPending = null;
+  barbackModalName = null; barbackModalPending = {};
   document.getElementById('main-content').innerHTML = '<div class="loading-card">Loading...</div>';
   document.getElementById('summary-strip').style.display = 'none';
   document.getElementById('pool-notice').style.display = 'none';
   document.getElementById('confirm-bar').style.display = 'none';
+
+  // Everything fetched below accumulates into LOCALS and is committed to the
+  // page globals in one shot at the bottom, behind a final mySeq check. That is
+  // the actual fix: previously each run reset assignmentsData/photosData/
+  // staffingRequested at the top and pushed into them several awaits later, so
+  // two overlapping runs both wrote the same rows into the same object. Nothing
+  // this run fetched can now land in a global that a newer run is also writing,
+  // and a superseded run leaves the page exactly as it found it.
+  var _sales = [], _photos = {}, _assigns = {}, _removed = {}, _reqs = {};
+  var _eventId = null, _barbacks = [], _barbackRoles = {}, _coverage = [];
+  // Dedupe backstops, keyed by primary key. Belt-and-braces: even if a guard is
+  // ever missed on a future edit, the same row physically cannot land twice.
+  var _seenPhoto = {}, _seenAssign = {};
 
   try {
     // Sales — query all venue codes that map to the current label
@@ -807,48 +842,57 @@ async function loadEvent() {
       '&select=*&order=stand.asc',
       { headers: apiHeaders() }
     );
-    salesData = await sRes.json();
-    if (!Array.isArray(salesData)) salesData = [];
+    // Bail here rather than at the bottom so a superseded run doesn't fire the
+    // remaining six requests for an event nobody is looking at any more.
+    if (mySeq !== loadSeq) return;
+    _sales = await sRes.json();
+    if (mySeq !== loadSeq) return;
+    if (!Array.isArray(_sales)) _sales = [];
 
-    var saleIds = salesData.map(function(r) { return r.id; });
+    var saleIds = _sales.map(function(r) { return r.id; });
 
     // Photos
-    photosData = {};
     if (saleIds.length) {
       var pRes = await fetch(
         SUPA_URL + '/rest/v1/sale_photos?sale_id=in.(' + saleIds.join(',') + ')&select=*&order=sort_order.asc',
         { headers: apiHeaders() }
       );
+      if (mySeq !== loadSeq) return;
       var pRows = await pRes.json();
+      if (mySeq !== loadSeq) return;
       if (Array.isArray(pRows)) {
         pRows.forEach(function(p) {
-          if (!photosData[p.sale_id]) photosData[p.sale_id] = { register:[], units:[], signin:[] };
-          if (photosData[p.sale_id][p.photo_type]) photosData[p.sale_id][p.photo_type].push(p);
+          if (_seenPhoto[p.id]) return;
+          _seenPhoto[p.id] = true;
+          if (!_photos[p.sale_id]) _photos[p.sale_id] = { register:[], units:[], signin:[] };
+          if (_photos[p.sale_id][p.photo_type]) _photos[p.sale_id][p.photo_type].push(p);
         });
       }
     }
 
     // Assignments
-    assignmentsData = {};
     if (saleIds.length) {
       var aRes = await fetch(
         SUPA_URL + '/rest/v1/sale_staff_assignments?sale_id=in.(' + saleIds.join(',') + ')&select=*&order=created_at.asc',
         { headers: apiHeaders() }
       );
+      if (mySeq !== loadSeq) return;
       var aRows = await aRes.json();
+      if (mySeq !== loadSeq) return;
       if (Array.isArray(aRows)) {
         aRows.forEach(function(a) {
-          if (!assignmentsData[a.sale_id]) assignmentsData[a.sale_id] = [];
-          assignmentsData[a.sale_id].push(a);
+          if (_seenAssign[a.id]) return;
+          _seenAssign[a.id] = true;
+          if (!_assigns[a.sale_id]) _assigns[a.sale_id] = [];
+          _assigns[a.sale_id].push(a);
           // Persisted "didn't work this cart" → show as removed on open. This is
           // what fixes the ghost-return bug: removals now survive reopening.
-          if (a.worked_cart === false) removedRows[a.id] = true;
+          if (a.worked_cart === false) _removed[a.id] = true;
         });
       }
     }
 
     // Staffing requests — try all venue codes mapped to current label
-    staffingRequested = {};
     try {
       var srCodes = codesForLabel(currentVenueLabel);
       var evVenueFilter = srCodes.length === 1
@@ -859,18 +903,22 @@ async function loadEvent() {
           '&deleted_at=is.null&select=id&order=created_at.asc&limit=1',
         { headers: apiHeaders() }
       );
+      if (mySeq !== loadSeq) return;
       var evRows = await evRes.json();
+      if (mySeq !== loadSeq) return;
       if (Array.isArray(evRows) && evRows.length) {
         var eventId = evRows[0].id;
-        currentEventId = eventId;
+        _eventId = eventId;
         var srRes = await fetch(
           SUPA_URL + '/rest/v1/staffing_requests?event_id=eq.' + eventId + '&' + evVenueFilter + '&select=stand,headcount',
           { headers: apiHeaders() }
         );
+        if (mySeq !== loadSeq) return;
         var srRows = await srRes.json();
+        if (mySeq !== loadSeq) return;
         if (Array.isArray(srRows)) {
           srRows.forEach(function(r) {
-            staffingRequested[r.stand] = (staffingRequested[r.stand] || 0) + r.headcount;
+            _reqs[r.stand] = (_reqs[r.stand] || 0) + r.headcount;
           });
         }
         // Tip-out eligible people placed on this event (Event Workspace →
@@ -883,17 +931,19 @@ async function loadEvent() {
             '&role=in.(' + encodeURIComponent(roleList) + ')&removed_at=is.null&select=staff_name,role',
             { headers: apiHeaders() }
           );
+          if (mySeq !== loadSeq) return;
           var bbRows = await bbRes.json();
+          if (mySeq !== loadSeq) return;
           if (Array.isArray(bbRows)) {
             var seen = {};
             bbRows.forEach(function(r) {
               if (r.staff_name && !seen[r.staff_name]) {
                 seen[r.staff_name] = true;
-                barbacks.push(r.staff_name);
-                barbackRoles[r.staff_name] = r.role || '';
+                _barbacks.push(r.staff_name);
+                _barbackRoles[r.staff_name] = r.role || '';
               }
             });
-            barbacks.sort();
+            _barbacks.sort();
           }
         } catch(e) {}
         // Existing barback→cart coverage for this event
@@ -903,14 +953,31 @@ async function loadEvent() {
             '&removed_at=is.null&select=*&limit=1000',
             { headers: apiHeaders() }
           );
+          if (mySeq !== loadSeq) return;
           var covRows = await covRes.json();
-          if (Array.isArray(covRows)) coverage = covRows;
+          if (mySeq !== loadSeq) return;
+          if (Array.isArray(covRows)) _coverage = covRows;
         } catch(e) {}
       }
     } catch(e) {}
 
+    // ── Commit ──────────────────────────────────────────────────────────────
+    // Single synchronous block, no awaits after this point, so a newer run can
+    // neither interleave with it nor see a half-written global.
+    if (mySeq !== loadSeq) return;
+    salesData = _sales;
+    photosData = _photos;
+    assignmentsData = _assigns;
+    removedRows = _removed;
+    staffingRequested = _reqs;
+    currentEventId = _eventId;
+    barbacks = _barbacks;
+    barbackRoles = _barbackRoles;   // was never reset per-event before; stale
+                                    // role chips could carry across events
+    coverage = _coverage;
     renderPage();
   } catch(e) {
+    if (mySeq !== loadSeq) return;
     document.getElementById('main-content').innerHTML = '<div class="loading-card">Error loading data. Check your connection.</div>';
   }
 }
