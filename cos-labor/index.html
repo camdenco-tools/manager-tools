@@ -339,6 +339,19 @@ var isLocked = false;
 var cachedSales=[],cachedPurchases=[],cachedInventory={},cachedPriorInventory={},cachedStaffing=[],cachedPayRates=[],cachedDealTemplates=[],cachedStandDeals=[],cachedBillingRates=[],cachedPayroll=[],cachedManual=[],cachedSnapshot=null,cachedEvents=[],cachedArLines=[],cachedInventoryRows=[];
 var arActualsByVenue={};
 
+/* ---- Uploaded payroll (Sep 2026) -----------------------------------
+   Actual labor now reads payroll_run_venue_lines — the per-venue split
+   produced by the Payroll Upload page — instead of the hand-typed
+   eom_payroll box. Only labor_type='variable' lines attribute to a
+   venue; fixed (salaried) and overhead (company) stay company-level and
+   are deliberately excluded here, per the P&L structure.
+   The Actual column carries WAGES ONLY. Employer tax is allocated by the
+   upload but shown on its own line, because the estimate is placements x
+   hourly rate — comparing wages to wages+burden would read as a
+   permanent ~22% overage at every venue.
+   eom_payroll survives as a fallback for weeks with no upload. */
+var cachedPayrollLines=[], uploadedPayrollByKey={};
+
 /* ---- Labor estimate v2 (Aug 2026) ----------------------------------
    Estimated labor now prices REAL placements at the REAL person's rate:
      position_assignments  ->  employee_venue_roles.pay_rate_override
@@ -523,7 +536,8 @@ async function loadAllData() {
       supa('staffing_requests?select=*&submitted_at=gte.'+p.start+'T00:00:00&submitted_at=lte.'+p.end+'T23:59:59'),
       supa('ar_invoice_lines?select=amount,ar_items!inner(cos_class),ar_invoices!inner(id,venue_code,period_start,status)&ar_invoices.status=neq.voided&ar_invoices.period_start=gte.'+p.start+'&ar_invoices.period_start=lte.'+p.end+'&limit=50000').catch(function(e){console.warn('[cos-labor] AR actuals fetch failed (non-fatal):',e);return [];}),
       supa('employees?select=id,first_name,last_name&limit=2000'),
-      supa('employee_venue_roles?select=employee_id,pay_rate_override,is_active,venues(code),roles(name)&is_active=eq.true&limit=5000')
+      supa('employee_venue_roles?select=employee_id,pay_rate_override,is_active,venues(code),roles(name)&is_active=eq.true&limit=5000'),
+      supa('payroll_run_venue_lines?select=venue_code,labor_type,regular_pay,ot_pay,employer_tax_alloc,payroll_runs!inner(pay_period_start,deleted_at)&payroll_runs.deleted_at=is.null&labor_type=eq.variable&payroll_runs.pay_period_start=gte.'+p.start+'&payroll_runs.pay_period_start=lte.'+p.end+'&limit=5000').catch(function(e){console.warn('[cos-labor] uploaded payroll fetch failed (non-fatal):',e);return [];})
     ]);
     cachedSales=Array.isArray(results[0])?results[0]:[];cachedPurchases=Array.isArray(results[1])?results[1]:[];
     var currentInv=Array.isArray(results[2])?results[2]:[];cachedInventoryRows=currentInv;cachedDealTemplates=Array.isArray(results[3])?results[3]:[];
@@ -534,6 +548,8 @@ async function loadAllData() {
     cachedStaffing=Array.isArray(results[11])?results[11]:[];
     cachedArLines=Array.isArray(results[12])?results[12]:[];
     buildLaborIndexes(Array.isArray(results[13])?results[13]:[], Array.isArray(results[14])?results[14]:[]);
+    cachedPayrollLines=Array.isArray(results[15])?results[15]:[];
+    buildUploadedPayroll();
     await loadPlacements(p);
     arActualsByVenue=buildArActuals(); logArActuals(p);
     isLocked=!!cachedSnapshot;
@@ -552,6 +568,23 @@ async function loadAllData() {
       msg.replace(/</g,'&lt;')+
       '</code><br><br>See browser console for more detail.</div>';
   }
+}
+
+/* Uploaded payroll index: "venueCode|weekStart" -> {wages, ertax}.
+   Multiple lines can share a venue-week (different labor rows in one run),
+   so amounts accumulate rather than overwrite. */
+function buildUploadedPayroll() {
+  uploadedPayrollByKey = {};
+  (cachedPayrollLines || []).forEach(function(l) {
+    var run = l.payroll_runs;
+    if (!run || !run.pay_period_start) return;
+    var vc = resolveVenueCode(l.venue_code);
+    if (vc === '__company__' || vc === '__unresolved__') return;
+    var key = vc + '|' + run.pay_period_start;
+    if (!uploadedPayrollByKey[key]) uploadedPayrollByKey[key] = { wages: 0, ertax: 0 };
+    uploadedPayrollByKey[key].wages += (parseFloat(l.regular_pay || 0) + parseFloat(l.ot_pay || 0));
+    uploadedPayrollByKey[key].ertax += parseFloat(l.employer_tax_alloc || 0);
+  });
 }
 
 /* AR-derived actuals — sums stored (signed) line amounts per venue by cos_class. 'exclude' and unclassified skipped. */
@@ -811,8 +844,21 @@ function buildVenueData(venueCode) {
   var transferEntry=cachedManual.filter(function(m){return m.venue===venueCode&&m.fiscal_period===pk&&m.entry_type==='transfer';});
   var transfers=transferEntry.length>0?parseFloat(transferEntry[0].amount||0):0;var endInv=cachedInventory[venueCode]||0;var consumption=begInv+totalPurchases+transfers-endInv;
   var estPayrollWeeks=weeks.map(function(w){return calcEstimatedLabor(venueCode,w.start,w.end);});var estPayrollTotal=estPayrollWeeks.reduce(function(s,v){return s+v;},0);
-  var actPayrollWeeks=weeks.map(function(w){var entry=cachedPayroll.filter(function(pr){return pr.venue===venueCode&&pr.week_start===w.start;});return entry.length>0?parseFloat(entry[0].amount||0):null;});
+  /* Uploaded wins over manual. The manual box was hand-transcribed and is
+     known to carry errors the upload does not (Aug 10: ACCC's wages were
+     typed into FMP). It stays only as a fallback for un-uploaded weeks. */
+  var actPayrollSource=[];
+  var erTaxWeeks=[];
+  var actPayrollWeeks=weeks.map(function(w){
+    var up=uploadedPayrollByKey[venueCode+'|'+w.start];
+    if(up){actPayrollSource.push('uploaded');erTaxWeeks.push(Math.round(up.ertax*100)/100);return Math.round(up.wages*100)/100;}
+    erTaxWeeks.push(0);
+    var entry=cachedPayroll.filter(function(pr){return pr.venue===venueCode&&pr.week_start===w.start;});
+    if(entry.length>0){actPayrollSource.push('manual');return parseFloat(entry[0].amount||0);}
+    actPayrollSource.push(null);return null;
+  });
   var actPayrollTotal=actPayrollWeeks.reduce(function(s,v){return s+(v||0);},0);var hasAnyPayroll=actPayrollWeeks.some(function(v){return v!==null;});
+  var erTaxTotal=erTaxWeeks.reduce(function(s,v){return s+v;},0);
   var estLaborCredit=calcEstimatedLaborCredit(venueCode);var lcEntry=cachedManual.filter(function(m){return m.venue===venueCode&&m.fiscal_period===pk&&m.entry_type==='labor_credit';});
   var ar=arActualsByVenue[venueCode]||null;var hasAr=!!ar;var arCos=ar?ar.cos_relatable:0;var arOther=ar?ar.other_sales:0;var arLabor=ar?ar.labor_credit:0;var arInvoiceCount=ar?ar.invoiceCount:0;
   var laborCreditOverride=lcEntry.length>0?parseFloat(lcEntry[0].amount):null;
@@ -827,16 +873,16 @@ function buildVenueData(venueCode) {
   var activeTotalSales=activeCosRelatable+activeOtherSales;
   var cosPercent=activeCosRelatable>0?consumption/activeCosRelatable:0;var laborPercent=activeTotalSales>0?actPayrollTotal/activeTotalSales:0;
   var correctedLabor=actPayrollTotal-laborCredit;var correctedLaborPct=activeCosRelatable>0?correctedLabor/activeCosRelatable:0;var payrollVariance=actPayrollTotal-estPayrollTotal;
-  return {venueCode:venueCode,cosRelatable:cosRelatable,otherSales:otherSalesTotal,totalSales:totalSales,begInv:begInv,weeklyPurchases:weeklyPurchases,totalPurchases:totalPurchases,allInvoices:allInvoices,transfers:transfers,endInv:endInv,consumption:consumption,cosPercent:cosPercent,weeks:weeks,estPayrollWeeks:estPayrollWeeks,estPayrollTotal:estPayrollTotal,actPayrollWeeks:actPayrollWeeks,actPayrollTotal:actPayrollTotal,hasAnyPayroll:hasAnyPayroll,laborPercent:laborPercent,estLaborCredit:estLaborCredit,laborCreditOverride:laborCreditOverride,laborCredit:laborCredit,lcNote:lcNote,lcEnteredBy:lcEnteredBy,correctedLabor:correctedLabor,correctedLaborPct:correctedLaborPct,payrollVariance:payrollVariance,actualCosRevenue:actualCosRevenue,actualOtherRevenue:actualOtherRevenue,actRevEnteredBy:actRevEnteredBy,activeCosRelatable:activeCosRelatable,activeOtherSales:activeOtherSales,activeTotalSales:activeTotalSales,hasAr:hasAr,arCos:arCos,arOther:arOther,arLabor:arLabor,arInvoiceCount:arInvoiceCount,cosSource:cosSource,otherSource:otherSource,laborCreditSource:laborCreditSource,salesDiag:salesDiag};
+  return {venueCode:venueCode,cosRelatable:cosRelatable,otherSales:otherSalesTotal,totalSales:totalSales,begInv:begInv,weeklyPurchases:weeklyPurchases,totalPurchases:totalPurchases,allInvoices:allInvoices,transfers:transfers,endInv:endInv,consumption:consumption,cosPercent:cosPercent,weeks:weeks,estPayrollWeeks:estPayrollWeeks,estPayrollTotal:estPayrollTotal,actPayrollWeeks:actPayrollWeeks,actPayrollTotal:actPayrollTotal,hasAnyPayroll:hasAnyPayroll,actPayrollSource:actPayrollSource,erTaxWeeks:erTaxWeeks,erTaxTotal:erTaxTotal,laborPercent:laborPercent,estLaborCredit:estLaborCredit,laborCreditOverride:laborCreditOverride,laborCredit:laborCredit,lcNote:lcNote,lcEnteredBy:lcEnteredBy,correctedLabor:correctedLabor,correctedLaborPct:correctedLaborPct,payrollVariance:payrollVariance,actualCosRevenue:actualCosRevenue,actualOtherRevenue:actualOtherRevenue,actRevEnteredBy:actRevEnteredBy,activeCosRelatable:activeCosRelatable,activeOtherSales:activeOtherSales,activeTotalSales:activeTotalSales,hasAr:hasAr,arCos:arCos,arOther:arOther,arLabor:arLabor,arInvoiceCount:arInvoiceCount,cosSource:cosSource,otherSource:otherSource,laborCreditSource:laborCreditSource,salesDiag:salesDiag};
 }
 
 /* Merge venue data */
 function mergeVenueData(codes) {
   var all=codes.map(function(c){return buildVenueData(c);});if(all.length===1)return all[0];
-  var merged={venueCode:'COMBINED',cosRelatable:0,otherSales:0,totalSales:0,begInv:0,totalPurchases:0,transfers:0,endInv:0,consumption:0,weeklyPurchases:[],allInvoices:[],weeks:all[0].weeks,estPayrollWeeks:[],estPayrollTotal:0,actPayrollWeeks:[],actPayrollTotal:0,hasAnyPayroll:false,estLaborCredit:0,laborCreditOverride:null,laborCredit:0,correctedLabor:0,lcNote:null,lcEnteredBy:null,hasAr:false,arCos:0,arOther:0,arLabor:0,arInvoiceCount:0,activeCosRelatable:0,activeOtherSales:0,cosSource:'estimate',otherSource:'estimate',laborCreditSource:'estimate',salesDiag:{totalSaleRows:0,grossSales:0,unmatchedSaleCount:0,unmatchedGross:0,unmatchedStands:{}}};
-  var numWeeks=merged.weeks.length;for(var w=0;w<numWeeks;w++){merged.weeklyPurchases.push({label:merged.weeks[w].label,start:merged.weeks[w].start,end:merged.weeks[w].end,total:0,invoices:[]});merged.estPayrollWeeks.push(0);merged.actPayrollWeeks.push(null);}
+  var merged={venueCode:'COMBINED',cosRelatable:0,otherSales:0,totalSales:0,begInv:0,totalPurchases:0,transfers:0,endInv:0,consumption:0,weeklyPurchases:[],allInvoices:[],weeks:all[0].weeks,estPayrollWeeks:[],estPayrollTotal:0,actPayrollWeeks:[],actPayrollTotal:0,hasAnyPayroll:false,actPayrollSource:[],erTaxWeeks:[],erTaxTotal:0,estLaborCredit:0,laborCreditOverride:null,laborCredit:0,correctedLabor:0,lcNote:null,lcEnteredBy:null,hasAr:false,arCos:0,arOther:0,arLabor:0,arInvoiceCount:0,activeCosRelatable:0,activeOtherSales:0,cosSource:'estimate',otherSource:'estimate',laborCreditSource:'estimate',salesDiag:{totalSaleRows:0,grossSales:0,unmatchedSaleCount:0,unmatchedGross:0,unmatchedStands:{}}};
+  var numWeeks=merged.weeks.length;for(var w=0;w<numWeeks;w++){merged.weeklyPurchases.push({label:merged.weeks[w].label,start:merged.weeks[w].start,end:merged.weeks[w].end,total:0,invoices:[]});merged.estPayrollWeeks.push(0);merged.actPayrollWeeks.push(null);merged.actPayrollSource.push(null);merged.erTaxWeeks.push(0);}
   var hasAnyOverride=false;var totalOverride=0;
-  all.forEach(function(vd){merged.cosRelatable+=vd.cosRelatable;merged.otherSales+=vd.otherSales;merged.totalSales+=vd.totalSales;merged.begInv+=vd.begInv;merged.totalPurchases+=vd.totalPurchases;merged.transfers+=vd.transfers;merged.endInv+=vd.endInv;merged.consumption+=vd.consumption;merged.allInvoices=merged.allInvoices.concat(vd.allInvoices);merged.estPayrollTotal+=vd.estPayrollTotal;merged.actPayrollTotal+=vd.actPayrollTotal;merged.estLaborCredit+=vd.estLaborCredit;if(vd.hasAnyPayroll)merged.hasAnyPayroll=true;if(vd.hasAr)merged.hasAr=true;merged.arCos+=vd.arCos;merged.arOther+=vd.arOther;merged.arLabor+=vd.arLabor;merged.arInvoiceCount+=vd.arInvoiceCount;merged.activeCosRelatable+=vd.activeCosRelatable;merged.activeOtherSales+=vd.activeOtherSales;merged.laborCredit+=vd.laborCredit;for(var w=0;w<numWeeks;w++){merged.weeklyPurchases[w].total+=vd.weeklyPurchases[w].total;merged.weeklyPurchases[w].invoices=merged.weeklyPurchases[w].invoices.concat(vd.weeklyPurchases[w].invoices);merged.estPayrollWeeks[w]+=vd.estPayrollWeeks[w];if(vd.actPayrollWeeks[w]!==null){if(merged.actPayrollWeeks[w]===null)merged.actPayrollWeeks[w]=0;merged.actPayrollWeeks[w]+=vd.actPayrollWeeks[w];}}
+  all.forEach(function(vd){merged.cosRelatable+=vd.cosRelatable;merged.otherSales+=vd.otherSales;merged.totalSales+=vd.totalSales;merged.begInv+=vd.begInv;merged.totalPurchases+=vd.totalPurchases;merged.transfers+=vd.transfers;merged.endInv+=vd.endInv;merged.consumption+=vd.consumption;merged.allInvoices=merged.allInvoices.concat(vd.allInvoices);merged.estPayrollTotal+=vd.estPayrollTotal;merged.actPayrollTotal+=vd.actPayrollTotal;merged.erTaxTotal+=vd.erTaxTotal;for(var sw=0;sw<numWeeks;sw++){merged.erTaxWeeks[sw]+=(vd.erTaxWeeks[sw]||0);if(vd.actPayrollSource[sw]==='uploaded')merged.actPayrollSource[sw]='uploaded';else if(vd.actPayrollSource[sw]==='manual'&&!merged.actPayrollSource[sw])merged.actPayrollSource[sw]='manual';}merged.estLaborCredit+=vd.estLaborCredit;if(vd.hasAnyPayroll)merged.hasAnyPayroll=true;if(vd.hasAr)merged.hasAr=true;merged.arCos+=vd.arCos;merged.arOther+=vd.arOther;merged.arLabor+=vd.arLabor;merged.arInvoiceCount+=vd.arInvoiceCount;merged.activeCosRelatable+=vd.activeCosRelatable;merged.activeOtherSales+=vd.activeOtherSales;merged.laborCredit+=vd.laborCredit;for(var w=0;w<numWeeks;w++){merged.weeklyPurchases[w].total+=vd.weeklyPurchases[w].total;merged.weeklyPurchases[w].invoices=merged.weeklyPurchases[w].invoices.concat(vd.weeklyPurchases[w].invoices);merged.estPayrollWeeks[w]+=vd.estPayrollWeeks[w];if(vd.actPayrollWeeks[w]!==null){if(merged.actPayrollWeeks[w]===null)merged.actPayrollWeeks[w]=0;merged.actPayrollWeeks[w]+=vd.actPayrollWeeks[w];}}
     if(vd.salesDiag){merged.salesDiag.totalSaleRows+=vd.salesDiag.totalSaleRows;merged.salesDiag.grossSales+=vd.salesDiag.grossSales;merged.salesDiag.unmatchedSaleCount+=vd.salesDiag.unmatchedSaleCount;merged.salesDiag.unmatchedGross+=vd.salesDiag.unmatchedGross;Object.keys(vd.salesDiag.unmatchedStands).forEach(function(k){if(!merged.salesDiag.unmatchedStands[k])merged.salesDiag.unmatchedStands[k]={count:0,gross:0};merged.salesDiag.unmatchedStands[k].count+=vd.salesDiag.unmatchedStands[k].count;merged.salesDiag.unmatchedStands[k].gross+=vd.salesDiag.unmatchedStands[k].gross;});}
   });
   merged.laborCreditOverride=null;merged.laborCreditSource=merged.hasAr?'ar':'estimate';
@@ -1021,7 +1067,14 @@ function renderReport() {
       ' not staffed through the Event Workspace, so there is nothing to estimate against. Actual payroll is unaffected.</div></div></div>';
   }
   html+='<div class="lg"><div class="lg-header"><div>Week</div><div>Estimated</div><div>Actual</div></div>';
-  for(var li=0;li<weeks.length;li++){html+='<div class="lg-row"><div class="lg-wk">'+weeks[li].label+'</div><div class="lg-est">'+fmtMoney(data.estPayrollWeeks[li])+'</div>';if(isSingleVenue&&!isLocked){var actVal=data.actPayrollWeeks[li]!==null?data.actPayrollWeeks[li]:'';html+='<div><input class="lg-act-input" type="number" step="0.01" id="payroll-'+li+'" value="'+actVal+'" placeholder="$0" data-week="'+weeks[li].start+'" data-end="'+weeks[li].end+'"></div>';}else{html+='<div class="lg-act">'+(data.actPayrollWeeks[li]!==null?fmtMoney(data.actPayrollWeeks[li]):'--')+'</div>';}html+='</div>';}
+  for(var li=0;li<weeks.length;li++){html+='<div class="lg-row"><div class="lg-wk">'+weeks[li].label+'</div><div class="lg-est">'+fmtMoney(data.estPayrollWeeks[li])+'</div>';
+    var src=data.actPayrollSource[li];
+    /* An uploaded week is not editable here — the Payroll Upload page owns it.
+       No input means savePayroll skips it, so a stale eom_payroll row can
+       never silently overwrite the real number. */
+    if(src==='uploaded'){html+='<div class="lg-act">'+fmtMoney(data.actPayrollWeeks[li])+' <span class="lc-badge">uploaded</span></div>';}
+    else if(isSingleVenue&&!isLocked){var actVal=data.actPayrollWeeks[li]!==null?data.actPayrollWeeks[li]:'';html+='<div><input class="lg-act-input" type="number" step="0.01" id="payroll-'+li+'" value="'+actVal+'" placeholder="$0" data-week="'+weeks[li].start+'" data-end="'+weeks[li].end+'"></div>';}
+    else{html+='<div class="lg-act">'+(data.actPayrollWeeks[li]!==null?fmtMoney(data.actPayrollWeeks[li]):'--')+'</div>';}html+='</div>';}
   html+='<div class="lg-row lg-tot"><div>Total</div><div>'+fmtMoney(data.estPayrollTotal)+'</div><div>'+fmtMoney(data.actPayrollTotal)+'</div></div></div>';
 
   if(isSingleVenue&&!isLocked){html+='<div class="save-row"><button class="btn-dark" onclick="savePayroll(\''+venueCode+'\')">Save payroll</button>';var prEntry=cachedPayroll.filter(function(pr){return pr.venue===venueCode;});if(prEntry.length>0){var lastSaved=prEntry[prEntry.length-1];html+='<button class="btn-outline" onclick="editPayroll(\''+venueCode+'\')">Edit (admin)</button><div class="save-ts">Last saved by '+(lastSaved.entered_by||'unknown')+'</div>';}html+='</div>';}
@@ -1041,7 +1094,9 @@ function renderReport() {
   if(data.hasAr){html+='<div class="lc-row"><div class="lc-k">From AR</div><div class="lc-v dim">'+fmtMoney(data.arLabor)+'</div></div>';}
   if(data.laborCreditSource==='manual'){html+='<div class="lc-row"><div class="lc-k">Active value</div><div class="lc-v">'+fmtMoney(data.laborCredit)+'</div><span class="lc-badge">manual override</span></div>';if(data.lcEnteredBy){html+='<div class="lc-note">Override by '+data.lcEnteredBy+'</div>';}}else if(data.laborCreditSource==='ar'){html+='<div class="lc-row"><div class="lc-k">Active value</div><div class="lc-v">'+fmtMoney(data.laborCredit)+'</div><span class="lc-badge">from AR</span></div>';}else{html+='<div class="lc-row"><div class="lc-k">Active value</div><div class="lc-v">'+fmtMoney(data.laborCredit)+'</div></div>';}html+='</div>';
 
-  html+='<table class="tb"><thead><tr><th>Labor summary</th><th>Amount</th></tr></thead><tbody><tr><td>Total payroll (actual)</td><td>'+fmtMoney(data.actPayrollTotal)+'</td></tr><tr><td>Labor credit</td><td>-'+fmtMoney(data.laborCredit)+'</td></tr><tr class="tot"><td>Corrected labor</td><td>'+fmtMoney(data.correctedLabor)+'</td></tr></tbody></table>';
+  html+='<table class="tb"><thead><tr><th>Labor summary</th><th>Amount</th></tr></thead><tbody><tr><td>Total payroll (actual)</td><td>'+fmtMoney(data.actPayrollTotal)+'</td></tr>';
+  if(data.erTaxTotal>0){html+='<tr class="sub"><td style="padding-left:20px;">employer payroll taxes (not in the figures above)</td><td>'+fmtMoney(data.erTaxTotal)+'</td></tr>';}
+  html+='<tr><td>Labor credit</td><td>-'+fmtMoney(data.laborCredit)+'</td></tr><tr class="tot"><td>Corrected labor</td><td>'+fmtMoney(data.correctedLabor)+'</td></tr></tbody></table>';
 
   var clPctColor=data.correctedLaborPct>0.35?'#A32D2D':data.correctedLaborPct>0.25?'#BA7517':'#3B6D11';
   html+='<div class="pct-row"><div class="pct-label">Corrected labor %</div><div class="pct-val" style="color:'+clPctColor+';">'+fmtPct(data.correctedLaborPct)+'</div><div class="pct-bar"><div class="pct-fill" style="width:'+Math.min(Math.abs(data.correctedLaborPct)*100,100)+'%;background:'+clPctColor+';"></div></div><div class="pct-note">corrected labor / COS relatable sales</div></div>';
