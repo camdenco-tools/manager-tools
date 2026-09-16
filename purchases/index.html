@@ -247,6 +247,13 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: #1a1a1a
 }
 .vp-unmatched { margin-top: 6px; font-size: 11px; color: #BA7517; font-style: italic; }
 
+/* Food vs non-food choice on the invoice form */
+.cost-type-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.cost-type-btn { padding: 10px; border: 1.5px solid #e0e0e0; border-radius: 10px; background: #fafafa; font-size: 13px; font-weight: 600; color: #555; cursor: pointer; text-align: left; font-family: inherit; line-height: 1.3; }
+.cost-type-btn span { display: block; font-size: 11px; font-weight: 400; color: #999; margin-top: 2px; }
+.cost-type-btn.active { border-color: #1a1a1a; background: white; color: #1a1a1a; }
+#cost-type-expense.active { border-color: #BA7517; background: #FAEEDA; color: #633806; }
+
 /* Monthly summary */
 .month-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px; }
 .month-label { font-size: 10px; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 0.08em; }
@@ -879,6 +886,14 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: #1a1a1a
             <div class="vp-selected" id="vendor-selected" style="display:none;"></div>
             <div class="vp-unmatched" id="vendor-unmatched" style="display:none;"></div>
           </div>
+          <div class="field" id="cost-type-field">
+            <label>What is this? <span style="color:#c0392b;">*</span></label>
+            <div class="cost-type-toggle">
+              <button type="button" class="cost-type-btn" id="cost-type-food" onclick="setCostType('food')">Food &amp; supplies<span>Counts toward the venue's food cost</span></button>
+              <button type="button" class="cost-type-btn" id="cost-type-expense" onclick="setCostType('expense')">Not food &mdash; expense<span>Equipment, repairs, services &mdash; office picks the category</span></button>
+            </div>
+            <input type="hidden" id="cost-type" value="">
+          </div>
           <div class="field"><label id="inv-number-label">Invoice / ticket # <span style="font-weight:400;color:#bbb;">(optional)</span></label><input type="text" id="inv-number" placeholder="e.g. 5237, ticket 11086912" autocomplete="off"></div>
           <div class="field"><label>Amount ($)</label><input type="number" id="amount" placeholder="0.00" step="0.01" min="0" oninput="updateSplitStatus()"></div>
 
@@ -1263,6 +1278,7 @@ function setMode(mode) {
   var btn = document.getElementById('submit-btn');
   if (mode === 'transfer') { btn.textContent = 'Log Transfer'; btn.className = 'submit-btn amber'; }
   else if (mode === 'expense') { btn.textContent = 'Send to Office'; btn.className = 'submit-btn amber'; }
+  else if (document.getElementById('cost-type').value === 'expense') { btn.textContent = 'Send to Office'; btn.className = 'submit-btn amber'; }
   else { btn.textContent = 'Submit Purchase'; btn.className = 'submit-btn'; }
   document.getElementById('error-msg').style.display = 'none';
 
@@ -1903,6 +1919,27 @@ function updateApBillHint() {
   hint.textContent = 'Net ' + terms + ' -- due ' + fmtDateDisplay(due) + '. Uncheck if you paid this at the register.';
 }
 
+// Food vs non-food. Non-food never writes to purchases, so it can't land in
+// a venue's food cost. Split is hidden (expenses are company-wide) and venue
+// becomes optional reference text.
+function setCostType(t) {
+  document.getElementById('cost-type').value = t;
+  document.getElementById('cost-type-food').classList.toggle('active', t === 'food');
+  document.getElementById('cost-type-expense').classList.toggle('active', t === 'expense');
+  var isExp = t === 'expense';
+  var splitRow = document.querySelector('.split-toggle-row');
+  if (splitRow) splitRow.style.display = isExp ? 'none' : 'flex';
+  var splitCb = document.getElementById('split-toggle');
+  if (isExp && splitCb.checked) { splitCb.checked = false; onSplitToggleChange(); }
+  var venueLabel = document.querySelector('#single-venue-block label');
+  if (venueLabel) {
+    venueLabel.innerHTML = isExp
+      ? 'Venue <span style="font-weight:400;color:#bbb;">(optional -- for reference)</span>'
+      : 'Venue';
+  }
+  setMode(currentMode);
+}
+
 // Create a payable when an invoiced-vendor invoice is logged. The COS purchase
 // is the source of truth -- a bill-insert failure NEVER rolls back the purchase;
 // we return a warning suffix instead. Never called from transfer / expense / recon.
@@ -2110,6 +2147,17 @@ async function submitInvoice(skipDupCheck) {
     return;
   }
 
+  var costType = document.getElementById('cost-type').value;
+  if (!costType) {
+    errEl.textContent = 'Pick whether this is food & supplies or a non-food expense.';
+    errEl.style.display = 'block';
+    return;
+  }
+  if (costType === 'expense') {
+    await submitInvoiceAsExpense({ date: date, vendor: vendor, vendorId: vendorId, amount: amount, note: note, invoiceNumber: invoiceNumber });
+    return;
+  }
+
   var venue = null;
   var splitVenue1 = null, splitVenue2 = null, splitAmount1 = 0, splitAmount2 = 0;
 
@@ -2238,6 +2286,142 @@ async function submitInvoice(skipDupCheck) {
     errEl.textContent = 'Something went wrong -- try again.';
     errEl.style.display = 'block';
     btn.disabled = false; btn.textContent = 'Submit Purchase';
+  }
+}
+
+// Non-food invoice. Two routes:
+//   Needs to be paid (invoiced vendor + box checked) -> uncategorized expenses
+//     row + AP bill linked with source='expense'. Check Writer pays it; the
+//     office categorizes it on the P&L "(uncategorized)" line.
+//   Paid at the register -> existing manager_upload flow on bank_charges. The
+//     card charge will hit the statement; categorizing there is the one record.
+async function submitInvoiceAsExpense(o) {
+  var errEl = document.getElementById('error-msg');
+  var venue = document.getElementById('venue-sel').value || null;
+  var vendorRow = null;
+  for (var i = 0; i < knownVendors.length; i++) {
+    if (knownVendors[i].id === o.vendorId) { vendorRow = knownVendors[i]; break; }
+  }
+  var billCheck = document.getElementById('ap-bill-check');
+  var isBilled = !!(vendorRow && vendorRow.payment_type === 'invoiced' && billCheck && billCheck.checked);
+
+  if (!invoiceFiles.length) {
+    errEl.textContent = 'Attach the invoice or receipt -- the office needs it to pick the expense category.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  var btn = document.getElementById('submit-btn');
+  btn.disabled = true; btn.textContent = 'Saving...';
+  try {
+    var hdrs = apiHeaders();
+    var jsonHdrs = Object.assign({}, hdrs, {'Content-Type': 'application/json', 'Prefer': 'return=minimal'});
+    var id = crypto.randomUUID();
+
+    var photoUrl = await uploadPhoto(invoiceFiles[0], id + '-p1.' + invoiceFiles[0].name.split('.').pop());
+    if (!photoUrl) throw new Error('Photo upload failed');
+    var extraUrls = [];
+    for (var p = 1; p < invoiceFiles.length; p++) {
+      var pu = await uploadPhoto(invoiceFiles[p], id + '-p' + (p + 1) + '.' + invoiceFiles[p].name.split('.').pop());
+      if (pu) extraUrls.push(pu);
+    }
+
+    var userName = 'unknown';
+    if (typeof pcAuth !== 'undefined') { var usr = pcAuth.getUser(); if (usr) userName = usr.display_name; }
+
+    var noteParts = ['Non-food invoice'];
+    if (venue) noteParts.push(venue);
+    if (o.invoiceNumber) noteParts.push('Inv #' + o.invoiceNumber);
+    if (o.note) noteParts.push(o.note);
+    var fullNote = noteParts.join(' \u00b7 ');
+    if (extraUrls.length) fullNote += '\n[Additional pages: ' + extraUrls.join(' , ') + ']';
+
+    var detail;
+
+    if (isBilled) {
+      var expRes = await fetch(SUPA_URL + '/rest/v1/expenses', {
+        method: 'POST', headers: jsonHdrs,
+        body: JSON.stringify({
+          id: id,
+          charge_date: o.date,
+          vendor_name: o.vendor,
+          amount: o.amount,
+          category_id: null,
+          notes: fullNote,
+          photo_url: photoUrl,
+          created_by: userName
+        })
+      });
+      if (!expRes.ok) throw new Error(await expRes.text());
+
+      var terms = (vendorRow.default_terms_days != null ? parseInt(vendorRow.default_terms_days) : 30);
+      if (isNaN(terms)) terms = 30;
+      var dueDate = addDays(o.date, terms);
+      var billId = crypto.randomUUID();
+      var billRes = await fetch(SUPA_URL + '/rest/v1/ap_bills', {
+        method: 'POST', headers: jsonHdrs,
+        body: JSON.stringify({
+          id: billId,
+          vendor_id: o.vendorId,
+          vendor_name: o.vendor,
+          invoice_number: o.invoiceNumber || null,
+          bill_date: o.date,
+          due_date: dueDate,
+          total_amount: o.amount,
+          venue: venue,
+          source: 'expense',
+          source_id: id,
+          invoice_photo_url: photoUrl,
+          notes: fullNote,
+          created_by: userName
+        })
+      });
+      var billMsg;
+      if (!billRes.ok) {
+        console.error('[purchases] expense bill create failed', await billRes.text());
+        billMsg = '\n\n(!) Bill entry did not save -- tell the office so it gets tracked.';
+      } else {
+        notifyBillCreated(billId);
+        billMsg = '\nBill created -- due ' + fmtDateDisplay(dueDate);
+      }
+      detail = o.vendor + '\n$' + fmtMoney(o.amount) + (venue ? '\n' + venue : '') + billMsg +
+        '\n\nLogged as an expense, not food cost. The office will pick the category.';
+    } else {
+      var bcRes = await fetch(SUPA_URL + '/rest/v1/bank_charges', {
+        method: 'POST', headers: jsonHdrs,
+        body: JSON.stringify({
+          id: id,
+          charge_date: o.date,
+          vendor_name: o.vendor,
+          amount: o.amount,
+          venue: venue,
+          batch_month: o.date.slice(0, 7),
+          status: 'returned',
+          return_reason: 'manager_upload',
+          return_note: fullNote,
+          returned_by: userName,
+          returned_at: new Date().toISOString(),
+          photo_url: photoUrl,
+          uploaded_by: userName,
+          raw_description: 'Manager-uploaded expense: ' + o.vendor
+        })
+      });
+      if (!bcRes.ok) throw new Error(await bcRes.text());
+      detail = o.vendor + '\n$' + fmtMoney(o.amount) + (venue ? '\n' + venue : '') +
+        '\n\nPaid at the register -- sent to the office to categorize. Not counted as food cost.';
+    }
+
+    document.getElementById('form-card').style.display = 'none';
+    var sc = document.getElementById('success-card');
+    sc.className = 'success-card amber-success'; sc.style.display = 'block';
+    document.getElementById('success-title').textContent = 'Sent to the office!';
+    document.getElementById('success-detail').textContent = detail;
+  } catch (e) {
+    console.error('[purchases] non-food invoice failed', e);
+    errEl.textContent = 'Something went wrong -- try again.';
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    setMode(currentMode);
   }
 }
 
@@ -2486,6 +2670,11 @@ function resetForm() {
   document.getElementById('note').value = '';
   document.getElementById('inv-number').value = '';
   updateApBillBlock(null);
+  document.getElementById('cost-type').value = '';
+  document.getElementById('cost-type-food').classList.remove('active');
+  document.getElementById('cost-type-expense').classList.remove('active');
+  document.querySelector('.split-toggle-row').style.display = 'flex';
+  document.querySelector('#single-venue-block label').textContent = 'Venue';
   document.getElementById('split-toggle').checked = false;
   document.getElementById('split-venue-1').value = '';
   document.getElementById('split-venue-2').value = '';
