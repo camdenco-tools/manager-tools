@@ -1419,6 +1419,11 @@
   // PRINT GATE
   // =====================================================================
   function printGate() {
+    // Lock: once a check is logged, the only way forward is the post-print banner
+    // (Print again / Reprint as new # / All good) or Clear. Prevents double-logging.
+    if (state.lastPrint && state.lastPrint.registerId) {
+      return { ok: false, reason: 'Already logged — use Print again or All good' };
+    }
     var payee = document.getElementById('fldPayee').value.trim();
     var amt   = parseAmount(document.getElementById('fldAmount').value);
     var dateV = document.getElementById('fldDate').value;
@@ -1656,7 +1661,10 @@
         if (btn) { btn.disabled = false; btn.textContent = '🖨 Print & log check'; }
         updatePrintEnabled();
         if (state.mode === 'report') refreshApprovedReports();
-        if (state.mode === 'ap_bill') refreshApprovedBills();
+        // On success, defer the AP refresh until the banner is dismissed; refreshing
+        // now drops the just-paid bills from state and breaks the multi-invoice
+        // selection (this caused the #2764 single-bill duplicate).
+        if (state.mode === 'ap_bill' && !state.lastPrint) refreshApprovedBills();
         refreshRecentChecks();
       });
   }
@@ -1750,6 +1758,7 @@
   // POST-PRINT BANNER  (Reprint / Edit number / All good)
   // =====================================================================
   function renderPostPrintBanner() {
+    updatePrintEnabled();   // re-evaluate the post-print lock on every banner change
     var banner = document.getElementById('postPrintBanner');
     if (!banner) return;
     var lp = state.lastPrint;
@@ -1767,9 +1776,10 @@
       '<div class="pp-head">' +
         '<span>✓ Printed check #' + esc(lp.checkNumber) + ' to ' + esc(lp.payee) + ' for ' + esc(fmtMoney(lp.amount)) + multiNote + (lp.isReprint ? ' <em>(reprint)</em>' : '') + '</span>' +
       '</div>' +
-      '<div>Did anything go wrong with the print? You can void this and reprint with a new number, or just correct the number if you typed it wrong.</div>' +
+      '<div>Need another copy (e.g. you saved a PDF)? Use <strong>Print again</strong> — nothing is logged. If the physical check was ruined, void and reprint with a new number, or just correct the number if you typed it wrong.</div>' +
       '<div class="pp-actions">' +
         '<button type="button" data-pp-action="all-good" class="is-primary">✓ All good</button>' +
+        '<button type="button" data-pp-action="print-again">🖨 Print again (no logging)</button>' +
         '<button type="button" data-pp-action="reprint">🔄 Reprint as new #</button>' +
         '<button type="button" data-pp-action="edit-num">✎ Just edit the #</button>' +
       '</div>';
@@ -1777,6 +1787,7 @@
       b.addEventListener('click', function () {
         var act = b.getAttribute('data-pp-action');
         if (act === 'all-good') clearForm();
+        else if (act === 'print-again') printAgain();
         else if (act === 'reprint') startReprint();
         else if (act === 'edit-num') startEditNumber();
       });
@@ -1786,6 +1797,35 @@
   function dismissPostPrintBanner() {
     state.lastPrint = null;
     renderPostPrintBanner();
+    // Deferred from handlePrint so the multi-invoice selection stays intact
+    // while the banner is up (Print again / Reprint need it).
+    refreshApprovedBills();
+  }
+
+  // Re-open the print dialog for the check already logged. No database writes.
+  function printAgain() {
+    var lp = state.lastPrint;
+    if (!lp || !lp.registerId) return;
+    var cur = {
+      payee:  document.getElementById('fldPayee').value.trim(),
+      addr:   document.getElementById('fldAddress').value.trim(),
+      amount: parseAmount(document.getElementById('fldAmount').value),
+      dateV:  document.getElementById('fldDate').value,
+      memo:   document.getElementById('fldMemo').value.trim() || null
+    };
+    var changed = cur.payee !== lp.payee ||
+                  cur.addr !== (lp.addr || '') ||
+                  cur.amount !== lp.amount ||
+                  cur.dateV !== lp.dateV ||
+                  cur.memo !== lp.memo;
+    if (changed && !window.confirm(
+      'The form has been edited since check #' + lp.checkNumber + ' was logged, ' +
+      'so this printout won\'t match the register.\n\nPrint anyway?')) {
+      return;
+    }
+    renderPreview();
+    showToast('Printing check #' + lp.checkNumber + ' again · nothing logged', 1600);
+    setTimeout(function () { window.print(); }, 250);
   }
 
   function startReprint() {
