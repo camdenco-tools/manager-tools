@@ -1448,6 +1448,24 @@ function findCategoryByName(name) {
 
 function isFoodCategory(cat) { return cat && cat.gl_group === 'cogs'; }
 
+// Payroll leaving the bank is settlement, not a new cost. Wages and taxes are
+// recognized from the payroll upload; Vestwell is employee RetireReady
+// deferrals already inside gross pay (no employer match). Payroll checks are
+// written outside Check Writer, so the check-register lookup never catches them.
+// Pattern-based on purpose: a bank fee or ADP service fee on the payroll
+// account is a real expense and still gets sorted normally.
+var PAYROLL_ACCOUNT_CODES = ['wf_payroll'];
+var PAYROLL_SETTLEMENT_CATEGORY = 'Payroll settlement';
+
+function isPayrollSettlementLine(line, account) {
+  var d = String(line.description || '').toUpperCase().replace(/\s+/g, ' ').trim();
+  if (/\bADP\b.*\b(WAG|TAX)/.test(d)) return true;
+  if (/VESTWELL|RETIRE ?READY/.test(d)) return true;
+  var onPayroll = account && PAYROLL_ACCOUNT_CODES.indexOf(account.code) !== -1;
+  if (onPayroll && (line.check_number || /^CHECK\b/.test(d))) return true;
+  return false;
+}
+
 // An invoiced vendor bills first and settles later, so their bank line is the
 // PAYMENT of invoices already entered in /purchases/ - the cost is on the books
 // and assigning a venue books it twice. A point_of_sale vendor is the opposite:
@@ -1528,6 +1546,18 @@ async function matchCharges(lines, ignoredMonth, fileName, fileType) {
     abortUpload('Every line in this file is already on record (' + dd.duplicates + ' duplicate' +
       (dd.duplicates === 1 ? '' : 's') + ').');
     await loadPendingCharges(); await loadReturned(); await loadTrash();
+    return;
+  }
+
+  // Checked BEFORE anything is written. If the lines were saved first, a
+  // re-upload would dedupe them all away and the charges would never queue.
+  var payrollCat = findCategoryByName(PAYROLL_SETTLEMENT_CATEGORY);
+  if (!payrollCat && dd.toInsert.some(function (l) {
+        return l.line_type === 'debit' && isPayrollSettlementLine(l, account);
+      })) {
+    abortUpload('This file has payroll lines (ADP, Vestwell, or payroll checks), but there is no active category named "'
+      + PAYROLL_SETTLEMENT_CATEGORY + '".\n\nCreate it on the P&L categories page with the Settlement group, '
+      + 'reload this page, and upload again. Nothing was recorded.');
     return;
   }
 
@@ -1625,7 +1655,7 @@ async function matchCharges(lines, ignoredMonth, fileName, fileType) {
     var matchedPurchaseIds = {};
     toPromote.forEach(function (l) {
       var vendorName = guessVendor(l.description);
-      var category = guessCategory(vendorName);
+      var category = isPayrollSettlementLine(l, account) ? payrollCat : guessCategory(vendorName);
       var isFood = !category || isFoodCategory(category);
       var matched = null;
       for (var p = 0; p < existingPurchases.length; p++) {
