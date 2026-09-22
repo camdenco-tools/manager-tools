@@ -1656,7 +1656,11 @@ async function matchCharges(lines, ignoredMonth, fileName, fileType) {
     toPromote.forEach(function (l) {
       var vendorName = guessVendor(l.description);
       var category = isPayrollSettlementLine(l, account) ? payrollCat : guessCategory(vendorName);
-      var isFood = !category || isFoodCategory(category);
+      // Only food goes to the venue queue. Everything else -- supplies, software,
+      // unknowns -- lands in expenses. Invoiced vendors still route through
+      // food_pending so they reach the Payments-against-invoices section.
+      var isInvoicedVendor = vendorPaymentType(vendorName) === 'invoiced';
+      var isFood = isInvoicedVendor || !!(category && category.name === 'Food Purchases');
       var matched = null;
       for (var p = 0; p < existingPurchases.length; p++) {
         var purch = existingPurchases[p];
@@ -1688,7 +1692,8 @@ async function matchCharges(lines, ignoredMonth, fileName, fileType) {
         raw_description: l.description,
         amount: l.amount,
         vendor_name: vendorName,
-        category_id: category ? category.id : (findCategoryByName('Food Purchases') || {}).id,
+        category_id: category ? category.id
+                   : (isInvoicedVendor ? (findCategoryByName('Food Purchases') || {}).id : null),
         status: matched ? 'matched' : (isFood ? 'food_pending' : 'expense_pending'),
         matched_purchase_id: matched ? matched.id : null,
         batch_month: String(l.txn_date).substring(0, 7),
@@ -2188,8 +2193,11 @@ function renderFood() {
 
   var checkedCount = items.filter(function(c) { return foodChecked[c.id]; }).length;
   html += '<div class="food-footer">';
-  html += '<span class="food-hint">Uncheck any you don\'t want to send</span>';
+  html += '<span class="food-hint">Uncheck any you don\'t want to move or send</span>';
+  html += '<div style="display:flex;gap:8px;">';
+  html += '<button class="section-btn purple" onclick="bulkMoveToExpense()"' + (checkedCount === 0 ? ' disabled' : '') + '>Move ' + checkedCount + ' to expenses</button>';
   html += '<button class="section-btn amber" onclick="sendToManagers()"' + (checkedCount === 0 ? ' disabled' : '') + '>Send ' + checkedCount + ' to managers</button>';
+  html += '</div>';
   html += '</div>';
 
   document.getElementById('food-body').innerHTML = html;
@@ -3173,6 +3181,42 @@ async function moveToExpense(id) {
     console.error('[bank-review] moveToExpense failed', e);
     alert('Could not move to Expenses. Try again.\n\n' + (e.message || ''));
   }
+}
+
+// Bulk version of moveToExpense for every checked food row. Keeps any real
+// category (Restaurant Supplies stays Restaurant Supplies); clears only the
+// Food Purchases label, so those rows show "pick category". Guarded on the
+// current status so a double-click cannot touch a row already moved.
+async function bulkMoveToExpense() {
+  var items = currentCharges.filter(function(c) {
+    return c.status === 'food_pending' && foodChecked[c.id] && vendorPaymentType(c.vendor_name) !== 'invoiced';
+  });
+  if (!items.length) return;
+  if (!confirm('Move ' + items.length + ' charge(s) to Non-food expenses?')) return;
+
+  var foodCat = findCategoryByName('Food Purchases');
+  var failed = [];
+  for (var i = 0; i < items.length; i++) {
+    var c = items[i];
+    var keep = c.category_id && !(foodCat && c.category_id === foodCat.id);
+    var payload = { status: 'expense_pending' };
+    if (!keep) payload.category_id = null;
+    try {
+      var res = await fetch(SUPA_URL + '/rest/v1/bank_charges?id=eq.' + c.id + '&status=eq.food_pending', {
+        method: 'PATCH',
+        headers: Object.assign({}, hdrs(), {'Content-Type': 'application/json', 'Prefer': 'return=representation'}),
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error(await res.text());
+      var rows = await res.json();
+      if (!Array.isArray(rows) || !rows.length) throw new Error('row was not in the food queue anymore');
+    } catch (e) {
+      failed.push((c.vendor_name || 'Unknown') + ' $' + fmtMoney(c.amount) + ' - ' + String(e.message || e).substring(0, 80));
+    }
+  }
+  if (failed.length) alert(failed.length + ' did not move:\n  ' + failed.join('\n  '));
+  else showToast('Moved ' + items.length + ' to expenses &mdash; check categories and Save');
+  await loadPendingCharges();
 }
 
 // Small bottom-right confirmation; auto-hides
