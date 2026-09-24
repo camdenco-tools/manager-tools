@@ -47,9 +47,6 @@ input:focus, select:focus { outline: none; border-color: #2d7dd2; }
 .builder-field { display: flex; flex-direction: column; gap: 3px; }
 .builder-field label { font-size: 11px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.4px; }
 
-.presets { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 14px; padding-top: 14px; border-top: 1px solid #f0f0f0; }
-.preset-pill { padding: 5px 14px; background: #e6f1fb; color: #185fa5; border: none; border-radius: 20px; font-size: 12px; font-weight: 500; cursor: pointer; }
-.preset-pill:hover { background: #b5d4f4; }
 
 .cal-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
 .cal-nav h3 { margin: 0; font-size: 15px; font-weight: 600; }
@@ -89,7 +86,49 @@ input:focus, select:focus { outline: none; border-color: #2d7dd2; }
 
 .empty-state { text-align: center; padding: 30px 20px; color: #aaa; font-size: 13px; }
 
+/* weekly editor + banners (Session 3) */
+.btn[disabled] { opacity: 0.5; cursor: default; }
+.btn-link { background: none; border: none; color: #2d7dd2; font-size: 12px; font-weight: 600; cursor: pointer; padding: 4px 0; font-family: inherit; }
+.btn-link:hover { text-decoration: underline; }
+.warn-msg { color: #7a5c00; font-size: 12px; margin-top: 6px; }
+.info-msg { color: #185fa5; font-size: 12px; margin-top: 6px; }
+.banner { border-radius: 8px; padding: 12px 14px; font-size: 13px; line-height: 1.55; margin-bottom: 12px; }
+.banner strong { display: block; margin-bottom: 2px; }
+.banner.red { background: #fdecea; border: 1px solid #f5c6c2; color: #8b1a1a; }
+.banner.amber { background: #fff8e1; border: 1px solid #ffe082; color: #7a5c00; }
+.banner.info { background: #e6f1fb; border: 1px solid #b5d4f4; color: #185fa5; }
+.wk-row { display: flex; gap: 16px; padding: 12px 0; border-top: 1px solid #f0f0f0; }
+.wk-day { width: 130px; flex-shrink: 0; padding-top: 4px; }
+.wk-toggle { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.wk-toggle input { width: 16px; height: 16px; cursor: pointer; }
+.wk-state { font-size: 11px; color: #888; margin: 2px 0 0 24px; }
+.wk-ranges { flex: 1; min-width: 0; }
+.wk-unavail { font-size: 13px; color: #aaa; line-height: 30px; }
+.wk-range { background: #fafafa; border: 1px solid #eee; border-radius: 8px; padding: 10px; margin-bottom: 8px; }
+.wk-range.changed { border-color: #b5d4f4; background: #f6faff; }
+.wk-range .builder-row { gap: 8px; }
+.wk-range select, .wk-range input[type=date] { padding: 6px 8px; font-size: 12px; }
+.wk-preview { font-size: 12px; color: #1e6b2e; margin-top: 8px; }
+.wk-preview.bad { color: #c0392b; }
+.wk-note { font-size: 12px; color: #7a5c00; margin-top: 4px; }
+.wk-footer { display: flex; align-items: center; gap: 10px; justify-content: flex-end; padding-top: 14px; border-top: 1px solid #f0f0f0; flex-wrap: wrap; }
+.wk-footer .wk-msg { flex: 1; min-width: 200px; }
+.wk-footer .wk-msg div { margin-top: 0; }
+.cal-slot.rule::before { content: '\21BB  '; }
+.cal-legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 11px; color: #888; margin-top: 10px; }
+.cal-legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+.bo-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+.bo-row:last-child { border-bottom: none; }
+.bo-when { font-weight: 600; min-width: 190px; }
+.bo-reason { flex: 1; color: #888; }
+.bo-list { margin-bottom: 14px; }
+.sec-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+
 @media (max-width: 700px) {
+  .wk-row { flex-direction: column; gap: 8px; }
+  .wk-day { width: auto; }
+  .bo-row { flex-wrap: wrap; }
+  .bo-when { min-width: 0; }
   header { padding: 0 16px; height: auto; flex-wrap: wrap; padding: 12px 16px; gap: 10px; }
   .cal-grid { gap: 3px; }
   .cal-day { min-height: 44px; padding: 3px; }
@@ -118,12 +157,24 @@ input:focus, select:focus { outline: none; border-color: #2d7dd2; }
 var SUPABASE_URL='https://aoazlttdjowhlfcksoyl.supabase.co';
 
 var DAY_NAMES=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+var DAY_FULL=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 var MONTH_NAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-var iaSlots=[],iaBookings=[],iaWeekStart=null,iaLoading=true,iaError=null;
+var EDITOR_ORDER=[1,2,3,4,5,6,0];            // Indeed order: Mon..Sun. Values are Postgres DOW (0=Sun).
+var HORIZON_DAYS=60;                          // must match the nightly cron call
+var LOW_WINDOW_DAYS=14, LOW_THRESHOLD=3;      // availability warning banner
+var SLOT_LOOKBACK_DAYS=90;                    // keeps the slot load well under PostgREST's row cap
+var DUR_OPTIONS=[15,20,30,45,60,90];
+var BUF_OPTIONS=[0,5,10,15,30,45,60];
+
+var iaSlots=[],iaBookings=[],iaRules=[],iaExceptions=[],iaPrefCounts={};
+var iaWeekStart=null,iaLoaded=false,iaError=null;
+var iaDraft=null,iaRemovedRules=[],iaDirty=false,iaSaving=false;
+var iaMsg={weekly:'',blackout:'',oneoff:''};
+var iaOneOffOpen=false;
 
 function apiHeaders() { return Object.assign({}, pcAuth.headers(), {'Content-Type':'application/json'}); }
 
-// Real actor name instead of the hardcoded 'admin' every existing row carries.
+// Real actor name instead of the hardcoded 'admin' every pre-Session-1 row carries.
 function iaCreator(){var u=(pcAuth&&pcAuth.getUser)?pcAuth.getUser():null;return (u&&u.display_name)?u.display_name:'unknown';}
 
 // Turn any error into something a human can read, and flag auth failures
@@ -135,25 +186,36 @@ function iaErrText(err){
   return err.message?err.message:'Unknown error.';
 }
 
+// Everything from the database or a text box goes through esc() before it
+// touches innerHTML. candidate_name/phone arrive from a public form.
+function esc(s){if(s===null||s===undefined)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function msgHtml(kind,text){return text?'<div class="'+kind+'-msg">'+esc(text)+'</div>':'';}
+
 function getSunday(d){var day=d.getDay();return new Date(d.getFullYear(),d.getMonth(),d.getDate()-day);}
 function initWeekStart(){iaWeekStart=getSunday(new Date());}
 function dateStr(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function todayStr(){return dateStr(new Date());}
+function addDays(ds,n){var d=parseDate(ds);d.setDate(d.getDate()+n);return dateStr(d);}
 function parseDate(s){var p=s.split('-');return new Date(parseInt(p[0]),parseInt(p[1])-1,parseInt(p[2]));}
+function hhmm(t){return t?String(t).slice(0,5):'';}
+function toMin(t){var p=String(t).split(':');return parseInt(p[0])*60+parseInt(p[1]);}
+function minToHHMM(m){return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');}
 function formatTime12(t){if(!t)return'';var p=t.split(':');var h=parseInt(p[0]);var m=p[1];var ampm=h>=12?'PM':'AM';if(h>12)h-=12;if(h===0)h=12;return h+':'+m+' '+ampm;}
 function formatTime24(h,m){return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');}
 function formatDateNice(s){var d=parseDate(s);return DAY_NAMES[d.getDay()]+', '+MONTH_NAMES[d.getMonth()]+' '+d.getDate();}
 function isToday(d){var now=new Date();return d.getFullYear()===now.getFullYear()&&d.getMonth()===now.getMonth()&&d.getDate()===now.getDate();}
 function isPast(slotDate,slotTime){var now=new Date();var p=slotTime.split(':');var sd=parseDate(slotDate);sd.setHours(parseInt(p[0]),parseInt(p[1]),0);return sd<now;}
+function plural(n,word){return n+' '+word+(n===1?'':'s');}
 
-// CRITICAL: this used to return the raw fetch promise, so a 401/403 resolved
-// normally and every caller treated a rejected write as a success. Any non-2xx
-// now throws, carrying status + authFailed.
+// CRITICAL (Session 1): this used to return the raw fetch promise, so a 401/403
+// resolved normally and every caller treated a rejected write as a success.
+// Any non-2xx now throws, carrying status + authFailed.
 function sbFetch(path,opts){
   var method=opts&&opts.method?opts.method:'GET';
   var headers=apiHeaders();
   if(opts&&opts.prefer)headers['Prefer']=opts.prefer;
   var cfg={method:method,headers:headers};
-  if(opts&&opts.body)cfg.body=JSON.stringify(opts.body);
+  if(opts&&opts.body!==undefined)cfg.body=JSON.stringify(opts.body);
   return fetch(SUPABASE_URL+path,cfg).then(function(r){
     if(r.ok)return r;
     return r.text().then(function(t){
@@ -166,139 +228,581 @@ function sbFetch(path,opts){
     });
   });
 }
+function sbJson(path){return sbFetch(path).then(function(r){return r.json();});}
+function rpc(name,body){return sbFetch('/rest/v1/rpc/'+name,{method:'POST',body:body}).then(function(r){return r.json();});}
+function regenerate(){return rpc('pc_generate_interview_slots',{p_horizon_days:HORIZON_DAYS});}
 
-// No more .catch(function(){return[];}) — a failed load must look like a
-// failed load, not an empty calendar.
+// No .catch(function(){return[];}) anywhere — a failed load must look like a
+// failed load, not an empty calendar. Only the first load shows "Loading...";
+// later reloads keep the page on screen so messages and the draft survive.
 function loadData(){
-  iaLoading=true;iaError=null;render();
-  var p1=sbFetch('/rest/v1/interview_slots?select=*&order=slot_date.asc,start_time.asc').then(function(r){return r.json();});
-  var p2=sbFetch('/rest/v1/interview_bookings?select=*,interview_slots(*)&status=eq.scheduled&order=booked_at.desc').then(function(r){return r.json();});
-  Promise.all([p1,p2]).then(function(res){
-    iaSlots=res[0]||[];iaBookings=res[1]||[];iaLoading=false;render();
+  iaError=null;
+  if(!iaLoaded)render();
+  var today=todayStr();
+  var floor=addDays(today,-SLOT_LOOKBACK_DAYS);
+  var p=[
+    sbJson('/rest/v1/interview_slots?select=*&slot_date=gte.'+floor+'&order=slot_date.asc,start_time.asc'),
+    sbJson('/rest/v1/interview_bookings?select=*,interview_slots(*)&status=eq.scheduled&order=booked_at.desc'),
+    sbJson('/rest/v1/interview_slot_rules?select=*&deleted_at=is.null&order=weekday.asc,start_time.asc'),
+    sbJson('/rest/v1/interview_slot_exceptions?select=*&deleted_at=is.null&exception_date=gte.'+today+'&order=exception_date.asc,start_time.asc'),
+    sbJson('/rest/v1/interview_slot_preferences?select=slot_id')
+  ];
+  return Promise.all(p).then(function(res){
+    iaSlots=res[0]||[];iaBookings=res[1]||[];iaRules=res[2]||[];iaExceptions=res[3]||[];
+    iaPrefCounts={};
+    var prefs=res[4]||[];
+    for(var i=0;i<prefs.length;i++){iaPrefCounts[prefs[i].slot_id]=(iaPrefCounts[prefs[i].slot_id]||0)+1;}
+    if(!iaDirty){iaDraft=buildDraft();iaRemovedRules=[];}
+    iaLoaded=true;render();
   }).catch(function(err){
     console.error('loadData failed',err);
-    iaSlots=[];iaBookings=[];iaLoading=false;
+    iaLoaded=true;
     iaError=iaErrText(err);
     render();
   });
 }
 
+function getSlot(slotId){for(var i=0;i<iaSlots.length;i++){if(iaSlots[i].id===slotId)return iaSlots[i];}return null;}
 function getBookingForSlot(slotId){for(var i=0;i<iaBookings.length;i++){if(iaBookings[i].slot_id===slotId)return iaBookings[i];}return null;}
 function getSlotsForDate(ds){var out=[];for(var i=0;i<iaSlots.length;i++){if(iaSlots[i].slot_date===ds&&iaSlots[i].is_available)out.push(iaSlots[i]);}return out;}
+function prefCount(slotId){return iaPrefCounts[slotId]||0;}
 
 function getUpcomingBookings(){var now=new Date();var out=[];for(var i=0;i<iaBookings.length;i++){var b=iaBookings[i];if(b.status!=='scheduled')continue;var slot=b.interview_slots;if(!slot)continue;var p=slot.start_time.split(':');var sd=parseDate(slot.slot_date);sd.setHours(parseInt(p[0]),parseInt(p[1]),0);if(sd>=now)out.push(b);}out.sort(function(a,b){var sa=a.interview_slots;var sb2=b.interview_slots;var da=sa.slot_date+'T'+sa.start_time;var db=sb2.slot_date+'T'+sb2.start_time;return da<db?-1:da>db?1:0;});return out;}
 
-function countStats(){var now=new Date();var totalOpen=0,totalBooked=0,thisWeekBooked=0;for(var i=0;i<iaSlots.length;i++){var s=iaSlots[i];if(!s.is_available||isPast(s.slot_date,s.start_time))continue;var booking=getBookingForSlot(s.id);if(booking){totalBooked++;var sd=parseDate(s.slot_date);var weekEnd=new Date(iaWeekStart.getTime()+7*86400000);if(sd>=iaWeekStart&&sd<weekEnd)thisWeekBooked++;}else{totalOpen++;}}return{open:totalOpen,booked:totalBooked,thisWeek:thisWeekBooked};}
+function countStats(){var totalOpen=0,totalBooked=0,thisWeekBooked=0;for(var i=0;i<iaSlots.length;i++){var s=iaSlots[i];if(!s.is_available||isPast(s.slot_date,s.start_time))continue;var booking=getBookingForSlot(s.id);if(booking){totalBooked++;var sd=parseDate(s.slot_date);var weekEnd=new Date(iaWeekStart.getTime()+7*86400000);if(sd>=iaWeekStart&&sd<weekEnd)thisWeekBooked++;}else{totalOpen++;}}return{open:totalOpen,booked:totalBooked,thisWeek:thisWeekBooked};}
 
+// ---------------------------------------------------------------------------
+// Weekly editor draft. One range = one interview_slot_rules row.
+// ---------------------------------------------------------------------------
+function snap(r){return{start:r.start,end:r.end,dur:r.dur,buf:r.buf,until:r.until};}
+function newRange(w,start,end){return{id:null,w:w,start:start,end:end,dur:30,buf:30,until:'',from:null,orig:null};}
+function buildDraft(){
+  var d={};for(var w=0;w<7;w++)d[w]=[];
+  for(var i=0;i<iaRules.length;i++){
+    var r=iaRules[i];
+    if(!r.is_active)continue;
+    var rg={id:r.id,w:r.weekday,start:hhmm(r.start_time),end:hhmm(r.end_time),dur:r.duration_minutes,buf:r.buffer_minutes,until:r.effective_until||'',from:r.effective_from,orig:null};
+    rg.orig=snap(rg);
+    d[r.weekday].push(rg);
+  }
+  for(var k=0;k<7;k++){d[k].sort(function(a,b){return toMin(a.start)-toMin(b.start);});}
+  return d;
+}
+function rangeChanged(r){if(!r.id||!r.orig)return true;var o=r.orig;return o.start!==r.start||o.end!==r.end||o.dur!==r.dur||o.buf!==r.buf||o.until!==r.until;}
+function computeDirty(){if(iaRemovedRules.length)return true;for(var w=0;w<7;w++){for(var i=0;i<iaDraft[w].length;i++){if(rangeChanged(iaDraft[w][i]))return true;}}return false;}
+function previewTimes(r){var s=toMin(r.start),e=toMin(r.end),out=[];if(e<=s||r.dur<=0)return out;for(var m=s;m+r.dur<=e;m+=r.dur+r.buf)out.push(m);return out;}
+function rangeLabel(w,r){return DAY_FULL[w]+' '+formatTime12(r.start)+'-'+formatTime12(r.end);}
+
+function rangeIssues(w,i){
+  var r=iaDraft[w][i];var out={errors:[],warnings:[]};
+  var s=toMin(r.start),e=toMin(r.end),today=todayStr();
+  if(e<=s)out.errors.push('End time must be after start time.');
+  else if(previewTimes(r).length===0)out.errors.push('No '+r.dur+'-minute interview fits in this range.');
+  if(r.until){
+    var from=r.from||today;
+    if(rangeChanged(r)&&r.until<today)out.errors.push('End date is in the past.');
+    else if(r.until<from)out.errors.push('End date is before this schedule started ('+formatDateNice(from)+').');
+    else if(r.until<today)out.warnings.push('This range ended '+formatDateNice(r.until)+'. Clear the end date to restart it, or remove it.');
+  }
+  for(var j=0;j<iaDraft[w].length;j++){
+    if(j===i)continue;var o=iaDraft[w][j];
+    if(s<toMin(o.end)&&toMin(o.start)<e){out.warnings.push('Overlaps another range on this day. Colliding times are skipped automatically.');break;}
+  }
+  return out;
+}
+
+function iaDayToggle(w){
+  if(iaSaving)return;
+  if(iaDraft[w].length){
+    for(var i=0;i<iaDraft[w].length;i++){if(iaDraft[w][i].id)iaRemovedRules.push(iaDraft[w][i]);}
+    iaDraft[w]=[];
+  }else{
+    iaDraft[w].push(newRange(w,'10:00','13:00'));
+  }
+  iaDirty=computeDirty();iaMsg.weekly='';render();
+}
+function iaRangeAdd(w){
+  if(iaSaving)return;
+  var list=iaDraft[w];var start='10:00';
+  if(list.length){start=minToHHMM(Math.min(toMin(list[list.length-1].end)+60,21*60));}
+  var end=minToHHMM(Math.min(toMin(start)+180,22*60));
+  list.push(newRange(w,start,end));
+  iaDirty=computeDirty();iaMsg.weekly='';render();
+}
+function iaRangeRemove(w,i){
+  if(iaSaving)return;
+  var r=iaDraft[w].splice(i,1)[0];
+  if(r&&r.id)iaRemovedRules.push(r);
+  iaDirty=computeDirty();iaMsg.weekly='';render();
+}
+function iaRangeSet(w,i,field,val){
+  if(iaSaving)return;
+  var r=iaDraft[w][i];if(!r)return;
+  if(field==='dur'||field==='buf')r[field]=parseInt(val);else r[field]=val||'';
+  iaDirty=computeDirty();iaMsg.weekly='';render();
+}
+function iaDiscardWeekly(){
+  if(iaSaving)return;
+  iaDraft=buildDraft();iaRemovedRules=[];iaDirty=false;iaMsg.weekly='';render();
+}
+
+// Each op updates the draft as soon as its own write succeeds, so a save that
+// stops halfway can simply be retried without re-inserting what already landed.
+function makeDeleteOp(r){
+  return{label:'remove '+rangeLabel(r.w,r.orig||r),fn:function(){
+    var now=new Date().toISOString();
+    return sbFetch('/rest/v1/interview_slot_rules?id=eq.'+r.id,{method:'PATCH',prefer:'return=minimal',body:{deleted_at:now,deleted_by:iaCreator(),is_active:false,updated_at:now}})
+      .then(function(){return rpc('pc_cleanup_interview_slots',{p_rule_id:r.id});})
+      .then(function(){var ix=iaRemovedRules.indexOf(r);if(ix>=0)iaRemovedRules.splice(ix,1);});
+  }};
+}
+function makePatchOp(r){
+  return{label:'update '+rangeLabel(r.w,r),fn:function(){
+    return sbFetch('/rest/v1/interview_slot_rules?id=eq.'+r.id,{method:'PATCH',prefer:'return=minimal',body:{start_time:r.start,end_time:r.end,duration_minutes:r.dur,buffer_minutes:r.buf,effective_until:r.until||null,updated_at:new Date().toISOString()}})
+      .then(function(){r.orig=snap(r);});
+  }};
+}
+function makeInsertOp(r){
+  return{label:'add '+rangeLabel(r.w,r),fn:function(){
+    // effective_from sent explicitly: the column default is UTC current_date,
+    // which is already tomorrow after 8pm Eastern.
+    return sbFetch('/rest/v1/interview_slot_rules',{method:'POST',prefer:'return=representation',body:{weekday:r.w,start_time:r.start,end_time:r.end,duration_minutes:r.dur,buffer_minutes:r.buf,effective_from:todayStr(),effective_until:r.until||null,is_active:true,created_by:iaCreator()}})
+      .then(function(res){return res.json();})
+      .then(function(rows){
+        if(!rows||!rows.length||!rows[0].id)throw new Error('The database did not return the new schedule row.');
+        r.id=rows[0].id;r.from=rows[0].effective_from;r.orig=snap(r);
+      });
+  }};
+}
+function runOps(ops){
+  var i=0;
+  function next(){
+    if(i>=ops.length)return Promise.resolve();
+    var op=ops[i];
+    return op.fn().then(function(){i++;return next();},function(err){err.opLabel=op.label;err.opIndex=i;throw err;});
+  }
+  return next();
+}
+
+function iaSaveWeekly(){
+  if(iaSaving)return;
+  var errs=0,w,i;
+  for(w=0;w<7;w++){for(i=0;i<iaDraft[w].length;i++){errs+=rangeIssues(w,i).errors.length;}}
+  if(errs){iaMsg.weekly='Fix the '+plural(errs,'problem')+' marked in red before saving.';render();return;}
+  var ops=[];
+  for(i=0;i<iaRemovedRules.length;i++)ops.push(makeDeleteOp(iaRemovedRules[i]));
+  for(var k=0;k<EDITOR_ORDER.length;k++){
+    w=EDITOR_ORDER[k];
+    for(i=0;i<iaDraft[w].length;i++){
+      var r=iaDraft[w][i];
+      if(!r.id)ops.push(makeInsertOp(r));
+      else if(rangeChanged(r))ops.push(makePatchOp(r));
+    }
+  }
+  if(!ops.length){iaDirty=false;iaMsg.weekly='info:No changes to save.';render();return;}
+  iaSaving=true;iaMsg.weekly='';render();
+  runOps(ops).then(function(){
+    return regenerate().then(function(n){return{ok:true,n:n};},function(err){return{ok:false,err:err};});
+  }).then(function(g){
+    iaSaving=false;iaDirty=false;
+    if(g.ok)iaMsg.weekly='ok:Weekly schedule saved. '+plural(g.n||0,'new interview time')+' added to the calendar.';
+    else iaMsg.weekly='warn:Weekly schedule saved, but the calendar could not refresh ('+iaErrText(g.err)+'). It will catch up overnight.';
+    return loadData();
+  }).catch(function(err){
+    console.error('iaSaveWeekly failed',err);
+    iaSaving=false;
+    iaDirty=computeDirty();
+    iaMsg.weekly='Saved '+(err.opIndex||0)+' of '+ops.length+' changes, then stopped at "'+(err.opLabel||'save')+'": '+iaErrText(err)+' Press Save again to retry the rest.';
+    render();
+  });
+}
+
+// iaMsg values: 'ok:...' success, 'warn:...' warning, anything else error.
+function renderMsgBox(key){return'<div id="ia-msg-'+key+'">'+renderMsg(iaMsg[key])+'</div>';}
+function setMsg(key,v){iaMsg[key]=v;var el=document.getElementById('ia-msg-'+key);if(el)el.innerHTML=renderMsg(v);else render();}
+function renderMsg(v){
+  if(!v)return'';
+  if(v.indexOf('ok:')===0)return msgHtml('success',v.slice(3));
+  if(v.indexOf('warn:')===0)return msgHtml('warn',v.slice(5));
+  if(v.indexOf('info:')===0)return msgHtml('info',v.slice(5));
+  return msgHtml('error',v);
+}
+
+// ---------------------------------------------------------------------------
+// Rendering
+// ---------------------------------------------------------------------------
 function render(){document.getElementById('ia-main').innerHTML=renderMain();}
 
 function renderMain(){
-if(iaLoading)return'<div class="empty-state">Loading...</div>';
-if(iaError)return'<div class="section-card"><div class="load-error"><strong>Could not load interview data</strong>'+iaError+'</div></div>';
-var stats=countStats();
-var html='<p class="page-sub">Manage available phone interview times for candidates.</p>';
-html+='<div class="stat-row"><div class="stat-box"><div class="stat-num" style="color:#1D9E75;">'+stats.open+'</div><div class="stat-lbl">Open slots</div></div><div class="stat-box"><div class="stat-num" style="color:#d97706;">'+stats.booked+'</div><div class="stat-lbl">Booked</div></div><div class="stat-box"><div class="stat-num" style="color:#2d7dd2;">'+stats.thisWeek+'</div><div class="stat-lbl">This week</div></div></div>';
+  if(!iaLoaded)return'<div class="empty-state">Loading...</div>';
+  if(iaError)return'<div class="section-card"><div class="load-error"><strong>Could not load interview data</strong>'+esc(iaError)+'</div></div>';
+  var stats=countStats();
+  var html='<p class="page-sub">Set when you interview. Candidates pick from these times when they apply.</p>';
+  html+=renderAvailabilityBanner();
+  html+='<div class="stat-row"><div class="stat-box"><div class="stat-num" style="color:#1D9E75;">'+stats.open+'</div><div class="stat-lbl">Open slots</div></div><div class="stat-box"><div class="stat-num" style="color:#d97706;">'+stats.booked+'</div><div class="stat-lbl">Booked</div></div><div class="stat-box"><div class="stat-num" style="color:#2d7dd2;">'+stats.thisWeek+'</div><div class="stat-lbl">This week</div></div></div>';
+  html+=renderCalendar();
+  html+=renderBlackouts();
+  html+=renderWeeklyEditor();
+  html+=renderUpcoming();
+  html+=renderOneOff();
+  return html;
+}
 
-html+='<div class="section-card"><h3>Add interview slots</h3><p class="sec-sub">Pick a date, time range, and slot duration to generate available times.</p><div class="builder-row"><div class="builder-field" style="min-width:140px;"><label>Date</label><input type="date" id="ia-build-date" value="'+dateStr(new Date())+'" /></div><div class="builder-field" style="min-width:110px;"><label>Start time</label><select id="ia-build-start">'+renderTimeOptions(9,0)+'</select></div><div class="builder-field" style="min-width:110px;"><label>End time</label><select id="ia-build-end">'+renderTimeOptions(17,0)+'</select></div><div class="builder-field" style="min-width:90px;"><label>Duration</label><select id="ia-build-dur"><option value="15">15 min</option><option value="30" selected>30 min</option><option value="45">45 min</option><option value="60">60 min</option></select></div><div class="builder-field"><label>&nbsp;</label><button class="btn btn-green" onclick="iaBuildSlots()">Add slots</button></div></div><div id="ia-build-msg"></div><div class="presets"><span style="font-size:12px;color:#888;padding:4px 0;">Quick add:</span><button class="preset-pill" onclick="iaPreset(\'weekday_afternoon\')">Mon-Fri 2-5 PM</button><button class="preset-pill" onclick="iaPreset(\'weekday_morning\')">Mon-Fri 9 AM-12 PM</button><button class="preset-pill" onclick="iaPreset(\'all_week\')">Sun-Sat 10 AM-4 PM</button></div></div>';
+// The "she forgot to add times over the holidays" guard. Counts only real,
+// open, future slots inside the next LOW_WINDOW_DAYS.
+function renderAvailabilityBanner(){
+  var today=todayStr(),limit=addDays(today,LOW_WINDOW_DAYS),open=0,i;
+  for(i=0;i<iaSlots.length;i++){
+    var s=iaSlots[i];
+    if(!s.is_available||s.slot_date>limit||isPast(s.slot_date,s.start_time))continue;
+    if(!getBookingForSlot(s.id))open++;
+  }
+  var live=[],ending=[];
+  for(i=0;i<iaRules.length;i++){
+    var r=iaRules[i];
+    if(!r.is_active)continue;
+    if(r.effective_until&&r.effective_until<today)continue;
+    live.push(r);
+    if(r.effective_until&&r.effective_until<=limit)ending.push(DAY_FULL[r.weekday]+' '+formatTime12(hhmm(r.start_time))+'-'+formatTime12(hhmm(r.end_time))+' stops after '+formatDateNice(r.effective_until));
+  }
+  var html='';
+  if(open===0){
+    html+='<div class="banner red"><strong>No open interview times in the next '+LOW_WINDOW_DAYS+' days.</strong>Anyone who applies right now will have no times to pick. '+(live.length?'Check your blackout dates, or add a range to your weekly schedule.':'Set your usual interview days in the weekly schedule below and times will keep appearing automatically.')+'</div>';
+  }else if(open<LOW_THRESHOLD){
+    html+='<div class="banner amber"><strong>Only '+plural(open,'open interview time')+' in the next '+LOW_WINDOW_DAYS+' days.</strong>Applicants may not find a time that works. Consider adding a range to your weekly schedule.</div>';
+  }
+  if(ending.length){
+    html+='<div class="banner amber"><strong>Part of your weekly schedule ends soon.</strong>'+esc(ending.join('; '))+'. Clear the end date if you want it to keep going.</div>';
+  }
+  if(!live.length&&open>0){
+    html+='<div class="banner info">No weekly schedule is set, so only times you add by hand will appear. Setting your usual days below keeps times available even when you are not checking this page.</div>';
+  }
+  return html;
+}
 
-html+='<div class="section-card"><div class="cal-nav"><button class="btn btn-sm" onclick="iaWeekPrev()">&larr; Prev</button><h3>'+renderWeekLabel()+'</h3><div class="cal-nav-btns"><button class="btn btn-sm" onclick="iaWeekToday()">Today</button><button class="btn btn-sm" onclick="iaWeekNext()">Next &rarr;</button></div></div><div class="cal-grid">';
-for(var d=0;d<7;d++)html+='<div class="cal-day-hdr">'+DAY_NAMES[d]+'</div>';
-for(var d=0;d<7;d++){var dayDate=new Date(iaWeekStart.getTime()+d*86400000);var ds=dateStr(dayDate);var slots=getSlotsForDate(ds);html+='<div class="cal-day'+(isToday(dayDate)?' today':'')+'"><div class="cal-day-num">'+dayDate.getDate()+'</div>';var maxShow=4;for(var s=0;s<slots.length;s++){if(s>=maxShow){html+='<div class="cal-more" onclick="iaShowDayDetail(\''+ds+'\')">+'+(slots.length-maxShow)+' more</div>';break;}var slot=slots[s];var booking=getBookingForSlot(slot.id);var slotClass=isPast(slot.slot_date,slot.start_time)?'past':(booking?'booked':'open');html+='<div class="cal-slot '+slotClass+'" onclick="iaSlotClick(\''+slot.id+'\')" title="'+formatTime12(slot.start_time)+(booking?' - '+booking.candidate_name:'')+'">'+formatTime12(slot.start_time)+'</div>';}if(slots.length===0)html+='<div style="font-size:10px;color:#ccc;text-align:center;padding:6px 0;">--</div>';html+='</div>';}
-html+='</div></div>';
+function timeOptions(sel){
+  var html='',found=false;
+  for(var m=360;m<=1320;m+=15){var v=minToHHMM(m);if(v===sel)found=true;html+='<option value="'+v+'"'+(v===sel?' selected':'')+'>'+formatTime12(v)+'</option>';}
+  if(sel&&!found)html='<option value="'+esc(sel)+'" selected>'+formatTime12(sel)+'</option>'+html;
+  return html;
+}
+function numOptions(list,sel,zeroLabel){
+  var html='',found=false;
+  for(var i=0;i<list.length;i++){var v=list[i];if(v===sel)found=true;html+='<option value="'+v+'"'+(v===sel?' selected':'')+'>'+(v===0&&zeroLabel?zeroLabel:v+' min')+'</option>';}
+  if(!found&&sel!==undefined&&sel!==null)html='<option value="'+sel+'" selected>'+sel+' min</option>'+html;
+  return html;
+}
 
-var upcoming=getUpcomingBookings();
-html+='<div class="section-card"><h3>Upcoming interviews</h3><p class="sec-sub">'+upcoming.length+' interview'+(upcoming.length!==1?'s':'')+' scheduled</p>';
-if(upcoming.length===0){html+='<div class="empty-state">No upcoming interviews.</div>';}
-else{for(var u=0;u<upcoming.length;u++){var b=upcoming[u];var slot=b.interview_slots;var nameParts=b.candidate_name.split(' ');var initials=((nameParts[0]?nameParts[0][0]:'')+(nameParts.length>1?nameParts[nameParts.length-1][0]:'')).toUpperCase();var slotDate=parseDate(slot.slot_date);var diffDays=Math.ceil((slotDate.getTime()-new Date().getTime())/86400000);var badge=diffDays<=0?'<span class="upcoming-badge" style="background:#fdecea;color:#8b1a1a;">Today</span>':diffDays===1?'<span class="upcoming-badge" style="background:#fff8e1;color:#7a5c00;">Tomorrow</span>':'<span class="upcoming-badge" style="background:#e6f1fb;color:#185fa5;">In '+diffDays+' days</span>';html+='<div class="upcoming-row"><div class="upcoming-avatar">'+initials+'</div><div style="flex:1;"><div class="upcoming-name">'+b.candidate_name+'</div><div class="upcoming-time">'+formatDateNice(slot.slot_date)+' at '+formatTime12(slot.start_time)+'</div>'+(b.candidate_phone?'<div class="upcoming-phone">'+b.candidate_phone+'</div>':'')+'</div>'+badge+'<button class="btn btn-sm" onclick="iaSlotClick(\''+b.slot_id+'\')">View</button></div>';}}
-html+='</div>';return html;}
+function renderWeeklyEditor(){
+  var dis=iaSaving?' disabled':'';
+  var html='<div class="section-card"><h3>Weekly schedule</h3><p class="sec-sub">Your usual interview days and times. Interview times are created '+HORIZON_DAYS+' days ahead and topped up every night, so they never run out while a range has no end date. All times Eastern.</p>';
+  for(var k=0;k<EDITOR_ORDER.length;k++){
+    var w=EDITOR_ORDER[k];var list=iaDraft[w];var on=list.length>0;
+    html+='<div class="wk-row"><div class="wk-day"><label class="wk-toggle"><input type="checkbox"'+(on?' checked':'')+dis+' onchange="iaDayToggle('+w+')"> '+DAY_FULL[w]+'</label><div class="wk-state">'+(on?'Available':'Unavailable')+'</div></div><div class="wk-ranges">';
+    if(!on){html+='<div class="wk-unavail">Unavailable</div>';}
+    for(var i=0;i<list.length;i++){
+      var r=list[i];var iss=rangeIssues(w,i);var times=previewTimes(r);
+      html+='<div class="wk-range'+(rangeChanged(r)?' changed':'')+'"><div class="builder-row">';
+      html+='<div class="builder-field" style="min-width:100px;"><label>From</label><select'+dis+' onchange="iaRangeSet('+w+','+i+',\'start\',this.value)">'+timeOptions(r.start)+'</select></div>';
+      html+='<div class="builder-field" style="min-width:100px;"><label>To</label><select'+dis+' onchange="iaRangeSet('+w+','+i+',\'end\',this.value)">'+timeOptions(r.end)+'</select></div>';
+      html+='<div class="builder-field" style="min-width:86px;"><label>Interview</label><select'+dis+' onchange="iaRangeSet('+w+','+i+',\'dur\',this.value)">'+numOptions(DUR_OPTIONS,r.dur)+'</select></div>';
+      html+='<div class="builder-field" style="min-width:86px;"><label>Buffer</label><select'+dis+' onchange="iaRangeSet('+w+','+i+',\'buf\',this.value)">'+numOptions(BUF_OPTIONS,r.buf,'None')+'</select></div>';
+      html+='<div class="builder-field" style="min-width:130px;"><label>Ends (optional)</label><input type="date"'+dis+' value="'+esc(r.until)+'" onchange="iaRangeSet('+w+','+i+',\'until\',this.value)"></div>';
+      html+='<div class="builder-field"><label>&nbsp;</label><button class="btn btn-sm"'+dis+' onclick="iaRangeRemove('+w+','+i+')" title="Remove this range">Remove</button></div>';
+      html+='</div>';
+      if(times.length&&!iss.errors.length){
+        var labels=[];for(var t=0;t<times.length;t++)labels.push(formatTime12(minToHHMM(times[t])));
+        html+='<div class="wk-preview">'+esc(labels.join(', '))+' &middot; '+plural(times.length,'interview')+' per '+DAY_FULL[w]+'</div>';
+      }
+      for(var e=0;e<iss.errors.length;e++)html+='<div class="wk-preview bad">'+esc(iss.errors[e])+'</div>';
+      for(var n=0;n<iss.warnings.length;n++)html+='<div class="wk-note">'+esc(iss.warnings[n])+'</div>';
+      html+='</div>';
+    }
+    if(on)html+='<button class="btn-link"'+dis+' onclick="iaRangeAdd('+w+')">+ Add another range</button>';
+    html+='</div></div>';
+  }
+  html+='<div class="wk-footer"><div class="wk-msg">'+(iaSaving?msgHtml('info','Saving...'):renderMsg(iaMsg.weekly))+'</div>';
+  if(iaDirty&&!iaSaving)html+='<button class="btn" onclick="iaDiscardWeekly()">Discard changes</button>';
+  html+='<button class="btn btn-primary"'+((iaDirty&&!iaSaving)?'':' disabled')+' onclick="iaSaveWeekly()">Save weekly schedule</button></div>';
+  html+='</div>';
+  return html;
+}
 
-function renderTimeOptions(defaultH,defaultM){var html='';for(var h=6;h<=21;h++){for(var m=0;m<60;m+=30){var val=formatTime24(h,m);html+='<option value="'+val+'"'+(h===defaultH&&m===defaultM?' selected':'')+'>'+formatTime12(val)+'</option>';}}return html;}
+function exceptionLabel(e){return formatDateNice(e.exception_date)+(e.start_time?' '+formatTime12(hhmm(e.start_time))+'-'+formatTime12(hhmm(e.end_time)):' (all day)');}
+
+function renderBlackouts(){
+  var html='<div class="section-card"><h3>Blackout dates</h3><p class="sec-sub">Days or times you cannot interview, such as vacations or event days. Blackouts override the weekly schedule. A time a candidate has already booked or requested is never removed automatically.</p>';
+  if(iaExceptions.length){
+    html+='<div class="bo-list">';
+    for(var i=0;i<iaExceptions.length;i++){
+      var e=iaExceptions[i];
+      html+='<div class="bo-row"><div class="bo-when">'+esc(exceptionLabel(e))+'</div><div class="bo-reason">'+esc(e.reason||'')+'</div><button class="btn btn-sm" onclick="iaRemoveBlackout(\''+e.id+'\')">Remove</button></div>';
+    }
+    html+='</div>';
+  }else{
+    html+='<div style="font-size:13px;color:#aaa;margin-bottom:14px;">No upcoming blackouts.</div>';
+  }
+  html+='<div class="builder-row">';
+  html+='<div class="builder-field" style="min-width:140px;"><label>Date</label><input type="date" id="ia-bo-date" min="'+todayStr()+'"></div>';
+  html+='<div class="builder-field" style="min-width:120px;"><label>Blocks</label><select id="ia-bo-mode" onchange="iaBlackoutMode()"><option value="whole">Whole day</option><option value="part">Part of day</option></select></div>';
+  html+='<div class="builder-field ia-bo-part" style="min-width:100px;display:none;"><label>From</label><select id="ia-bo-start">'+timeOptions('12:00')+'</select></div>';
+  html+='<div class="builder-field ia-bo-part" style="min-width:100px;display:none;"><label>To</label><select id="ia-bo-end">'+timeOptions('13:00')+'</select></div>';
+  html+='<div class="builder-field" style="min-width:180px;flex:1;"><label>Reason (optional)</label><input type="text" id="ia-bo-reason" maxlength="200" placeholder="e.g. Vacation"></div>';
+  html+='<div class="builder-field"><label>&nbsp;</label><button class="btn btn-green" onclick="iaAddBlackout()">Add blackout</button></div>';
+  html+='</div>'+renderMsgBox('blackout')+'</div>';
+  return html;
+}
+
 function renderWeekLabel(){if(!iaWeekStart)return'';var end=new Date(iaWeekStart.getTime()+6*86400000);var sm=MONTH_NAMES[iaWeekStart.getMonth()];var em=MONTH_NAMES[end.getMonth()];return sm===em?sm+' '+iaWeekStart.getDate()+' - '+end.getDate()+', '+iaWeekStart.getFullYear():sm+' '+iaWeekStart.getDate()+' - '+em+' '+end.getDate()+', '+end.getFullYear();}
+
+function renderCalendar(){
+  var html='<div class="section-card"><div class="cal-nav"><button class="btn btn-sm" onclick="iaWeekPrev()">&larr; Prev</button><h3>'+renderWeekLabel()+'</h3><div class="cal-nav-btns"><button class="btn btn-sm" onclick="iaWeekToday()">Today</button><button class="btn btn-sm" onclick="iaWeekNext()">Next &rarr;</button></div></div><div class="cal-grid">';
+  var d;
+  for(d=0;d<7;d++)html+='<div class="cal-day-hdr">'+DAY_NAMES[d]+'</div>';
+  for(d=0;d<7;d++){
+    var dayDate=new Date(iaWeekStart.getTime()+d*86400000);var ds=dateStr(dayDate);var slots=getSlotsForDate(ds);
+    html+='<div class="cal-day'+(isToday(dayDate)?' today':'')+'"><div class="cal-day-num">'+dayDate.getDate()+'</div>';
+    var maxShow=4;
+    for(var s=0;s<slots.length;s++){
+      if(s>=maxShow){html+='<div class="cal-more" onclick="iaShowDayDetail(\''+ds+'\')">+'+(slots.length-maxShow)+' more</div>';break;}
+      var slot=slots[s];var booking=getBookingForSlot(slot.id);
+      var slotClass=isPast(slot.slot_date,slot.start_time)?'past':(booking?'booked':'open');
+      if(slot.source==='rule')slotClass+=' rule';
+      html+='<div class="cal-slot '+slotClass+'" onclick="iaSlotClick(\''+slot.id+'\')" title="'+esc(formatTime12(hhmm(slot.start_time))+(booking?' - '+(booking.candidate_name||''):'')+(slot.source==='rule'?' (weekly schedule)':' (one-off)'))+'">'+formatTime12(hhmm(slot.start_time))+'</div>';
+    }
+    if(slots.length===0)html+='<div style="font-size:10px;color:#ccc;text-align:center;padding:6px 0;">--</div>';
+    html+='</div>';
+  }
+  html+='</div><div class="cal-legend"><span><span class="sw" style="background:#eaf6ec;"></span>Open</span><span><span class="sw" style="background:#fff8e1;"></span>Booked</span><span><span class="sw" style="background:#f0f0f0;"></span>Past</span><span>&#8635; From weekly schedule (no mark = one-off)</span></div></div>';
+  return html;
+}
+
+function renderUpcoming(){
+  var upcoming=getUpcomingBookings();
+  var html='<div class="section-card"><h3>Upcoming interviews</h3><p class="sec-sub">'+upcoming.length+' interview'+(upcoming.length!==1?'s':'')+' scheduled</p>';
+  if(upcoming.length===0){html+='<div class="empty-state">No upcoming interviews.</div>';}
+  else{
+    for(var u=0;u<upcoming.length;u++){
+      var b=upcoming[u];var slot=b.interview_slots;var name=b.candidate_name||'Unnamed candidate';
+      var nameParts=name.split(' ');var initials=((nameParts[0]?nameParts[0][0]:'')+(nameParts.length>1?nameParts[nameParts.length-1][0]:'')).toUpperCase();
+      var slotDate=parseDate(slot.slot_date);var diffDays=Math.ceil((slotDate.getTime()-new Date().getTime())/86400000);
+      var badge=diffDays<=0?'<span class="upcoming-badge" style="background:#fdecea;color:#8b1a1a;">Today</span>':diffDays===1?'<span class="upcoming-badge" style="background:#fff8e1;color:#7a5c00;">Tomorrow</span>':'<span class="upcoming-badge" style="background:#e6f1fb;color:#185fa5;">In '+diffDays+' days</span>';
+      html+='<div class="upcoming-row"><div class="upcoming-avatar">'+esc(initials)+'</div><div style="flex:1;"><div class="upcoming-name">'+esc(name)+'</div><div class="upcoming-time">'+formatDateNice(slot.slot_date)+' at '+formatTime12(hhmm(slot.start_time))+'</div>'+(b.candidate_phone?'<div class="upcoming-phone">'+esc(b.candidate_phone)+'</div>':'')+'</div>'+badge+'<button class="btn btn-sm" onclick="iaSlotClick(\''+b.slot_id+'\')">View</button></div>';
+    }
+  }
+  html+='</div>';
+  return html;
+}
+
+function renderOneOff(){
+  var html='<div class="section-card"><div class="sec-head"><div><h3>Add a one-off time</h3><p class="sec-sub" style="margin-bottom:0;">For a single day outside your weekly schedule. Weekly times are created automatically, so you do not need this for them.</p></div><button class="btn btn-sm" onclick="iaToggleOneOff()">'+(iaOneOffOpen?'Hide':'Show')+'</button></div>';
+  if(iaOneOffOpen){
+    html+='<div class="builder-row" style="margin-top:16px;"><div class="builder-field" style="min-width:140px;"><label>Date</label><input type="date" id="ia-build-date" min="'+todayStr()+'" value="'+todayStr()+'" /></div>';
+    html+='<div class="builder-field" style="min-width:110px;"><label>From</label><select id="ia-build-start">'+timeOptions('10:00')+'</select></div>';
+    html+='<div class="builder-field" style="min-width:110px;"><label>To</label><select id="ia-build-end">'+timeOptions('13:00')+'</select></div>';
+    html+='<div class="builder-field" style="min-width:90px;"><label>Interview</label><select id="ia-build-dur">'+numOptions(DUR_OPTIONS,30)+'</select></div>';
+    html+='<div class="builder-field" style="min-width:90px;"><label>Buffer</label><select id="ia-build-buf">'+numOptions(BUF_OPTIONS,30,'None')+'</select></div>';
+    html+='<div class="builder-field"><label>&nbsp;</label><button class="btn btn-green" onclick="iaBuildSlots()">Add times</button></div></div>';
+    html+=renderMsgBox('oneoff');
+  }
+  html+='</div>';
+  return html;
+}
+
+function iaToggleOneOff(){iaOneOffOpen=!iaOneOffOpen;if(!iaOneOffOpen)iaMsg.oneoff='';render();}
+
+// ---------------------------------------------------------------------------
+// One-off (manual) slots
+// ---------------------------------------------------------------------------
+function buildSlotsForDay(ds,startTime,endTime,dur,buf){
+  var startMin=toMin(startTime),endMin=toMin(endTime);
+  var slots=[];var cur=startMin;var creator=iaCreator();
+  while(cur+dur<=endMin){
+    slots.push({slot_date:ds,start_time:minToHHMM(cur),duration_minutes:dur,is_available:true,created_by:creator});
+    cur+=dur+buf;
+  }
+  return slots;
+}
+
+// Same collision rule the generator uses: a new time must not touch any
+// existing slot on that date, padded by the buffer.
+function overlapsExisting(ds,startMin,dur,buf){
+  for(var i=0;i<iaSlots.length;i++){
+    var x=iaSlots[i];if(x.slot_date!==ds)continue;
+    var xs=toMin(x.start_time);
+    if(xs<startMin+dur+buf&&xs+x.duration_minutes+buf>startMin)return true;
+  }
+  return false;
+}
 
 function iaBuildSlots(){
   var dateVal=document.getElementById('ia-build-date').value;
   var startVal=document.getElementById('ia-build-start').value;
   var endVal=document.getElementById('ia-build-end').value;
   var durVal=parseInt(document.getElementById('ia-build-dur').value);
-  var msgEl=document.getElementById('ia-build-msg');
-  if(!dateVal){msgEl.innerHTML='<div class="error-msg">Please select a date.</div>';return;}
-  var sp=startVal.split(':');var ep=endVal.split(':');
-  var startMin=parseInt(sp[0])*60+parseInt(sp[1]);
-  var endMin=parseInt(ep[0])*60+parseInt(ep[1]);
-  if(endMin<=startMin){msgEl.innerHTML='<div class="error-msg">End time must be after start time.</div>';return;}
-  var slots=buildSlotsForDay(dateVal,startVal,endVal,durVal);
-  if(slots.length===0){msgEl.innerHTML='<div class="error-msg">No slots fit in that time range.</div>';return;}
-  msgEl.innerHTML='<div class="success-msg">Saving '+slots.length+' slot'+(slots.length!==1?'s':'')+'...</div>';
+  var bufVal=parseInt(document.getElementById('ia-build-buf').value);
+  if(!dateVal){setMsg('oneoff','Please select a date.');return;}
+  if(dateVal<todayStr()){setMsg('oneoff','Pick today or a future date.');return;}
+  if(toMin(endVal)<=toMin(startVal)){setMsg('oneoff','End time must be after start time.');return;}
+  var all=buildSlotsForDay(dateVal,startVal,endVal,durVal,bufVal);
+  if(all.length===0){setMsg('oneoff','No '+durVal+'-minute interview fits in that time range.');return;}
+  var slots=[],skipped=0;
+  for(var i=0;i<all.length;i++){
+    var m=toMin(all[i].start_time);
+    if(isPast(dateVal,all[i].start_time)||overlapsExisting(dateVal,m,durVal,bufVal)){skipped++;continue;}
+    slots.push(all[i]);
+  }
+  if(slots.length===0){setMsg('oneoff','Nothing added: every time in that range is past or collides with an existing time on '+formatDateNice(dateVal)+'.');return;}
+  setMsg('oneoff','info:Saving '+plural(slots.length,'time')+'...');
   sbFetch('/rest/v1/interview_slots',{method:'POST',prefer:'return=minimal,resolution=ignore-duplicates',body:slots}).then(function(){
-    msgEl.innerHTML='<div class="success-msg">Saved '+slots.length+' slot'+(slots.length!==1?'s':'')+' for '+formatDateNice(dateVal)+' (times that already existed were skipped).</div>';
-    loadData();
+    iaMsg.oneoff='ok:Added '+plural(slots.length,'time')+' on '+formatDateNice(dateVal)+'.'+(skipped?' Skipped '+skipped+' that were past or too close to an existing time.':'');
+    return loadData();
   }).catch(function(err){
     console.error('iaBuildSlots failed',err);
-    msgEl.innerHTML='<div class="error-msg">Could not add slots. '+iaErrText(err)+'</div>';
+    setMsg('oneoff','Could not add times. '+iaErrText(err));
   });
 }
 
-function iaPreset(type){
-  var msgEl=document.getElementById('ia-build-msg');
-  var now=new Date();
-  var startDay=new Date(now.getFullYear(),now.getMonth(),now.getDate()+1);
-  var dur=parseInt(document.getElementById('ia-build-dur').value)||30;
-  var allSlots=[];
-  var d,day,dow;
-  if(type==='weekday_afternoon'){
-    for(d=0;d<7;d++){day=new Date(startDay.getTime()+d*86400000);dow=day.getDay();if(dow===0||dow===6)continue;allSlots=allSlots.concat(buildSlotsForDay(dateStr(day),'14:00','17:00',dur));}
-  }else if(type==='weekday_morning'){
-    for(d=0;d<7;d++){day=new Date(startDay.getTime()+d*86400000);dow=day.getDay();if(dow===0||dow===6)continue;allSlots=allSlots.concat(buildSlotsForDay(dateStr(day),'09:00','12:00',dur));}
-  }else if(type==='all_week'){
-    for(d=0;d<7;d++){day=new Date(startDay.getTime()+d*86400000);allSlots=allSlots.concat(buildSlotsForDay(dateStr(day),'10:00','16:00',dur));}
+// ---------------------------------------------------------------------------
+// Blackouts (interview_slot_exceptions)
+// ---------------------------------------------------------------------------
+function iaBlackoutMode(){
+  var part=document.getElementById('ia-bo-mode').value==='part';
+  var els=document.querySelectorAll('.ia-bo-part');
+  for(var i=0;i<els.length;i++)els[i].style.display=part?'':'none';
+}
+
+// Slots a blackout cannot clear: anything booked or requested, plus one-offs
+// (the generator only ever removes rule-generated times).
+function blackoutLeftovers(ds,startT,endT){
+  var out={held:[],manual:0};
+  var bs=startT?toMin(startT):null,be=endT?toMin(endT):null;
+  for(var i=0;i<iaSlots.length;i++){
+    var s=iaSlots[i];
+    if(s.slot_date!==ds||isPast(s.slot_date,s.start_time))continue;
+    var ss=toMin(s.start_time);
+    if(bs!==null&&!(ss<be&&ss+s.duration_minutes>bs))continue;
+    var b=getBookingForSlot(s.id),pc=prefCount(s.id);
+    if(b)out.held.push(formatTime12(hhmm(s.start_time))+' (booked: '+(b.candidate_name||'candidate')+')');
+    else if(pc)out.held.push(formatTime12(hhmm(s.start_time))+' ('+plural(pc,'request')+')');
+    else if(s.source!=='rule')out.manual++;
   }
-  if(allSlots.length===0){msgEl.innerHTML='<div class="error-msg">No slots generated.</div>';return;}
-  msgEl.innerHTML='<div class="success-msg">Saving '+allSlots.length+' slots...</div>';
-  sbFetch('/rest/v1/interview_slots',{method:'POST',prefer:'return=minimal,resolution=ignore-duplicates',body:allSlots}).then(function(){
-    msgEl.innerHTML='<div class="success-msg">Saved '+allSlots.length+' slots across the next 7 days (times that already existed were skipped).</div>';
-    loadData();
+  return out;
+}
+
+function iaAddBlackout(){
+  var ds=document.getElementById('ia-bo-date').value;
+  var part=document.getElementById('ia-bo-mode').value==='part';
+  var st=part?document.getElementById('ia-bo-start').value:null;
+  var et=part?document.getElementById('ia-bo-end').value:null;
+  var reason=document.getElementById('ia-bo-reason').value.trim();
+  if(!ds){setMsg('blackout','Please select a date.');return;}
+  if(ds<todayStr()){setMsg('blackout','Pick today or a future date.');return;}
+  if(part&&toMin(et)<=toMin(st)){setMsg('blackout','End time must be after start time.');return;}
+  var left=blackoutLeftovers(ds,st,et);
+  var label=formatDateNice(ds)+(part?' '+formatTime12(st)+'-'+formatTime12(et):' (all day)');
+  setMsg('blackout','info:Saving blackout...');
+  sbFetch('/rest/v1/interview_slot_exceptions',{method:'POST',prefer:'return=minimal',body:{exception_date:ds,start_time:st,end_time:et,reason:reason||null,created_by:iaCreator()}}).then(function(){
+    return regenerate().then(function(){return null;},function(err){return err;});
+  }).then(function(genErr){
+    var txt='Blacked out '+label+'.';
+    if(left.held.length)txt+=' Still on the calendar because a candidate booked or requested it: '+left.held.join(', ')+'. Handle those separately.';
+    if(left.manual)txt+=' '+plural(left.manual,'one-off time')+' you added by hand on that date '+(left.manual===1?'was':'were')+' left alone. Remove from the calendar if needed.';
+    if(genErr)txt+=' The calendar could not refresh ('+iaErrText(genErr)+'); it will catch up overnight.';
+    iaMsg.blackout=((left.held.length||left.manual||genErr)?'warn:':'ok:')+txt;
+    return loadData();
   }).catch(function(err){
-    console.error('iaPreset failed',err);
-    msgEl.innerHTML='<div class="error-msg">Could not add slots. '+iaErrText(err)+'</div>';
+    console.error('iaAddBlackout failed',err);
+    setMsg('blackout','Could not save the blackout. '+iaErrText(err));
   });
 }
 
-function buildSlotsForDay(ds,startTime,endTime,dur){
-  var sp=startTime.split(':');var ep=endTime.split(':');
-  var startMin=parseInt(sp[0])*60+parseInt(sp[1]);
-  var endMin=parseInt(ep[0])*60+parseInt(ep[1]);
-  var slots=[];var cur=startMin;var creator=iaCreator();
-  while(cur+dur<=endMin){
-    var h=Math.floor(cur/60);var m=cur%60;
-    slots.push({slot_date:ds,start_time:formatTime24(h,m),duration_minutes:dur,is_available:true,created_by:creator});
-    cur+=dur;
-  }
-  return slots;
+function iaRemoveBlackout(id){
+  var e=null;for(var i=0;i<iaExceptions.length;i++){if(iaExceptions[i].id===id){e=iaExceptions[i];break;}}
+  if(!e)return;
+  if(!window.confirm('Remove the blackout on '+exceptionLabel(e)+'? Weekly schedule times for that date will come back.'))return;
+  var now=new Date().toISOString();
+  setMsg('blackout','info:Removing blackout...');
+  sbFetch('/rest/v1/interview_slot_exceptions?id=eq.'+id,{method:'PATCH',prefer:'return=minimal',body:{deleted_at:now,deleted_by:iaCreator()}}).then(function(){
+    return regenerate().then(function(){return null;},function(err){return err;});
+  }).then(function(genErr){
+    iaMsg.blackout=genErr?'warn:Blackout removed, but the calendar could not refresh ('+iaErrText(genErr)+'). It will catch up overnight.':'ok:Blackout on '+exceptionLabel(e)+' removed.';
+    return loadData();
+  }).catch(function(err){
+    console.error('iaRemoveBlackout failed',err);
+    setMsg('blackout','Could not remove the blackout. '+iaErrText(err));
+  });
 }
 
+// ---------------------------------------------------------------------------
+// Calendar navigation + slot modal
+// ---------------------------------------------------------------------------
 function iaWeekPrev(){iaWeekStart=new Date(iaWeekStart.getTime()-7*86400000);render();}
 function iaWeekNext(){iaWeekStart=new Date(iaWeekStart.getTime()+7*86400000);render();}
 function iaWeekToday(){initWeekStart();render();}
 
-function iaSlotClick(slotId){var slot=null;for(var i=0;i<iaSlots.length;i++){if(iaSlots[i].id===slotId){slot=iaSlots[i];break;}}if(!slot)return;var booking=getBookingForSlot(slotId);var html='<div class="modal-overlay" onclick="iaCloseModal(event)"><div class="modal-box"><h3>'+formatDateNice(slot.slot_date)+' at '+formatTime12(slot.start_time)+'</h3><p>'+slot.duration_minutes+' minute slot</p>';if(booking){html+='<div style="background:#fff8e1;border:1px solid #ffe082;border-radius:6px;padding:12px;margin-bottom:14px;"><div style="font-size:11px;color:#7a5c00;font-weight:600;text-transform:uppercase;margin-bottom:6px;">Booked by</div><div style="font-size:15px;font-weight:500;color:#78350f;">'+booking.candidate_name+'</div>'+(booking.candidate_phone?'<div style="font-size:13px;color:#92400e;margin-top:2px;">'+booking.candidate_phone+'</div>':'')+(booking.candidate_email?'<div style="font-size:13px;color:#92400e;margin-top:2px;">'+booking.candidate_email+'</div>':'')+'<div style="font-size:11px;color:#a16207;margin-top:6px;">Booked '+new Date(booking.booked_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+'</div></div><div id="ia-modal-msg"></div><div style="display:flex;gap:8px;"><button class="btn" style="flex:1;" onclick="iaCloseModal(null)">Close</button><button class="btn btn-danger" style="flex:1;" onclick="iaCancelBooking(\''+booking.id+'\',\''+slotId+'\')">Cancel booking</button></div>';}else if(isPast(slot.slot_date,slot.start_time)){html+='<div style="background:#f0f0f0;border-radius:6px;padding:10px 12px;font-size:13px;color:#888;margin-bottom:14px;">This slot is in the past.</div><div id="ia-modal-msg"></div><div style="display:flex;gap:8px;"><button class="btn" style="flex:1;" onclick="iaCloseModal(null)">Close</button><button class="btn btn-danger" style="flex:1;" onclick="iaDeleteSlot(\''+slotId+'\')">Remove slot</button></div>';}else{html+='<div style="background:#eaf6ec;border-radius:6px;padding:10px 12px;font-size:13px;color:#1e6b2e;margin-bottom:14px;">This slot is open and available for candidates to book.</div><div id="ia-modal-msg"></div><div style="display:flex;gap:8px;"><button class="btn" style="flex:1;" onclick="iaCloseModal(null)">Close</button><button class="btn btn-danger" style="flex:1;" onclick="iaDeleteSlot(\''+slotId+'\')">Remove slot</button></div>';}html+='</div></div>';document.getElementById('ia-modal').innerHTML=html;}
+function iaSlotClick(slotId){
+  var slot=getSlot(slotId);if(!slot)return;
+  var booking=getBookingForSlot(slotId);var pc=prefCount(slotId);var isRule=slot.source==='rule';
+  var t12=formatTime12(hhmm(slot.start_time));
+  var html='<div class="modal-overlay" onclick="iaCloseModal(event)"><div class="modal-box"><h3>'+formatDateNice(slot.slot_date)+' at '+t12+'</h3><p>'+slot.duration_minutes+' minute slot &middot; '+(isRule?'&#8635; from your weekly schedule':'one-off time')+(pc?' &middot; '+plural(pc,'candidate request'):'')+'</p>';
+  var close='<button class="btn" style="flex:1;" onclick="iaCloseModal(null)">Close</button>';
+  if(booking){
+    html+='<div style="background:#fff8e1;border:1px solid #ffe082;border-radius:6px;padding:12px;margin-bottom:14px;"><div style="font-size:11px;color:#7a5c00;font-weight:600;text-transform:uppercase;margin-bottom:6px;">Booked by</div><div style="font-size:15px;font-weight:500;color:#78350f;">'+esc(booking.candidate_name||'')+'</div>'+(booking.candidate_phone?'<div style="font-size:13px;color:#92400e;margin-top:2px;">'+esc(booking.candidate_phone)+'</div>':'')+(booking.candidate_email?'<div style="font-size:13px;color:#92400e;margin-top:2px;">'+esc(booking.candidate_email)+'</div>':'')+(booking.booked_at?'<div style="font-size:11px;color:#a16207;margin-top:6px;">Booked '+new Date(booking.booked_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+'</div>':'')+'</div><div id="ia-modal-msg"></div><div style="display:flex;gap:8px;">'+close+'<button class="btn btn-danger" style="flex:1;" onclick="iaCancelBooking(\''+booking.id+'\',\''+slotId+'\')">Cancel booking</button></div>';
+  }else if(pc){
+    html+='<div style="background:#e6f1fb;border-radius:6px;padding:10px 12px;font-size:13px;color:#185fa5;margin-bottom:14px;">'+plural(pc,'candidate')+' asked for this time, so it can\'t be removed or blocked until their request is handled.</div><div id="ia-modal-msg"></div><div style="display:flex;gap:8px;">'+close+'</div>';
+  }else if(isPast(slot.slot_date,slot.start_time)){
+    html+='<div style="background:#f0f0f0;border-radius:6px;padding:10px 12px;font-size:13px;color:#888;margin-bottom:14px;">This slot is in the past.</div><div id="ia-modal-msg"></div><div style="display:flex;gap:8px;">'+close+'<button class="btn btn-danger" style="flex:1;" onclick="iaDeleteSlot(\''+slotId+'\')">Remove slot</button></div>';
+  }else if(isRule){
+    html+='<div style="background:#eaf6ec;border-radius:6px;padding:10px 12px;font-size:13px;color:#1e6b2e;margin-bottom:14px;">Open for candidates. This time comes from your weekly schedule, so removing it would just bring it back overnight. Blocking it adds a blackout for this time only.</div><div id="ia-modal-msg"></div><div style="display:flex;gap:8px;">'+close+'<button class="btn btn-danger" style="flex:1;" onclick="iaBlockSlot(\''+slotId+'\')">Block this time</button></div>';
+  }else{
+    html+='<div style="background:#eaf6ec;border-radius:6px;padding:10px 12px;font-size:13px;color:#1e6b2e;margin-bottom:14px;">This slot is open and available for candidates to book.</div><div id="ia-modal-msg"></div><div style="display:flex;gap:8px;">'+close+'<button class="btn btn-danger" style="flex:1;" onclick="iaDeleteSlot(\''+slotId+'\')">Remove slot</button></div>';
+  }
+  html+='</div></div>';
+  document.getElementById('ia-modal').innerHTML=html;
+}
 
-function iaShowDayDetail(ds){var slots=getSlotsForDate(ds);var html='<div class="modal-overlay" onclick="iaCloseModal(event)"><div class="modal-box"><h3>'+formatDateNice(ds)+'</h3><p>'+slots.length+' slot'+(slots.length!==1?'s':'')+'</p>';for(var i=0;i<slots.length;i++){var slot=slots[i];var booking=getBookingForSlot(slot.id);var past=isPast(slot.slot_date,slot.start_time);var bg=past?'#f0f0f0':(booking?'#fff8e1':'#eaf6ec');var color=past?'#aaa':(booking?'#7a5c00':'#1e6b2e');html+='<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:'+bg+';border-radius:6px;margin-bottom:4px;font-size:13px;color:'+color+';"><span>'+formatTime12(slot.start_time)+(booking?' - '+booking.candidate_name:(past?' (past)':' (open)'))+'</span><button class="btn btn-sm" style="font-size:11px;" onclick="iaSlotClick(\''+slot.id+'\')">View</button></div>';}html+='<div style="margin-top:12px;"><button class="btn" onclick="iaCloseModal(null)" style="width:100%;">Close</button></div></div></div>';document.getElementById('ia-modal').innerHTML=html;}
+function iaShowDayDetail(ds){
+  var slots=getSlotsForDate(ds);
+  var html='<div class="modal-overlay" onclick="iaCloseModal(event)"><div class="modal-box"><h3>'+formatDateNice(ds)+'</h3><p>'+slots.length+' slot'+(slots.length!==1?'s':'')+'</p>';
+  for(var i=0;i<slots.length;i++){
+    var slot=slots[i];var booking=getBookingForSlot(slot.id);var past=isPast(slot.slot_date,slot.start_time);
+    var bg=past?'#f0f0f0':(booking?'#fff8e1':'#eaf6ec');var color=past?'#aaa':(booking?'#7a5c00':'#1e6b2e');
+    html+='<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:'+bg+';border-radius:6px;margin-bottom:4px;font-size:13px;color:'+color+';"><span>'+(slot.source==='rule'?'&#8635; ':'')+formatTime12(hhmm(slot.start_time))+(booking?' - '+esc(booking.candidate_name||''):(past?' (past)':' (open)'))+'</span><button class="btn btn-sm" style="font-size:11px;" onclick="iaSlotClick(\''+slot.id+'\')">View</button></div>';
+  }
+  html+='<div style="margin-top:12px;"><button class="btn" onclick="iaCloseModal(null)" style="width:100%;">Close</button></div></div></div>';
+  document.getElementById('ia-modal').innerHTML=html;
+}
 
 function iaModalError(err){
   console.error(err);
   var el=document.getElementById('ia-modal-msg');
-  if(el){el.innerHTML='<div class="error-msg" style="margin-bottom:10px;">'+iaErrText(err)+'</div>';}
+  if(el){el.innerHTML='<div class="error-msg" style="margin-bottom:10px;">'+esc(iaErrText(err))+'</div>';}
 }
 
 function iaDeleteSlot(slotId){
-  sbFetch('/rest/v1/interview_slots?id=eq.'+slotId,{method:'DELETE'}).then(function(){
-    iaCloseModal(null);loadData();
+  if(prefCount(slotId)){iaModalError(new Error('A candidate asked for this time, so it cannot be removed yet.'));return;}
+  sbFetch('/rest/v1/interview_slots?id=eq.'+slotId,{method:'DELETE',prefer:'return=minimal'}).then(function(){
+    iaCloseModal(null);return loadData();
   }).catch(iaModalError);
 }
 
-// Two writes, and the second one was previously fire-and-forget — if the
-// candidate PATCH failed the booking was cancelled with the candidate left
-// stranded in whatever stage they were in. Chained and surfaced now.
+// A rule slot can't simply be deleted — the nightly generator would recreate
+// it. Write a time-bounded exception instead; the generator then prunes it.
+function iaBlockSlot(slotId){
+  var slot=getSlot(slotId);if(!slot)return;
+  if(getBookingForSlot(slotId)||prefCount(slotId)){iaModalError(new Error('This time is booked or requested, so it cannot be blocked.'));return;}
+  var st=hhmm(slot.start_time);var et=minToHHMM(toMin(st)+slot.duration_minutes);
+  sbFetch('/rest/v1/interview_slot_exceptions',{method:'POST',prefer:'return=minimal',body:{exception_date:slot.slot_date,start_time:st,end_time:et,reason:'Blocked from calendar',created_by:iaCreator()}}).then(function(){
+    return regenerate().then(function(){return null;},function(err){return err;});
+  }).then(function(genErr){
+    if(genErr){iaModalError(new Error('Blocked, but the calendar could not refresh ('+iaErrText(genErr)+'). The time will disappear overnight.'));return loadData();}
+    iaCloseModal(null);return loadData();
+  }).catch(iaModalError);
+}
+
+// Two writes, chained and surfaced (Session 1). candidates.interview_scheduled_at
+// and interview_slot_time both exist (confirmed Session 2).
 function iaCancelBooking(bookingId,slotId){
   var booking=null;
   for(var i=0;i<iaBookings.length;i++){if(iaBookings[i].id===bookingId){booking=iaBookings[i];break;}}
@@ -308,7 +812,7 @@ function iaCancelBooking(bookingId,slotId){
     }
     return null;
   }).then(function(){
-    iaCloseModal(null);loadData();
+    iaCloseModal(null);return loadData();
   }).catch(iaModalError);
 }
 
