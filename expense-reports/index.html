@@ -795,7 +795,29 @@
     padding-bottom: 18px;
     border-bottom: 1px solid #f0efe8;
   }
-  .draft-address-input {
+  .draft-address-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 10px 12px;
+  }
+  .draft-address-grid .addr-field { display: flex; flex-direction: column; min-width: 0; }
+  .draft-address-grid .addr-field.is-full { grid-column: 1 / -1; }
+  .draft-address-grid .addr-field label {
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #666;
+    margin-bottom: 4px;
+  }
+  .draft-address-grid .addr-field label .opt {
+    text-transform: none;
+    letter-spacing: 0;
+    color: #aaa;
+    font-weight: 400;
+  }
+  .draft-address-grid input,
+  .draft-address-grid select {
     width: 100%;
     font-family: inherit;
     font-size: 13px;
@@ -804,10 +826,33 @@
     border-radius: 6px;
     background: #fff;
     color: #1a1a1a;
-    resize: vertical;
-    min-height: 60px;
   }
-  .draft-address-input:focus { outline: none; border-color: #1a1a1a; }
+  .draft-address-grid input:focus,
+  .draft-address-grid select:focus { outline: none; border-color: #1a1a1a; }
+  .draft-address-grid input.is-error,
+  .draft-address-grid select.is-error { border-color: #791F1F; background: #fceaea; }
+  .draft-address-row-3 {
+    display: grid;
+    grid-template-columns: 2fr 90px 120px;
+    gap: 10px 12px;
+    grid-column: 1 / -1;
+  }
+  @media (max-width: 560px) {
+    .draft-address-grid { grid-template-columns: 1fr; }
+    .draft-address-row-3 { grid-template-columns: 1fr; }
+  }
+  .draft-address-confirm {
+    background: #fef6ec;
+    border: 1px solid #f3d9a8;
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    font-size: 12px;
+    color: #633806;
+    line-height: 1.5;
+  }
+  .draft-address-confirm strong { font-weight: 600; }
+  .draft-address-confirm .actions { margin-top: 8px; }
   .draft-address-hint {
     font-size: 11px;
     color: #888;
@@ -3627,6 +3672,268 @@
   var SESSION_3_CATEGORIES = ['Mileage Reimbursement', 'Food Purchases'];
 
   // -------------------------------------------------------------
+  // ADDRESS — structured parts (street / unit / city / state / ZIP)
+  //
+  // The page never builds the printed address string. It writes the five
+  // parts; the DB trigger composes mailing_address, which is what the
+  // Check Writer prints verbatim into the envelope window. That's why
+  // the page and the check can't disagree.
+  // -------------------------------------------------------------
+
+  var US_STATES = ('AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD ' +
+    'MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA PR RI SC SD TN TX UT VT ' +
+    'VA VI WA WV WI WY').split(' ');
+
+  var ADDR_FIELDS = ['address_line1', 'address_line2', 'address_city', 'address_state', 'address_zip'];
+  var ZIP_RE = /^[0-9]{5}(-[0-9]{4})?$/;
+
+  function addrPartsOf(row) {
+    return {
+      address_line1: (row && row.address_line1) || '',
+      address_line2: (row && row.address_line2) || '',
+      address_city:  (row && row.address_city)  || '',
+      address_state: (row && row.address_state) || '',
+      address_zip:   (row && row.address_zip)   || ''
+    };
+  }
+  function addrIsComplete(row) {
+    var p = addrPartsOf(row);
+    if (!p.address_line1.trim()) return false;
+    if (!p.address_city.trim())  return false;
+    if (!/^[A-Z]{2}$/.test(p.address_state)) return false;
+    if (!ZIP_RE.test(p.address_zip)) return false;
+    return true;
+  }
+  function addrIsEmpty(row) {
+    var p = addrPartsOf(row);
+    return !(p.address_line1 || p.address_line2 || p.address_city || p.address_state || p.address_zip);
+  }
+  function addrPartsEqual(a, b) {
+    var x = addrPartsOf(a), y = addrPartsOf(b);
+    for (var i = 0; i < ADDR_FIELDS.length; i++) {
+      if ((x[ADDR_FIELDS[i]] || '').trim() !== (y[ADDR_FIELDS[i]] || '').trim()) return false;
+    }
+    return true;
+  }
+  function addrMissingLabel(row) {
+    var p = addrPartsOf(row);
+    var missing = [];
+    if (!p.address_line1.trim()) missing.push('street');
+    if (!p.address_city.trim())  missing.push('city');
+    if (!/^[A-Z]{2}$/.test(p.address_state)) missing.push('state');
+    if (!ZIP_RE.test(p.address_zip)) missing.push('ZIP');
+    return missing.join(', ');
+  }
+
+  /**
+   * A legacy report has free text but no parts. Prefill the inputs from a
+   * best-effort parse so the manager confirms rather than retypes — but
+   * nothing is saved until they do confirm, because this parse is exactly
+   * the guesswork we're replacing.
+   */
+  function addressNeedsConfirm() {
+    if (draftState.fixMode) return false;
+    var r = draftState.report;
+    if (!r) return false;
+    return addrIsEmpty(r) && !!(r.mailing_address && r.mailing_address.trim());
+  }
+  function parseAddressToParts(raw) {
+    var out = { address_line1: '', address_line2: '', address_city: '', address_state: '', address_zip: '' };
+    if (!raw) return out;
+    var s = String(raw).replace(/\r/g, '').trim();
+    if (!s) return out;
+    var m = s.match(/([A-Za-z]{2})[\s,]+([0-9]{5}(?:-[0-9]{4})?)\s*$/);
+    if (m) {
+      out.address_state = m[1].toUpperCase();
+      out.address_zip   = m[2];
+      s = s.substring(0, m.index).trim().replace(/[,\s]+$/, '');
+    }
+    var lines = s.split('\n').map(function (l) { return l.trim(); })
+                 .filter(function (l) { return !!l; });
+    if (lines.length >= 2) {
+      out.address_line1 = lines[0];
+      out.address_city  = lines[lines.length - 1].replace(/,\s*$/, '');
+      if (lines.length >= 3) out.address_line2 = lines[1];
+    } else if (lines.length === 1) {
+      var one = lines[0];
+      var lastComma = one.lastIndexOf(',');
+      if (lastComma !== -1) {
+        out.address_line1 = one.substring(0, lastComma).trim();
+        out.address_city  = one.substring(lastComma + 1).trim();
+      } else {
+        out.address_line1 = one;
+      }
+    }
+    return out;
+  }
+
+  function fetchMyDefaultAddress() {
+    if (!pageState.currentUser) return Promise.resolve(null);
+    var uid = pageState.currentUser.id;
+    return authFetch(
+      SB_REST + 'user_roles?select=address_line1,address_line2,address_city,address_state,address_zip' +
+      '&id=eq.' + encodeURIComponent(uid) + '&limit=1',
+      { headers: pcAuth.headers() }
+    ).then(function (rows) {
+      pageState.defaultAddress = addrPartsOf((rows && rows[0]) || null);
+      return pageState.defaultAddress;
+    });
+  }
+
+  function saveAddressField(field, value) {
+    if (!draftState.report) return Promise.resolve();
+    draftState.report[field] = value || null;
+    var body = {};
+    body[field] = value || null;
+    return patchReport(body)
+      .then(function () {
+        updateSubmitButtonState();
+        refreshAddressHint();
+      })
+      .catch(function (e) {
+        if (e && e.authFailed) { handleAuthFailure(); return; }
+        console.error('[ER] address save failed:', field, e);
+        showToast('Could not save address', 2400);
+      });
+  }
+
+  function addressHintLabel() {
+    var d = pageState.defaultAddress;
+    var hasDefault = d && addrIsComplete(d);
+    if (!hasDefault) {
+      return addrIsComplete(draftState.report)
+        ? 'No default yet — tick below to save this one'
+        : 'No default saved yet';
+    }
+    if (addrPartsEqual(d, draftState.report) && !draftState.addressOverride) {
+      return 'Default for your account · editable';
+    }
+    return 'Overriding your saved default';
+  }
+  function refreshAddressHint() {
+    var el = document.getElementById('draftAddressLabel');
+    if (el) el.textContent = addressHintLabel();
+  }
+
+  function addressFieldsHtml(parts) {
+    var stateOpts = '<option value="">—</option>' + US_STATES.map(function (s) {
+      var sel = (parts.address_state === s) ? ' selected' : '';
+      return '<option value="' + esc(s) + '"' + sel + '>' + esc(s) + '</option>';
+    }).join('');
+    return '<div class="draft-address-grid">' +
+      '<div class="addr-field is-full">' +
+        '<label for="draftAddr1">Street address</label>' +
+        '<input type="text" id="draftAddr1" autocomplete="address-line1" placeholder="123 Main St" value="' + esc(parts.address_line1) + '">' +
+      '</div>' +
+      '<div class="addr-field is-full">' +
+        '<label for="draftAddr2">Apt / Suite / Unit <span class="opt">— optional</span></label>' +
+        '<input type="text" id="draftAddr2" autocomplete="address-line2" placeholder="Apt 4" value="' + esc(parts.address_line2) + '">' +
+      '</div>' +
+      '<div class="draft-address-row-3">' +
+        '<div class="addr-field">' +
+          '<label for="draftAddrCity">City</label>' +
+          '<input type="text" id="draftAddrCity" autocomplete="address-level2" placeholder="Camden" value="' + esc(parts.address_city) + '">' +
+        '</div>' +
+        '<div class="addr-field">' +
+          '<label for="draftAddrState">State</label>' +
+          '<select id="draftAddrState" autocomplete="address-level1">' + stateOpts + '</select>' +
+        '</div>' +
+        '<div class="addr-field">' +
+          '<label for="draftAddrZip">ZIP</label>' +
+          '<input type="text" id="draftAddrZip" inputmode="numeric" autocomplete="postal-code" placeholder="08012" value="' + esc(parts.address_zip) + '">' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function wireAddressFields() {
+    if (draftState.fixMode) return;
+    var r = draftState.report;
+    if (!r) return;
+
+    function bind(id, field, clean) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('change', function () {
+        var v = clean ? clean(el.value) : el.value;
+        el.value = v;
+        el.classList.remove('is-error');
+        if (field === 'address_zip' && v && !ZIP_RE.test(v)) {
+          el.classList.add('is-error');
+          showToast('ZIP must be 5 digits, or ZIP+4', 2400);
+          return;
+        }
+        if ((r[field] || '') === (v || '')) return;
+        saveAddressField(field, v);
+      });
+    }
+    bind('draftAddr1',     'address_line1', function (v) { return v.trim(); });
+    bind('draftAddr2',     'address_line2', function (v) { return v.trim(); });
+    bind('draftAddrCity',  'address_city',  function (v) { return v.trim(); });
+    bind('draftAddrState', 'address_state', function (v) { return v.trim().toUpperCase(); });
+    bind('draftAddrZip',   'address_zip',   function (v) { return v.replace(/[^0-9-]/g, '').trim(); });
+
+    var confirmBtn = document.getElementById('draftAddressConfirm');
+    if (confirmBtn) confirmBtn.addEventListener('click', function () {
+      var parts = {
+        address_line1: document.getElementById('draftAddr1').value.trim(),
+        address_line2: document.getElementById('draftAddr2').value.trim(),
+        address_city:  document.getElementById('draftAddrCity').value.trim(),
+        address_state: document.getElementById('draftAddrState').value.trim().toUpperCase(),
+        address_zip:   document.getElementById('draftAddrZip').value.trim()
+      };
+      if (!addrIsComplete(parts)) {
+        showToast('Still needs: ' + addrMissingLabel(parts), 2800);
+        return;
+      }
+      ADDR_FIELDS.forEach(function (f) { draftState.report[f] = parts[f] || null; });
+      patchReport(parts)
+        .then(function () { showToast('Address confirmed', 1800); renderDraft(); })
+        .catch(function (e) {
+          if (e && e.authFailed) { handleAuthFailure(); return; }
+          console.error('[ER] address confirm failed:', e);
+          showToast('Could not save address', 2400);
+        });
+    });
+
+    var saveDef = document.getElementById('draftAddressSaveDefault');
+    if (saveDef) saveDef.addEventListener('change', function () {
+      draftState.saveDefaultAddressOnSubmit = !!saveDef.checked;
+    });
+
+    var ovr = document.getElementById('draftAddressOverride');
+    if (ovr) ovr.addEventListener('click', function () {
+      draftState.addressOverride = true;
+      var blank = { address_line1: null, address_line2: null, address_city: null, address_state: null, address_zip: null };
+      ADDR_FIELDS.forEach(function (f) { draftState.report[f] = null; });
+      patchReport(blank)
+        .then(function () {
+          renderDraft();
+          var f = document.getElementById('draftAddr1');
+          if (f) f.focus();
+        })
+        .catch(function (e) {
+          if (e && e.authFailed) { handleAuthFailure(); return; }
+          console.error('[ER] address override failed:', e);
+        });
+    });
+
+    var rev = document.getElementById('draftAddressRevert');
+    if (rev) rev.addEventListener('click', function () {
+      draftState.addressOverride = false;
+      draftState.saveDefaultAddressOnSubmit = false;
+      var d = addrPartsOf(pageState.defaultAddress);
+      ADDR_FIELDS.forEach(function (f) { draftState.report[f] = d[f] || null; });
+      patchReport(d)
+        .then(function () { renderDraft(); })
+        .catch(function (e) {
+          if (e && e.authFailed) { handleAuthFailure(); return; }
+          console.error('[ER] revert address failed:', e);
+        });
+    });
+  }
+
+  // -------------------------------------------------------------
   // FETCHES
   // -------------------------------------------------------------
 
@@ -3647,7 +3954,8 @@
     var uid = pageState.currentUser.id;
     return authFetch(
       SB_REST + 'expense_reports?' +
-      'select=id,submitter_id,submitter_name,mailing_address,status,total_amount,line_count,period_start,period_end,created_at' +
+      'select=id,submitter_id,submitter_name,mailing_address,status,total_amount,line_count,period_start,period_end,created_at,' +
+      'address_line1,address_line2,address_city,address_state,address_zip' +
       '&submitter_id=eq.' + encodeURIComponent(uid) +
       '&status=eq.draft&limit=1',
       { headers: pcAuth.headers() }
@@ -3673,11 +3981,16 @@
       'Content-Type': 'application/json',
       'Prefer':       'return=representation'
     });
+    var d = pageState.defaultAddress || {};
     var body = {
       submitter_id:    u.id,
       submitter_name:  u.display_name || u.email || 'unknown',
-      mailing_address: u.mailing_address || null,
-      status:          'draft'
+      status:          'draft',
+      address_line1:   d.address_line1 || null,
+      address_line2:   d.address_line2 || null,
+      address_city:    d.address_city  || null,
+      address_state:   d.address_state || null,
+      address_zip:     d.address_zip   || null
     };
     return authFetch(SB_REST + 'expense_reports', {
       method:  'POST',
@@ -3878,21 +4191,23 @@
       if (fcTotal) fcTotal.textContent = fmtMoney(fcTotalVal);
     }
 
-    // Compute address state for hint rendering
-    var savedDefault = (pageState.currentUser && pageState.currentUser.mailing_address) || '';
-    var currentValue = r.mailing_address || '';
-    var addressStateLabel;
-    if (!savedDefault && !currentValue) {
-      addressStateLabel = 'No default saved yet';
-    } else if (savedDefault && currentValue === savedDefault && !draftState.addressOverride) {
-      addressStateLabel = 'Default for your account · editable';
-    } else if (savedDefault && currentValue !== savedDefault) {
-      addressStateLabel = 'Overriding your saved default';
-    } else if (!savedDefault && currentValue) {
-      addressStateLabel = 'No default yet — save below if this is permanent';
-    } else {
-      addressStateLabel = '';
-    }
+    // Address parts. A legacy row with only free text gets its inputs
+    // prefilled from a parse, flagged for confirmation, and saved nothing
+    // until the manager confirms.
+    var needsConfirm = addressNeedsConfirm();
+    var addrParts = needsConfirm
+      ? parseAddressToParts(r.mailing_address)
+      : addrPartsOf(r);
+    var confirmHtml = needsConfirm
+      ? '<div class="draft-address-confirm">' +
+          '<strong>Check your mailing address.</strong> We split your saved address into ' +
+          'separate fields so it prints correctly on the check. Fix anything that landed ' +
+          'in the wrong box, then confirm.' +
+          '<div class="actions">' +
+            '<button type="button" class="btn-primary" id="draftAddressConfirm">Confirm address</button>' +
+          '</div>' +
+        '</div>'
+      : '';
 
     // Build the address block — hidden entirely in fix mode (already validated at submit)
     var addressHtml = fixBannerHtml;
@@ -3900,10 +4215,11 @@
       addressHtml +=
         '<div class="draft-address-block">' +
           '<p class="draft-subhead">Mailing address — where to send the check</p>' +
-          '<textarea class="draft-address-input" id="draftAddress" placeholder="Street, City, State ZIP" rows="2">' + esc(currentValue) + '</textarea>' +
+          confirmHtml +
+          addressFieldsHtml(addrParts) +
           '<div class="draft-address-hint">' +
-            '<span id="draftAddressLabel">' + esc(addressStateLabel) + '</span>' +
-            buildAddressCheckboxOrLink(savedDefault, currentValue) +
+            '<span id="draftAddressLabel">' + esc(addressHintLabel()) + '</span>' +
+            buildAddressCheckboxOrLink() +
           '</div>' +
         '</div>';
     }
@@ -4000,9 +4316,12 @@
     }
   }
 
-  function buildAddressCheckboxOrLink(savedDefault, currentValue) {
+  function buildAddressCheckboxOrLink() {
     // Session 6b — in fix mode, don't offer to save as default (focused UX)
     if (draftState.fixMode) return '';
+    var d = pageState.defaultAddress;
+    var savedDefault = (d && addrIsComplete(d)) ? d : null;
+    var currentValue = addrPartsEqual(d, draftState.report) ? savedDefault : 'different';
     // Three states from spec section 9.
     if (!savedDefault) {
       // State A — no saved default yet → offer "Save this address for future reports"
