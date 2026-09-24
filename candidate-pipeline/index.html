@@ -59,6 +59,7 @@ header { background: #fff; border-bottom: 1px solid #e8e8e4; padding: 0 32px; di
 .badge-contacted { background: #e3f2fd; border: 1px solid #90caf9; color: #0d47a1; }
 .badge-interview { background: #fff8e1; border: 1px solid #ffe082; color: #7a5c00; }
 .badge-interview-scheduled { background: #fff8e1; border: 1px solid #ffe082; color: #7a5c00; }
+.badge-interview-requested { background: #fff3e0; border: 1px solid #ffcc80; color: #8a4b00; }
 .badge-hired { background: #eaf6ec; border: 1px solid #7dc98a; color: #1e6b2e; }
 .badge-onboarding { background: #e8f5e9; border: 1px solid #a5d6a7; color: #1b5e20; }
 .badge-active { background: #1D9E75; border: 1px solid #0F6E56; color: #fff; }
@@ -205,8 +206,8 @@ var EMAIL_INFO=[{num:1,title:'Email 1',desc:'Thanks for applying',field:'email1_
 var VENUE_STATE={FMP:'NJ',BWH:'NJ',ACCC:'NJ',Cure:'NJ',Mann:'PA',Subaru:'PA',Montage:'PA',Villanova:'PA',DE:'DE',SATB:'DE',Kirkwood:'DE'};
 var VENUE_LABELS={FMP:'Freedom Mortgage Pavilion',Mann:'Mann Music Center',BWH:'Boardwalk Hall',ACCC:'AC Convention Center',Cure:'Cure Insurance Arena',Subaru:'Subaru Park',DE:'DE Chase Field House',Montage:'Montage Mountain',SATB:'Sports at the Beach',Villanova:'Villanova',Kirkwood:'Kirkwood'};
 var VENUE_CODES=['FMP','Mann','BWH','ACCC','Cure','Subaru','DE','Montage','SATB','Villanova','Kirkwood'];
-var STAGE_LABELS={applied:'Applied',contacted:'Contacted',interview_scheduled:'Interview Scheduled',hired:'Hired',onboarding:'Onboarding',active:'Active',inactive:'Inactive',rejected:'Rejected'};
-var ARCHIVE_DAYS={applied:30,contacted:30,interview_scheduled:0,hired:7,onboarding:35,active:14,inactive:14,rejected:7};
+var STAGE_LABELS={applied:'Applied',contacted:'Contacted',interview_requested:'Interview Requested',interview_scheduled:'Interview Scheduled',hired:'Hired',onboarding:'Onboarding',active:'Active',inactive:'Inactive',rejected:'Rejected'};
+var ARCHIVE_DAYS={applied:30,contacted:30,interview_requested:0,interview_scheduled:0,hired:7,onboarding:35,active:14,inactive:14,rejected:7};
 /* SHIRT_SIZES: must match the CHECK constraint on candidates.shirt_size and
    employees.shirt_size in the DB. Order is small -> large for sortability.
    If you change this list, also update the SQL CHECK constraint, the
@@ -324,7 +325,7 @@ function getHireChecked(prefix,items){var out=[];for(var i=0;i<items.length;i++)
 function getEmailAvailability(c){
   var stage=c.pipeline_stage;
   // Email 1: Thanks for applying. Available from application through interview.
-  var e1=stage==='applied'||stage==='contacted'||stage==='interview_scheduled';
+  var e1=stage==='applied'||stage==='contacted'||stage==='interview_requested'||stage==='interview_scheduled';
   // Email 2: Welcome / onboarding paperwork. Available once the person has been hired.
   var e2=stage==='onboarding'||stage==='active'||stage==='inactive';
   // Email 3: Final steps / app downloads. Same stage gating as Email 2.
@@ -347,7 +348,7 @@ html+='<div id="pcpipe-list"></div></div>';
 html+='<div class="panel-right" id="pcpipe-detail"></div></div>';
 return html;}
 
-function updateStatCounts(){var el=document.getElementById('pcpipe-stats');if(!el)return;var nonArchived=0;for(var i=0;i<pcCandidates.length;i++){if(!isArchived(pcCandidates[i]))nonArchived++;}var archivedCount=pcCandidates.length-nonArchived;var inProgress=countStage('contacted')+countStage('interview_scheduled');el.innerHTML='<div class="stat-box"><div class="stat-num">'+nonArchived+'</div><div class="stat-lbl">Active pipeline</div></div><div class="stat-box"><div class="stat-num" style="color:#283593;">'+countStage('applied')+'</div><div class="stat-lbl">Pending review</div></div><div class="stat-box"><div class="stat-num" style="color:#d97706;">'+inProgress+'</div><div class="stat-lbl">In progress</div></div><div class="stat-box"><div class="stat-num" style="color:#1b5e20;">'+countStage('onboarding')+'</div><div class="stat-lbl">Onboarding</div></div><div class="stat-box"><div class="stat-num" style="color:#1D9E75;">'+countHiredThisMonth()+'</div><div class="stat-lbl">Hired this month</div></div><div class="stat-box"><div class="stat-num" style="color:#1D9E75;">'+countStage('active')+'</div><div class="stat-lbl">Active</div></div><div class="stat-box"><div class="stat-num" style="color:#5f5e5a;">'+countStage('inactive')+'</div><div class="stat-lbl">Inactive</div></div><div class="stat-box"><div class="stat-num" style="color:#888;">'+archivedCount+'</div><div class="stat-lbl">Archived</div></div>';}
+function updateStatCounts(){var el=document.getElementById('pcpipe-stats');if(!el)return;var nonArchived=0;for(var i=0;i<pcCandidates.length;i++){if(!isArchived(pcCandidates[i]))nonArchived++;}var archivedCount=pcCandidates.length-nonArchived;var inProgress=countStage('contacted')+countStage('interview_requested')+countStage('interview_scheduled');el.innerHTML='<div class="stat-box"><div class="stat-num">'+nonArchived+'</div><div class="stat-lbl">Active pipeline</div></div><div class="stat-box"><div class="stat-num" style="color:#283593;">'+countStage('applied')+'</div><div class="stat-lbl">Pending review</div></div><div class="stat-box"><div class="stat-num" style="color:#d97706;">'+inProgress+'</div><div class="stat-lbl">In progress</div></div><div class="stat-box"><div class="stat-num" style="color:#1b5e20;">'+countStage('onboarding')+'</div><div class="stat-lbl">Onboarding</div></div><div class="stat-box"><div class="stat-num" style="color:#1D9E75;">'+countHiredThisMonth()+'</div><div class="stat-lbl">Hired this month</div></div><div class="stat-box"><div class="stat-num" style="color:#1D9E75;">'+countStage('active')+'</div><div class="stat-lbl">Active</div></div><div class="stat-box"><div class="stat-num" style="color:#5f5e5a;">'+countStage('inactive')+'</div><div class="stat-lbl">Inactive</div></div><div class="stat-box"><div class="stat-num" style="color:#888;">'+archivedCount+'</div><div class="stat-lbl">Archived</div></div>';}
 
 /* updateFilterPills: rebuilds the row of filter pills above the candidate list. The Legacy
    toggle appears as a small dashed pill alongside the stage filters EXCEPT when viewing
@@ -356,8 +357,8 @@ function updateStatCounts(){var el=document.getElementById('pcpipe-stats');if(!e
 function updateFilterPills(){
   var el=document.getElementById('pcpipe-pills');
   if(!el)return;
-  var stages=['all','applied','contacted','interview_scheduled','onboarding','active','inactive','rejected','archive'];
-  var stageNames={all:'All',applied:'Applied',contacted:'Contacted',interview_scheduled:'Interview',onboarding:'Onboarding',active:'Active',inactive:'Inactive',rejected:'Rejected',archive:'Archive'};
+  var stages=['all','applied','contacted','interview_requested','interview_scheduled','onboarding','active','inactive','rejected','archive'];
+  var stageNames={all:'All',applied:'Applied',contacted:'Contacted',interview_requested:'Requested',interview_scheduled:'Interview',onboarding:'Onboarding',active:'Active',inactive:'Inactive',rejected:'Rejected',archive:'Archive'};
   var html='';
   for(var si=0;si<stages.length;si++){
     html+='<span class="pill'+(pcFilter===stages[si]?' active':'')+'" onclick="pcPipeFilter(\''+stages[si]+'\')">'+stageNames[stages[si]]+'</span>';
@@ -380,6 +381,7 @@ html+='<div class="card-section" style="display:flex;align-items:center;gap:12px
 if(!isRej)html+=renderEmailButtons(c);
 var booking=getBookingForCandidate(c.id);
 if(booking){html+='<div class="card-section" style="padding:10px 16px;"><div class="interview-info"><div class="ii-label">Phone interview scheduled</div><div class="ii-time">'+formatSlotDateTime(booking)+'</div><div class="ii-status">Booked '+formatDate(booking.booked_at)+'</div></div></div>';}
+else if(stage==='interview_requested'){html+='<div class="card-section" style="padding:10px 16px;"><div class="email-sent-banner">Candidate picked preferred interview times. Confirm one on the Interviews page.</div></div>';}
 else if(stage==='contacted'){html+='<div class="card-section" style="padding:10px 16px;"><div class="email-sent-banner">Waiting for candidate to pick an interview time.</div></div>';}
 var pencilSvg='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path></svg>';
 html+='<div class="card-section"><div class="section-title">Application details</div><div class="detail-grid"><div><div class="detail-label">Email</div><div class="detail-value">';
@@ -403,7 +405,7 @@ function pcPipeShowEmailConfirm(emailNum,isResend){if(!pcSelected||!pcSelected.e
 
 function pcPipeConfirmSendEmail(emailNum){if(!pcSelected)return;var btn=document.getElementById('email-send-btn');if(btn){btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Sending...';}var h=apiHeaders();h['Content-Type']='application/json';fetch(SUPABASE_URL+'/functions/v1/send-pipeline-email',{method:'POST',headers:h,body:JSON.stringify({email_number:emailNum,first_name:pcSelected.first_name,to_email:pcSelected.email,candidate_id:pcSelected.id})}).then(function(r){return r.json();}).then(function(data){if(data.success){pcPipeCloseModal(null);loadAll();}else{var e=document.getElementById('email-send-err');if(e)e.innerHTML='Failed to send: '+(data.error||'Unknown error');if(btn){btn.disabled=false;btn.innerHTML='Send email';}}}).catch(function(err){console.error('Email send error:',err);var e=document.getElementById('email-send-err');if(e)e.innerHTML='Network error. Please try again.';if(btn){btn.disabled=false;btn.innerHTML='Send email';}});}
 
-function renderPipelineActions(c,stage){var html='<div class="card-section"><div class="section-title">Pipeline actions</div><div class="stage-select-wrap">';if(stage==='onboarding'){var mpn=c.is_minor&&!c.working_papers_complete;if(mpn){html+='<div style="font-size:12px;color:#c0392b;margin-bottom:8px;flex-basis:100%;">Working papers must be marked complete before this minor can be marked active.</div><button class="btn btn-sm" disabled style="opacity:0.4;cursor:not-allowed;">Mark Active</button>';}else{html+='<button class="btn btn-green" onclick="pcPipeMoveStage(\'active\')">Mark Active</button>';}}else{html+='<div style="flex:1;min-width:160px;"><div class="detail-label" style="margin-bottom:4px;">Move to stage</div><select id="stage-move-select" style="margin-bottom:0;"><option value="">-- Select stage --</option>';if(stage==='applied')html+='<option value="contacted">Contacted</option><option value="interview_scheduled">Interview Scheduled</option><option value="hire_modal">Hired (assign venue + role)</option>';else if(stage==='contacted')html+='<option value="applied">Applied (move back)</option><option value="interview_scheduled">Interview Scheduled</option><option value="hire_modal">Hired (assign venue + role)</option>';else if(stage==='interview_scheduled')html+='<option value="applied">Applied (move back)</option><option value="contacted">Contacted (move back)</option><option value="hire_modal">Hired (assign venue + role)</option>';html+='</select></div><button class="btn btn-primary" style="margin-top:18px;" onclick="pcPipeHandleStageMove()">Move</button>';}html+='<button class="btn btn-danger btn-sm" style="margin-top:18px;" onclick="pcPipeShowRejectModal()">Reject</button></div></div>';return html;}
+function renderPipelineActions(c,stage){var html='<div class="card-section"><div class="section-title">Pipeline actions</div><div class="stage-select-wrap">';if(stage==='onboarding'){var mpn=c.is_minor&&!c.working_papers_complete;if(mpn){html+='<div style="font-size:12px;color:#c0392b;margin-bottom:8px;flex-basis:100%;">Working papers must be marked complete before this minor can be marked active.</div><button class="btn btn-sm" disabled style="opacity:0.4;cursor:not-allowed;">Mark Active</button>';}else{html+='<button class="btn btn-green" onclick="pcPipeMoveStage(\'active\')">Mark Active</button>';}}else{html+='<div style="flex:1;min-width:160px;"><div class="detail-label" style="margin-bottom:4px;">Move to stage</div><select id="stage-move-select" style="margin-bottom:0;"><option value="">-- Select stage --</option>';if(stage==='applied')html+='<option value="contacted">Contacted</option><option value="interview_scheduled">Interview Scheduled</option><option value="hire_modal">Hired (assign venue + role)</option>';else if(stage==='contacted')html+='<option value="applied">Applied (move back)</option><option value="interview_scheduled">Interview Scheduled</option><option value="hire_modal">Hired (assign venue + role)</option>';else if(stage==='interview_requested')html+='<option value="applied">Applied (move back)</option><option value="contacted">Contacted (move back)</option><option value="interview_scheduled">Interview Scheduled</option><option value="hire_modal">Hired (assign venue + role)</option>';else if(stage==='interview_scheduled')html+='<option value="applied">Applied (move back)</option><option value="contacted">Contacted (move back)</option><option value="hire_modal">Hired (assign venue + role)</option>';html+='</select></div><button class="btn btn-primary" style="margin-top:18px;" onclick="pcPipeHandleStageMove()">Move</button>';}html+='<button class="btn btn-danger btn-sm" style="margin-top:18px;" onclick="pcPipeShowRejectModal()">Reject</button></div></div>';return html;}
 
 function renderHireDetails(c){
   var pencilSvg='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path></svg>';
@@ -628,8 +630,16 @@ function cancelBookingForCandidate(cid){
   sbFetch('/rest/v1/interview_bookings?id=eq.'+b.id,{method:'PATCH',prefer:'return=minimal',body:{status:'cancelled',cancelled_at:new Date().toISOString()}})
     .catch(function(err){console.warn('Booking cancel failed (non-critical):',err);});
 }
+/* Hire means the interview happened: mark it completed, not cancelled.
+   Non-blocking like cancel -- a failure here must not undo the hire. */
+function completeBookingForCandidate(cid){
+  var b=getBookingForCandidate(cid);
+  if(!b)return;
+  sbFetch('/rest/v1/interview_bookings?id=eq.'+b.id,{method:'PATCH',prefer:'return=minimal',body:{status:'completed'}})
+    .catch(function(err){console.warn('Booking complete failed (non-critical):',err);});
+}
 function pcPipeShowRejectModal(){document.getElementById('pcpipe-modal').innerHTML='<div class="modal-overlay" onclick="pcPipeCloseModal(event)"><div class="modal-box"><h3>Reject candidate</h3><p>This candidate will be marked rejected. Their record is retained.</p><label style="font-size:13px;color:#555;display:block;margin-bottom:4px;">Reason (optional)</label><input type="text" id="reject-reason-input" placeholder="e.g. Not hiring for this role..." style="margin-bottom:12px;" /><div style="display:flex;gap:8px;"><button class="btn" style="flex:1;" onclick="pcPipeCloseModal(null)">Cancel</button><button class="btn btn-danger" style="flex:1;" onclick="pcPipeConfirmReject()">Reject</button></div></div></div>';}
-function pcPipeConfirmReject(){if(!pcSelected)return;var reason=document.getElementById('reject-reason-input').value.trim();cancelBookingForCandidate(pcSelected.id);sbFetch('/rest/v1/candidates?id=eq.'+pcSelected.id,{method:'PATCH',prefer:'return=minimal',body:{pipeline_stage:'rejected',rejection_reason:reason||null,interview_scheduled_at:null,interview_slot_time:null,stage_updated_at:new Date().toISOString(),updated_at:new Date().toISOString()}}).then(function(){pcPipeCloseModal(null);loadAll();});}
+function pcPipeConfirmReject(){if(!pcSelected)return;var reason=document.getElementById('reject-reason-input').value.trim();cancelBookingForCandidate(pcSelected.id);sbFetch('/rest/v1/candidates?id=eq.'+pcSelected.id,{method:'PATCH',prefer:'return=minimal',body:{pipeline_stage:'rejected',rejection_reason:reason||null,interview_scheduled_at:null,interview_slot_time:null,stage_updated_at:new Date().toISOString(),updated_at:new Date().toISOString()}}).then(function(){pcPipeCloseModal(null);loadAll();}).catch(function(err){console.error('Reject failed:',err);alert('Could not reject this candidate. '+(err&&err.status===403?'Permission denied -- send Claude the console error.':'Please try again or send Claude the console error.'));});}
 
 // ============================================================
 // HIRE MODAL -- per-venue role picker (employee_venue_roles).
@@ -890,8 +900,8 @@ function doHireWrite(punch,desiredPairs,venuesMirror,rolesMirror,hiredBy,homeVen
   // venue_roles and the Hire-details card now reads it from there.
   // home_venue stays on employees only (dropped from candidates in Step 1.1).
   var cu={pipeline_stage:'onboarding',hired:true,hired_at:new Date().toISOString(),hired_by:hiredBy,punch_id:punch,assigned_venues:venuesMirror,assigned_roles:rolesMirror,stage_updated_at:new Date().toISOString(),updated_at:new Date().toISOString()};
-  var er={first_name:pcSelected.first_name,last_name:pcSelected.last_name,punch_id:punch,is_active:true,phone:pcSelected.phone,home_venue:homeVenue,shirt_size:pcSelected.shirt_size||null};
-  cancelBookingForCandidate(pcSelected.id);
+  var er={first_name:pcSelected.first_name,last_name:pcSelected.last_name,punch_id:punch,is_active:true,phone:pcSelected.phone,home_venue:homeVenue,shirt_size:pcSelected.shirt_size||null,candidate_id:pcSelected.id};
+  completeBookingForCandidate(pcSelected.id);
   var failStep='candidates update';
   return sbFetch('/rest/v1/candidates?id=eq.'+pcSelected.id,{method:'PATCH',prefer:'return=minimal',body:cu})
     .then(function(){
