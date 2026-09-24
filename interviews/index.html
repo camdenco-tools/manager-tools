@@ -79,6 +79,9 @@ input:focus, select:focus { outline: none; border-color: #2d7dd2; }
 .stat-num { font-size: 22px; font-weight: 600; }
 .stat-lbl { font-size: 11px; color: #888; margin-top: 2px; }
 
+.load-error { background: #fdecea; border: 1px solid #f5c6c2; border-radius: 8px; padding: 14px 16px; color: #8b1a1a; font-size: 13px; line-height: 1.6; }
+.load-error strong { display: block; font-size: 14px; margin-bottom: 4px; }
+
 .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 1000; }
 .modal-box { background: #fff; border-radius: 10px; padding: 24px; max-width: 420px; width: 95%; max-height: 90vh; overflow-y: auto; }
 .modal-box h3 { margin: 0 0 8px; font-size: 16px; }
@@ -116,9 +119,21 @@ var SUPABASE_URL='https://aoazlttdjowhlfcksoyl.supabase.co';
 
 var DAY_NAMES=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var MONTH_NAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-var iaSlots=[],iaBookings=[],iaWeekStart=null,iaLoading=true;
+var iaSlots=[],iaBookings=[],iaWeekStart=null,iaLoading=true,iaError=null;
 
 function apiHeaders() { return Object.assign({}, pcAuth.headers(), {'Content-Type':'application/json'}); }
+
+// Real actor name instead of the hardcoded 'admin' every existing row carries.
+function iaCreator(){var u=(pcAuth&&pcAuth.getUser)?pcAuth.getUser():null;return (u&&u.display_name)?u.display_name:'unknown';}
+
+// Turn any error into something a human can read, and flag auth failures
+// so the page can tell "your session died" apart from "the write was rejected".
+function iaErrText(err){
+  if(!err)return'Unknown error.';
+  if(err.authFailed)return'Your session expired. Reload the page and sign in again. Nothing was saved.';
+  if(err.status===403)return'Permission denied by the database (RLS). Nothing was saved.';
+  return err.message?err.message:'Unknown error.';
+}
 
 function getSunday(d){var day=d.getDay();return new Date(d.getFullYear(),d.getMonth(),d.getDate()-day);}
 function initWeekStart(){iaWeekStart=getSunday(new Date());}
@@ -130,9 +145,43 @@ function formatDateNice(s){var d=parseDate(s);return DAY_NAMES[d.getDay()]+', '+
 function isToday(d){var now=new Date();return d.getFullYear()===now.getFullYear()&&d.getMonth()===now.getMonth()&&d.getDate()===now.getDate();}
 function isPast(slotDate,slotTime){var now=new Date();var p=slotTime.split(':');var sd=parseDate(slotDate);sd.setHours(parseInt(p[0]),parseInt(p[1]),0);return sd<now;}
 
-function sbFetch(path,opts){var method=opts&&opts.method?opts.method:'GET';var headers=apiHeaders();if(opts&&opts.prefer)headers['Prefer']=opts.prefer;var cfg={method:method,headers:headers};if(opts&&opts.body)cfg.body=JSON.stringify(opts.body);return fetch(SUPABASE_URL+path,cfg);}
+// CRITICAL: this used to return the raw fetch promise, so a 401/403 resolved
+// normally and every caller treated a rejected write as a success. Any non-2xx
+// now throws, carrying status + authFailed.
+function sbFetch(path,opts){
+  var method=opts&&opts.method?opts.method:'GET';
+  var headers=apiHeaders();
+  if(opts&&opts.prefer)headers['Prefer']=opts.prefer;
+  var cfg={method:method,headers:headers};
+  if(opts&&opts.body)cfg.body=JSON.stringify(opts.body);
+  return fetch(SUPABASE_URL+path,cfg).then(function(r){
+    if(r.ok)return r;
+    return r.text().then(function(t){
+      var msg='';
+      if(t){try{var j=JSON.parse(t);msg=j.message||j.error||j.hint||t;}catch(e){msg=t;}}
+      var err=new Error('HTTP '+r.status+(msg?': '+msg:''));
+      err.status=r.status;
+      err.authFailed=(r.status===401||r.status===403);
+      throw err;
+    });
+  });
+}
 
-function loadData(){iaLoading=true;render();var p1=sbFetch('/rest/v1/interview_slots?select=*&order=slot_date.asc,start_time.asc').then(function(r){return r.json();}).catch(function(){return[];});var p2=sbFetch('/rest/v1/interview_bookings?select=*,interview_slots(*)&status=eq.scheduled&order=booked_at.desc').then(function(r){return r.json();}).catch(function(){return[];});Promise.all([p1,p2]).then(function(res){iaSlots=res[0]||[];iaBookings=res[1]||[];iaLoading=false;render();});}
+// No more .catch(function(){return[];}) — a failed load must look like a
+// failed load, not an empty calendar.
+function loadData(){
+  iaLoading=true;iaError=null;render();
+  var p1=sbFetch('/rest/v1/interview_slots?select=*&order=slot_date.asc,start_time.asc').then(function(r){return r.json();});
+  var p2=sbFetch('/rest/v1/interview_bookings?select=*,interview_slots(*)&status=eq.scheduled&order=booked_at.desc').then(function(r){return r.json();});
+  Promise.all([p1,p2]).then(function(res){
+    iaSlots=res[0]||[];iaBookings=res[1]||[];iaLoading=false;render();
+  }).catch(function(err){
+    console.error('loadData failed',err);
+    iaSlots=[];iaBookings=[];iaLoading=false;
+    iaError=iaErrText(err);
+    render();
+  });
+}
 
 function getBookingForSlot(slotId){for(var i=0;i<iaBookings.length;i++){if(iaBookings[i].slot_id===slotId)return iaBookings[i];}return null;}
 function getSlotsForDate(ds){var out=[];for(var i=0;i<iaSlots.length;i++){if(iaSlots[i].slot_date===ds&&iaSlots[i].is_available)out.push(iaSlots[i]);}return out;}
@@ -145,6 +194,7 @@ function render(){document.getElementById('ia-main').innerHTML=renderMain();}
 
 function renderMain(){
 if(iaLoading)return'<div class="empty-state">Loading...</div>';
+if(iaError)return'<div class="section-card"><div class="load-error"><strong>Could not load interview data</strong>'+iaError+'</div></div>';
 var stats=countStats();
 var html='<p class="page-sub">Manage available phone interview times for candidates.</p>';
 html+='<div class="stat-row"><div class="stat-box"><div class="stat-num" style="color:#1D9E75;">'+stats.open+'</div><div class="stat-lbl">Open slots</div></div><div class="stat-box"><div class="stat-num" style="color:#d97706;">'+stats.booked+'</div><div class="stat-lbl">Booked</div></div><div class="stat-box"><div class="stat-num" style="color:#2d7dd2;">'+stats.thisWeek+'</div><div class="stat-lbl">This week</div></div></div>';
@@ -165,23 +215,102 @@ html+='</div>';return html;}
 function renderTimeOptions(defaultH,defaultM){var html='';for(var h=6;h<=21;h++){for(var m=0;m<60;m+=30){var val=formatTime24(h,m);html+='<option value="'+val+'"'+(h===defaultH&&m===defaultM?' selected':'')+'>'+formatTime12(val)+'</option>';}}return html;}
 function renderWeekLabel(){if(!iaWeekStart)return'';var end=new Date(iaWeekStart.getTime()+6*86400000);var sm=MONTH_NAMES[iaWeekStart.getMonth()];var em=MONTH_NAMES[end.getMonth()];return sm===em?sm+' '+iaWeekStart.getDate()+' - '+end.getDate()+', '+iaWeekStart.getFullYear():sm+' '+iaWeekStart.getDate()+' - '+em+' '+end.getDate()+', '+end.getFullYear();}
 
-function iaBuildSlots(){var dateVal=document.getElementById('ia-build-date').value;var startVal=document.getElementById('ia-build-start').value;var endVal=document.getElementById('ia-build-end').value;var durVal=parseInt(document.getElementById('ia-build-dur').value);var msgEl=document.getElementById('ia-build-msg');if(!dateVal){msgEl.innerHTML='<div class="error-msg">Please select a date.</div>';return;}var sp=startVal.split(':');var ep=endVal.split(':');var startMin=parseInt(sp[0])*60+parseInt(sp[1]);var endMin=parseInt(ep[0])*60+parseInt(ep[1]);if(endMin<=startMin){msgEl.innerHTML='<div class="error-msg">End time must be after start time.</div>';return;}var slots=[];var cur=startMin;while(cur+durVal<=endMin){var h=Math.floor(cur/60);var m=cur%60;slots.push({slot_date:dateVal,start_time:formatTime24(h,m),duration_minutes:durVal,is_available:true,created_by:'admin'});cur+=durVal;}if(slots.length===0){msgEl.innerHTML='<div class="error-msg">No slots fit in that time range.</div>';return;}msgEl.innerHTML='<div class="success-msg">Adding '+slots.length+' slot'+(slots.length!==1?'s':'')+'...</div>';sbFetch('/rest/v1/interview_slots',{method:'POST',prefer:'return=minimal,resolution=ignore-duplicates',body:slots}).then(function(){msgEl.innerHTML='<div class="success-msg">Added '+slots.length+' slot'+(slots.length!==1?'s':'')+' for '+formatDateNice(dateVal)+'.</div>';loadData();}).catch(function(err){msgEl.innerHTML='<div class="error-msg">Error adding slots. Some may already exist.</div>';console.error(err);});}
+function iaBuildSlots(){
+  var dateVal=document.getElementById('ia-build-date').value;
+  var startVal=document.getElementById('ia-build-start').value;
+  var endVal=document.getElementById('ia-build-end').value;
+  var durVal=parseInt(document.getElementById('ia-build-dur').value);
+  var msgEl=document.getElementById('ia-build-msg');
+  if(!dateVal){msgEl.innerHTML='<div class="error-msg">Please select a date.</div>';return;}
+  var sp=startVal.split(':');var ep=endVal.split(':');
+  var startMin=parseInt(sp[0])*60+parseInt(sp[1]);
+  var endMin=parseInt(ep[0])*60+parseInt(ep[1]);
+  if(endMin<=startMin){msgEl.innerHTML='<div class="error-msg">End time must be after start time.</div>';return;}
+  var slots=buildSlotsForDay(dateVal,startVal,endVal,durVal);
+  if(slots.length===0){msgEl.innerHTML='<div class="error-msg">No slots fit in that time range.</div>';return;}
+  msgEl.innerHTML='<div class="success-msg">Saving '+slots.length+' slot'+(slots.length!==1?'s':'')+'...</div>';
+  sbFetch('/rest/v1/interview_slots',{method:'POST',prefer:'return=minimal,resolution=ignore-duplicates',body:slots}).then(function(){
+    msgEl.innerHTML='<div class="success-msg">Saved '+slots.length+' slot'+(slots.length!==1?'s':'')+' for '+formatDateNice(dateVal)+' (times that already existed were skipped).</div>';
+    loadData();
+  }).catch(function(err){
+    console.error('iaBuildSlots failed',err);
+    msgEl.innerHTML='<div class="error-msg">Could not add slots. '+iaErrText(err)+'</div>';
+  });
+}
 
-function iaPreset(type){var msgEl=document.getElementById('ia-build-msg');var now=new Date();var startDay=new Date(now.getFullYear(),now.getMonth(),now.getDate()+1);var dur=parseInt(document.getElementById('ia-build-dur').value)||30;var allSlots=[];if(type==='weekday_afternoon'){for(var d=0;d<7;d++){var day=new Date(startDay.getTime()+d*86400000);var dow=day.getDay();if(dow===0||dow===6)continue;allSlots=allSlots.concat(buildSlotsForDay(dateStr(day),'14:00','17:00',dur));}}else if(type==='weekday_morning'){for(var d=0;d<7;d++){var day=new Date(startDay.getTime()+d*86400000);var dow=day.getDay();if(dow===0||dow===6)continue;allSlots=allSlots.concat(buildSlotsForDay(dateStr(day),'09:00','12:00',dur));}}else if(type==='all_week'){for(var d=0;d<7;d++){var day=new Date(startDay.getTime()+d*86400000);allSlots=allSlots.concat(buildSlotsForDay(dateStr(day),'10:00','16:00',dur));}}if(allSlots.length===0){msgEl.innerHTML='<div class="error-msg">No slots generated.</div>';return;}msgEl.innerHTML='<div class="success-msg">Adding '+allSlots.length+' slots...</div>';sbFetch('/rest/v1/interview_slots',{method:'POST',prefer:'return=minimal,resolution=ignore-duplicates',body:allSlots}).then(function(){msgEl.innerHTML='<div class="success-msg">Added '+allSlots.length+' slots across the next 7 days.</div>';loadData();}).catch(function(err){msgEl.innerHTML='<div class="error-msg">Error. Some slots may already exist.</div>';console.error(err);});}
+function iaPreset(type){
+  var msgEl=document.getElementById('ia-build-msg');
+  var now=new Date();
+  var startDay=new Date(now.getFullYear(),now.getMonth(),now.getDate()+1);
+  var dur=parseInt(document.getElementById('ia-build-dur').value)||30;
+  var allSlots=[];
+  var d,day,dow;
+  if(type==='weekday_afternoon'){
+    for(d=0;d<7;d++){day=new Date(startDay.getTime()+d*86400000);dow=day.getDay();if(dow===0||dow===6)continue;allSlots=allSlots.concat(buildSlotsForDay(dateStr(day),'14:00','17:00',dur));}
+  }else if(type==='weekday_morning'){
+    for(d=0;d<7;d++){day=new Date(startDay.getTime()+d*86400000);dow=day.getDay();if(dow===0||dow===6)continue;allSlots=allSlots.concat(buildSlotsForDay(dateStr(day),'09:00','12:00',dur));}
+  }else if(type==='all_week'){
+    for(d=0;d<7;d++){day=new Date(startDay.getTime()+d*86400000);allSlots=allSlots.concat(buildSlotsForDay(dateStr(day),'10:00','16:00',dur));}
+  }
+  if(allSlots.length===0){msgEl.innerHTML='<div class="error-msg">No slots generated.</div>';return;}
+  msgEl.innerHTML='<div class="success-msg">Saving '+allSlots.length+' slots...</div>';
+  sbFetch('/rest/v1/interview_slots',{method:'POST',prefer:'return=minimal,resolution=ignore-duplicates',body:allSlots}).then(function(){
+    msgEl.innerHTML='<div class="success-msg">Saved '+allSlots.length+' slots across the next 7 days (times that already existed were skipped).</div>';
+    loadData();
+  }).catch(function(err){
+    console.error('iaPreset failed',err);
+    msgEl.innerHTML='<div class="error-msg">Could not add slots. '+iaErrText(err)+'</div>';
+  });
+}
 
-function buildSlotsForDay(ds,startTime,endTime,dur){var sp=startTime.split(':');var ep=endTime.split(':');var startMin=parseInt(sp[0])*60+parseInt(sp[1]);var endMin=parseInt(ep[0])*60+parseInt(ep[1]);var slots=[];var cur=startMin;while(cur+dur<=endMin){var h=Math.floor(cur/60);var m=cur%60;slots.push({slot_date:ds,start_time:formatTime24(h,m),duration_minutes:dur,is_available:true,created_by:'admin'});cur+=dur;}return slots;}
+function buildSlotsForDay(ds,startTime,endTime,dur){
+  var sp=startTime.split(':');var ep=endTime.split(':');
+  var startMin=parseInt(sp[0])*60+parseInt(sp[1]);
+  var endMin=parseInt(ep[0])*60+parseInt(ep[1]);
+  var slots=[];var cur=startMin;var creator=iaCreator();
+  while(cur+dur<=endMin){
+    var h=Math.floor(cur/60);var m=cur%60;
+    slots.push({slot_date:ds,start_time:formatTime24(h,m),duration_minutes:dur,is_available:true,created_by:creator});
+    cur+=dur;
+  }
+  return slots;
+}
 
 function iaWeekPrev(){iaWeekStart=new Date(iaWeekStart.getTime()-7*86400000);render();}
 function iaWeekNext(){iaWeekStart=new Date(iaWeekStart.getTime()+7*86400000);render();}
 function iaWeekToday(){initWeekStart();render();}
 
-function iaSlotClick(slotId){var slot=null;for(var i=0;i<iaSlots.length;i++){if(iaSlots[i].id===slotId){slot=iaSlots[i];break;}}if(!slot)return;var booking=getBookingForSlot(slotId);var html='<div class="modal-overlay" onclick="iaCloseModal(event)"><div class="modal-box"><h3>'+formatDateNice(slot.slot_date)+' at '+formatTime12(slot.start_time)+'</h3><p>'+slot.duration_minutes+' minute slot</p>';if(booking){html+='<div style="background:#fff8e1;border:1px solid #ffe082;border-radius:6px;padding:12px;margin-bottom:14px;"><div style="font-size:11px;color:#7a5c00;font-weight:600;text-transform:uppercase;margin-bottom:6px;">Booked by</div><div style="font-size:15px;font-weight:500;color:#78350f;">'+booking.candidate_name+'</div>'+(booking.candidate_phone?'<div style="font-size:13px;color:#92400e;margin-top:2px;">'+booking.candidate_phone+'</div>':'')+(booking.candidate_email?'<div style="font-size:13px;color:#92400e;margin-top:2px;">'+booking.candidate_email+'</div>':'')+'<div style="font-size:11px;color:#a16207;margin-top:6px;">Booked '+new Date(booking.booked_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+'</div></div><div style="display:flex;gap:8px;"><button class="btn" style="flex:1;" onclick="iaCloseModal(null)">Close</button><button class="btn btn-danger" style="flex:1;" onclick="iaCancelBooking(\''+booking.id+'\',\''+slotId+'\')">Cancel booking</button></div>';}else if(isPast(slot.slot_date,slot.start_time)){html+='<div style="background:#f0f0f0;border-radius:6px;padding:10px 12px;font-size:13px;color:#888;margin-bottom:14px;">This slot is in the past.</div><div style="display:flex;gap:8px;"><button class="btn" style="flex:1;" onclick="iaCloseModal(null)">Close</button><button class="btn btn-danger" style="flex:1;" onclick="iaDeleteSlot(\''+slotId+'\')">Remove slot</button></div>';}else{html+='<div style="background:#eaf6ec;border-radius:6px;padding:10px 12px;font-size:13px;color:#1e6b2e;margin-bottom:14px;">This slot is open and available for candidates to book.</div><div style="display:flex;gap:8px;"><button class="btn" style="flex:1;" onclick="iaCloseModal(null)">Close</button><button class="btn btn-danger" style="flex:1;" onclick="iaDeleteSlot(\''+slotId+'\')">Remove slot</button></div>';}html+='</div></div>';document.getElementById('ia-modal').innerHTML=html;}
+function iaSlotClick(slotId){var slot=null;for(var i=0;i<iaSlots.length;i++){if(iaSlots[i].id===slotId){slot=iaSlots[i];break;}}if(!slot)return;var booking=getBookingForSlot(slotId);var html='<div class="modal-overlay" onclick="iaCloseModal(event)"><div class="modal-box"><h3>'+formatDateNice(slot.slot_date)+' at '+formatTime12(slot.start_time)+'</h3><p>'+slot.duration_minutes+' minute slot</p>';if(booking){html+='<div style="background:#fff8e1;border:1px solid #ffe082;border-radius:6px;padding:12px;margin-bottom:14px;"><div style="font-size:11px;color:#7a5c00;font-weight:600;text-transform:uppercase;margin-bottom:6px;">Booked by</div><div style="font-size:15px;font-weight:500;color:#78350f;">'+booking.candidate_name+'</div>'+(booking.candidate_phone?'<div style="font-size:13px;color:#92400e;margin-top:2px;">'+booking.candidate_phone+'</div>':'')+(booking.candidate_email?'<div style="font-size:13px;color:#92400e;margin-top:2px;">'+booking.candidate_email+'</div>':'')+'<div style="font-size:11px;color:#a16207;margin-top:6px;">Booked '+new Date(booking.booked_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+'</div></div><div id="ia-modal-msg"></div><div style="display:flex;gap:8px;"><button class="btn" style="flex:1;" onclick="iaCloseModal(null)">Close</button><button class="btn btn-danger" style="flex:1;" onclick="iaCancelBooking(\''+booking.id+'\',\''+slotId+'\')">Cancel booking</button></div>';}else if(isPast(slot.slot_date,slot.start_time)){html+='<div style="background:#f0f0f0;border-radius:6px;padding:10px 12px;font-size:13px;color:#888;margin-bottom:14px;">This slot is in the past.</div><div id="ia-modal-msg"></div><div style="display:flex;gap:8px;"><button class="btn" style="flex:1;" onclick="iaCloseModal(null)">Close</button><button class="btn btn-danger" style="flex:1;" onclick="iaDeleteSlot(\''+slotId+'\')">Remove slot</button></div>';}else{html+='<div style="background:#eaf6ec;border-radius:6px;padding:10px 12px;font-size:13px;color:#1e6b2e;margin-bottom:14px;">This slot is open and available for candidates to book.</div><div id="ia-modal-msg"></div><div style="display:flex;gap:8px;"><button class="btn" style="flex:1;" onclick="iaCloseModal(null)">Close</button><button class="btn btn-danger" style="flex:1;" onclick="iaDeleteSlot(\''+slotId+'\')">Remove slot</button></div>';}html+='</div></div>';document.getElementById('ia-modal').innerHTML=html;}
 
 function iaShowDayDetail(ds){var slots=getSlotsForDate(ds);var html='<div class="modal-overlay" onclick="iaCloseModal(event)"><div class="modal-box"><h3>'+formatDateNice(ds)+'</h3><p>'+slots.length+' slot'+(slots.length!==1?'s':'')+'</p>';for(var i=0;i<slots.length;i++){var slot=slots[i];var booking=getBookingForSlot(slot.id);var past=isPast(slot.slot_date,slot.start_time);var bg=past?'#f0f0f0':(booking?'#fff8e1':'#eaf6ec');var color=past?'#aaa':(booking?'#7a5c00':'#1e6b2e');html+='<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:'+bg+';border-radius:6px;margin-bottom:4px;font-size:13px;color:'+color+';"><span>'+formatTime12(slot.start_time)+(booking?' - '+booking.candidate_name:(past?' (past)':' (open)'))+'</span><button class="btn btn-sm" style="font-size:11px;" onclick="iaSlotClick(\''+slot.id+'\')">View</button></div>';}html+='<div style="margin-top:12px;"><button class="btn" onclick="iaCloseModal(null)" style="width:100%;">Close</button></div></div></div>';document.getElementById('ia-modal').innerHTML=html;}
 
-function iaDeleteSlot(slotId){sbFetch('/rest/v1/interview_slots?id=eq.'+slotId,{method:'DELETE'}).then(function(){iaCloseModal(null);loadData();});}
+function iaModalError(err){
+  console.error(err);
+  var el=document.getElementById('ia-modal-msg');
+  if(el){el.innerHTML='<div class="error-msg" style="margin-bottom:10px;">'+iaErrText(err)+'</div>';}
+}
 
-function iaCancelBooking(bookingId,slotId){sbFetch('/rest/v1/interview_bookings?id=eq.'+bookingId,{method:'PATCH',prefer:'return=minimal',body:{status:'cancelled',cancelled_at:new Date().toISOString()}}).then(function(){var booking=null;for(var i=0;i<iaBookings.length;i++){if(iaBookings[i].id===bookingId){booking=iaBookings[i];break;}}if(booking&&booking.candidate_id){sbFetch('/rest/v1/candidates?id=eq.'+booking.candidate_id,{method:'PATCH',prefer:'return=minimal',body:{pipeline_stage:'contacted',interview_scheduled_at:null,interview_slot_time:null,stage_updated_at:new Date().toISOString(),updated_at:new Date().toISOString()}});}iaCloseModal(null);loadData();});}
+function iaDeleteSlot(slotId){
+  sbFetch('/rest/v1/interview_slots?id=eq.'+slotId,{method:'DELETE'}).then(function(){
+    iaCloseModal(null);loadData();
+  }).catch(iaModalError);
+}
+
+// Two writes, and the second one was previously fire-and-forget — if the
+// candidate PATCH failed the booking was cancelled with the candidate left
+// stranded in whatever stage they were in. Chained and surfaced now.
+function iaCancelBooking(bookingId,slotId){
+  var booking=null;
+  for(var i=0;i<iaBookings.length;i++){if(iaBookings[i].id===bookingId){booking=iaBookings[i];break;}}
+  sbFetch('/rest/v1/interview_bookings?id=eq.'+bookingId,{method:'PATCH',prefer:'return=minimal',body:{status:'cancelled',cancelled_at:new Date().toISOString()}}).then(function(){
+    if(booking&&booking.candidate_id){
+      return sbFetch('/rest/v1/candidates?id=eq.'+booking.candidate_id,{method:'PATCH',prefer:'return=minimal',body:{pipeline_stage:'contacted',interview_scheduled_at:null,interview_slot_time:null,stage_updated_at:new Date().toISOString(),updated_at:new Date().toISOString()}});
+    }
+    return null;
+  }).then(function(){
+    iaCloseModal(null);loadData();
+  }).catch(iaModalError);
+}
 
 function iaCloseModal(e){if(e?e.target===e.currentTarget:true)document.getElementById('ia-modal').innerHTML='';}
 
