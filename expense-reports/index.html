@@ -2427,6 +2427,7 @@
   var pageState = {
     isAdmin: false,
     currentUser: null,
+    defaultAddress: null,   // user_roles structured address parts
     insurance: {
       mine: null,        // { active, latest, ... } from refreshMyInsurance
       queue: []          // pending review list (admin)
@@ -4303,6 +4304,8 @@
     var addBottomBtn = document.getElementById('btnAddLineBottom');
     if (addBottomBtn) addBottomBtn.addEventListener('click', function () { addLine(); });
 
+    wireAddressFields();
+
     // Session 6b — Exit fix mode button (in the fix-card header)
     var exitBtn = document.getElementById('btnExitFixModeHeader');
     if (exitBtn) {
@@ -4753,32 +4756,10 @@
   }
 
   // -------------------------------------------------------------
-  // ADDRESS HANDLERS
+  // REPORT PATCH
   // -------------------------------------------------------------
 
-  function onAddressChange(newValue) {
-    if (!draftState.report) return;
-    var prev = draftState.report.mailing_address || '';
-    if (prev === newValue) return;
-    draftState.report.mailing_address = newValue;
-    // Debounced PATCH — normalize at save time, not keystroke time, so the
-    // cursor doesn't jump while the user is mid-typing.
-    clearTimeout(draftState._addressSaveTimer);
-    draftState._addressSaveTimer = setTimeout(function () {
-      var normalized = normalizeAddress(newValue);
-      // If normalize cleaned it up, reflect that in state + the textarea
-      if (normalized !== newValue) {
-        draftState.report.mailing_address = normalized;
-        var ta = document.getElementById('draftAddress');
-        if (ta && document.activeElement !== ta) {
-          // Only rewrite the textarea if it's not focused (don't yank cursor)
-          ta.value = normalized;
-        }
-      }
-      patchReport({ mailing_address: normalized || null })
-        .then(function () { updateSubmitButtonState(); })
-        .catch(function (e) {
-          if (e && e.authFailed) { handleAuthFailure(); return; }
+  function patchReport(patchBody) { return; }
           console.error('[ER] address save failed:', e);
           showToast('Could not save address', 2400);
         });
@@ -5137,31 +5118,6 @@
         toggleLineExpand(lid);
         return;
       }
-
-      // Address override link
-      if (t.id === 'draftAddressOverride') {
-        draftState.addressOverride = true;
-        draftState.report.mailing_address = '';
-        renderDraft();
-        var ta = document.getElementById('draftAddress');
-        if (ta) { ta.value = ''; ta.focus(); }
-        return;
-      }
-      if (t.id === 'draftAddressRevert') {
-        draftState.addressOverride = false;
-        var savedDefault = (pageState.currentUser && pageState.currentUser.mailing_address) || '';
-        draftState.report.mailing_address = savedDefault;
-        draftState.saveDefaultAddressOnSubmit = false;
-        renderDraft();
-        var ta2 = document.getElementById('draftAddress');
-        if (ta2) ta2.value = savedDefault;
-        // Persist
-        patchReport({ mailing_address: savedDefault || null }).catch(function (e) {
-          if (e && e.authFailed) { handleAuthFailure(); return; }
-          console.error('[ER] revert address failed:', e);
-        });
-        return;
-      }
     });
 
     // Field changes — handled by 'input' and 'change' events
@@ -5170,10 +5126,6 @@
       if (!t || !t.classList) return;
       var lineId = t.getAttribute('data-line-id');
 
-      if (t.id === 'draftAddress') {
-        onAddressChange(t.value);
-        return;
-      }
       if (!lineId) return;
 
       if (t.classList.contains('line-description')) {
@@ -5194,10 +5146,6 @@
       if (!t || !t.classList) return;
       var lineId = t.getAttribute('data-line-id');
 
-      if (t.id === 'draftAddressSaveDefault') {
-        draftState.saveDefaultAddressOnSubmit = !!t.checked;
-        return;
-      }
       if (!lineId) return;
 
       if (t.classList.contains('line-date')) {
@@ -5828,13 +5776,13 @@
       return { ok: false, reason: 'Total must be greater than $0' };
     }
 
-    // 4) Mailing address required AND must include city/state/ZIP
-    var addr = (draftState.report.mailing_address || '').trim();
-    if (!addr) {
-      return { ok: false, reason: 'Mailing address is required' };
+    // 4) Mailing address — every part present, and confirmed if it was legacy text
+    if (addressNeedsConfirm()) {
+      return { ok: false, reason: 'Confirm your mailing address above' };
     }
-    if (!isValidUSAddress(addr)) {
-      return { ok: false, reason: 'Mailing address needs street, city, state, and ZIP' };
+    if (!addrIsComplete(draftState.report)) {
+      var miss = addrMissingLabel(draftState.report);
+      return { ok: false, reason: 'Mailing address needs: ' + (miss || 'all fields') };
     }
 
     // 5) No blocking warnings (mileage >15 days, insurance gate on mileage)
@@ -5936,17 +5884,17 @@
     .then(function () {
       // Step 1.5: if user opted to save the address as default, persist it
       // to user_roles.mailing_address (admin-update via the same row's own id).
-      if (draftState.saveDefaultAddressOnSubmit && draftState.report.mailing_address) {
+      if (draftState.saveDefaultAddressOnSubmit && addrIsComplete(draftState.report)) {
         var u = pageState.currentUser;
         if (u && u.id) {
-          var normalizedForDefault = normalizeAddress(draftState.report.mailing_address);
+          var defParts = addrPartsOf(draftState.report);
           return authFetch(SB_REST + 'user_roles?id=eq.' + encodeURIComponent(u.id), {
             method:  'PATCH',
             headers: minimalHdrs,
-            body:    JSON.stringify({ mailing_address: normalizedForDefault })
+            body:    JSON.stringify(defParts)
           }).then(function () {
             // Update local pageState so UX reflects the new default immediately
-            pageState.currentUser.mailing_address = normalizedForDefault;
+            pageState.defaultAddress = defParts;
           }).catch(function (e) {
             // Non-fatal — log and continue. The report submitted; saving the
             // default is a nice-to-have.
@@ -7692,6 +7640,7 @@
     // expenses. Load venues from pc-catalog first so the food line picker
     // is ready by the time anyone expands a food line.
     ensureVenuesLoaded()
+      .then(fetchMyDefaultAddress)
       .then(initDraftSurface)
       .then(refreshPastReports)
       .then(refreshReturnedReports);
