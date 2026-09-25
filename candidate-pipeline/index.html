@@ -270,7 +270,7 @@ function sbFetch(path,opts){
 }
 
 function sbJsonList(path){return sbFetch(path).then(function(r){return r.json();});}
-function loadAll(){pcLoading=true;pcLoadError='';render();var today=new Date().toLocaleString('sv-SE',{timeZone:'America/New_York'}).slice(0,10);Promise.all([sbJsonList('/rest/v1/candidates?select=*&order=applied_at.desc'),sbJsonList('/rest/v1/pay_rates?select=*&order=state.asc,role.asc'),sbJsonList('/rest/v1/interview_bookings?select=*,interview_slots(*)&order=booked_at.desc&limit=2000'),sbJsonList('/rest/v1/interview_requests?select=id,candidate_id,kind,note,source,created_at,notified_at,notify_error&resolved_at=is.null&deleted_at=is.null&order=created_at.asc&limit=500'),sbJsonList('/rest/v1/interview_slot_preferences?select=request_id,slot_id,rank,interview_slots(slot_date,start_time,duration_minutes)&retired_at=is.null&limit=1500'),sbJsonList('/rest/v1/interview_pick_links?select=id,candidate_id,created_at,created_by,expires_at,email_to,email_sent_at,email_error,first_opened_at,last_opened_at,open_count,used_at,retired_at,retired_reason&order=created_at.desc&limit=2000'),sbJsonList('/rest/v1/interview_slots?select=id,slot_date,start_time,duration_minutes&is_available=eq.true&slot_date=gte.'+today+'&order=slot_date.asc,start_time.asc&limit=400')]).then(function(res){pcCandidates=res[0]||[];pcPayRates=res[1]||[];pcBookings=res[2]||[];pcRequests=res[3]||[];pcPrefs=res[4]||[];pcLinks=res[5]||[];pcOpenSlots=res[6]||[];var roleSet={};pcPayRates.forEach(function(r){roleSet[r.role]=true;});payRoleNames=Object.keys(roleSet).sort();pcLoading=false;if(pcSelected){for(var i=0;i<pcCandidates.length;i++){if(pcCandidates[i].id===pcSelected.id){pcSelected=pcCandidates[i];break;}}}render();}).catch(function(err){console.error('Pipeline load failed:',err);pcLoading=false;pcLoadError=(err&&err.message)?err.message:String(err);render();});}
+function loadAll(){pcLoading=true;pcLoadError='';render();var today=new Date().toLocaleString('sv-SE',{timeZone:'America/New_York'}).slice(0,10);Promise.all([sbJsonList('/rest/v1/candidates?select=*&order=applied_at.desc'),sbJsonList('/rest/v1/pay_rates?select=*&order=state.asc,role.asc'),sbJsonList('/rest/v1/interview_bookings?select=*,interview_slots(*)&order=booked_at.desc&limit=2000'),sbJsonList('/rest/v1/interview_requests?select=id,candidate_id,kind,note,source,created_at,notified_at,notify_error&resolved_at=is.null&deleted_at=is.null&order=created_at.asc&limit=500'),sbJsonList('/rest/v1/interview_slot_preferences?select=request_id,slot_id,rank,retired_at,interview_slots(slot_date,start_time,duration_minutes)&order=created_at.desc&limit=3000'),sbJsonList('/rest/v1/interview_pick_links?select=id,candidate_id,created_at,created_by,expires_at,email_to,email_sent_at,email_error,first_opened_at,last_opened_at,open_count,used_at,retired_at,retired_reason&order=created_at.desc&limit=2000'),sbJsonList('/rest/v1/interview_slots?select=id,slot_date,start_time,duration_minutes&is_available=eq.true&slot_date=gte.'+today+'&order=slot_date.asc,start_time.asc&limit=400')]).then(function(res){pcCandidates=res[0]||[];pcPayRates=res[1]||[];pcBookings=res[2]||[];pcRequests=res[3]||[];pcPrefs=res[4]||[];pcLinks=res[5]||[];pcOpenSlots=res[6]||[];var roleSet={};pcPayRates.forEach(function(r){roleSet[r.role]=true;});payRoleNames=Object.keys(roleSet).sort();pcLoading=false;if(pcSelected){for(var i=0;i<pcCandidates.length;i++){if(pcCandidates[i].id===pcSelected.id){pcSelected=pcCandidates[i];break;}}}render();}).catch(function(err){console.error('Pipeline load failed:',err);pcLoading=false;pcLoadError=(err&&err.message)?err.message:String(err);render();});}
 
 function getBookingForCandidate(cid){for(var i=0;i<pcBookings.length;i++){if(pcBookings[i].candidate_id===cid&&pcBookings[i].status==='scheduled')return pcBookings[i];}return null;}
 function getInitials(f,l){return((f?f[0]:'?')+(l?l[0]:'?')).toUpperCase();}
@@ -1434,7 +1434,8 @@ function renderInterviewSection(c){
   var req=ivOpenRequest(c.id);
   var links=ivLinks(c.id);
   if(IV_PRE_HIRE.indexOf(stage)===-1&&!booking&&!req)return'';
-  if(!booking&&!req&&links.length===0&&stage!=='interview_scheduled')return'';
+  var canBook=IV_LINK_STAGES.indexOf(stage)>-1&&!!c.email;
+  if(!booking&&!req&&links.length===0&&stage!=='interview_scheduled'&&!canBook)return'';
   var html='<div class="card-section"><div class="section-title">Interview</div>';
 
   if(booking){
@@ -1447,7 +1448,8 @@ function renderInterviewSection(c){
         :'<div class="ii-status" style="color:#c0392b;font-weight:600;">Confirmation email was not sent. Contact the candidate directly.</div>')+
       '</div><div style="display:flex;gap:8px;flex-wrap:wrap;">'+
       '<button class="btn btn-sm" id="iv-resched-btn" onclick="pcIvReschedule(\''+booking.id+'\')">Reschedule (send new link)</button>'+
-      '<button class="btn btn-sm btn-danger" onclick="pcIvShowCancel(\''+booking.id+'\')">Cancel interview</button></div>';
+      '<button class="btn btn-sm btn-danger" onclick="pcIvShowCancel(\''+booking.id+'\')">Cancel interview</button></div>'+
+      renderChangeTime(booking);
   } else if(req){
     html+=renderRequestPanel(req,c);
   } else if(stage==='interview_scheduled'){
@@ -1455,6 +1457,7 @@ function renderInterviewSection(c){
   } else if(links.length>0&&!links[0].retired_at&&new Date(links[0].expires_at).getTime()>Date.now()){
     html+='<div class="email-sent-banner">Waiting for the candidate to pick interview times.</div>';
   }
+  if(!booking&&!req&&canBook)html+=renderBookTime();
 
   if(links.length>0){
     html+='<div style="margin-top:12px;"><div class="detail-label" style="margin-bottom:4px;">Interview link history</div>';
@@ -1626,6 +1629,65 @@ function pcIvReschedule(bookingId){
     if(!d.email_sent)alert('The interview was cancelled and a new link was created, but the email did not send: '+(d.email_error||'unknown error')+'\n\nUse Resend on the interview link button.');
     loadAll();
   }).catch(function(err){console.error('Reschedule failed:',err);alert('Not rescheduled. '+ivErrMsg(err));loadAll();});
+}
+
+
+// Their earlier picks for the booked request (excluding the current time), then all other open times.
+function ivSlotOptions(currentSlotId,requestId){
+  var now=ivNowKey(),seen=[currentSlotId],html='',theirs='';
+  if(requestId){
+    var ps=[];
+    for(var i=0;i<pcPrefs.length;i++){if(pcPrefs[i].request_id===requestId)ps.push(pcPrefs[i]);}
+    ps.sort(function(a,b){return a.rank-b.rank;});
+    for(var k=0;k<ps.length;k++){
+      var p=ps[k],s=p.interview_slots;
+      if(!s||seen.indexOf(p.slot_id)>-1)continue;
+      seen.push(p.slot_id);
+      if(ivSlotKey(s.slot_date,s.start_time)<=now||ivSlotBooked(p.slot_id))continue;
+      theirs+='<option value="'+p.slot_id+'">Their #'+p.rank+': '+esc(ivWallLabel(s.slot_date,s.start_time))+'</option>';
+    }
+  }
+  if(theirs)html+='<optgroup label="Times they picked">'+theirs+'</optgroup>';
+  var other=ivBookableSlots(seen),rest='';
+  for(var j=0;j<other.length&&j<120;j++)rest+='<option value="'+other[j].id+'">'+esc(ivWallLabel(other[j].slot_date,other[j].start_time))+'</option>';
+  if(rest)html+='<optgroup label="Other open times">'+rest+'</optgroup>';
+  return html;
+}
+function renderChangeTime(booking){
+  var opts=ivSlotOptions(booking.slot_id,booking.request_id);
+  var html='<div style="margin-top:12px;"><div class="detail-label" style="margin-bottom:4px;">Change time (keeps the interview, emails the new time)</div>';
+  if(!opts)return html+'<div style="font-size:12px;color:#888;">No other open times. Add times on the Interviews page.</div></div>';
+  return html+'<div style="display:flex;gap:6px;flex-wrap:wrap;"><select id="iv-move-slot" style="flex:1;min-width:180px;margin-bottom:0;"><option value="">-- Choose the new time --</option>'+opts+'</select>'+
+    '<button class="btn btn-sm btn-primary" id="iv-move-btn" onclick="pcIvMove(\''+booking.id+'\')">Move interview</button></div></div>';
+}
+function renderBookTime(){
+  var opts=ivSlotOptions(null,null);
+  var html='<div style="margin-top:12px;"><div class="detail-label" style="margin-bottom:4px;">Book a time you already agreed with them</div>';
+  if(!opts)return html+'<div style="font-size:12px;color:#888;">No open times. Add times on the Interviews page.</div></div>';
+  return html+'<div style="display:flex;gap:6px;flex-wrap:wrap;"><select id="iv-book-slot" style="flex:1;min-width:180px;margin-bottom:0;"><option value="">-- Choose a time --</option>'+opts+'</select>'+
+    '<button class="btn btn-sm btn-green" id="iv-book-btn" onclick="pcIvBook()">Book interview</button></div></div>';
+}
+function ivSelectedLabel(sel){return sel&&sel.selectedIndex>-1?sel.options[sel.selectedIndex].text.replace(/^Their #\d+: /,''):'';}
+function pcIvMove(bookingId){
+  var sel=document.getElementById('iv-move-slot');
+  if(!sel||!sel.value){alert('Choose the new time first.');return;}
+  if(!confirm('Move '+ivCandidateName()+'\'s interview to '+ivSelectedLabel(sel)+' (Eastern)?\n\nThey get an email with the new time, and the calendar invite updates to it.'))return;
+  var btn=document.getElementById('iv-move-btn');if(btn){btn.disabled=true;btn.textContent='Moving...';}
+  staffAction({action:'move',booking_id:bookingId,slot_id:sel.value}).then(function(d){
+    if(!d.email_sent)alert('The interview was moved to '+(d.when||'the new time')+', but the email did not send: '+(d.email_error||'unknown error')+'\n\nContact the candidate directly.');
+    loadAll();
+  }).catch(function(err){console.error('Move failed:',err);alert('Not moved. '+ivErrMsg(err));loadAll();});
+}
+function pcIvBook(){
+  if(!pcSelected)return;
+  var sel=document.getElementById('iv-book-slot');
+  if(!sel||!sel.value){alert('Choose a time first.');return;}
+  if(!confirm('Book '+ivCandidateName()+' for '+ivSelectedLabel(sel)+' (Eastern)?\n\nThe confirmation email with the Google Meet link goes out right away.'))return;
+  var btn=document.getElementById('iv-book-btn');if(btn){btn.disabled=true;btn.textContent='Booking...';}
+  staffAction({action:'book',candidate_id:pcSelected.id,slot_id:sel.value}).then(function(d){
+    if(!d.email_sent)alert('Booked for '+(d.when||'that time')+', but the confirmation email did not send: '+(d.email_error||'unknown error')+'\n\nContact the candidate directly.');
+    loadAll();
+  }).catch(function(err){console.error('Book failed:',err);alert('Not booked. '+ivErrMsg(err));loadAll();});
 }
 
 // Hire / reject tidy-up: closes open requests, links, and the booking.
