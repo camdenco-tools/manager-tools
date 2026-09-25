@@ -781,7 +781,7 @@ function iaSlotClick(slotId){
   var html='<div class="modal-overlay" onclick="iaCloseModal(event)"><div class="modal-box"><h3>'+formatDateNice(slot.slot_date)+' at '+t12+'</h3><p>'+slot.duration_minutes+' minute slot &middot; '+(isRule?'&#8635; from your weekly schedule':'one-off time')+(pc?' &middot; '+plural(pc,'candidate request'):'')+'</p>';
   var close='<button class="btn" style="flex:1;" onclick="iaCloseModal(null)">Close</button>';
   if(booking){
-    html+='<div style="background:#fff8e1;border:1px solid #ffe082;border-radius:6px;padding:12px;margin-bottom:14px;"><div style="font-size:11px;color:#7a5c00;font-weight:600;text-transform:uppercase;margin-bottom:6px;">Booked by</div><div style="font-size:15px;font-weight:500;color:#78350f;">'+esc(booking.candidate_name||'')+'</div>'+(booking.candidate_phone?'<div style="font-size:13px;color:#92400e;margin-top:2px;">'+esc(booking.candidate_phone)+'</div>':'')+(booking.candidate_email?'<div style="font-size:13px;color:#92400e;margin-top:2px;">'+esc(booking.candidate_email)+'</div>':'')+(booking.booked_at?'<div style="font-size:11px;color:#a16207;margin-top:6px;">Booked '+new Date(booking.booked_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+'</div>':'')+(booking.invite_sent_at?'<div style="font-size:11px;color:#a16207;margin-top:2px;">Confirmation emailed '+new Date(booking.invite_sent_at).toLocaleDateString('en-US',{month:'short',day:'numeric'})+'</div>':'<div style="font-size:12px;color:#c0392b;font-weight:600;margin-top:4px;">Confirmation email was not sent. Contact the candidate.</div>')+'</div><div id="ia-modal-msg"></div><div style="display:flex;gap:8px;flex-wrap:wrap;">'+close+'<button class="btn" style="flex:1;" onclick="iaReschedule(\''+booking.id+'\')">Reschedule</button><button class="btn btn-danger" style="flex:1;" onclick="iaShowCancel(\''+booking.id+'\')">Cancel interview</button></div>';
+    html+='<div style="background:#fff8e1;border:1px solid #ffe082;border-radius:6px;padding:12px;margin-bottom:14px;"><div style="font-size:11px;color:#7a5c00;font-weight:600;text-transform:uppercase;margin-bottom:6px;">Booked by</div><div style="font-size:15px;font-weight:500;color:#78350f;">'+esc(booking.candidate_name||'')+'</div>'+(booking.candidate_phone?'<div style="font-size:13px;color:#92400e;margin-top:2px;">'+esc(booking.candidate_phone)+'</div>':'')+(booking.candidate_email?'<div style="font-size:13px;color:#92400e;margin-top:2px;">'+esc(booking.candidate_email)+'</div>':'')+(booking.booked_at?'<div style="font-size:11px;color:#a16207;margin-top:6px;">Booked '+new Date(booking.booked_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+'</div>':'')+(booking.invite_sent_at?'<div style="font-size:11px;color:#a16207;margin-top:2px;">Confirmation emailed '+new Date(booking.invite_sent_at).toLocaleDateString('en-US',{month:'short',day:'numeric'})+'</div>':'<div style="font-size:12px;color:#c0392b;font-weight:600;margin-top:4px;">Confirmation email was not sent. Contact the candidate.</div>')+'</div>'+iaChangeTimeHtml(booking)+'<div id="ia-modal-msg"></div><div style="display:flex;gap:8px;flex-wrap:wrap;">'+close+'<button class="btn" style="flex:1;" onclick="iaReschedule(\''+booking.id+'\')">Reschedule (new link)</button><button class="btn btn-danger" style="flex:1;" onclick="iaShowCancel(\''+booking.id+'\')">Cancel interview</button></div>';
   }else if(pc){
     html+='<div style="background:#e6f1fb;border-radius:6px;padding:10px 12px;font-size:13px;color:#185fa5;margin-bottom:14px;">'+plural(pc,'candidate')+' asked for this time, so it can\'t be removed or blocked until their request is handled.</div><div id="ia-modal-msg"></div><div style="display:flex;gap:8px;">'+close+'</div>';
   }else if(isPast(slot.slot_date,slot.start_time)){
@@ -979,6 +979,42 @@ function iaCancelBooking(bookingId){
     if(notify&&!d.email_sent)alert('The interview is cancelled, but the email to the candidate did not send: '+(d.email_error||'unknown error'));
     return loadData();
   }).catch(function(err){console.error('Cancel failed:',err);iaModalFail(err,'Cancel interview');});
+}
+// Change time: their other picks for this booking's request first, then every other open time.
+function iaChangeTimeHtml(booking){
+  var seen=[booking.slot_id],theirs='',rest='';
+  if(booking.request_id){
+    var ps=[];
+    for(var i=0;i<iaPrefs.length;i++){if(iaPrefs[i].request_id===booking.request_id)ps.push(iaPrefs[i]);}
+    ps.sort(function(a,b){return a.rank-b.rank;});
+    for(var k=0;k<ps.length;k++){
+      var sl=getSlot(ps[k].slot_id);
+      if(!sl||seen.indexOf(sl.id)>-1)continue;
+      seen.push(sl.id);
+      if(!sl.is_available||isPast(sl.slot_date,sl.start_time)||getBookingForSlot(sl.id))continue;
+      theirs+='<option value="'+sl.id+'">Their #'+ps[k].rank+': '+esc(iaSlotLabel(sl))+'</option>';
+    }
+  }
+  var other=iaBookable(seen);
+  for(var j=0;j<other.length&&j<120;j++)rest+='<option value="'+other[j].id+'">'+esc(iaSlotLabel(other[j]))+'</option>';
+  var html='<div style="margin-bottom:14px;"><label class="field-lbl">Change time (keeps the interview, emails them the new time)</label>';
+  if(!theirs&&!rest)return html+'<div style="font-size:12px;color:#888;">No other open times.</div></div>';
+  return html+'<div style="display:flex;gap:6px;flex-wrap:wrap;"><select id="ia-move-slot" class="queue-select"><option value="">Choose the new time...</option>'+
+    (theirs?'<optgroup label="Times they picked">'+theirs+'</optgroup>':'')+(rest?'<optgroup label="Other open times">'+rest+'</optgroup>':'')+
+    '</select><button class="btn btn-sm btn-primary" id="ia-move-btn" onclick="iaMove(\''+booking.id+'\')">Move</button></div></div>';
+}
+function iaMove(bookingId){
+  var sel=document.getElementById('ia-move-slot');
+  if(!sel||!sel.value){iaModalError(new Error('Choose the new time first.'));return;}
+  var b=null;for(var i=0;i<iaBookings.length;i++){if(iaBookings[i].id===bookingId){b=iaBookings[i];break;}}
+  var label=sel.options[sel.selectedIndex].text.replace(/^Their #\d+: /,'');
+  if(!confirm('Move '+((b&&b.candidate_name)||'this interview')+' to '+label+'?\n\nThey get an email with the new time, and the calendar invite updates to it.'))return;
+  var btn=document.getElementById('ia-move-btn');if(btn){btn.disabled=true;btn.textContent='Moving...';}
+  iaStaff({action:'move',booking_id:bookingId,slot_id:sel.value}).then(function(d){
+    iaCloseModal(null);
+    if(!d.email_sent)alert('Moved to '+(d.when||label)+', but the email did not send: '+(d.email_error||'unknown error')+'\n\nContact the candidate directly.');
+    return loadData();
+  }).catch(function(err){console.error('Move failed:',err);if(btn){btn.disabled=false;btn.textContent='Move';}iaModalError(err);});
 }
 function iaReschedule(bookingId){
   var b=null;for(var i=0;i<iaBookings.length;i++){if(iaBookings[i].id===bookingId){b=iaBookings[i];break;}}
