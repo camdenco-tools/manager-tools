@@ -338,7 +338,7 @@ function getEmailAvailability(c){
   return{e1:e1,e2:e2,e3:e3};
 }
 
-function render(){var main=document.getElementById('pcpipe-main');if(pcLoading){main.innerHTML='<p class="page-sub">Loading...</p>';return;}if(pcLoadError){main.innerHTML='<div style="background:#fdecea;border:1px solid #f4b8b8;border-radius:8px;padding:14px 16px;color:#8b1a1a;font-size:13px;"><strong>The Pipeline could not load.</strong><br>'+esc(pcLoadError)+'<br><button class="btn btn-sm" style="margin-top:10px;" onclick="loadAll()">Try again</button></div>';return;}var listEl=document.getElementById('pcpipe-list');var detailEl=document.getElementById('pcpipe-detail');if(!listEl){main.innerHTML=renderShell();listEl=document.getElementById('pcpipe-list');detailEl=document.getElementById('pcpipe-detail');}listEl.innerHTML=renderList();detailEl.innerHTML=pcSelected?renderCandidateCard(pcSelected):'<div class="empty-state" style="background:#f9f9f9;border-radius:10px;border:1px solid #eee;padding:60px 20px;">Select a candidate to view their record.</div>';updateStatCounts();updateFilterPills();if(pcEditingPhone){setTimeout(function(){var inp=document.getElementById('phone-edit-input');if(inp)inp.focus();},30);}if(pcEditingEmail){setTimeout(function(){var inp=document.getElementById('email-edit-input');if(inp)inp.focus();},30);}if(pcEditingPunchId){setTimeout(function(){var inp=document.getElementById('punch-edit-input');if(inp){inp.focus();inp.select();}},30);}if(pcEditingShirtSize){setTimeout(function(){var inp=document.getElementById('shirt-edit-input');if(inp)inp.focus();},30);}pcPipeLoadEvrForSelected();pcPipeLoadReferralForSelected();}
+function render(){var main=document.getElementById('pcpipe-main');if(pcLoading){main.innerHTML='<p class="page-sub">Loading...</p>';return;}if(pcLoadError){main.innerHTML='<div style="background:#fdecea;border:1px solid #f4b8b8;border-radius:8px;padding:14px 16px;color:#8b1a1a;font-size:13px;"><strong>The Pipeline could not load.</strong><br>'+esc(pcLoadError)+'<br><button class="btn btn-sm" style="margin-top:10px;" onclick="loadAll()">Try again</button></div>';return;}var listEl=document.getElementById('pcpipe-list');var detailEl=document.getElementById('pcpipe-detail');if(!listEl){main.innerHTML=renderShell();listEl=document.getElementById('pcpipe-list');detailEl=document.getElementById('pcpipe-detail');}listEl.innerHTML=renderList();detailEl.innerHTML=pcSelected?renderCandidateCard(pcSelected):'<div class="empty-state" style="background:#f9f9f9;border-radius:10px;border:1px solid #eee;padding:60px 20px;">Select a candidate to view their record.</div>';updateStatCounts();updateFilterPills();if(pcEditingPhone){setTimeout(function(){var inp=document.getElementById('phone-edit-input');if(inp)inp.focus();},30);}if(pcEditingEmail){setTimeout(function(){var inp=document.getElementById('email-edit-input');if(inp)inp.focus();},30);}if(pcEditingPunchId){setTimeout(function(){var inp=document.getElementById('punch-edit-input');if(inp){inp.focus();inp.select();}},30);}if(pcEditingShirtSize){setTimeout(function(){var inp=document.getElementById('shirt-edit-input');if(inp)inp.focus();},30);}pcPipeLoadEvrForSelected();pcPipeLoadReferralForSelected();pcS6LoadForSelected();}
 
 function renderShell(){var html='<p class="page-sub">Manage applicants from application through onboarding.</p>';
 html+='<div class="stat-row" id="pcpipe-stats"></div>';
@@ -376,12 +376,13 @@ function updateFilterPills(){
 
 function countStageVisible(stage){var n=0;for(var i=0;i<pcCandidates.length;i++){if(pcCandidates[i].pipeline_stage===stage&&!isArchived(pcCandidates[i]))n++;}return n;}
 
-function renderList(){var filtered=getFiltered();if(filtered.length===0)return'<div class="empty-state" style="padding:30px 10px;">No candidates found.</div>';var html='';for(var i=0;i<filtered.length;i++){var c=filtered[i];var isSel=pcSelected&&pcSelected.id===c.id;var rejCls=(c.pipeline_stage==='rejected'||c.pipeline_stage==='inactive')?' rejected':'';var minor=c.is_minor?' <span class="badge badge-minor" style="font-size:10px;">Minor</span>':'';var srcPill='';if(c.hear_about_us){var sc='background:#e3f2fd;border:1px solid #90caf9;color:#0d47a1;';if(c.hear_about_us==='Indeed')sc='background:#fff8e1;border:1px solid #ffe082;color:#7a5c00;';else if(c.hear_about_us==='Friend or Family')sc='background:#eaf6ec;border:1px solid #7dc98a;color:#1e6b2e;';else if(c.hear_about_us==='Other')sc='background:#f3e8ff;border:1px solid #d8b4fe;color:#6b21a8;';srcPill=' <span class="badge" style="font-size:10px;'+sc+'">'+esc(c.hear_about_us)+'</span>';}html+='<div class="cand-row'+(isSel?' selected':'')+rejCls+'" onclick="pcPipeSelect(\''+c.id+'\')"><div style="display:flex;justify-content:space-between;align-items:center;gap:6px;"><div class="cand-name">'+esc(c.first_name)+' '+esc(c.last_name)+minor+srcPill+'</div>'+stageBadge(c.pipeline_stage)+'</div><div class="cand-meta">'+formatDateShort(c.applied_at)+(c.roles&&c.roles.length>0?' &middot; '+esc(c.roles[0]):'')+'</div></div>';}html+='<div style="margin-top:10px;font-size:12px;color:#aaa;">'+filtered.length+' candidate'+(filtered.length!==1?'s':'')+'</div>';return html;}
+function renderList(){var filtered=getFiltered();if(filtered.length===0)return'<div class="empty-state" style="padding:30px 10px;">No candidates found.</div>';var html='';for(var i=0;i<filtered.length;i++){var c=filtered[i];var isSel=pcSelected&&pcSelected.id===c.id;var rejCls=(c.pipeline_stage==='rejected'||c.pipeline_stage==='inactive')?' rejected':'';var minor=c.is_minor?' <span class="badge badge-minor" style="font-size:10px;">Minor</span>':'';var srcPill='';if(c.hear_about_us){var sc='background:#e3f2fd;border:1px solid #90caf9;color:#0d47a1;';if(c.hear_about_us==='Indeed')sc='background:#fff8e1;border:1px solid #ffe082;color:#7a5c00;';else if(c.hear_about_us==='Friend or Family')sc='background:#eaf6ec;border:1px solid #7dc98a;color:#1e6b2e;';else if(c.hear_about_us==='Other')sc='background:#f3e8ff;border:1px solid #d8b4fe;color:#6b21a8;';srcPill=' <span class="badge" style="font-size:10px;'+sc+'">'+esc(c.hear_about_us)+'</span>';}html+='<div class="cand-row'+(isSel?' selected':'')+rejCls+'" onclick="pcPipeSelect(\''+c.id+'\')"><div style="display:flex;justify-content:space-between;align-items:center;gap:6px;"><div class="cand-name">'+esc(c.first_name)+' '+esc(c.last_name)+minor+srcPill+s6RefBadge(c)+'</div>'+stageBadge(c.pipeline_stage)+'</div><div class="cand-meta">'+formatDateShort(c.applied_at)+(c.roles&&c.roles.length>0?' &middot; '+esc(c.roles[0]):'')+'</div></div>';}html+='<div style="margin-top:10px;font-size:12px;color:#aaa;">'+filtered.length+' candidate'+(filtered.length!==1?'s':'')+'</div>';return html;}
 
 function renderCandidateCard(c){var stage=c.pipeline_stage,isOnb=stage==='onboarding',isAct=stage==='active',isRej=stage==='rejected';var isHiredPlus=stage==='hired'||isOnb||isAct||stage==='inactive';var html='<div class="card">';
-html+='<div class="card-section" style="display:flex;align-items:center;gap:12px;"><div class="avatar">'+getInitials(c.first_name,c.last_name)+'</div><div style="flex:1;"><div style="font-size:16px;font-weight:600;">'+esc(c.first_name)+' '+esc(c.last_name)+(c.is_minor?' <span class="badge badge-minor">Minor</span>':'')+'</div><div style="font-size:12px;color:#888;margin-top:2px;">Applied '+formatDate(c.applied_at)+'</div></div>'+stageBadge(stage)+'</div>';
+html+='<div class="card-section" style="display:flex;align-items:center;gap:12px;"><div class="avatar">'+getInitials(c.first_name,c.last_name)+'</div><div style="flex:1;"><div style="font-size:16px;font-weight:600;">'+esc(c.first_name)+' '+esc(c.last_name)+(c.is_minor?' <span class="badge badge-minor">Minor</span>':'')+s6RefBadge(c)+'</div><div style="font-size:12px;color:#888;margin-top:2px;">Applied '+formatDate(c.applied_at)+'</div></div>'+stageBadge(stage)+'</div>';
 if(!isRej)html+=renderEmailButtons(c);
 if(!isRej)html+=renderInterviewSection(c);
+html+=renderS6Section(c);
 var pencilSvg='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path></svg>';
 html+='<div class="card-section"><div class="section-title">Application details</div><div class="detail-grid"><div><div class="detail-label">Email</div><div class="detail-value">';
 if(pcEditingEmail){html+='<div class="phone-edit-inline"><input type="text" id="email-edit-input" value="'+esc(c.email||'')+'" placeholder="e.g. name@gmail.com" style="width:200px;" /><button class="btn btn-sm btn-primary" onclick="pcPipeSaveEmail()" style="padding:4px 10px;">Save</button><button class="btn btn-sm" onclick="pcPipeCancelEmailEdit()" style="padding:4px 10px;">Cancel</button></div><div id="email-edit-err" class="error-msg"></div>';}else{html+=(c.email?'<a href="mailto:'+esc(c.email)+'" style="color:#2d7dd2;">'+esc(c.email)+'</a>':'--')+'<button class="edit-phone-btn" onclick="pcPipeEditEmail()" title="Edit email address">'+pencilSvg+'</button>';}
@@ -663,11 +664,12 @@ function pcPipeShowHireModal(){
     hiredBy:'',
     homeVenue:'',
     punchOverride:'',
-    collisionMsg:''
+    collisionMsg:'',
+    prefillHtml:''
   };
   // Make sure the role catalog is loaded before rendering the picker.
   if(window.pcRoles&&pcRoles.ready){
-    pcRoles.ready().then(function(){pcPipeRenderHireModal();}).catch(function(){pcPipeRenderHireModal();});
+    pcRoles.ready().then(function(){return pcS6PrefillHire();}).then(function(){pcPipeRenderHireModal();}).catch(function(){pcPipeRenderHireModal();});
   } else {
     pcPipeRenderHireModal();
   }
@@ -803,6 +805,7 @@ function pcPipeRenderHireModal(){
       '<div class="modal-box">'+
         '<h3>Hire '+esc(pcSelected.first_name)+' '+esc(pcSelected.last_name)+'</h3>'+
         mn+
+        (st.prefillHtml||'')+
         '<p>Pick venues, then choose this person\'s roles at each one. Punch ID is generated from last 4 of phone.</p>'+
         punchBlock+
         '<label style="font-size:13px;font-weight:500;color:#444;display:block;margin-bottom:6px;">Roles per venue <span style="color:#c0392b;">*</span></label>'+
@@ -1333,6 +1336,442 @@ function pcPipeSaveShirtSize(){
      calls one SQL function. The Interviews page uses the same calls, so a
      second confirm from the other page fails cleanly.
    ============================================================ */
+// ============================================================
+// SESSION 6 -- interview notes, references, reference status and
+// pre-hire INTEREST (Sept 25, 2026).
+//
+// Interest (candidate_interests) is what the candidate WANTS, captured
+// at interview. Assignment (employee_venue_roles) is what we GIVE, set
+// in the hire modal. They are stored separately; the hire modal only
+// pre-checks from interest, through the same legality filter it already
+// uses (role mapped + active at the venue, no alcohol roles for minors).
+// The database also refuses minor + alcohol interest (trigger) and any
+// pair not in venue_roles (composite FK).
+//
+// Notes are append-only: staff can add and soft-delete, never rewrite.
+// ref_status is a separate field, not a pipeline stage; marking any
+// reference checked clears it.
+// ============================================================
+var S6_REF_STATUS={waiting_info:'Waiting for ref info',checking:'Checking ref'};
+var S6_NOTE_TYPES=[['interview','Interview'],['reference','Reference'],['general','General']];
+var S6_MAX_NOTE=4000;
+var pcS6={};              // candidate id -> {status:'loading'|'ok'|'error', data:{notes,refs,ints}|null, err:''}
+var pcS6Venues=null;      // {byId:{id:code}, byCode:{code:id}}
+var pcS6Busy=false;
+var pcS6Msg=null;         // {where:'note'|'ref'|'status'|'int', text:'...'}
+var pcS6NoteDraft={type:'',body:''};
+var pcS6RefForm=null;     // null | 'new' | reference id being edited
+var pcS6RefDraft={name:'',relationship:'',phone:'',notes:''};
+var pcS6IntVenue=null;    // venue code selected in the interest picker
+var pcS6DraftFor=null;    // candidate id the drafts belong to
+
+function pcS6Actor(){return pcReferralCreatorLabel();}
+function pcS6IsPreHire(c){return IV_PRE_HIRE.indexOf(c.pipeline_stage||'applied')>-1;}
+function s6RefBadge(c){
+  if(!c||!c.ref_status||!pcS6IsPreHire(c))return'';
+  var st=c.ref_status==='checking'?'background:#e6f1fb;border:1px solid #b3d4f7;color:#185fa5;':'background:#fffbeb;border:1px solid #fcd34d;color:#92400e;';
+  return' <span class="badge" style="font-size:10px;'+st+'">'+esc(S6_REF_STATUS[c.ref_status]||c.ref_status)+'</span>';
+}
+
+function pcS6LoadVenues(){
+  if(pcS6Venues)return Promise.resolve(pcS6Venues);
+  return sbJsonList('/rest/v1/venues?select=id,code&limit=500').then(function(rows){
+    var byId={},byCode={};
+    (rows||[]).forEach(function(v){if(v&&v.id&&v.code){byId[v.id]=v.code;byCode[v.code]=v.id;}});
+    pcS6Venues={byId:byId,byCode:byCode};
+    return pcS6Venues;
+  });
+}
+
+function pcS6LoadForSelected(){
+  if(!pcSelected)return;
+  if(pcS6DraftFor!==pcSelected.id){
+    pcS6DraftFor=pcSelected.id;
+    pcS6NoteDraft={type:'',body:''};pcS6RefForm=null;pcS6RefDraft={name:'',relationship:'',phone:'',notes:''};pcS6IntVenue=null;pcS6Msg=null;
+  }
+  if(pcS6[pcSelected.id])return;
+  pcS6Load(pcSelected.id);
+}
+
+// Loads notes, references and interest for one candidate. Keeps the
+// previous data on screen while a refresh is in flight.
+function pcS6Load(id){
+  var prev=pcS6[id];
+  var entry={status:'loading',data:prev?prev.data:null,err:''};
+  pcS6[id]=entry;
+  var rolesReady=(window.pcRoles&&pcRoles.ready)?pcRoles.ready():Promise.reject(new Error('Role catalog (pc-roles.js) is not loaded.'));
+  return Promise.all([
+    rolesReady,
+    pcS6LoadVenues(),
+    sbJsonList('/rest/v1/candidate_notes?candidate_id=eq.'+id+'&deleted_at=is.null&select=id,note_type,body,created_by,created_at&order=created_at.desc&limit=200'),
+    sbJsonList('/rest/v1/candidate_references?candidate_id=eq.'+id+'&deleted_at=is.null&select=id,name,relationship,phone,notes,checked_at,checked_by,created_by,created_at,updated_at&order=created_at.asc&limit=50'),
+    sbJsonList('/rest/v1/candidate_interests?candidate_id=eq.'+id+'&deleted_at=is.null&select=id,venue_id,role_id,created_by,created_at&order=created_at.asc&limit=200')
+  ]).then(function(res){
+    if(pcS6[id]!==entry)return entry;
+    entry.status='ok';
+    entry.data={notes:res[2]||[],refs:res[3]||[],ints:res[4]||[]};
+    if(pcSelected&&pcSelected.id===id)render();
+    return entry;
+  }).catch(function(err){
+    console.error('Session 6 load failed:',err);
+    if(pcS6[id]!==entry)return entry;
+    entry.status='error';
+    entry.err=ivErrMsg(err);
+    if(pcSelected&&pcSelected.id===id)render();
+    return entry;
+  });
+}
+function pcS6Retry(){if(pcSelected){pcS6Load(pcSelected.id);render();}}
+
+// Interest rows resolved to venue code + role name (null parts if the
+// catalog no longer knows them).
+function pcS6InterestPairs(ints){
+  var names={};
+  try{pcRoles.getRoles({includeRetired:true}).forEach(function(r){names[r.id]=r.name;});}catch(e){names={};}
+  var byId=pcS6Venues?pcS6Venues.byId:{};
+  return (ints||[]).map(function(it){
+    return {id:it.id,code:byId[it.venue_id]||null,role:names[it.role_id]||null,venue_id:it.venue_id,role_id:it.role_id};
+  });
+}
+
+function pcS6MsgHtml(where){
+  if(!pcS6Msg||pcS6Msg.where!==where)return'';
+  return'<div class="error-msg" style="display:block;margin-top:6px;">'+esc(pcS6Msg.text)+'</div>';
+}
+
+function renderS6Section(c){
+  var e=pcS6[c.id];
+  var html='<div class="card-section"><div class="section-title">Interview notes, references &amp; interest</div>';
+  if(!e||(!e.data&&e.status==='loading')){
+    html+='<p style="font-size:13px;color:#888;margin:0;">Loading...</p>';
+  } else if(!e.data&&e.status==='error'){
+    html+='<div style="background:#fdecea;border:1px solid #f4b8b8;border-radius:6px;padding:10px 12px;font-size:13px;color:#8b1a1a;">Could not load notes, references and interest.<br>'+esc(e.err)+
+      '<br><button class="btn btn-sm" style="margin-top:8px;" onclick="pcS6Retry()">Try again</button></div>';
+  } else {
+    if(e.status==='error')html+='<div class="error-msg" style="display:block;margin-bottom:8px;">Refresh failed: '+esc(e.err)+' <a href="#" onclick="pcS6Retry();return false;">Try again</a></div>';
+    html+=renderS6Notes(c,e.data);
+    html+=renderS6Refs(c,e.data);
+    html+=renderS6Interest(c,e.data);
+  }
+  html+='</div>';
+  return html;
+}
+
+function renderS6Notes(c,d){
+  var dis=pcS6Busy?' disabled':'';
+  var type=pcS6NoteDraft.type||(pcS6IsPreHire(c)?'interview':'general');
+  var opts=S6_NOTE_TYPES.map(function(t){return'<option value="'+t[0]+'"'+(t[0]===type?' selected':'')+'>'+t[1]+'</option>';}).join('');
+  var html='<div class="detail-label" style="margin-bottom:6px;">Notes</div>'+
+    '<div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;">'+
+      '<select id="s6-note-type" onchange="pcS6NoteDraft.type=this.value" style="width:130px;padding:6px 8px;">'+opts+'</select>'+
+      '<textarea class="notes-area" id="s6-note-body" maxlength="'+S6_MAX_NOTE+'" oninput="pcS6NoteDraft.body=this.value" placeholder="What stood out, availability, anything to follow up..." style="flex:1;min-width:220px;min-height:70px;">'+esc(pcS6NoteDraft.body)+'</textarea>'+
+    '</div>'+
+    '<button class="btn btn-sm btn-primary" style="margin-top:6px;" onclick="pcS6AddNote()"'+dis+'>Add note</button>'+
+    pcS6MsgHtml('note');
+  var notes=d.notes||[];
+  if(notes.length===0){
+    html+='<div style="font-size:12px;color:#aaa;margin-top:8px;">No notes yet.</div>';
+  } else {
+    html+='<div style="margin-top:10px;">';
+    notes.forEach(function(n){
+      var label='General';
+      S6_NOTE_TYPES.forEach(function(t){if(t[0]===n.note_type)label=t[1];});
+      html+='<div style="padding:8px 0;border-top:1px solid #f0f0f0;">'+
+        '<div style="font-size:12px;color:#888;display:flex;justify-content:space-between;gap:8px;">'+
+          '<span><strong style="color:#555;">'+esc(label)+'</strong> &middot; '+esc(ivStamp(n.created_at))+' &middot; '+esc(n.created_by)+'</span>'+
+          '<a href="#" style="color:#c0392b;" onclick="pcS6RemoveNote(\''+n.id+'\');return false;">Remove</a>'+
+        '</div>'+
+        '<div style="font-size:13px;color:#333;line-height:1.55;white-space:pre-wrap;margin-top:3px;">'+esc(n.body)+'</div>'+
+      '</div>';
+    });
+    html+='</div>';
+  }
+  return html;
+}
+
+function renderS6Refs(c,d){
+  var dis=pcS6Busy?' disabled':'';
+  var html='<div class="detail-label" style="margin:18px 0 6px;">References</div>';
+  if(pcS6IsPreHire(c)){
+    var cur=c.ref_status||'';
+    var btn=function(val,label){
+      var on=cur===val;
+      return'<button class="btn btn-sm'+(on?' btn-primary':'')+'" onclick="pcS6SetRefStatus('+(val?'\''+val+'\'':'null')+')"'+dis+'>'+label+'</button>';
+    };
+    html+='<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:6px;">'+
+      '<span style="font-size:12px;color:#888;">Status:</span>'+
+      btn('waiting_info','Waiting for ref info')+btn('checking','Checking ref')+(cur?btn('','Clear'):'')+
+      '</div>';
+    if(cur&&c.ref_status_updated_at)html+='<div style="font-size:11px;color:#aaa;margin-bottom:6px;">Set '+esc(ivStamp(c.ref_status_updated_at))+(c.ref_status_updated_by?' by '+esc(c.ref_status_updated_by):'')+'</div>';
+    html+=pcS6MsgHtml('status');
+  }
+  var refs=d.refs||[];
+  if(refs.length===0&&pcS6RefForm!=='new')html+='<div style="font-size:12px;color:#aaa;">No references yet.</div>';
+  refs.forEach(function(rf){
+    if(pcS6RefForm===rf.id){html+=renderS6RefForm();return;}
+    html+='<div style="padding:8px 10px;border:1px solid #eee;border-radius:6px;margin-top:6px;">'+
+      '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;">'+
+        '<div style="font-size:13px;"><strong>'+esc(rf.name)+'</strong>'+(rf.relationship?' <span style="color:#888;">&middot; '+esc(rf.relationship)+'</span>':'')+
+          (rf.phone?' &middot; <a href="tel:'+esc(rf.phone)+'" style="color:#2d7dd2;">'+esc(formatPhoneDisplay(rf.phone))+'</a>':'')+'</div>'+
+        '<div style="font-size:12px;display:flex;gap:10px;">'+
+          '<a href="#" onclick="pcS6EditRef(\''+rf.id+'\');return false;">Edit</a>'+
+          '<a href="#" style="color:#c0392b;" onclick="pcS6RemoveRef(\''+rf.id+'\');return false;">Remove</a>'+
+        '</div>'+
+      '</div>'+
+      (rf.notes?'<div style="font-size:12px;color:#555;white-space:pre-wrap;margin-top:4px;">'+esc(rf.notes)+'</div>':'')+
+      '<div style="margin-top:6px;font-size:12px;">'+
+        (rf.checked_at
+          ?'<span style="color:#1D9E75;font-weight:600;">&#10003; Checked '+esc(ivStamp(rf.checked_at))+(rf.checked_by?' by '+esc(rf.checked_by):'')+'</span> <a href="#" style="color:#888;margin-left:6px;" onclick="pcS6CheckRef(\''+rf.id+'\',false);return false;">undo</a>'
+          :'<button class="btn btn-sm btn-green" onclick="pcS6CheckRef(\''+rf.id+'\',true)"'+dis+'>Mark checked</button>')+
+      '</div>'+
+    '</div>';
+  });
+  if(pcS6RefForm==='new')html+=renderS6RefForm();
+  else if(pcS6RefForm===null)html+='<button class="btn btn-sm" style="margin-top:8px;" onclick="pcS6NewRef()"'+dis+'>Add reference</button>';
+  html+=pcS6MsgHtml('ref');
+  return html;
+}
+
+function renderS6RefForm(){
+  var d=pcS6RefDraft,dis=pcS6Busy?' disabled':'';
+  var inp=function(id,key,ph,max,type){
+    return'<input type="'+(type||'text')+'" id="'+id+'" maxlength="'+max+'" value="'+esc(d[key])+'" placeholder="'+ph+'" oninput="pcS6RefDraft.'+key+'=this.value" style="margin-bottom:6px;" />';
+  };
+  return'<div style="padding:10px;border:1px solid #b3d4f7;background:#f7fbff;border-radius:6px;margin-top:6px;">'+
+    '<div style="font-size:12px;font-weight:600;color:#185fa5;margin-bottom:6px;">'+(pcS6RefForm==='new'?'New reference':'Edit reference')+'</div>'+
+    inp('s6-ref-name','name','Name (required)',120)+
+    inp('s6-ref-rel','relationship','Relationship / from where (e.g. former manager at ...)',120)+
+    inp('s6-ref-phone','phone','Phone',40,'tel')+
+    '<textarea class="notes-area" id="s6-ref-notes" maxlength="2000" oninput="pcS6RefDraft.notes=this.value" placeholder="Notes from the call" style="min-height:50px;">'+esc(d.notes)+'</textarea>'+
+    '<div style="display:flex;gap:8px;margin-top:6px;">'+
+      '<button class="btn btn-sm btn-primary" onclick="pcS6SaveRef()"'+dis+'>Save reference</button>'+
+      '<button class="btn btn-sm" onclick="pcS6CancelRef()">Cancel</button>'+
+    '</div>'+
+  '</div>';
+}
+
+function renderS6Interest(c,d){
+  var pairs=pcS6InterestPairs(d.ints);
+  var live={};pairs.forEach(function(p){if(p.code&&p.role)live[p.code+'||'+p.role]=p;});
+  var html='<div class="detail-label" style="margin:18px 0 6px;">Interested in</div>';
+  var summary=pairs.map(function(p){return (p.code?(VENUE_LABELS[p.code]||p.code):'Unknown venue')+' '+(p.role||'unknown role');});
+  if(!pcS6IsPreHire(c)){
+    html+=summary.length?'<div class="tag-list">'+summary.map(function(s){return'<span class="tag">'+esc(s)+'</span>';}).join('')+'</div>'
+      :'<div style="font-size:12px;color:#aaa;">No interest recorded at interview.</div>';
+    return html;
+  }
+  var hints=[];
+  if(c.roles&&c.roles.length)hints.push('applied for '+c.roles.join(', '));
+  if(c.locations&&c.locations.length)hints.push('locations '+c.locations.join(', '));
+  html+='<div style="font-size:12px;color:#888;margin-bottom:8px;">What the candidate wants, from the interview. This is not an assignment; the hire modal pre-checks from it.'+
+    (hints.length?'<br>On the application: '+esc(hints.join('; '))+'.':'')+'</div>';
+  if(c.is_minor)html+='<div style="font-size:12px;color:#92400e;margin-bottom:8px;">Minor: Bartender and Bar Lead cannot be selected.</div>';
+  var counts={};Object.keys(live).forEach(function(k){var v=k.split('||')[0];counts[v]=(counts[v]||0)+1;});
+  var sel=pcS6IntVenue||VENUE_CODES[0];
+  var venues='';
+  VENUE_CODES.forEach(function(code){
+    var n=counts[code]||0;
+    venues+='<button type="button" class="evr-venue-row'+(sel===code?' sel':'')+'" onclick="pcS6IntSelectVenue(\''+code+'\')">'+
+      '<span class="evr-venue-label">'+esc(VENUE_LABELS[code]||code)+'</span>'+
+      (n>0?'<span class="evr-venue-badge">'+n+'</span>':'<span class="evr-venue-badge zero">&mdash;</span>')+'</button>';
+  });
+  var legal=[];try{legal=pcRoles.getRolesForVenue(sel)||[];}catch(e){legal=[];}
+  var right;
+  if(legal.length===0){
+    right='<div class="evr-rolepane-empty">No roles are configured for '+esc(VENUE_LABELS[sel]||sel)+'.</div>';
+  } else {
+    right='<div class="evr-rolepane-head">Roles at '+esc(VENUE_LABELS[sel]||sel)+'</div><div class="evr-role-pills">'+
+      legal.map(function(vr,i){
+        var on=!!live[sel+'||'+vr.role_name];
+        var blocked=!!c.is_minor&&ALCOHOL_ROLES.indexOf(vr.role_name)!==-1&&!on;
+        var disabled=blocked||pcS6Busy;
+        return'<button type="button" class="evr-role-pill'+(on?' on':'')+(blocked?' disabled-role':'')+'"'+
+          (disabled?' disabled':' onclick="pcS6ToggleInterest(\''+sel+'\','+i+')"')+'>'+
+          '<span class="evr-role-check">'+(on?'&#10003;':'+')+'</span>'+esc(vr.role_name)+(blocked?' <span class="evr-rate">(minor)</span>':'')+'</button>';
+      }).join('')+'</div>';
+  }
+  html+='<div class="evr-editor"><div class="evr-venue-col">'+venues+'</div><div class="evr-role-pane">'+right+'</div></div>';
+  // Interest that no longer maps to the picker (retired role, unknown venue) still shows and can be removed.
+  var orphans=pairs.filter(function(p){
+    if(!p.code||!p.role)return true;
+    if(VENUE_CODES.indexOf(p.code)===-1)return true;
+    var vr=null;try{vr=pcRoles.getVenueRole(p.code,p.role);}catch(e){vr=null;}
+    return !vr||!vr.is_active;
+  });
+  if(summary.length)html+='<div style="background:#eaf3de;border:1px solid #7dc98a;border-radius:6px;padding:8px 12px;margin-top:10px;font-size:12px;color:#27500a;">'+summary.length+' interest'+(summary.length===1?'':'s')+' &middot; '+esc(summary.join(', '))+'</div>';
+  orphans.forEach(function(p){
+    html+='<div style="font-size:12px;color:#92400e;margin-top:6px;">'+esc((p.code?(VENUE_LABELS[p.code]||p.code):'Unknown venue')+' '+(p.role||'unknown role'))+' is no longer offered, so it will not pre-check. <a href="#" onclick="pcS6RemoveInterest(\''+p.id+'\');return false;">Remove</a></div>';
+  });
+  html+=pcS6MsgHtml('int');
+  return html;
+}
+
+// ---- writes ----------------------------------------------------------
+function pcS6Run(where,work){
+  if(pcS6Busy)return;
+  var c=pcSelected;if(!c)return;
+  pcS6Busy=true;pcS6Msg=null;render();
+  Promise.resolve().then(work).then(function(){
+    pcS6Busy=false;
+    return pcS6Load(c.id);
+  }).then(function(){render();}).catch(function(err){
+    console.error('Session 6 write failed ('+where+'):',err);
+    pcS6Busy=false;
+    pcS6Msg={where:where,text:pcS6ErrText(err)};
+    pcS6Load(c.id);
+    render();
+  });
+}
+function pcS6ErrText(err){
+  var body=(err&&err.body)?String(err.body):'';
+  if(body.indexOf('minor_alcohol_role')>-1)return'Minors cannot be marked interested in Bartender or Bar Lead.';
+  if(body.indexOf('candidate_interests_one_live_pair')>-1)return'That interest is already recorded (someone may have added it just now).';
+  if(body.indexOf('candidate_interests_venue_role_fkey')>-1)return'That role is not offered at that venue.';
+  return'Save failed: '+ivErrMsg(err);
+}
+function pcS6Stamp(){return{deleted_at:new Date().toISOString(),deleted_by:pcS6Actor()};}
+
+function pcS6AddNote(){
+  var c=pcSelected;if(!c)return;
+  var tEl=document.getElementById('s6-note-type'),bEl=document.getElementById('s6-note-body');
+  var type=tEl?tEl.value:'general';
+  var body=(bEl?bEl.value:'').trim();
+  if(!body){pcS6Msg={where:'note',text:'Type a note first.'};render();return;}
+  if(body.length>S6_MAX_NOTE){pcS6Msg={where:'note',text:'Notes are limited to '+S6_MAX_NOTE+' characters.'};render();return;}
+  pcS6Run('note',function(){
+    return sbFetch('/rest/v1/candidate_notes',{method:'POST',prefer:'return=minimal',body:{candidate_id:c.id,note_type:type,body:body,created_by:pcS6Actor()}})
+      .then(function(){pcS6NoteDraft={type:type,body:''};});
+  });
+}
+function pcS6RemoveNote(id){
+  if(!confirm('Remove this note? It will be hidden from the card.'))return;
+  pcS6Run('note',function(){
+    return sbFetch('/rest/v1/candidate_notes?id=eq.'+id+'&deleted_at=is.null',{method:'PATCH',prefer:'return=minimal',body:pcS6Stamp()});
+  });
+}
+
+function pcS6SetRefStatus(val){
+  var c=pcSelected;if(!c)return;
+  var now=new Date().toISOString(),by=pcS6Actor();
+  pcS6Run('status',function(){
+    return sbFetch('/rest/v1/candidates?id=eq.'+c.id,{method:'PATCH',prefer:'return=minimal',body:{ref_status:val,ref_status_updated_at:now,ref_status_updated_by:by,updated_at:now}})
+      .then(function(){c.ref_status=val;c.ref_status_updated_at=now;c.ref_status_updated_by=by;});
+  });
+}
+
+function pcS6NewRef(){pcS6RefForm='new';pcS6RefDraft={name:'',relationship:'',phone:'',notes:''};pcS6Msg=null;render();}
+function pcS6EditRef(id){
+  var e=pcS6[pcSelected?pcSelected.id:''];if(!e||!e.data)return;
+  var rf=null;e.data.refs.forEach(function(r){if(r.id===id)rf=r;});
+  if(!rf)return;
+  pcS6RefForm=id;
+  pcS6RefDraft={name:rf.name||'',relationship:rf.relationship||'',phone:rf.phone||'',notes:rf.notes||''};
+  pcS6Msg=null;render();
+}
+function pcS6CancelRef(){pcS6RefForm=null;pcS6Msg=null;render();}
+function pcS6SaveRef(){
+  var c=pcSelected;if(!c||pcS6RefForm===null)return;
+  var d={
+    name:(pcS6RefDraft.name||'').trim().slice(0,120),
+    relationship:(pcS6RefDraft.relationship||'').trim().slice(0,120),
+    phone:(pcS6RefDraft.phone||'').trim().slice(0,40),
+    notes:(pcS6RefDraft.notes||'').trim().slice(0,2000)
+  };
+  if(!d.name){pcS6Msg={where:'ref',text:'A reference needs a name.'};render();return;}
+  var editing=pcS6RefForm;
+  var body={name:d.name,relationship:d.relationship||null,phone:d.phone||null,notes:d.notes||null};
+  pcS6Run('ref',function(){
+    var req;
+    if(editing==='new'){
+      body.candidate_id=c.id;body.created_by=pcS6Actor();
+      req=sbFetch('/rest/v1/candidate_references',{method:'POST',prefer:'return=minimal',body:body});
+    } else {
+      body.updated_at=new Date().toISOString();
+      req=sbFetch('/rest/v1/candidate_references?id=eq.'+editing+'&deleted_at=is.null',{method:'PATCH',prefer:'return=minimal',body:body});
+    }
+    return req.then(function(){pcS6RefForm=null;pcS6RefDraft={name:'',relationship:'',phone:'',notes:''};});
+  });
+}
+function pcS6CheckRef(id,checked){
+  var c=pcSelected;if(!c)return;
+  var now=new Date().toISOString(),by=pcS6Actor();
+  pcS6Run('ref',function(){
+    var body=checked?{checked_at:now,checked_by:by,updated_at:now}:{checked_at:null,checked_by:null,updated_at:now};
+    return sbFetch('/rest/v1/candidate_references?id=eq.'+id+'&deleted_at=is.null',{method:'PATCH',prefer:'return=minimal',body:body})
+      .then(function(){
+        // A checked reference ends the waiting/checking substate.
+        if(!checked||!c.ref_status)return;
+        return sbFetch('/rest/v1/candidates?id=eq.'+c.id,{method:'PATCH',prefer:'return=minimal',body:{ref_status:null,ref_status_updated_at:now,ref_status_updated_by:by,updated_at:now}})
+          .then(function(){c.ref_status=null;c.ref_status_updated_at=now;c.ref_status_updated_by=by;});
+      });
+  });
+}
+function pcS6RemoveRef(id){
+  if(!confirm('Remove this reference? It will be hidden from the card.'))return;
+  pcS6Run('ref',function(){
+    return sbFetch('/rest/v1/candidate_references?id=eq.'+id+'&deleted_at=is.null',{method:'PATCH',prefer:'return=minimal',body:pcS6Stamp()})
+      .then(function(){if(pcS6RefForm===id)pcS6RefForm=null;});
+  });
+}
+
+function pcS6IntSelectVenue(code){pcS6IntVenue=code;render();}
+function pcS6ToggleInterest(code,idx){
+  var c=pcSelected;if(!c)return;
+  var e=pcS6[c.id];if(!e||!e.data)return;
+  var legal=[];try{legal=pcRoles.getRolesForVenue(code)||[];}catch(x){legal=[];}
+  var vr=legal[idx];if(!vr)return;
+  var existing=null;
+  pcS6InterestPairs(e.data.ints).forEach(function(p){if(p.code===code&&p.role===vr.role_name)existing=p;});
+  if(!existing&&c.is_minor&&ALCOHOL_ROLES.indexOf(vr.role_name)!==-1){pcS6Msg={where:'int',text:'Minors cannot be marked interested in Bartender or Bar Lead.'};render();return;}
+  var venueId=pcS6Venues?pcS6Venues.byCode[code]:null;
+  if(!existing&&!venueId){pcS6Msg={where:'int',text:'Venue '+code+' was not found in the venue list.'};render();return;}
+  pcS6Run('int',function(){
+    if(existing)return sbFetch('/rest/v1/candidate_interests?id=eq.'+existing.id+'&deleted_at=is.null',{method:'PATCH',prefer:'return=minimal',body:pcS6Stamp()});
+    return sbFetch('/rest/v1/candidate_interests',{method:'POST',prefer:'return=minimal',body:{candidate_id:c.id,venue_id:venueId,role_id:vr.role_id,created_by:pcS6Actor()}});
+  });
+}
+function pcS6RemoveInterest(id){
+  pcS6Run('int',function(){
+    return sbFetch('/rest/v1/candidate_interests?id=eq.'+id+'&deleted_at=is.null',{method:'PATCH',prefer:'return=minimal',body:pcS6Stamp()});
+  });
+}
+
+// ---- hire modal pre-check ----------------------------------------------
+// Fills pcHireState.pairs from interview interest, through the same legality
+// rules the hire modal enforces. Never rejects: on any problem the modal
+// opens with nothing pre-checked and says why.
+function pcS6PrefillHire(){
+  var c=pcSelected,st=pcHireState;
+  if(!c||!st)return Promise.resolve();
+  var e=pcS6[c.id];
+  var p=(e&&e.status==='ok')?Promise.resolve(e):pcS6Load(c.id);
+  return p.then(function(entry){
+    if(pcHireState!==st)return;
+    if(!entry||entry.status!=='ok'){
+      st.prefillHtml='<div style="background:#fdecea;border:1px solid #f4b8b8;border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#8b1a1a;">Interview interest could not be loaded, so nothing is pre-checked.'+(entry&&entry.err?' ('+esc(entry.err)+')':'')+'</div>';
+      return;
+    }
+    var used=[],skipped=[];
+    pcS6InterestPairs(entry.data.ints).forEach(function(pr){
+      var label=(pr.code?(VENUE_LABELS[pr.code]||pr.code):'Unknown venue')+' '+(pr.role||'unknown role');
+      if(!pr.code||!pr.role||VENUE_CODES.indexOf(pr.code)===-1){skipped.push(label+' (not in the venue list)');return;}
+      var vr=null;try{vr=pcRoles.getVenueRole(pr.code,pr.role);}catch(x){vr=null;}
+      if(!vr||!vr.is_active){skipped.push(label+' (no longer offered)');return;}
+      if(c.is_minor&&ALCOHOL_ROLES.indexOf(pr.role)!==-1){skipped.push(label+' (minor)');return;}
+      st.pairs[pr.code+'||'+pr.role]=true;
+      if(used.length===0)st.selectedVenue=pr.code;
+      used.push(label);
+    });
+    var h='';
+    if(used.length)h+='<div style="background:#e6f1fb;border:1px solid #b3d4f7;border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#185fa5;">Pre-checked '+used.length+' role'+(used.length===1?'':'s')+' from interview interest. Untick anything that does not apply.</div>';
+    if(skipped.length)h+='<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#92400e;">Not pre-checked: '+esc(skipped.join(', '))+'.</div>';
+    st.prefillHtml=h;
+  }).catch(function(err){
+    console.error('Hire pre-check failed:',err);
+    if(pcHireState===st)st.prefillHtml='<div style="background:#fdecea;border:1px solid #f4b8b8;border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#8b1a1a;">Interview interest could not be applied, so nothing is pre-checked.</div>';
+  });
+}
+
 var IV_FN_URL=SUPABASE_URL+'/functions/v1/interview-staff';
 var IV_TZ='America/New_York';
 var IV_DAY=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
