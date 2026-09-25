@@ -216,7 +216,7 @@ var SHIRT_SIZES=['XS','S','M','L','XL','2XL','3XL','4XL','5XL'];
 /* pcShowLegacy: when false (default), legacy_import rows are hidden from Active/Inactive/All
    filters on the pipeline page. Those employees live on the home-components page. The
    "Legacy" pill toggle lets a manager opt in to seeing them here for ad-hoc lookups. */
-var pcCandidates=[],pcPayRates=[],payRoleNames=[],pcBookings=[],pcSelected=null,pcFilter='all',pcSearch='',pcLoading=true,pcShowLegacy=false;
+var pcCandidates=[],pcPayRates=[],payRoleNames=[],pcBookings=[],pcRequests=[],pcPrefs=[],pcLinks=[],pcOpenSlots=[],pcLoadError='',pcSelected=null,pcFilter='all',pcSearch='',pcLoading=true,pcShowLegacy=false;
 // pcEvrByPunch: employee_venue_roles cache keyed by punch_id for the displayed
 //   hired candidate. undefined=never fetched, null=in-flight, []=loaded-none,
 //   [rows]=loaded. Lazy-filled from render() via pcPipeLoadEvrForSelected().
@@ -235,6 +235,8 @@ var pcEditingShirtSize=false;
 function apiHeaders() {
   return pcAuth.headers();
 }
+// Escape database and form values before they go into innerHTML.
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 function apiHeadersJson() {
   return Object.assign({}, apiHeaders(), {'Content-Type':'application/json'});
 }
@@ -267,13 +269,13 @@ function sbFetch(path,opts){
   });
 }
 
-function loadAll(){pcLoading=true;render();var p1=sbFetch('/rest/v1/candidates?select=*&order=applied_at.desc').then(function(r){return r.json();}).catch(function(){return[];});var p2=sbFetch('/rest/v1/pay_rates?select=*&order=state.asc,role.asc').then(function(r){return r.json();}).catch(function(){return[];});var p3=sbFetch('/rest/v1/interview_bookings?select=*,interview_slots(*)&order=booked_at.desc').then(function(r){return r.json();}).catch(function(){return[];});Promise.all([p1,p2,p3]).then(function(res){pcCandidates=res[0]||[];pcPayRates=res[1]||[];pcBookings=res[2]||[];var roleSet={};pcPayRates.forEach(function(r){roleSet[r.role]=true;});payRoleNames=Object.keys(roleSet).sort();pcLoading=false;if(pcSelected){for(var i=0;i<pcCandidates.length;i++){if(pcCandidates[i].id===pcSelected.id){pcSelected=pcCandidates[i];break;}}}render();});}
+function sbJsonList(path){return sbFetch(path).then(function(r){return r.json();});}
+function loadAll(){pcLoading=true;pcLoadError='';render();var today=new Date().toLocaleString('sv-SE',{timeZone:'America/New_York'}).slice(0,10);Promise.all([sbJsonList('/rest/v1/candidates?select=*&order=applied_at.desc'),sbJsonList('/rest/v1/pay_rates?select=*&order=state.asc,role.asc'),sbJsonList('/rest/v1/interview_bookings?select=*,interview_slots(*)&order=booked_at.desc&limit=2000'),sbJsonList('/rest/v1/interview_requests?select=id,candidate_id,kind,note,source,created_at,notified_at,notify_error&resolved_at=is.null&deleted_at=is.null&order=created_at.asc&limit=500'),sbJsonList('/rest/v1/interview_slot_preferences?select=request_id,slot_id,rank,interview_slots(slot_date,start_time,duration_minutes)&retired_at=is.null&limit=1500'),sbJsonList('/rest/v1/interview_pick_links?select=id,candidate_id,created_at,created_by,expires_at,email_to,email_sent_at,email_error,first_opened_at,last_opened_at,open_count,used_at,retired_at,retired_reason&order=created_at.desc&limit=2000'),sbJsonList('/rest/v1/interview_slots?select=id,slot_date,start_time,duration_minutes&is_available=eq.true&slot_date=gte.'+today+'&order=slot_date.asc,start_time.asc&limit=400')]).then(function(res){pcCandidates=res[0]||[];pcPayRates=res[1]||[];pcBookings=res[2]||[];pcRequests=res[3]||[];pcPrefs=res[4]||[];pcLinks=res[5]||[];pcOpenSlots=res[6]||[];var roleSet={};pcPayRates.forEach(function(r){roleSet[r.role]=true;});payRoleNames=Object.keys(roleSet).sort();pcLoading=false;if(pcSelected){for(var i=0;i<pcCandidates.length;i++){if(pcCandidates[i].id===pcSelected.id){pcSelected=pcCandidates[i];break;}}}render();}).catch(function(err){console.error('Pipeline load failed:',err);pcLoading=false;pcLoadError=(err&&err.message)?err.message:String(err);render();});}
 
 function getBookingForCandidate(cid){for(var i=0;i<pcBookings.length;i++){if(pcBookings[i].candidate_id===cid&&pcBookings[i].status==='scheduled')return pcBookings[i];}return null;}
 function getInitials(f,l){return((f?f[0]:'?')+(l?l[0]:'?')).toUpperCase();}
 function formatDate(ts){if(!ts)return'--';var d=new Date(ts);return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});}
 function formatDateShort(ts){if(!ts)return'--';var d=new Date(ts);return d.toLocaleDateString('en-US',{month:'short',day:'numeric'});}
-function formatSlotDateTime(booking){if(!booking)return'--';var slot=booking.interview_slots;if(!slot)return booking.interview_slot_time||'--';var d=new Date(slot.slot_date+'T00:00:00');var dateStr=d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});var tp=slot.start_time.split(':');var h=parseInt(tp[0]);var m=tp[1];var ampm=h>=12?'PM':'AM';if(h>12)h=h-12;if(h===0)h=12;return dateStr+' at '+h+':'+m+' '+ampm;}
 function stageBadge(stage){var cls='badge-'+(stage?stage.replace(/_/g,'-'):'applied');return'<span class="badge '+cls+'">'+(STAGE_LABELS[stage]||stage)+'</span>';}
 
 /* getFiltered: returns the candidates that should be visible given the current filter pill,
@@ -336,7 +338,7 @@ function getEmailAvailability(c){
   return{e1:e1,e2:e2,e3:e3};
 }
 
-function render(){var main=document.getElementById('pcpipe-main');if(pcLoading){main.innerHTML='<p class="page-sub">Loading...</p>';return;}var listEl=document.getElementById('pcpipe-list');var detailEl=document.getElementById('pcpipe-detail');if(!listEl){main.innerHTML=renderShell();listEl=document.getElementById('pcpipe-list');detailEl=document.getElementById('pcpipe-detail');}listEl.innerHTML=renderList();detailEl.innerHTML=pcSelected?renderCandidateCard(pcSelected):'<div class="empty-state" style="background:#f9f9f9;border-radius:10px;border:1px solid #eee;padding:60px 20px;">Select a candidate to view their record.</div>';updateStatCounts();updateFilterPills();if(pcEditingPhone){setTimeout(function(){var inp=document.getElementById('phone-edit-input');if(inp)inp.focus();},30);}if(pcEditingEmail){setTimeout(function(){var inp=document.getElementById('email-edit-input');if(inp)inp.focus();},30);}if(pcEditingPunchId){setTimeout(function(){var inp=document.getElementById('punch-edit-input');if(inp){inp.focus();inp.select();}},30);}if(pcEditingShirtSize){setTimeout(function(){var inp=document.getElementById('shirt-edit-input');if(inp)inp.focus();},30);}pcPipeLoadEvrForSelected();pcPipeLoadReferralForSelected();}
+function render(){var main=document.getElementById('pcpipe-main');if(pcLoading){main.innerHTML='<p class="page-sub">Loading...</p>';return;}if(pcLoadError){main.innerHTML='<div style="background:#fdecea;border:1px solid #f4b8b8;border-radius:8px;padding:14px 16px;color:#8b1a1a;font-size:13px;"><strong>The Pipeline could not load.</strong><br>'+esc(pcLoadError)+'<br><button class="btn btn-sm" style="margin-top:10px;" onclick="loadAll()">Try again</button></div>';return;}var listEl=document.getElementById('pcpipe-list');var detailEl=document.getElementById('pcpipe-detail');if(!listEl){main.innerHTML=renderShell();listEl=document.getElementById('pcpipe-list');detailEl=document.getElementById('pcpipe-detail');}listEl.innerHTML=renderList();detailEl.innerHTML=pcSelected?renderCandidateCard(pcSelected):'<div class="empty-state" style="background:#f9f9f9;border-radius:10px;border:1px solid #eee;padding:60px 20px;">Select a candidate to view their record.</div>';updateStatCounts();updateFilterPills();if(pcEditingPhone){setTimeout(function(){var inp=document.getElementById('phone-edit-input');if(inp)inp.focus();},30);}if(pcEditingEmail){setTimeout(function(){var inp=document.getElementById('email-edit-input');if(inp)inp.focus();},30);}if(pcEditingPunchId){setTimeout(function(){var inp=document.getElementById('punch-edit-input');if(inp){inp.focus();inp.select();}},30);}if(pcEditingShirtSize){setTimeout(function(){var inp=document.getElementById('shirt-edit-input');if(inp)inp.focus();},30);}pcPipeLoadEvrForSelected();pcPipeLoadReferralForSelected();}
 
 function renderShell(){var html='<p class="page-sub">Manage applicants from application through onboarding.</p>';
 html+='<div class="stat-row" id="pcpipe-stats"></div>';
@@ -374,38 +376,34 @@ function updateFilterPills(){
 
 function countStageVisible(stage){var n=0;for(var i=0;i<pcCandidates.length;i++){if(pcCandidates[i].pipeline_stage===stage&&!isArchived(pcCandidates[i]))n++;}return n;}
 
-function renderList(){var filtered=getFiltered();if(filtered.length===0)return'<div class="empty-state" style="padding:30px 10px;">No candidates found.</div>';var html='';for(var i=0;i<filtered.length;i++){var c=filtered[i];var isSel=pcSelected&&pcSelected.id===c.id;var rejCls=(c.pipeline_stage==='rejected'||c.pipeline_stage==='inactive')?' rejected':'';var minor=c.is_minor?' <span class="badge badge-minor" style="font-size:10px;">Minor</span>':'';var srcPill='';if(c.hear_about_us){var sc='background:#e3f2fd;border:1px solid #90caf9;color:#0d47a1;';if(c.hear_about_us==='Indeed')sc='background:#fff8e1;border:1px solid #ffe082;color:#7a5c00;';else if(c.hear_about_us==='Friend or Family')sc='background:#eaf6ec;border:1px solid #7dc98a;color:#1e6b2e;';else if(c.hear_about_us==='Other')sc='background:#f3e8ff;border:1px solid #d8b4fe;color:#6b21a8;';srcPill=' <span class="badge" style="font-size:10px;'+sc+'">'+c.hear_about_us+'</span>';}html+='<div class="cand-row'+(isSel?' selected':'')+rejCls+'" onclick="pcPipeSelect(\''+c.id+'\')"><div style="display:flex;justify-content:space-between;align-items:center;gap:6px;"><div class="cand-name">'+c.first_name+' '+c.last_name+minor+srcPill+'</div>'+stageBadge(c.pipeline_stage)+'</div><div class="cand-meta">'+formatDateShort(c.applied_at)+(c.roles&&c.roles.length>0?' &middot; '+c.roles[0]:'')+'</div></div>';}html+='<div style="margin-top:10px;font-size:12px;color:#aaa;">'+filtered.length+' candidate'+(filtered.length!==1?'s':'')+'</div>';return html;}
+function renderList(){var filtered=getFiltered();if(filtered.length===0)return'<div class="empty-state" style="padding:30px 10px;">No candidates found.</div>';var html='';for(var i=0;i<filtered.length;i++){var c=filtered[i];var isSel=pcSelected&&pcSelected.id===c.id;var rejCls=(c.pipeline_stage==='rejected'||c.pipeline_stage==='inactive')?' rejected':'';var minor=c.is_minor?' <span class="badge badge-minor" style="font-size:10px;">Minor</span>':'';var srcPill='';if(c.hear_about_us){var sc='background:#e3f2fd;border:1px solid #90caf9;color:#0d47a1;';if(c.hear_about_us==='Indeed')sc='background:#fff8e1;border:1px solid #ffe082;color:#7a5c00;';else if(c.hear_about_us==='Friend or Family')sc='background:#eaf6ec;border:1px solid #7dc98a;color:#1e6b2e;';else if(c.hear_about_us==='Other')sc='background:#f3e8ff;border:1px solid #d8b4fe;color:#6b21a8;';srcPill=' <span class="badge" style="font-size:10px;'+sc+'">'+esc(c.hear_about_us)+'</span>';}html+='<div class="cand-row'+(isSel?' selected':'')+rejCls+'" onclick="pcPipeSelect(\''+c.id+'\')"><div style="display:flex;justify-content:space-between;align-items:center;gap:6px;"><div class="cand-name">'+esc(c.first_name)+' '+esc(c.last_name)+minor+srcPill+'</div>'+stageBadge(c.pipeline_stage)+'</div><div class="cand-meta">'+formatDateShort(c.applied_at)+(c.roles&&c.roles.length>0?' &middot; '+esc(c.roles[0]):'')+'</div></div>';}html+='<div style="margin-top:10px;font-size:12px;color:#aaa;">'+filtered.length+' candidate'+(filtered.length!==1?'s':'')+'</div>';return html;}
 
 function renderCandidateCard(c){var stage=c.pipeline_stage,isOnb=stage==='onboarding',isAct=stage==='active',isRej=stage==='rejected';var isHiredPlus=stage==='hired'||isOnb||isAct||stage==='inactive';var html='<div class="card">';
-html+='<div class="card-section" style="display:flex;align-items:center;gap:12px;"><div class="avatar">'+getInitials(c.first_name,c.last_name)+'</div><div style="flex:1;"><div style="font-size:16px;font-weight:600;">'+c.first_name+' '+c.last_name+(c.is_minor?' <span class="badge badge-minor">Minor</span>':'')+'</div><div style="font-size:12px;color:#888;margin-top:2px;">Applied '+formatDate(c.applied_at)+'</div></div>'+stageBadge(stage)+'</div>';
+html+='<div class="card-section" style="display:flex;align-items:center;gap:12px;"><div class="avatar">'+getInitials(c.first_name,c.last_name)+'</div><div style="flex:1;"><div style="font-size:16px;font-weight:600;">'+esc(c.first_name)+' '+esc(c.last_name)+(c.is_minor?' <span class="badge badge-minor">Minor</span>':'')+'</div><div style="font-size:12px;color:#888;margin-top:2px;">Applied '+formatDate(c.applied_at)+'</div></div>'+stageBadge(stage)+'</div>';
 if(!isRej)html+=renderEmailButtons(c);
-var booking=getBookingForCandidate(c.id);
-if(booking){html+='<div class="card-section" style="padding:10px 16px;"><div class="interview-info"><div class="ii-label">Phone interview scheduled</div><div class="ii-time">'+formatSlotDateTime(booking)+'</div><div class="ii-status">Booked '+formatDate(booking.booked_at)+'</div></div></div>';}
-else if(stage==='interview_requested'){html+='<div class="card-section" style="padding:10px 16px;"><div class="email-sent-banner">Candidate picked preferred interview times. Confirm one on the Interviews page.</div></div>';}
-else if(stage==='contacted'){html+='<div class="card-section" style="padding:10px 16px;"><div class="email-sent-banner">Waiting for candidate to pick an interview time.</div></div>';}
+if(!isRej)html+=renderInterviewSection(c);
 var pencilSvg='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path></svg>';
 html+='<div class="card-section"><div class="section-title">Application details</div><div class="detail-grid"><div><div class="detail-label">Email</div><div class="detail-value">';
-if(pcEditingEmail){html+='<div class="phone-edit-inline"><input type="text" id="email-edit-input" value="'+(c.email||'')+'" placeholder="e.g. name@gmail.com" style="width:200px;" /><button class="btn btn-sm btn-primary" onclick="pcPipeSaveEmail()" style="padding:4px 10px;">Save</button><button class="btn btn-sm" onclick="pcPipeCancelEmailEdit()" style="padding:4px 10px;">Cancel</button></div><div id="email-edit-err" class="error-msg"></div>';}else{html+=(c.email?'<a href="mailto:'+c.email+'" style="color:#2d7dd2;">'+c.email+'</a>':'--')+'<button class="edit-phone-btn" onclick="pcPipeEditEmail()" title="Edit email address">'+pencilSvg+'</button>';}
+if(pcEditingEmail){html+='<div class="phone-edit-inline"><input type="text" id="email-edit-input" value="'+esc(c.email||'')+'" placeholder="e.g. name@gmail.com" style="width:200px;" /><button class="btn btn-sm btn-primary" onclick="pcPipeSaveEmail()" style="padding:4px 10px;">Save</button><button class="btn btn-sm" onclick="pcPipeCancelEmailEdit()" style="padding:4px 10px;">Cancel</button></div><div id="email-edit-err" class="error-msg"></div>';}else{html+=(c.email?'<a href="mailto:'+esc(c.email)+'" style="color:#2d7dd2;">'+esc(c.email)+'</a>':'--')+'<button class="edit-phone-btn" onclick="pcPipeEditEmail()" title="Edit email address">'+pencilSvg+'</button>';}
 html+='</div></div><div><div class="detail-label">Phone</div><div class="detail-value">';
-if(pcEditingPhone){html+='<div class="phone-edit-inline"><input type="tel" id="phone-edit-input" value="'+(c.phone||'')+'" placeholder="e.g. 856 357 6785" style="width:150px;" oninput="pcPipePhonePreview()" /><button class="btn btn-sm btn-primary" onclick="pcPipeSavePhone()" style="padding:4px 10px;">Save</button><button class="btn btn-sm" onclick="pcPipeCancelPhoneEdit()" style="padding:4px 10px;">Cancel</button></div><div id="phone-edit-err" class="error-msg"></div><div class="phone-punch-preview" id="phone-punch-preview"></div>';}else{html+=(c.phone?'<a href="tel:'+c.phone+'" style="color:#2d7dd2;">'+formatPhoneDisplay(c.phone)+'</a>':'--')+'<button class="edit-phone-btn" onclick="pcPipeEditPhone()" title="Edit phone number">'+pencilSvg+'</button>';}
-html+='</div></div><div><div class="detail-label">Date of birth</div><div class="detail-value">'+(c.date_of_birth?formatDate(c.date_of_birth):'--')+'</div></div><div><div class="detail-label">Earliest start</div><div class="detail-value">'+(c.earliest_start_date?formatDate(c.earliest_start_date):'--')+'</div></div><div><div class="detail-label">Uniform shirt size</div><div class="detail-value">'+(pcEditingShirtSize?('<div class="phone-edit-inline"><select id="shirt-edit-input" style="width:120px;padding:6px 8px;">'+buildShirtSizeOptions(c.shirt_size||'')+'</select><button class="btn btn-sm btn-primary" onclick="pcPipeSaveShirtSize()" style="padding:4px 10px;">Save</button><button class="btn btn-sm" onclick="pcPipeCancelShirtSizeEdit()" style="padding:4px 10px;">Cancel</button></div><div id="shirt-edit-err" class="error-msg"></div>'):((c.shirt_size?c.shirt_size:'--')+'<button class="edit-phone-btn" onclick="pcPipeEditShirtSize()" title="Edit shirt size">'+pencilSvg+'</button>'))+'</div></div></div><div style="margin-top:10px;"><div class="detail-label" style="margin-bottom:4px;">Roles applied for</div><div class="tag-list">'+renderTags(c.roles)+'</div></div><div style="margin-top:10px;"><div class="detail-label" style="margin-bottom:4px;">Locations</div><div class="tag-list">'+renderTags(c.locations)+'</div></div>'+(c.referral_source?'<div style="margin-top:10px;"><div class="detail-label">Referred by</div><div class="detail-value">'+c.referral_source+'</div></div>':'')+'<div style="margin-top:10px;"><div class="detail-label" style="margin-bottom:4px;">Experience</div><div style="font-size:13px;color:#444;line-height:1.6;">'+(c.experience_notes||'--')+'</div></div>'+(c.resume_url?'<div style="margin-top:10px;"><div class="detail-label" style="margin-bottom:4px;">Resume</div><button class="btn btn-sm" onclick="pcPipeOpenFile(\''+c.id+'\',\'resume\')">View resume</button></div>':'')+'</div>';
-if(c.booking_code&&(stage==='contacted'||stage==='interview_scheduled')){html+='<div class="card-section"><div class="section-title">Booking code</div><div style="font-family:monospace;font-size:18px;font-weight:700;color:#2d7dd2;letter-spacing:0.15em;">'+c.booking_code+'</div><div style="font-size:12px;color:#888;margin-top:4px;">Scheduling link: camdenco.com/schedule-interview?code='+c.booking_code+'</div></div>';}
-html+='<div class="card-section"><div class="section-title">Internal notes</div><textarea class="notes-area" id="pipe-notes-field" placeholder="Add notes about this candidate...">'+(c.internal_notes||'')+'</textarea><button class="btn btn-sm" style="margin-top:6px;" onclick="pcPipeSaveNotes()">Save notes</button><div id="notes-saved-msg" style="font-size:12px;color:#1D9E75;display:none;margin-top:4px;">Saved</div></div>';
+if(pcEditingPhone){html+='<div class="phone-edit-inline"><input type="tel" id="phone-edit-input" value="'+esc(c.phone||'')+'" placeholder="e.g. 856 357 6785" style="width:150px;" oninput="pcPipePhonePreview()" /><button class="btn btn-sm btn-primary" onclick="pcPipeSavePhone()" style="padding:4px 10px;">Save</button><button class="btn btn-sm" onclick="pcPipeCancelPhoneEdit()" style="padding:4px 10px;">Cancel</button></div><div id="phone-edit-err" class="error-msg"></div><div class="phone-punch-preview" id="phone-punch-preview"></div>';}else{html+=(c.phone?'<a href="tel:'+esc(c.phone)+'" style="color:#2d7dd2;">'+esc(formatPhoneDisplay(c.phone))+'</a>':'--')+'<button class="edit-phone-btn" onclick="pcPipeEditPhone()" title="Edit phone number">'+pencilSvg+'</button>';}
+html+='</div></div><div><div class="detail-label">Date of birth</div><div class="detail-value">'+(c.date_of_birth?formatDate(c.date_of_birth):'--')+'</div></div><div><div class="detail-label">Earliest start</div><div class="detail-value">'+(c.earliest_start_date?formatDate(c.earliest_start_date):'--')+'</div></div><div><div class="detail-label">Uniform shirt size</div><div class="detail-value">'+(pcEditingShirtSize?('<div class="phone-edit-inline"><select id="shirt-edit-input" style="width:120px;padding:6px 8px;">'+buildShirtSizeOptions(c.shirt_size||'')+'</select><button class="btn btn-sm btn-primary" onclick="pcPipeSaveShirtSize()" style="padding:4px 10px;">Save</button><button class="btn btn-sm" onclick="pcPipeCancelShirtSizeEdit()" style="padding:4px 10px;">Cancel</button></div><div id="shirt-edit-err" class="error-msg"></div>'):((c.shirt_size?c.shirt_size:'--')+'<button class="edit-phone-btn" onclick="pcPipeEditShirtSize()" title="Edit shirt size">'+pencilSvg+'</button>'))+'</div></div></div><div style="margin-top:10px;"><div class="detail-label" style="margin-bottom:4px;">Roles applied for</div><div class="tag-list">'+renderTags(c.roles)+'</div></div><div style="margin-top:10px;"><div class="detail-label" style="margin-bottom:4px;">Locations</div><div class="tag-list">'+renderTags(c.locations)+'</div></div>'+(c.referral_source?'<div style="margin-top:10px;"><div class="detail-label">Referred by</div><div class="detail-value">'+esc(c.referral_source)+'</div></div>':'')+'<div style="margin-top:10px;"><div class="detail-label" style="margin-bottom:4px;">Experience</div><div style="font-size:13px;color:#444;line-height:1.6;">'+esc(c.experience_notes||'--')+'</div></div>'+(c.resume_url?'<div style="margin-top:10px;"><div class="detail-label" style="margin-bottom:4px;">Resume</div><button class="btn btn-sm" onclick="pcPipeOpenFile(\''+c.id+'\',\'resume\')">View resume</button></div>':'')+'</div>';
+html+='<div class="card-section"><div class="section-title">Internal notes</div><textarea class="notes-area" id="pipe-notes-field" placeholder="Add notes about this candidate...">'+esc(c.internal_notes||'')+'</textarea><button class="btn btn-sm" style="margin-top:6px;" onclick="pcPipeSaveNotes()">Save notes</button><div id="notes-saved-msg" style="font-size:12px;color:#1D9E75;display:none;margin-top:4px;">Saved</div></div>';
 html+=renderReferralSection(c);
 if(isHiredPlus){html+=renderHireDetails(c);html+=renderOnboardingChecklist(c);if(c.is_minor)html+=renderMinorChecklist(c);}
 if(!isRej&&!isAct&&stage!=='inactive')html+=renderPipelineActions(c,stage);
 if(isAct){html+='<div class="card-section"><div class="section-title">Employee status</div><p style="font-size:13px;color:#555;margin:0 0 10px;">This employee is currently active. Deactivating will remove them from the availability sign-up list immediately.</p><label style="font-size:13px;color:#555;display:block;margin-bottom:4px;">Reason (optional)</label><input type="text" id="deactivate-reason" placeholder="e.g. Resigned, terminated, seasonal end..." style="margin-bottom:10px;" /><button class="btn btn-danger btn-sm" onclick="pcPipeDeactivate()">Deactivate employee</button></div>';}
-if(isRej){html+='<div class="card-section"><div style="background:#fdecea;border-radius:6px;padding:10px 12px;font-size:13px;color:#8b1a1a;">Rejected'+(c.rejection_reason?' -- '+c.rejection_reason:'')+(c.stage_updated_at?' on '+formatDate(c.stage_updated_at):'')+'</div><button class="btn btn-sm" style="margin-top:10px;" onclick="pcPipeMoveStage(\'applied\')">Restore to Applied</button></div>';}
-if(stage==='inactive'){html+='<div class="card-section"><div style="background:#f1efe8;border-radius:6px;padding:10px 12px;font-size:13px;color:#5f5e5a;">Inactive'+(c.deactivation_reason?' -- '+c.deactivation_reason:'')+(c.stage_updated_at?' since '+formatDate(c.stage_updated_at):'')+'</div><button class="btn btn-green btn-sm" style="margin-top:10px;" onclick="pcPipeReactivate()">Reactivate employee</button></div>';}
+if(isRej){html+='<div class="card-section"><div style="background:#fdecea;border-radius:6px;padding:10px 12px;font-size:13px;color:#8b1a1a;">Rejected'+(c.rejection_reason?' -- '+esc(c.rejection_reason):'')+(c.stage_updated_at?' on '+formatDate(c.stage_updated_at):'')+'</div><button class="btn btn-sm" style="margin-top:10px;" onclick="pcPipeMoveStage(\'applied\')">Restore to Applied</button></div>';}
+if(stage==='inactive'){html+='<div class="card-section"><div style="background:#f1efe8;border-radius:6px;padding:10px 12px;font-size:13px;color:#5f5e5a;">Inactive'+(c.deactivation_reason?' -- '+esc(c.deactivation_reason):'')+(c.stage_updated_at?' since '+formatDate(c.stage_updated_at):'')+'</div><button class="btn btn-green btn-sm" style="margin-top:10px;" onclick="pcPipeReactivate()">Reactivate employee</button></div>';}
 html+='</div>';return html;}
 
-function renderEmailButtons(c){var avail=getEmailAvailability(c);var hasEmail=!!c.email;var mailIco='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2d7dd2" stroke-width="2" style="flex-shrink:0;"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="M22 4L12 13L2 4"></path></svg>';var checkIco='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1D9E75" stroke-width="2" style="flex-shrink:0;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>';var offIco='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#bbb" stroke-width="2" style="flex-shrink:0;"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="M22 4L12 13L2 4"></path></svg>';var html='<div class="card-section" style="background:#fafafa;"><div class="section-title">Send email</div>';if(!hasEmail)html+='<div style="font-size:12px;color:#c0392b;margin-bottom:8px;">No email address on file -- emails cannot be sent until one is added.</div>';html+='<div class="email-btn-row">';for(var i=0;i<EMAIL_INFO.length;i++){var info=EMAIL_INFO[i];var isSent=!!c[info.field];var isAvail=info.num===1?avail.e1:(info.num===2?avail.e2:avail.e3);if(isSent){html+='<div class="email-btn sent"><div class="eb-top">'+checkIco+'<span class="eb-title">'+info.title+'</span></div><div class="eb-desc">Sent '+formatDateShort(c[info.field])+'</div>';if(hasEmail)html+='<span class="eb-resend" onclick="pcPipeShowEmailConfirm('+info.num+',true)">Resend</span>';html+='</div>';}else if(isAvail&&hasEmail){html+='<div class="email-btn" onclick="pcPipeShowEmailConfirm('+info.num+',false)"><div class="eb-top">'+mailIco+'<span class="eb-title">'+info.title+'</span></div><div class="eb-desc">'+info.desc+'</div></div>';}else{html+='<div class="email-btn disabled"><div class="eb-top">'+offIco+'<span class="eb-title" style="color:#bbb;">'+info.title+'</span></div><div class="eb-desc" style="color:#ccc;">'+info.desc+'</div></div>';}}html+='</div></div>';return html;}
+function renderEmailButtons(c){var avail=getEmailAvailability(c);var hasEmail=!!c.email;var mailIco='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2d7dd2" stroke-width="2" style="flex-shrink:0;"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="M22 4L12 13L2 4"></path></svg>';var checkIco='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1D9E75" stroke-width="2" style="flex-shrink:0;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>';var offIco='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#bbb" stroke-width="2" style="flex-shrink:0;"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="M22 4L12 13L2 4"></path></svg>';var html='<div class="card-section" style="background:#fafafa;"><div class="section-title">Send email</div>';if(!hasEmail)html+='<div style="font-size:12px;color:#c0392b;margin-bottom:8px;">No email address on file -- emails cannot be sent until one is added.</div>';html+='<div class="email-btn-row">';for(var i=0;i<EMAIL_INFO.length;i++){var info=EMAIL_INFO[i];var isSent=!!c[info.field];var isAvail=info.num===1?avail.e1:(info.num===2?avail.e2:avail.e3);if(isSent){html+='<div class="email-btn sent"><div class="eb-top">'+checkIco+'<span class="eb-title">'+info.title+'</span></div><div class="eb-desc">Sent '+formatDateShort(c[info.field])+'</div>';if(hasEmail)html+='<span class="eb-resend" onclick="pcPipeShowEmailConfirm('+info.num+',true)">Resend</span>';html+='</div>';}else if(isAvail&&hasEmail){html+='<div class="email-btn" onclick="pcPipeShowEmailConfirm('+info.num+',false)"><div class="eb-top">'+mailIco+'<span class="eb-title">'+info.title+'</span></div><div class="eb-desc">'+info.desc+'</div></div>';}else{html+='<div class="email-btn disabled"><div class="eb-top">'+offIco+'<span class="eb-title" style="color:#bbb;">'+info.title+'</span></div><div class="eb-desc" style="color:#ccc;">'+info.desc+'</div></div>';}}html+=renderPickLinkButton(c);html+='</div></div>';return html;}
 
-function pcPipeShowEmailConfirm(emailNum,isResend){if(!pcSelected||!pcSelected.email)return;var info=EMAIL_INFO[emailNum-1];var label=isResend?'Resend '+info.title:'Send '+info.title;var desc='';if(emailNum===1)desc='This will send the "Thanks for Applying" email.';else if(emailNum===2)desc='This will send the "Welcome / Complete Onboarding Paperwork" email with a link to the W-4 and payroll page.';else desc='This will send the "Final Steps" email with app download links and onboarding training instructions.';var html='<div class="modal-overlay" onclick="pcPipeCloseModal(event)"><div class="modal-box"><h3>'+label+'</h3><p>'+desc+'</p><div style="background:#f0f6ff;border:1px solid #b3d4f7;border-radius:6px;padding:10px 14px;margin-bottom:14px;"><div style="font-size:11px;color:#666;margin-bottom:2px;">To:</div><div style="font-size:14px;font-weight:500;color:#0c447c;">'+pcSelected.email+'</div><div style="font-size:11px;color:#666;margin-top:6px;">CC: erikapeters@camdenco.com</div></div>'+(isResend?'<div style="font-size:12px;color:#d97706;margin-bottom:12px;">This email was already sent on '+formatDateShort(pcSelected[info.field])+'. Sending again will update the sent date.</div>':'')+'<div id="email-send-err" class="error-msg" style="margin-bottom:8px;"></div><div style="display:flex;gap:8px;"><button class="btn" style="flex:1;" onclick="pcPipeCloseModal(null)">Cancel</button><button class="btn btn-primary" style="flex:1;" id="email-send-btn" onclick="pcPipeConfirmSendEmail('+emailNum+')">'+(isResend?'Resend':'Send email')+'</button></div></div></div>';document.getElementById('pcpipe-modal').innerHTML=html;}
+function pcPipeShowEmailConfirm(emailNum,isResend){if(!pcSelected||!pcSelected.email)return;var info=EMAIL_INFO[emailNum-1];var label=isResend?'Resend '+info.title:'Send '+info.title;var desc='';if(emailNum===1)desc='This will send the "Thanks for Applying" email.';else if(emailNum===2)desc='This will send the "Welcome / Complete Onboarding Paperwork" email with a link to the W-4 and payroll page.';else desc='This will send the "Final Steps" email with app download links and onboarding training instructions.';var html='<div class="modal-overlay" onclick="pcPipeCloseModal(event)"><div class="modal-box"><h3>'+label+'</h3><p>'+desc+'</p><div style="background:#f0f6ff;border:1px solid #b3d4f7;border-radius:6px;padding:10px 14px;margin-bottom:14px;"><div style="font-size:11px;color:#666;margin-bottom:2px;">To:</div><div style="font-size:14px;font-weight:500;color:#0c447c;">'+esc(pcSelected.email)+'</div><div style="font-size:11px;color:#666;margin-top:6px;">CC: staffing@camdenco.com</div></div>'+(isResend?'<div style="font-size:12px;color:#d97706;margin-bottom:12px;">This email was already sent on '+formatDateShort(pcSelected[info.field])+'. Sending again will update the sent date.</div>':'')+'<div id="email-send-err" class="error-msg" style="margin-bottom:8px;"></div><div style="display:flex;gap:8px;"><button class="btn" style="flex:1;" onclick="pcPipeCloseModal(null)">Cancel</button><button class="btn btn-primary" style="flex:1;" id="email-send-btn" onclick="pcPipeConfirmSendEmail('+emailNum+')">'+(isResend?'Resend':'Send email')+'</button></div></div></div>';document.getElementById('pcpipe-modal').innerHTML=html;}
 
 function pcPipeConfirmSendEmail(emailNum){if(!pcSelected)return;var btn=document.getElementById('email-send-btn');if(btn){btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Sending...';}var h=apiHeaders();h['Content-Type']='application/json';fetch(SUPABASE_URL+'/functions/v1/send-pipeline-email',{method:'POST',headers:h,body:JSON.stringify({email_number:emailNum,first_name:pcSelected.first_name,to_email:pcSelected.email,candidate_id:pcSelected.id})}).then(function(r){return r.json();}).then(function(data){if(data.success){pcPipeCloseModal(null);loadAll();}else{var e=document.getElementById('email-send-err');if(e)e.innerHTML='Failed to send: '+(data.error||'Unknown error');if(btn){btn.disabled=false;btn.innerHTML='Send email';}}}).catch(function(err){console.error('Email send error:',err);var e=document.getElementById('email-send-err');if(e)e.innerHTML='Network error. Please try again.';if(btn){btn.disabled=false;btn.innerHTML='Send email';}});}
 
-function renderPipelineActions(c,stage){var html='<div class="card-section"><div class="section-title">Pipeline actions</div><div class="stage-select-wrap">';if(stage==='onboarding'){var mpn=c.is_minor&&!c.working_papers_complete;if(mpn){html+='<div style="font-size:12px;color:#c0392b;margin-bottom:8px;flex-basis:100%;">Working papers must be marked complete before this minor can be marked active.</div><button class="btn btn-sm" disabled style="opacity:0.4;cursor:not-allowed;">Mark Active</button>';}else{html+='<button class="btn btn-green" onclick="pcPipeMoveStage(\'active\')">Mark Active</button>';}}else{html+='<div style="flex:1;min-width:160px;"><div class="detail-label" style="margin-bottom:4px;">Move to stage</div><select id="stage-move-select" style="margin-bottom:0;"><option value="">-- Select stage --</option>';if(stage==='applied')html+='<option value="contacted">Contacted</option><option value="interview_scheduled">Interview Scheduled</option><option value="hire_modal">Hired (assign venue + role)</option>';else if(stage==='contacted')html+='<option value="applied">Applied (move back)</option><option value="interview_scheduled">Interview Scheduled</option><option value="hire_modal">Hired (assign venue + role)</option>';else if(stage==='interview_requested')html+='<option value="applied">Applied (move back)</option><option value="contacted">Contacted (move back)</option><option value="interview_scheduled">Interview Scheduled</option><option value="hire_modal">Hired (assign venue + role)</option>';else if(stage==='interview_scheduled')html+='<option value="applied">Applied (move back)</option><option value="contacted">Contacted (move back)</option><option value="hire_modal">Hired (assign venue + role)</option>';html+='</select></div><button class="btn btn-primary" style="margin-top:18px;" onclick="pcPipeHandleStageMove()">Move</button>';}html+='<button class="btn btn-danger btn-sm" style="margin-top:18px;" onclick="pcPipeShowRejectModal()">Reject</button></div></div>';return html;}
+function renderPipelineActions(c,stage){var html='<div class="card-section"><div class="section-title">Pipeline actions</div><div class="stage-select-wrap">';if(stage==='onboarding'){var mpn=c.is_minor&&!c.working_papers_complete;if(mpn){html+='<div style="font-size:12px;color:#c0392b;margin-bottom:8px;flex-basis:100%;">Working papers must be marked complete before this minor can be marked active.</div><button class="btn btn-sm" disabled style="opacity:0.4;cursor:not-allowed;">Mark Active</button>';}else{html+='<button class="btn btn-green" onclick="pcPipeMoveStage(\'active\')">Mark Active</button>';}}else{html+='<div style="flex:1;min-width:160px;"><div class="detail-label" style="margin-bottom:4px;">Move to stage</div><select id="stage-move-select" style="margin-bottom:0;"><option value="">-- Select stage --</option>';if(stage==='applied')html+='<option value="contacted">Contacted</option><option value="hire_modal">Hired (assign venue + role)</option>';else if(stage==='contacted')html+='<option value="applied">Applied (move back)</option><option value="hire_modal">Hired (assign venue + role)</option>';else if(stage==='interview_requested')html+='<option value="applied">Applied (move back)</option><option value="contacted">Contacted (move back)</option><option value="hire_modal">Hired (assign venue + role)</option>';else if(stage==='interview_scheduled')html+='<option value="applied">Applied (move back)</option><option value="contacted">Contacted (move back)</option><option value="hire_modal">Hired (assign venue + role)</option>';html+='</select></div><button class="btn btn-primary" style="margin-top:18px;" onclick="pcPipeHandleStageMove()">Move</button>';}html+='<button class="btn btn-danger btn-sm" style="margin-top:18px;" onclick="pcPipeShowRejectModal()">Reject</button></div></div>';return html;}
 
 function renderHireDetails(c){
   var pencilSvg='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path></svg>';
@@ -456,14 +454,14 @@ html+='</div>';return html;}
 function renderMinorChecklist(c){var venues=c.assigned_venues||[];var states=getVenueStates(venues);var html='<div class="card-section"><div class="section-title" style="color:#92400e;">Minor -- working papers</div><div class="minor-section">';if(states.length===0){html+='<p style="font-size:13px;color:#92400e;margin:0;">Assign venues to see state-specific working paper requirements.</p></div></div>';return html;}for(var s=0;s<states.length;s++){var state=states[s];html+='<div style="'+(s>0?'margin-top:14px;padding-top:14px;border-top:1px solid #fde68a;':'')+'"><div class="minor-section-title">'+state+' requirements</div>';if(state==='NJ'){html+='<div class="employer-code-box"><div class="ec-lbl">NJ Employer Code -- provide this to the minor</div><div class="ec-num">'+NJ_EMPLOYER_CODE+'</div><div class="ec-instructions">The minor must enter this code when completing their application at myworkingpapers.nj.gov. A parent or guardian must also complete their portion. Working papers are issued electronically by the state.</div></div>';html+=renderMinorCheckItem(c,'employer_code_provided','employer_code_provided_at','Employer code provided to minor');html+=renderMinorCheckItem(c,'working_papers_complete','working_papers_uploaded_at','Working papers approved by NJ state');}else if(state==='PA'){html+='<div style="font-size:13px;color:#92400e;margin-bottom:10px;line-height:1.6;">Minor must download the PA Work Permit application, have a parent sign it, and take it to their school district. The school district issues the official permit. PA papers may be transferable from a previous job.</div>';html+=renderMinorCheckItem(c,'working_papers_complete','working_papers_uploaded_at','PA work permit issued by school district');}else if(state==='DE'){html+='<div style="font-size:13px;color:#92400e;margin-bottom:10px;line-height:1.6;">Minor must download and complete the DE labor permit form and have it approved and signed by an issuing officer. Required for each employer even if they have papers from another job.</div>';html+=renderMinorCheckItem(c,'working_papers_complete','working_papers_uploaded_at','DE labor permit approved by issuing officer');}html+=renderMinorCheckItem(c,'parental_consent_complete','parental_consent_completed_at','Parental consent form completed');html+='</div>';}html+='<div style="margin-top:12px;"><div class="detail-label" style="margin-bottom:6px;">Working papers document upload</div>';if(c.working_papers_url){html+='<div class="upload-done"><span>Document uploaded</span><button class="btn btn-sm" onclick="pcPipeOpenFile(\''+c.id+'\',\'working-papers\')">View</button></div>';}else{html+='<div class="upload-zone" onclick="document.getElementById(\'wp-file-input\').click()">Tap to upload approved working papers document</div><input type="file" id="wp-file-input" accept=".pdf,.jpg,.jpeg,.png" style="display:none;" onchange="pcPipeUploadWorkingPapers(this)" />';}html+='</div></div></div>';return html;}
 
 function renderMinorCheckItem(c,key,tsKey,label){var done=!!c[key];var ts=c[tsKey]?formatDate(c[tsKey]):'';return'<div class="checklist-row"><div style="display:flex;align-items:center;gap:8px;"><input type="checkbox" '+(done?'checked':'')+' onchange="pcPipeToggleChecklist(\''+key+'\',\''+tsKey+'\',this.checked)" style="width:16px;height:16px;accent-color:#d97706;cursor:pointer;" /><span class="checklist-label" style="'+(done?'text-decoration:line-through;color:#aaa;':'color:#78350f;')+'">'+label+'</span></div><span class="checklist-status" style="color:'+(done?'#d97706':'#aaa')+';">'+(done?(ts||'Done'):'Pending')+'</span></div>';}
-function renderTags(arr){if(!arr||arr.length===0)return'<span style="font-size:12px;color:#aaa;">None</span>';var h='';for(var i=0;i<arr.length;i++)h+='<span class="tag">'+arr[i]+'</span>';return h;}
+function renderTags(arr){if(!arr||arr.length===0)return'<span style="font-size:12px;color:#aaa;">None</span>';var h='';for(var i=0;i<arr.length;i++)h+='<span class="tag">'+esc(arr[i])+'</span>';return h;}
 
 function renderReferralSection(c){
   if(!c.referred_by_employee_id)return '';
   var stage=c.pipeline_stage;
   var isHired=stage==='hired'||stage==='onboarding'||stage==='active'||stage==='inactive';
   var html='<div class="card-section"><div class="section-title">Referral</div>';
-  html+='<div class="detail-grid"><div><div class="detail-label">Referred by</div><div class="detail-value">'+(c.referred_by_name||'--')+'</div></div></div>';
+  html+='<div class="detail-grid"><div><div class="detail-label">Referred by</div><div class="detail-value">'+esc(c.referred_by_name||'--')+'</div></div></div>';
   if(!isHired){
     html+='<div style="margin-top:10px;font-size:13px;color:#888;">A referral record is created after this candidate is hired, so the bonus can be tracked.</div></div>';
     return html;
@@ -610,36 +608,35 @@ function pcPipeSaveNotes(){
 function pcPipeHandleStageMove(){var sel=document.getElementById('stage-move-select');if(!sel)return;var val=sel.value;if(!val)return;if(val==='hire_modal')pcPipeShowHireModal();else pcPipeMoveStage(val);}
 function pcPipeMoveStage(newStage){
   if(!pcSelected)return;
+  var cand=pcSelected,old=cand.pipeline_stage;
+  var booking=getBookingForCandidate(cand.id);
+  var req=ivOpenRequest(cand.id);
+  var failMsg=function(err){
+    console.error('Stage move failed:',err);
+    alert('Could not change stage to "'+newStage+'". '+(err&&err.status===403?'Permission denied -- send Claude the browser console error.':ivErrMsg(err)));
+    loadAll();
+  };
+  // A booked interview is cancelled through the interview functions, which also move the stage.
+  if(old==='interview_scheduled'&&booking&&(newStage==='applied'||newStage==='contacted')){
+    if(!confirm('This cancels their scheduled interview and frees the time. The candidate is NOT emailed. Continue?'))return;
+    staffAction({action:'cancel',booking_id:booking.id,reason:'Stage moved back to '+newStage+' on the Pipeline',notify:false,stage_to:newStage})
+      .then(function(){loadAll();}).catch(failMsg);
+    return;
+  }
+  var pre=Promise.resolve();
+  if(req&&(newStage==='applied'||newStage==='contacted')){
+    if(!confirm('They have an open interview request. Moving them back declines it, and their interview link stops working. Continue?'))return;
+    pre=staffAction({action:'decline',request_id:req.id,note:'Stage moved back to '+newStage+' on the Pipeline'});
+  }
   var now=new Date().toISOString();
   var updates={pipeline_stage:newStage,stage_updated_at:now,updated_at:now};
-  var old=pcSelected.pipeline_stage;
-  if(old==='interview_scheduled'&&(newStage==='applied'||newStage==='contacted')){
-    updates.interview_scheduled_at=null;updates.interview_slot_time=null;
-    cancelBookingForCandidate(pcSelected.id);
-  }
-  sbFetch('/rest/v1/candidates?id=eq.'+pcSelected.id,{method:'PATCH',prefer:'return=minimal',body:updates})
+  if(old==='interview_scheduled'){updates.interview_scheduled_at=null;updates.interview_slot_time=null;}
+  pre.then(function(){return sbFetch('/rest/v1/candidates?id=eq.'+cand.id,{method:'PATCH',prefer:'return=minimal',body:updates});})
     .then(function(){loadAll();})
-    .catch(function(err){
-      console.error('Stage move failed:',err);
-      alert('Could not change stage to "'+newStage+'". '+(err&&err.status===403?'Permission denied -- send Claude the browser console error.':'Please try again or send Claude the console error.'));
-    });
-}
-function cancelBookingForCandidate(cid){
-  var b=getBookingForCandidate(cid);
-  if(!b)return;
-  sbFetch('/rest/v1/interview_bookings?id=eq.'+b.id,{method:'PATCH',prefer:'return=minimal',body:{status:'cancelled',cancelled_at:new Date().toISOString()}})
-    .catch(function(err){console.warn('Booking cancel failed (non-critical):',err);});
-}
-/* Hire means the interview happened: mark it completed, not cancelled.
-   Non-blocking like cancel -- a failure here must not undo the hire. */
-function completeBookingForCandidate(cid){
-  var b=getBookingForCandidate(cid);
-  if(!b)return;
-  sbFetch('/rest/v1/interview_bookings?id=eq.'+b.id,{method:'PATCH',prefer:'return=minimal',body:{status:'completed'}})
-    .catch(function(err){console.warn('Booking complete failed (non-critical):',err);});
+    .catch(failMsg);
 }
 function pcPipeShowRejectModal(){document.getElementById('pcpipe-modal').innerHTML='<div class="modal-overlay" onclick="pcPipeCloseModal(event)"><div class="modal-box"><h3>Reject candidate</h3><p>This candidate will be marked rejected. Their record is retained.</p><label style="font-size:13px;color:#555;display:block;margin-bottom:4px;">Reason (optional)</label><input type="text" id="reject-reason-input" placeholder="e.g. Not hiring for this role..." style="margin-bottom:12px;" /><div style="display:flex;gap:8px;"><button class="btn" style="flex:1;" onclick="pcPipeCloseModal(null)">Cancel</button><button class="btn btn-danger" style="flex:1;" onclick="pcPipeConfirmReject()">Reject</button></div></div></div>';}
-function pcPipeConfirmReject(){if(!pcSelected)return;var reason=document.getElementById('reject-reason-input').value.trim();cancelBookingForCandidate(pcSelected.id);sbFetch('/rest/v1/candidates?id=eq.'+pcSelected.id,{method:'PATCH',prefer:'return=minimal',body:{pipeline_stage:'rejected',rejection_reason:reason||null,interview_scheduled_at:null,interview_slot_time:null,stage_updated_at:new Date().toISOString(),updated_at:new Date().toISOString()}}).then(function(){pcPipeCloseModal(null);loadAll();}).catch(function(err){console.error('Reject failed:',err);alert('Could not reject this candidate. '+(err&&err.status===403?'Permission denied -- send Claude the console error.':'Please try again or send Claude the console error.'));});}
+function pcPipeConfirmReject(){if(!pcSelected)return;var cid=pcSelected.id;var reason=document.getElementById('reject-reason-input').value.trim();ivCloseInterviews(cid,'rejected').then(function(){return sbFetch('/rest/v1/candidates?id=eq.'+cid,{method:'PATCH',prefer:'return=minimal',body:{pipeline_stage:'rejected',rejection_reason:reason||null,interview_scheduled_at:null,interview_slot_time:null,stage_updated_at:new Date().toISOString(),updated_at:new Date().toISOString()}});}).then(function(){pcPipeCloseModal(null);loadAll();}).catch(function(err){console.error('Reject failed:',err);alert('Could not reject this candidate. '+(err&&err.status===403?'Permission denied -- send Claude the console error.':ivErrMsg(err)));});}
 
 // ============================================================
 // HIRE MODAL -- per-venue role picker (employee_venue_roles).
@@ -804,7 +801,7 @@ function pcPipeRenderHireModal(){
   document.getElementById('pcpipe-modal').innerHTML=
     '<div class="modal-overlay" onclick="pcPipeCloseModal(event)">'+
       '<div class="modal-box">'+
-        '<h3>Hire '+pcSelected.first_name+' '+pcSelected.last_name+'</h3>'+
+        '<h3>Hire '+esc(pcSelected.first_name)+' '+esc(pcSelected.last_name)+'</h3>'+
         mn+
         '<p>Pick venues, then choose this person\'s roles at each one. Punch ID is generated from last 4 of phone.</p>'+
         punchBlock+
@@ -901,7 +898,7 @@ function doHireWrite(punch,desiredPairs,venuesMirror,rolesMirror,hiredBy,homeVen
   // home_venue stays on employees only (dropped from candidates in Step 1.1).
   var cu={pipeline_stage:'onboarding',hired:true,hired_at:new Date().toISOString(),hired_by:hiredBy,punch_id:punch,assigned_venues:venuesMirror,assigned_roles:rolesMirror,stage_updated_at:new Date().toISOString(),updated_at:new Date().toISOString()};
   var er={first_name:pcSelected.first_name,last_name:pcSelected.last_name,punch_id:punch,is_active:true,phone:pcSelected.phone,home_venue:homeVenue,shirt_size:pcSelected.shirt_size||null,candidate_id:pcSelected.id};
-  completeBookingForCandidate(pcSelected.id);
+  ivCloseInterviews(pcSelected.id,'hired').catch(function(err){console.error('Closing interview records on hire failed (hire continues):',err);});
   var failStep='candidates update';
   return sbFetch('/rest/v1/candidates?id=eq.'+pcSelected.id,{method:'PATCH',prefer:'return=minimal',body:cu})
     .then(function(){
@@ -1324,6 +1321,316 @@ function pcPipeSaveShirtSize(){
     })
     .then(function(){pcEditingShirtSize=false;loadAll();})
     .catch(function(err){console.error('Shirt size update failed',err);if(errEl)errEl.innerHTML='Error saving. Please try again.';});
+}
+
+/* ============================================================
+   INTERVIEW SCHEDULING (Interviews Session 5, Sep 2026)
+   - 4th email button "Pick your interview time" sends a per-candidate
+     picker link (only the newest link works; history shown on the card).
+   - Open interview request: confirm a pick / another time, decline,
+     or ask for new times. Scheduled interview: cancel or reschedule.
+   - Every change goes through the interview-staff edge function, which
+     calls one SQL function. The Interviews page uses the same calls, so a
+     second confirm from the other page fails cleanly.
+   ============================================================ */
+var IV_FN_URL=SUPABASE_URL+'/functions/v1/interview-staff';
+var IV_TZ='America/New_York';
+var IV_DAY=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+var IV_MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+var IV_LINK_STAGES=['applied','contacted','interview_requested'];
+var IV_PRE_HIRE=['applied','contacted','interview_requested','interview_scheduled'];
+
+function staffAction(body){
+  return fetch(IV_FN_URL,{method:'POST',headers:apiHeadersJson(),body:JSON.stringify(body)}).then(function(r){
+    return r.text().then(function(t){
+      var d=null;try{d=t?JSON.parse(t):null;}catch(e){d=null;}
+      if(!r.ok||!d||d.ok!==true){
+        var err=new Error((d&&d.message)?d.message:('HTTP '+r.status+' from interview-staff'));
+        err.status=r.status;err.code=d?d.code:null;throw err;
+      }
+      return d;
+    });
+  });
+}
+function ivErrMsg(err){return (err&&err.message)?err.message:'Something went wrong. Please try again.';}
+
+// slot_date + start_time are Eastern wall-clock values
+function ivWallLabel(d,t){
+  var p=String(d||'').split('-'),tm=String(t||'').split(':');
+  if(p.length!==3||tm.length<2)return'--';
+  var dt=new Date(Date.UTC(parseInt(p[0],10),parseInt(p[1],10)-1,parseInt(p[2],10),12));
+  var h=parseInt(tm[0],10),h12=h%12===0?12:h%12;
+  return IV_DAY[dt.getUTCDay()]+', '+IV_MON[dt.getUTCMonth()]+' '+dt.getUTCDate()+' at '+h12+':'+tm[1]+' '+(h>=12?'PM':'AM');
+}
+function ivStamp(iso){
+  if(!iso)return'--';
+  return new Date(iso).toLocaleString('en-US',{timeZone:IV_TZ,month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+}
+function ivNowKey(){return new Date().toLocaleString('sv-SE',{timeZone:IV_TZ}).slice(0,16);}
+function ivSlotKey(d,t){return String(d)+' '+String(t).slice(0,5);}
+function ivSlotBooked(slotId){
+  for(var i=0;i<pcBookings.length;i++){if(pcBookings[i].slot_id===slotId&&pcBookings[i].status!=='cancelled')return true;}
+  return false;
+}
+function ivOpenRequest(cid){
+  for(var i=0;i<pcRequests.length;i++){if(pcRequests[i].candidate_id===cid)return pcRequests[i];}
+  return null;
+}
+function ivPrefs(rid){
+  var out=[];
+  for(var i=0;i<pcPrefs.length;i++){if(pcPrefs[i].request_id===rid)out.push(pcPrefs[i]);}
+  out.sort(function(a,b){return a.rank-b.rank;});
+  return out;
+}
+function ivLinks(cid){
+  var out=[];
+  for(var i=0;i<pcLinks.length;i++){if(pcLinks[i].candidate_id===cid)out.push(pcLinks[i]);}
+  return out;
+}
+function ivBookableSlots(excludeIds){
+  var now=ivNowKey(),out=[];
+  for(var i=0;i<pcOpenSlots.length;i++){
+    var s=pcOpenSlots[i];
+    if(excludeIds.indexOf(s.id)>-1)continue;
+    if(ivSlotKey(s.slot_date,s.start_time)<=now)continue;
+    if(ivSlotBooked(s.id))continue;
+    out.push(s);
+  }
+  return out;
+}
+function ivLinkStatus(l){
+  if(l.retired_at){
+    if(l.retired_reason==='superseded')return'Replaced by a newer link';
+    if(l.retired_reason==='declined')return'Closed (request declined)';
+    return'Closed';
+  }
+  if(new Date(l.expires_at).getTime()<Date.now())return'Expired '+ivStamp(l.expires_at);
+  return'Active until '+ivStamp(l.expires_at);
+}
+
+// 4th button in the "Send email" row
+function renderPickLinkButton(c){
+  var calIco='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2d7dd2" stroke-width="2" style="flex-shrink:0;"><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"></path></svg>';
+  var offIco='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#bbb" stroke-width="2" style="flex-shrink:0;"><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"></path></svg>';
+  var title='Pick your interview time';
+  var booked=getBookingForCandidate(c.id);
+  var allowed=IV_LINK_STAGES.indexOf(c.pipeline_stage||'applied')>-1;
+  var reason=!c.email?'No email on file':(booked?'Interview is booked':(!allowed?'Not available at this stage':''));
+  if(reason)return'<div class="email-btn disabled"><div class="eb-top">'+offIco+'<span class="eb-title" style="color:#bbb;">'+title+'</span></div><div class="eb-desc" style="color:#ccc;">'+reason+'</div></div>';
+  var links=ivLinks(c.id);
+  if(links.length>0){
+    var l=links[0];
+    var failed=!!l.email_error&&!l.email_sent_at;
+    return'<div class="email-btn sent"'+(failed?' style="border-color:#f4b8b8;background:#fdf3f2;"':'')+'><div class="eb-top">'+calIco+'<span class="eb-title">'+title+'</span></div>'+
+      '<div class="eb-desc">'+(failed?'<span style="color:#c0392b;">Email failed '+esc(formatDateShort(l.created_at))+'</span>':'Sent '+esc(formatDateShort(l.created_at)))+'</div>'+
+      '<span class="eb-resend" onclick="pcIvShowSendLink(true)">Resend</span></div>';
+  }
+  return'<div class="email-btn" onclick="pcIvShowSendLink(false)"><div class="eb-top">'+calIco+'<span class="eb-title">'+title+'</span></div><div class="eb-desc">Link to choose interview times</div></div>';
+}
+
+function renderInterviewSection(c){
+  var stage=c.pipeline_stage||'applied';
+  var booking=getBookingForCandidate(c.id);
+  var req=ivOpenRequest(c.id);
+  var links=ivLinks(c.id);
+  if(IV_PRE_HIRE.indexOf(stage)===-1&&!booking&&!req)return'';
+  if(!booking&&!req&&links.length===0&&stage!=='interview_scheduled')return'';
+  var html='<div class="card-section"><div class="section-title">Interview</div>';
+
+  if(booking){
+    var slot=booking.interview_slots;
+    var when=slot?ivWallLabel(slot.slot_date,slot.start_time):(booking.interview_slot_time||'--');
+    html+='<div class="interview-info"><div class="ii-label">Video interview scheduled</div>'+
+      '<div class="ii-time">'+esc(when)+' <span style="font-size:12px;font-weight:500;">(Eastern)</span></div>'+
+      '<div class="ii-status">Booked '+esc(ivStamp(booking.booked_at))+(booking.booked_by?' by '+esc(booking.booked_by):'')+'</div>'+
+      (booking.invite_sent_at?'<div class="ii-status">Confirmation emailed '+esc(ivStamp(booking.invite_sent_at))+'</div>'
+        :'<div class="ii-status" style="color:#c0392b;font-weight:600;">Confirmation email was not sent. Contact the candidate directly.</div>')+
+      '</div><div style="display:flex;gap:8px;flex-wrap:wrap;">'+
+      '<button class="btn btn-sm" id="iv-resched-btn" onclick="pcIvReschedule(\''+booking.id+'\')">Reschedule (send new link)</button>'+
+      '<button class="btn btn-sm btn-danger" onclick="pcIvShowCancel(\''+booking.id+'\')">Cancel interview</button></div>';
+  } else if(req){
+    html+=renderRequestPanel(req,c);
+  } else if(stage==='interview_scheduled'){
+    html+='<div class="email-sent-banner">Stage says Interview Scheduled, but no interview is booked. Move the stage back, then send an interview link.</div>';
+  } else if(links.length>0&&!links[0].retired_at&&new Date(links[0].expires_at).getTime()>Date.now()){
+    html+='<div class="email-sent-banner">Waiting for the candidate to pick interview times.</div>';
+  }
+
+  if(links.length>0){
+    html+='<div style="margin-top:12px;"><div class="detail-label" style="margin-bottom:4px;">Interview link history</div>';
+    for(var i=0;i<links.length&&i<6;i++){
+      var l=links[i];
+      var mail=l.email_sent_at?'emailed':(l.email_error?'<span style="color:#c0392b;">email failed</span>':'email pending');
+      var opened=l.open_count>0?'opened '+l.open_count+'x (last '+esc(ivStamp(l.last_opened_at))+')':'not opened';
+      html+='<div style="font-size:12px;color:#555;padding:5px 0;border-top:1px solid #f0f0f0;line-height:1.5;">'+
+        '<strong>'+esc(ivStamp(l.created_at))+'</strong>'+(l.created_by?' by '+esc(l.created_by):'')+' &middot; '+mail+
+        ' &middot; '+opened+(l.used_at?' &middot; times sent '+esc(ivStamp(l.used_at)):'')+
+        '<br><span style="color:#888;">'+esc(ivLinkStatus(l))+'</span></div>';
+    }
+    html+='</div>';
+  }
+  html+='</div>';
+  return html;
+}
+
+function renderRequestPanel(req,c){
+  var html='<div style="background:#f0f6ff;border:1px solid #b3d4f7;border-radius:8px;padding:12px 14px;">';
+  html+='<div style="font-size:11px;color:#0c447c;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Interview request &middot; '+esc(ivStamp(req.created_at))+'</div>';
+  if(req.notify_error)html+='<div style="font-size:12px;color:#c0392b;margin-bottom:6px;">The staffing@ notice for this request did not send.</div>';
+  var prefIds=[];
+  if(req.kind==='picks'){
+    var prefs=ivPrefs(req.id),now=ivNowKey();
+    html+='<div style="font-size:13px;color:#333;margin-bottom:6px;">Their choices, in order (Eastern):</div>';
+    for(var i=0;i<prefs.length;i++){
+      var p=prefs[i],s=p.interview_slots||{};
+      prefIds.push(p.slot_id);
+      var past=s.slot_date?ivSlotKey(s.slot_date,s.start_time)<=now:true;
+      var taken=ivSlotBooked(p.slot_id);
+      var note=past?'already passed':(taken?'booked by someone else':'');
+      html+='<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 0;border-top:1px solid #dbe8f7;">'+
+        '<span style="font-size:13px;'+(note?'color:#999;text-decoration:line-through;':'font-weight:600;')+'">'+p.rank+'. '+esc(ivWallLabel(s.slot_date,s.start_time))+'</span>'+
+        (note?'<span style="font-size:11px;color:#999;">'+note+'</span>'
+          :'<button class="btn btn-sm btn-green" onclick="pcIvConfirm(\''+req.id+'\',\''+p.slot_id+'\')">Confirm</button>')+'</div>';
+    }
+  } else if(req.kind==='none_work'){
+    html+='<div style="font-size:13px;color:#333;margin-bottom:4px;"><strong>None of the open times work for them.</strong></div>'+
+      '<div style="font-size:13px;color:#555;margin-bottom:6px;">'+(req.note?'Their note: '+esc(req.note):'They did not leave a note.')+'</div>';
+  } else {
+    html+='<div style="font-size:13px;color:#333;margin-bottom:6px;"><strong>No times were open</strong> when they opened their link. Add times on the Interviews page, then use Ask for new times.</div>';
+  }
+  var other=ivBookableSlots(prefIds);
+  html+='<div style="margin-top:10px;"><div class="detail-label" style="margin-bottom:4px;">Book a different time</div>';
+  if(other.length===0){
+    html+='<div style="font-size:12px;color:#888;">No other open times. Add times on the Interviews page.</div>';
+  } else {
+    html+='<div style="display:flex;gap:6px;flex-wrap:wrap;"><select id="iv-other-slot" style="flex:1;min-width:180px;margin-bottom:0;"><option value="">-- Choose a time --</option>';
+    for(var j=0;j<other.length&&j<120;j++){
+      html+='<option value="'+other[j].id+'">'+esc(ivWallLabel(other[j].slot_date,other[j].start_time))+'</option>';
+    }
+    html+='</select><button class="btn btn-sm btn-primary" onclick="pcIvConfirmOther(\''+req.id+'\')">Confirm</button></div>';
+  }
+  html+='</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">'+
+    '<button class="btn btn-sm" onclick="pcIvShowResolve(\''+req.id+'\',\'new_times\')">Ask for new times</button>'+
+    '<button class="btn btn-sm btn-danger" onclick="pcIvShowResolve(\''+req.id+'\',\'declined\')">Decline</button></div>';
+  html+='</div>';
+  return html;
+}
+
+// ── Actions ──────────────────────────────────────────────────────────
+
+function ivCandidateName(){return pcSelected?((pcSelected.first_name||'')+' '+(pcSelected.last_name||'')).trim():'';}
+
+function pcIvShowSendLink(isResend){
+  if(!pcSelected||!pcSelected.email)return;
+  var req=ivOpenRequest(pcSelected.id);
+  var warn='';
+  if(req)warn='<div style="font-size:12px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:8px 10px;margin-bottom:12px;">They already sent their times (request below). A new link will only show them &quot;we already have your times.&quot; To have them choose again, use <strong>Ask for new times</strong> on the request instead.</div>';
+  else if(isResend)warn='<div style="font-size:12px;color:#d97706;margin-bottom:12px;">Their previous link will stop working. Only the newest link works.</div>';
+  var html='<div class="modal-overlay" onclick="pcPipeCloseModal(event)"><div class="modal-box"><h3>'+(isResend?'Resend':'Send')+' interview link</h3>'+
+    '<p>Emails '+esc(pcSelected.first_name||'the candidate')+' a link to pick up to 3 interview times. The link works for 7 days.</p>'+
+    '<div style="background:#f0f6ff;border:1px solid #b3d4f7;border-radius:6px;padding:10px 14px;margin-bottom:14px;"><div style="font-size:11px;color:#666;margin-bottom:2px;">To:</div>'+
+    '<div style="font-size:14px;font-weight:500;color:#0c447c;">'+esc(pcSelected.email)+'</div><div style="font-size:11px;color:#666;margin-top:6px;">BCC: staffing@camdenco.com</div></div>'+
+    warn+'<div id="iv-modal-err" class="error-msg" style="margin-bottom:8px;"></div>'+
+    '<div style="display:flex;gap:8px;"><button class="btn" style="flex:1;" onclick="pcPipeCloseModal(null)">Cancel</button>'+
+    '<button class="btn btn-primary" style="flex:1;" id="iv-modal-btn" onclick="pcIvSendLink()">'+(isResend?'Resend link':'Send link')+'</button></div></div></div>';
+  document.getElementById('pcpipe-modal').innerHTML=html;
+}
+
+function ivModalBusy(label){var b=document.getElementById('iv-modal-btn');if(b){b.disabled=true;b.innerHTML='<span class="spinner"></span>'+label;}}
+function ivModalFail(err,label){
+  var e=document.getElementById('iv-modal-err');if(e)e.textContent=ivErrMsg(err);
+  var b=document.getElementById('iv-modal-btn');if(b){b.disabled=false;b.innerHTML=label;}
+}
+
+function pcIvSendLink(){
+  if(!pcSelected)return;
+  ivModalBusy('Sending...');
+  staffAction({action:'send_link',candidate_id:pcSelected.id}).then(function(d){
+    pcPipeCloseModal(null);
+    if(!d.email_sent)alert('The link was created, but the email did not send: '+(d.email_error||'unknown error')+'\n\nTry Resend in a minute.');
+    loadAll();
+  }).catch(function(err){console.error('Send interview link failed:',err);ivModalFail(err,'Send link');});
+}
+
+function pcIvConfirm(requestId,slotId){
+  if(!pcSelected)return;
+  var label='';
+  for(var i=0;i<pcPrefs.length;i++){var p=pcPrefs[i];if(p.slot_id===slotId&&p.interview_slots){label=ivWallLabel(p.interview_slots.slot_date,p.interview_slots.start_time);}}
+  for(var j=0;j<pcOpenSlots.length;j++){if(pcOpenSlots[j].id===slotId)label=ivWallLabel(pcOpenSlots[j].slot_date,pcOpenSlots[j].start_time);}
+  if(!confirm('Book '+ivCandidateName()+' for '+(label||'this time')+' (Eastern)?\n\nThe confirmation email with the Google Meet link goes out right away.'))return;
+  staffAction({action:'confirm',request_id:requestId,slot_id:slotId}).then(function(d){
+    if(!d.email_sent)alert('The interview is booked for '+(d.when||label)+', but the confirmation email did not send: '+(d.email_error||'unknown error')+'\n\nContact the candidate directly.');
+    loadAll();
+  }).catch(function(err){console.error('Confirm interview failed:',err);alert('Not booked. '+ivErrMsg(err));loadAll();});
+}
+
+function pcIvConfirmOther(requestId){
+  var sel=document.getElementById('iv-other-slot');
+  if(!sel||!sel.value){alert('Choose a time first.');return;}
+  pcIvConfirm(requestId,sel.value);
+}
+
+function pcIvShowResolve(requestId,kind){
+  var isNew=kind==='new_times';
+  var html='<div class="modal-overlay" onclick="pcPipeCloseModal(event)"><div class="modal-box"><h3>'+(isNew?'Ask for new times':'Decline request')+'</h3>'+
+    '<p>'+(isNew?'Closes this request and emails '+esc(pcSelected?pcSelected.first_name:'the candidate')+' a fresh link to pick again. Use this after adding new times, or when none of their picks work.'
+      :'Closes this request without booking and moves the candidate back to Contacted. No email is sent to the candidate. Their interview link stops working.')+'</p>'+
+    '<label style="font-size:13px;color:#555;display:block;margin-bottom:4px;">Note for the record (optional)</label>'+
+    '<textarea id="iv-resolve-note" maxlength="500" class="notes-area" style="min-height:60px;margin-bottom:10px;"></textarea>'+
+    '<div id="iv-modal-err" class="error-msg" style="margin-bottom:8px;"></div>'+
+    '<div style="display:flex;gap:8px;"><button class="btn" style="flex:1;" onclick="pcPipeCloseModal(null)">Cancel</button>'+
+    '<button class="btn '+(isNew?'btn-primary':'btn-danger')+'" style="flex:1;" id="iv-modal-btn" onclick="pcIvResolve(\''+requestId+'\',\''+kind+'\')">'+(isNew?'Send new link':'Decline')+'</button></div></div></div>';
+  document.getElementById('pcpipe-modal').innerHTML=html;
+}
+
+function pcIvResolve(requestId,kind){
+  var noteEl=document.getElementById('iv-resolve-note');
+  var note=noteEl?noteEl.value.trim():'';
+  var label=kind==='new_times'?'Send new link':'Decline';
+  ivModalBusy('Saving...');
+  staffAction({action:kind==='new_times'?'new_times':'decline',request_id:requestId,note:note||null}).then(function(d){
+    pcPipeCloseModal(null);
+    if(kind==='new_times'&&!d.email_sent)alert('The request was closed and a new link was created, but the email did not send: '+(d.email_error||'unknown error')+'\n\nUse Resend on the interview link button.');
+    loadAll();
+  }).catch(function(err){console.error('Resolve request failed:',err);ivModalFail(err,label);});
+}
+
+function pcIvShowCancel(bookingId){
+  var html='<div class="modal-overlay" onclick="pcPipeCloseModal(event)"><div class="modal-box"><h3>Cancel interview</h3>'+
+    '<p>Cancels the interview and frees the time. The candidate moves back to Contacted.</p>'+
+    '<label style="font-size:13px;color:#555;display:block;margin-bottom:4px;">Reason (optional, internal)</label>'+
+    '<input type="text" id="iv-cancel-reason" maxlength="500" style="margin-bottom:10px;" />'+
+    '<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#333;margin-bottom:12px;cursor:pointer;"><input type="checkbox" id="iv-cancel-notify" checked style="width:auto;" /> Email the candidate that it is cancelled (removes it from their calendar)</label>'+
+    '<div id="iv-modal-err" class="error-msg" style="margin-bottom:8px;"></div>'+
+    '<div style="display:flex;gap:8px;"><button class="btn" style="flex:1;" onclick="pcPipeCloseModal(null)">Keep interview</button>'+
+    '<button class="btn btn-danger" style="flex:1;" id="iv-modal-btn" onclick="pcIvCancel(\''+bookingId+'\')">Cancel interview</button></div></div></div>';
+  document.getElementById('pcpipe-modal').innerHTML=html;
+}
+
+function pcIvCancel(bookingId){
+  var r=document.getElementById('iv-cancel-reason'),n=document.getElementById('iv-cancel-notify');
+  var reason=r?r.value.trim():'';
+  var notify=n?n.checked:true;
+  ivModalBusy('Cancelling...');
+  staffAction({action:'cancel',booking_id:bookingId,reason:reason||null,notify:notify,stage_to:'contacted'}).then(function(d){
+    pcPipeCloseModal(null);
+    if(notify&&!d.email_sent)alert('The interview is cancelled, but the email to the candidate did not send: '+(d.email_error||'unknown error'));
+    loadAll();
+  }).catch(function(err){console.error('Cancel interview failed:',err);ivModalFail(err,'Cancel interview');});
+}
+
+function pcIvReschedule(bookingId){
+  if(!confirm('Reschedule '+ivCandidateName()+'?\n\nThis cancels the current interview (freeing the time) and emails them a new link to pick again, with a calendar update removing the old time.'))return;
+  var btn=document.getElementById('iv-resched-btn');if(btn){btn.disabled=true;btn.textContent='Sending...';}
+  staffAction({action:'cancel',booking_id:bookingId,reason:'Rescheduled from the Pipeline',reschedule:true,stage_to:'contacted'}).then(function(d){
+    if(!d.email_sent)alert('The interview was cancelled and a new link was created, but the email did not send: '+(d.email_error||'unknown error')+'\n\nUse Resend on the interview link button.');
+    loadAll();
+  }).catch(function(err){console.error('Reschedule failed:',err);alert('Not rescheduled. '+ivErrMsg(err));loadAll();});
+}
+
+// Hire / reject tidy-up: closes open requests, links, and the booking.
+function ivCloseInterviews(cid,outcome){
+  return staffAction({action:'close',candidate_id:cid,outcome:outcome});
 }
 
 function init(){
