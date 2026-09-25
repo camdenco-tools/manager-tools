@@ -205,6 +205,9 @@ function iaErrText(err){
 function esc(s){if(s===null||s===undefined)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 function msgHtml(kind,text){return text?'<div class="'+kind+'-msg">'+esc(text)+'</div>':'';}
 
+// Add calendar days via the Date constructor. Adding 24h in milliseconds breaks
+// across daylight-saving changes (Nov 1 showed up twice after the clocks changed).
+function shiftDays(d,n){return new Date(d.getFullYear(),d.getMonth(),d.getDate()+n);}
 function getSunday(d){var day=d.getDay();return new Date(d.getFullYear(),d.getMonth(),d.getDate()-day);}
 function initWeekStart(){iaWeekStart=getSunday(new Date());}
 function dateStr(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
@@ -288,7 +291,7 @@ function prefAnyCount(slotId){return iaPrefAny[slotId]||0;}
 
 function getUpcomingBookings(){var now=new Date();var out=[];for(var i=0;i<iaBookings.length;i++){var b=iaBookings[i];if(b.status!=='scheduled')continue;var slot=b.interview_slots;if(!slot)continue;var p=slot.start_time.split(':');var sd=parseDate(slot.slot_date);sd.setHours(parseInt(p[0]),parseInt(p[1]),0);if(sd>=now)out.push(b);}out.sort(function(a,b){var sa=a.interview_slots;var sb2=b.interview_slots;var da=sa.slot_date+'T'+sa.start_time;var db=sb2.slot_date+'T'+sb2.start_time;return da<db?-1:da>db?1:0;});return out;}
 
-function countStats(){var totalOpen=0,totalBooked=0,thisWeekBooked=0;for(var i=0;i<iaSlots.length;i++){var s=iaSlots[i];if(!s.is_available||isPast(s.slot_date,s.start_time))continue;var booking=getBookingForSlot(s.id);if(booking){totalBooked++;var sd=parseDate(s.slot_date);var weekEnd=new Date(iaWeekStart.getTime()+7*86400000);if(sd>=iaWeekStart&&sd<weekEnd)thisWeekBooked++;}else{totalOpen++;}}return{open:totalOpen,booked:totalBooked,thisWeek:thisWeekBooked};}
+function countStats(){var totalOpen=0,totalBooked=0,thisWeekBooked=0;for(var i=0;i<iaSlots.length;i++){var s=iaSlots[i];if(!s.is_available||isPast(s.slot_date,s.start_time))continue;var booking=getBookingForSlot(s.id);if(booking){totalBooked++;var sd=parseDate(s.slot_date);var weekEnd=shiftDays(iaWeekStart,7);if(sd>=iaWeekStart&&sd<weekEnd)thisWeekBooked++;}else{totalOpen++;}}return{open:totalOpen,booked:totalBooked,thisWeek:thisWeekBooked};}
 
 // ---------------------------------------------------------------------------
 // Weekly editor draft. One range = one interview_slot_rules row.
@@ -573,14 +576,14 @@ function renderBlackouts(){
   return html;
 }
 
-function renderWeekLabel(){if(!iaWeekStart)return'';var end=new Date(iaWeekStart.getTime()+13*86400000);var sm=MONTH_NAMES[iaWeekStart.getMonth()];var em=MONTH_NAMES[end.getMonth()];return sm===em?sm+' '+iaWeekStart.getDate()+' - '+end.getDate()+', '+iaWeekStart.getFullYear():sm+' '+iaWeekStart.getDate()+' - '+em+' '+end.getDate()+', '+end.getFullYear();}
+function renderWeekLabel(){if(!iaWeekStart)return'';var end=shiftDays(iaWeekStart,13);var sm=MONTH_NAMES[iaWeekStart.getMonth()];var em=MONTH_NAMES[end.getMonth()];return sm===em?sm+' '+iaWeekStart.getDate()+' - '+end.getDate()+', '+iaWeekStart.getFullYear():sm+' '+iaWeekStart.getDate()+' - '+em+' '+end.getDate()+', '+end.getFullYear();}
 
 function renderCalendar(){
   var html='<div class="section-card"><div class="cal-nav"><button class="btn btn-sm" onclick="iaWeekPrev()">&larr; Prev</button><h3>'+renderWeekLabel()+'</h3><div class="cal-nav-btns"><button class="btn btn-sm" onclick="iaWeekToday()">Today</button><button class="btn btn-sm" onclick="iaWeekNext()">Next &rarr;</button></div></div><div class="cal-grid">';
   var d;
   for(d=0;d<7;d++)html+='<div class="cal-day-hdr">'+DAY_NAMES[d]+'</div>';
   for(d=0;d<14;d++){
-    var dayDate=new Date(iaWeekStart.getTime()+d*86400000);var ds=dateStr(dayDate);var slots=getSlotsForDate(ds);
+    var dayDate=shiftDays(iaWeekStart,d);var ds=dateStr(dayDate);var slots=getSlotsForDate(ds);
     html+='<div class="cal-day'+(isToday(dayDate)?' today':'')+'"><div class="cal-day-num">'+dayDate.getDate()+'</div>';
     for(var s=0;s<slots.length;s++){
       var slot=slots[s];var booking=getBookingForSlot(slot.id);
@@ -770,8 +773,8 @@ function iaRemoveBlackout(id){
 // ---------------------------------------------------------------------------
 // Calendar navigation + slot modal
 // ---------------------------------------------------------------------------
-function iaWeekPrev(){iaWeekStart=new Date(iaWeekStart.getTime()-7*86400000);render();}
-function iaWeekNext(){iaWeekStart=new Date(iaWeekStart.getTime()+7*86400000);render();}
+function iaWeekPrev(){iaWeekStart=shiftDays(iaWeekStart,-7);render();}
+function iaWeekNext(){iaWeekStart=shiftDays(iaWeekStart,7);render();}
 function iaWeekToday(){initWeekStart();render();}
 
 function iaSlotClick(slotId){
@@ -783,7 +786,7 @@ function iaSlotClick(slotId){
   if(booking){
     html+='<div style="background:#fff8e1;border:1px solid #ffe082;border-radius:6px;padding:12px;margin-bottom:14px;"><div style="font-size:11px;color:#7a5c00;font-weight:600;text-transform:uppercase;margin-bottom:6px;">Booked by</div><div style="font-size:15px;font-weight:500;color:#78350f;">'+esc(booking.candidate_name||'')+'</div>'+(booking.candidate_phone?'<div style="font-size:13px;color:#92400e;margin-top:2px;">'+esc(booking.candidate_phone)+'</div>':'')+(booking.candidate_email?'<div style="font-size:13px;color:#92400e;margin-top:2px;">'+esc(booking.candidate_email)+'</div>':'')+(booking.booked_at?'<div style="font-size:11px;color:#a16207;margin-top:6px;">Booked '+new Date(booking.booked_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+'</div>':'')+(booking.invite_sent_at?'<div style="font-size:11px;color:#a16207;margin-top:2px;">Confirmation emailed '+new Date(booking.invite_sent_at).toLocaleDateString('en-US',{month:'short',day:'numeric'})+'</div>':'<div style="font-size:12px;color:#c0392b;font-weight:600;margin-top:4px;">Confirmation email was not sent. Contact the candidate.</div>')+'</div>'+iaChangeTimeHtml(booking)+'<div id="ia-modal-msg"></div><div style="display:flex;gap:8px;flex-wrap:wrap;">'+close+'<button class="btn" style="flex:1;" onclick="iaReschedule(\''+booking.id+'\')">Reschedule (new link)</button><button class="btn btn-danger" style="flex:1;" onclick="iaShowCancel(\''+booking.id+'\')">Cancel interview</button></div>';
   }else if(pc){
-    html+='<div style="background:#e6f1fb;border-radius:6px;padding:10px 12px;font-size:13px;color:#185fa5;margin-bottom:14px;">'+plural(pc,'candidate')+' asked for this time, so it can\'t be removed or blocked until their request is handled.</div><div id="ia-modal-msg"></div><div style="display:flex;gap:8px;">'+close+'</div>';
+    html+=iaSlotPickersHtml(slotId)+'<div id="ia-modal-msg"></div><div style="display:flex;gap:8px;">'+close+'</div>';
   }else if(isPast(slot.slot_date,slot.start_time)){
     html+='<div style="background:#f0f0f0;border-radius:6px;padding:10px 12px;font-size:13px;color:#888;margin-bottom:14px;">This slot is in the past.</div><div id="ia-modal-msg"></div><div style="display:flex;gap:8px;">'+close+'<button class="btn btn-danger" style="flex:1;" onclick="iaDeleteSlot(\''+slotId+'\')">Remove slot</button></div>';
   }else if(isRule){
@@ -1002,6 +1005,18 @@ function iaChangeTimeHtml(booking){
   return html+'<div style="display:flex;gap:6px;flex-wrap:wrap;"><select id="ia-move-slot" class="queue-select"><option value="">Choose the new time...</option>'+
     (theirs?'<optgroup label="Times they picked">'+theirs+'</optgroup>':'')+(rest?'<optgroup label="Other open times">'+rest+'</optgroup>':'')+
     '</select><button class="btn btn-sm btn-primary" id="ia-move-btn" onclick="iaMove(\''+booking.id+'\')">Move</button></div></div>';
+}
+// Candidates whose open request picked this slot, each with a Confirm button.
+function iaSlotPickersHtml(slotId){
+  var rows='';
+  for(var i=0;i<iaPrefs.length;i++){
+    var p=iaPrefs[i];if(p.slot_id!==slotId||p.retired_at)continue;
+    var req=iaFindReq(p.request_id);if(!req)continue;
+    rows+='<div class="queue-pick"><span class="queue-pick-live">#'+p.rank+' choice: '+esc(iaCandName(req))+'</span>'+
+      '<button class="btn btn-sm btn-green" onclick="iaCloseModal(null);iaConfirm(\''+req.id+'\',\''+slotId+'\')">Confirm</button></div>';
+  }
+  return '<div style="background:#e6f1fb;border-radius:6px;padding:10px 12px;font-size:13px;color:#185fa5;margin-bottom:10px;">Picked by a candidate. Confirm to book it and email them the Meet link. Picked times can\'t be removed or blocked until the request is handled.</div>'+
+    '<div style="margin-bottom:14px;">'+rows+'</div>';
 }
 function iaMove(bookingId){
   var sel=document.getElementById('ia-move-slot');
