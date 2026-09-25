@@ -54,10 +54,13 @@ input:focus, select:focus { outline: none; border-color: #2d7dd2; }
 
 .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
 .cal-day-hdr { text-align: center; font-size: 11px; font-weight: 600; color: #888; padding: 4px 0; text-transform: uppercase; }
-.cal-day { min-height: 60px; border: 1px solid #eee; border-radius: 6px; padding: 4px; background: #fafafa; }
+.cal-day { min-height: 160px; border: 1px solid #eee; border-radius: 8px; padding: 6px; background: #fafafa; }
 .cal-day.today { border-color: #2d7dd2; }
-.cal-day-num { font-size: 11px; font-weight: 600; color: #666; margin-bottom: 3px; }
-.cal-slot { font-size: 10px; padding: 3px 5px; border-radius: 4px; margin-bottom: 2px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-day-num { font-size: 13px; font-weight: 700; color: #555; margin-bottom: 6px; }
+.cal-slot { font-size: 13px; line-height: 1.3; padding: 6px 7px; border-radius: 6px; margin-bottom: 4px; cursor: pointer; white-space: normal; overflow-wrap: anywhere; }
+.cal-slot-time { font-weight: 700; }
+.cal-slot-who { font-size: 11px; font-weight: 500; margin-top: 2px; }
+.cal-slot.open .cal-slot-who { color: #185fa5; }
 .cal-slot.open { background: #eaf6ec; color: #1e6b2e; }
 .cal-slot.booked { background: #fff8e1; color: #7a5c00; }
 .cal-slot.past { background: #f0f0f0; color: #aaa; }
@@ -136,6 +139,17 @@ input:focus, select:focus { outline: none; border-color: #2d7dd2; }
   .builder-row { flex-direction: column; }
   .builder-field { width: 100%; }
 }
+.queue-item { border: 1px solid #e0e0e0; border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; background: #fafcff; }
+.queue-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 6px; }
+.queue-pick { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; border-top: 1px solid #eef2f7; }
+.queue-pick-live { font-size: 13px; font-weight: 600; color: #222; }
+.queue-pick-dead { font-size: 13px; color: #999; text-decoration: line-through; }
+.queue-pick-why { font-size: 11px; color: #999; }
+.queue-note { font-size: 13px; color: #444; padding: 6px 0; line-height: 1.5; }
+.queue-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+.queue-select { flex: 1; min-width: 190px; padding: 5px 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 12px; font-family: inherit; background: #fff; }
+.field-lbl { font-size: 12px; color: #555; display: block; margin-bottom: 4px; }
+.cal-pref { font-size: 9px; font-weight: 700; background: #185fa5; color: #fff; border-radius: 8px; padding: 0 5px; margin-left: 3px; }
 </style>
 </head>
 <body>
@@ -166,7 +180,7 @@ var SLOT_LOOKBACK_DAYS=90;                    // keeps the slot load well under 
 var DUR_OPTIONS=[15,20,30,45,60,90];
 var BUF_OPTIONS=[0,5,10,15,30,45,60];
 
-var iaSlots=[],iaBookings=[],iaRules=[],iaExceptions=[],iaPrefCounts={};
+var iaSlots=[],iaBookings=[],iaRules=[],iaExceptions=[],iaPrefCounts={},iaPrefAny={},iaRequests=[],iaPrefs=[];
 var iaWeekStart=null,iaLoaded=false,iaError=null;
 var iaDraft=null,iaRemovedRules=[],iaDirty=false,iaSaving=false;
 var iaMsg={weekly:'',blackout:'',oneoff:''};
@@ -245,13 +259,17 @@ function loadData(){
     sbJson('/rest/v1/interview_bookings?select=*,interview_slots(*)&status=eq.scheduled&order=booked_at.desc'),
     sbJson('/rest/v1/interview_slot_rules?select=*&deleted_at=is.null&order=weekday.asc,start_time.asc'),
     sbJson('/rest/v1/interview_slot_exceptions?select=*&deleted_at=is.null&exception_date=gte.'+today+'&order=exception_date.asc,start_time.asc'),
-    sbJson('/rest/v1/interview_slot_preferences?select=slot_id')
+    sbJson('/rest/v1/interview_slot_preferences?select=slot_id,request_id,rank,retired_at&limit=5000'),
+    sbJson('/rest/v1/interview_requests?select=id,candidate_id,kind,note,source,created_at,notify_error,candidates(first_name,last_name,email,pipeline_stage)&resolved_at=is.null&deleted_at=is.null&order=created_at.asc&limit=200')
   ];
   return Promise.all(p).then(function(res){
     iaSlots=res[0]||[];iaBookings=res[1]||[];iaRules=res[2]||[];iaExceptions=res[3]||[];
-    iaPrefCounts={};
-    var prefs=res[4]||[];
-    for(var i=0;i<prefs.length;i++){iaPrefCounts[prefs[i].slot_id]=(iaPrefCounts[prefs[i].slot_id]||0)+1;}
+    iaPrefs=res[4]||[];iaRequests=res[5]||[];
+    // iaPrefCounts: live picks on open requests (what the calendar shows).
+    // iaPrefAny: every pick row, retired or not -- any row blocks deleting the slot (FK RESTRICT).
+    iaPrefCounts={};iaPrefAny={};
+    var openIds={};for(var q=0;q<iaRequests.length;q++)openIds[iaRequests[q].id]=true;
+    for(var i=0;i<iaPrefs.length;i++){var pr=iaPrefs[i];iaPrefAny[pr.slot_id]=(iaPrefAny[pr.slot_id]||0)+1;if(!pr.retired_at&&openIds[pr.request_id])iaPrefCounts[pr.slot_id]=(iaPrefCounts[pr.slot_id]||0)+1;}
     if(!iaDirty){iaDraft=buildDraft();iaRemovedRules=[];}
     iaLoaded=true;render();
   }).catch(function(err){
@@ -266,6 +284,7 @@ function getSlot(slotId){for(var i=0;i<iaSlots.length;i++){if(iaSlots[i].id===sl
 function getBookingForSlot(slotId){for(var i=0;i<iaBookings.length;i++){if(iaBookings[i].slot_id===slotId)return iaBookings[i];}return null;}
 function getSlotsForDate(ds){var out=[];for(var i=0;i<iaSlots.length;i++){if(iaSlots[i].slot_date===ds&&iaSlots[i].is_available)out.push(iaSlots[i]);}return out;}
 function prefCount(slotId){return iaPrefCounts[slotId]||0;}
+function prefAnyCount(slotId){return iaPrefAny[slotId]||0;}
 
 function getUpcomingBookings(){var now=new Date();var out=[];for(var i=0;i<iaBookings.length;i++){var b=iaBookings[i];if(b.status!=='scheduled')continue;var slot=b.interview_slots;if(!slot)continue;var p=slot.start_time.split(':');var sd=parseDate(slot.slot_date);sd.setHours(parseInt(p[0]),parseInt(p[1]),0);if(sd>=now)out.push(b);}out.sort(function(a,b){var sa=a.interview_slots;var sb2=b.interview_slots;var da=sa.slot_date+'T'+sa.start_time;var db=sb2.slot_date+'T'+sb2.start_time;return da<db?-1:da>db?1:0;});return out;}
 
@@ -437,9 +456,10 @@ function renderMain(){
   if(!iaLoaded)return'<div class="empty-state">Loading...</div>';
   if(iaError)return'<div class="section-card"><div class="load-error"><strong>Could not load interview data</strong>'+esc(iaError)+'</div></div>';
   var stats=countStats();
-  var html='<p class="page-sub">Set when you interview. Candidates pick from these times when they apply.</p>';
+  var html='<p class="page-sub">Set when you interview. Candidates pick from these times using the interview link you send from the Pipeline.</p>';
   html+=renderAvailabilityBanner();
   html+='<div class="stat-row"><div class="stat-box"><div class="stat-num" style="color:#1D9E75;">'+stats.open+'</div><div class="stat-lbl">Open slots</div></div><div class="stat-box"><div class="stat-num" style="color:#d97706;">'+stats.booked+'</div><div class="stat-lbl">Booked</div></div><div class="stat-box"><div class="stat-num" style="color:#2d7dd2;">'+stats.thisWeek+'</div><div class="stat-lbl">This week</div></div></div>';
+  html+=renderQueue();
   html+=renderCalendar();
   html+=renderBlackouts();
   html+=renderWeeklyEditor();
@@ -562,18 +582,31 @@ function renderCalendar(){
   for(d=0;d<7;d++){
     var dayDate=new Date(iaWeekStart.getTime()+d*86400000);var ds=dateStr(dayDate);var slots=getSlotsForDate(ds);
     html+='<div class="cal-day'+(isToday(dayDate)?' today':'')+'"><div class="cal-day-num">'+dayDate.getDate()+'</div>';
-    var maxShow=4;
     for(var s=0;s<slots.length;s++){
-      if(s>=maxShow){html+='<div class="cal-more" onclick="iaShowDayDetail(\''+ds+'\')">+'+(slots.length-maxShow)+' more</div>';break;}
       var slot=slots[s];var booking=getBookingForSlot(slot.id);
       var slotClass=isPast(slot.slot_date,slot.start_time)?'past':(booking?'booked':'open');
       if(slot.source==='rule')slotClass+=' rule';
-      html+='<div class="cal-slot '+slotClass+'" onclick="iaSlotClick(\''+slot.id+'\')" title="'+esc(formatTime12(hhmm(slot.start_time))+(booking?' - '+(booking.candidate_name||''):'')+(slot.source==='rule'?' (weekly schedule)':' (one-off)'))+'">'+formatTime12(hhmm(slot.start_time))+'</div>';
+      // Booked: the candidate. Open: who picked it (live picks on open requests), by rank.
+      var who='';
+      if(booking){who=booking.candidate_name||'Booked';}
+      else{
+        var pick=[];
+        for(var pi=0;pi<iaPrefs.length;pi++){
+          var pp=iaPrefs[pi];if(pp.slot_id!==slot.id||pp.retired_at)continue;
+          for(var ri=0;ri<iaRequests.length;ri++){
+            if(iaRequests[ri].id!==pp.request_id)continue;
+            var cc=iaRequests[ri].candidates||{};
+            pick.push('#'+pp.rank+' '+(((cc.first_name||'')+(cc.last_name?' '+cc.last_name.charAt(0)+'.':'')).trim()||'Candidate'));
+          }
+        }
+        if(pick.length)who='Picked: '+pick.join(', ');
+      }
+      html+='<div class="cal-slot '+slotClass+'" onclick="iaSlotClick(\''+slot.id+'\')" title="'+esc(formatTime12(hhmm(slot.start_time))+(slot.source==='rule'?' (weekly schedule)':' (one-off)'))+'"><span class="cal-slot-time">'+formatTime12(hhmm(slot.start_time))+'</span>'+(who?'<div class="cal-slot-who">'+esc(who)+'</div>':'')+'</div>';
     }
     if(slots.length===0)html+='<div style="font-size:10px;color:#ccc;text-align:center;padding:6px 0;">--</div>';
     html+='</div>';
   }
-  html+='</div><div class="cal-legend"><span><span class="sw" style="background:#eaf6ec;"></span>Open</span><span><span class="sw" style="background:#fff8e1;"></span>Booked</span><span><span class="sw" style="background:#f0f0f0;"></span>Past</span><span>&#8635; From weekly schedule (no mark = one-off)</span></div></div>';
+  html+='</div><div class="cal-legend"><span><span class="sw" style="background:#eaf6ec;"></span>Open</span><span><span class="sw" style="background:#fff8e1;"></span>Booked</span><span><span class="sw" style="background:#f0f0f0;"></span>Past</span><span>&#8635; From weekly schedule (no mark = one-off)</span><span>Names show who booked or picked each time (#1 = their first choice)</span></div></div>';
   return html;
 }
 
@@ -587,7 +620,7 @@ function renderUpcoming(){
       var nameParts=name.split(' ');var initials=((nameParts[0]?nameParts[0][0]:'')+(nameParts.length>1?nameParts[nameParts.length-1][0]:'')).toUpperCase();
       var slotDate=parseDate(slot.slot_date);var diffDays=Math.ceil((slotDate.getTime()-new Date().getTime())/86400000);
       var badge=diffDays<=0?'<span class="upcoming-badge" style="background:#fdecea;color:#8b1a1a;">Today</span>':diffDays===1?'<span class="upcoming-badge" style="background:#fff8e1;color:#7a5c00;">Tomorrow</span>':'<span class="upcoming-badge" style="background:#e6f1fb;color:#185fa5;">In '+diffDays+' days</span>';
-      html+='<div class="upcoming-row"><div class="upcoming-avatar">'+esc(initials)+'</div><div style="flex:1;"><div class="upcoming-name">'+esc(name)+'</div><div class="upcoming-time">'+formatDateNice(slot.slot_date)+' at '+formatTime12(hhmm(slot.start_time))+'</div>'+(b.candidate_phone?'<div class="upcoming-phone">'+esc(b.candidate_phone)+'</div>':'')+'</div>'+badge+'<button class="btn btn-sm" onclick="iaSlotClick(\''+b.slot_id+'\')">View</button></div>';
+      html+='<div class="upcoming-row"><div class="upcoming-avatar">'+esc(initials)+'</div><div style="flex:1;"><div class="upcoming-name">'+esc(name)+'</div><div class="upcoming-time">'+formatDateNice(slot.slot_date)+' at '+formatTime12(hhmm(slot.start_time))+'</div>'+(b.candidate_phone?'<div class="upcoming-phone">'+esc(b.candidate_phone)+'</div>':'')+(b.invite_sent_at?'':'<div class="upcoming-phone" style="color:#c0392b;font-weight:600;">Confirmation email not sent</div>')+'</div>'+badge+'<button class="btn btn-sm" onclick="iaSlotClick(\''+b.slot_id+'\')">View</button></div>';
     }
   }
   html+='</div>';
@@ -682,9 +715,9 @@ function blackoutLeftovers(ds,startT,endT){
     if(s.slot_date!==ds||isPast(s.slot_date,s.start_time))continue;
     var ss=toMin(s.start_time);
     if(bs!==null&&!(ss<be&&ss+s.duration_minutes>bs))continue;
-    var b=getBookingForSlot(s.id),pc=prefCount(s.id);
+    var b=getBookingForSlot(s.id),pc=prefAnyCount(s.id);
     if(b)out.held.push(formatTime12(hhmm(s.start_time))+' (booked: '+(b.candidate_name||'candidate')+')');
-    else if(pc)out.held.push(formatTime12(hhmm(s.start_time))+' ('+plural(pc,'request')+')');
+    else if(pc)out.held.push(formatTime12(hhmm(s.start_time))+' (a candidate picked it)');
     else if(s.source!=='rule')out.manual++;
   }
   return out;
@@ -748,7 +781,7 @@ function iaSlotClick(slotId){
   var html='<div class="modal-overlay" onclick="iaCloseModal(event)"><div class="modal-box"><h3>'+formatDateNice(slot.slot_date)+' at '+t12+'</h3><p>'+slot.duration_minutes+' minute slot &middot; '+(isRule?'&#8635; from your weekly schedule':'one-off time')+(pc?' &middot; '+plural(pc,'candidate request'):'')+'</p>';
   var close='<button class="btn" style="flex:1;" onclick="iaCloseModal(null)">Close</button>';
   if(booking){
-    html+='<div style="background:#fff8e1;border:1px solid #ffe082;border-radius:6px;padding:12px;margin-bottom:14px;"><div style="font-size:11px;color:#7a5c00;font-weight:600;text-transform:uppercase;margin-bottom:6px;">Booked by</div><div style="font-size:15px;font-weight:500;color:#78350f;">'+esc(booking.candidate_name||'')+'</div>'+(booking.candidate_phone?'<div style="font-size:13px;color:#92400e;margin-top:2px;">'+esc(booking.candidate_phone)+'</div>':'')+(booking.candidate_email?'<div style="font-size:13px;color:#92400e;margin-top:2px;">'+esc(booking.candidate_email)+'</div>':'')+(booking.booked_at?'<div style="font-size:11px;color:#a16207;margin-top:6px;">Booked '+new Date(booking.booked_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+'</div>':'')+'</div><div id="ia-modal-msg"></div><div style="display:flex;gap:8px;">'+close+'<button class="btn btn-danger" style="flex:1;" onclick="iaCancelBooking(\''+booking.id+'\',\''+slotId+'\')">Cancel booking</button></div>';
+    html+='<div style="background:#fff8e1;border:1px solid #ffe082;border-radius:6px;padding:12px;margin-bottom:14px;"><div style="font-size:11px;color:#7a5c00;font-weight:600;text-transform:uppercase;margin-bottom:6px;">Booked by</div><div style="font-size:15px;font-weight:500;color:#78350f;">'+esc(booking.candidate_name||'')+'</div>'+(booking.candidate_phone?'<div style="font-size:13px;color:#92400e;margin-top:2px;">'+esc(booking.candidate_phone)+'</div>':'')+(booking.candidate_email?'<div style="font-size:13px;color:#92400e;margin-top:2px;">'+esc(booking.candidate_email)+'</div>':'')+(booking.booked_at?'<div style="font-size:11px;color:#a16207;margin-top:6px;">Booked '+new Date(booking.booked_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+'</div>':'')+(booking.invite_sent_at?'<div style="font-size:11px;color:#a16207;margin-top:2px;">Confirmation emailed '+new Date(booking.invite_sent_at).toLocaleDateString('en-US',{month:'short',day:'numeric'})+'</div>':'<div style="font-size:12px;color:#c0392b;font-weight:600;margin-top:4px;">Confirmation email was not sent. Contact the candidate.</div>')+'</div><div id="ia-modal-msg"></div><div style="display:flex;gap:8px;flex-wrap:wrap;">'+close+'<button class="btn" style="flex:1;" onclick="iaReschedule(\''+booking.id+'\')">Reschedule</button><button class="btn btn-danger" style="flex:1;" onclick="iaShowCancel(\''+booking.id+'\')">Cancel interview</button></div>';
   }else if(pc){
     html+='<div style="background:#e6f1fb;border-radius:6px;padding:10px 12px;font-size:13px;color:#185fa5;margin-bottom:14px;">'+plural(pc,'candidate')+' asked for this time, so it can\'t be removed or blocked until their request is handled.</div><div id="ia-modal-msg"></div><div style="display:flex;gap:8px;">'+close+'</div>';
   }else if(isPast(slot.slot_date,slot.start_time)){
@@ -781,7 +814,7 @@ function iaModalError(err){
 }
 
 function iaDeleteSlot(slotId){
-  if(prefCount(slotId)){iaModalError(new Error('A candidate asked for this time, so it cannot be removed yet.'));return;}
+  if(prefAnyCount(slotId)){iaModalError(new Error('A candidate picked this time (now or in an earlier request), so it is kept for the record and cannot be removed.'));return;}
   sbFetch('/rest/v1/interview_slots?id=eq.'+slotId,{method:'DELETE',prefer:'return=minimal'}).then(function(){
     iaCloseModal(null);return loadData();
   }).catch(iaModalError);
@@ -791,7 +824,7 @@ function iaDeleteSlot(slotId){
 // it. Write a time-bounded exception instead; the generator then prunes it.
 function iaBlockSlot(slotId){
   var slot=getSlot(slotId);if(!slot)return;
-  if(getBookingForSlot(slotId)||prefCount(slotId)){iaModalError(new Error('This time is booked or requested, so it cannot be blocked.'));return;}
+  if(getBookingForSlot(slotId)||prefAnyCount(slotId)){iaModalError(new Error('This time is booked or was picked by a candidate, so it cannot be blocked.'));return;}
   var st=hhmm(slot.start_time);var et=minToHHMM(toMin(st)+slot.duration_minutes);
   sbFetch('/rest/v1/interview_slot_exceptions',{method:'POST',prefer:'return=minimal',body:{exception_date:slot.slot_date,start_time:st,end_time:et,reason:'Blocked from calendar',created_by:iaCreator()}}).then(function(){
     return regenerate().then(function(){return null;},function(err){return err;});
@@ -801,19 +834,160 @@ function iaBlockSlot(slotId){
   }).catch(iaModalError);
 }
 
-// Two writes, chained and surfaced (Session 1). candidates.interview_scheduled_at
-// and interview_slot_time both exist (confirmed Session 2).
-function iaCancelBooking(bookingId,slotId){
-  var booking=null;
-  for(var i=0;i<iaBookings.length;i++){if(iaBookings[i].id===bookingId){booking=iaBookings[i];break;}}
-  sbFetch('/rest/v1/interview_bookings?id=eq.'+bookingId,{method:'PATCH',prefer:'return=minimal',body:{status:'cancelled',cancelled_at:new Date().toISOString()}}).then(function(){
-    if(booking&&booking.candidate_id){
-      return sbFetch('/rest/v1/candidates?id=eq.'+booking.candidate_id,{method:'PATCH',prefer:'return=minimal',body:{pipeline_stage:'contacted',interview_scheduled_at:null,interview_slot_time:null,stage_updated_at:new Date().toISOString(),updated_at:new Date().toISOString()}});
+// ---------------------------------------------------------------------------
+// Interview requests queue + booking actions (Interviews Session 5, Sep 2026).
+// Every change goes through the interview-staff edge function, which calls ONE
+// SQL function. The Pipeline card uses the same calls, so a second confirm of
+// the same request from the other page fails cleanly ("already handled").
+// ---------------------------------------------------------------------------
+var IA_FN_URL=SUPABASE_URL+'/functions/v1/interview-staff';
+
+function iaStaff(body){
+  return fetch(IA_FN_URL,{method:'POST',headers:apiHeaders(),body:JSON.stringify(body)}).then(function(r){
+    return r.text().then(function(t){
+      var d=null;try{d=t?JSON.parse(t):null;}catch(e){d=null;}
+      if(!r.ok||!d||d.ok!==true){
+        var err=new Error((d&&d.message)?d.message:('HTTP '+r.status+' from interview-staff'));
+        err.status=r.status;err.authFailed=(r.status===401);throw err;
+      }
+      return d;
+    });
+  });
+}
+function iaCandName(req){var c=req.candidates||{};return ((c.first_name||'')+' '+(c.last_name||'')).trim()||'Unnamed candidate';}
+function iaReqPrefs(rid){
+  var out=[];
+  for(var i=0;i<iaPrefs.length;i++){if(iaPrefs[i].request_id===rid&&!iaPrefs[i].retired_at)out.push(iaPrefs[i]);}
+  out.sort(function(a,b){return a.rank-b.rank;});
+  return out;
+}
+function iaSlotLabel(slot){return slot?formatDateNice(slot.slot_date)+' at '+formatTime12(hhmm(slot.start_time)):'(time removed)';}
+function iaBookable(excludeIds){
+  var out=[];
+  for(var i=0;i<iaSlots.length;i++){
+    var s=iaSlots[i];
+    if(!s.is_available||excludeIds.indexOf(s.id)>-1)continue;
+    if(isPast(s.slot_date,s.start_time)||getBookingForSlot(s.id))continue;
+    out.push(s);
+  }
+  return out;
+}
+function iaAgo(iso){
+  var mins=Math.round((Date.now()-new Date(iso).getTime())/60000);
+  if(mins<60)return mins<=1?'just now':mins+' min ago';
+  var hrs=Math.round(mins/60);if(hrs<24)return hrs+' hr ago';
+  var days=Math.round(hrs/24);return days+' day'+(days===1?'':'s')+' ago';
+}
+
+function renderQueue(){
+  var n=iaRequests.length;
+  var html='<div class="section-card"><h3>'+(n===0?'No interview requests waiting':plural(n,'interview request')+' waiting')+'</h3>'+
+    '<p class="sec-sub">Candidates who used their interview link. Confirm a time to book it and email them the Google Meet link. The same requests show on each candidate\'s Pipeline card.</p>';
+  if(n===0){html+='<div class="empty-state">Nothing to confirm right now. Send interview links from the Pipeline.</div></div>';return html;}
+  for(var i=0;i<n;i++)html+=renderQueueItem(iaRequests[i]);
+  html+='</div>';
+  return html;
+}
+
+function renderQueueItem(req){
+  var c=req.candidates||{};
+  var html='<div class="queue-item"><div class="queue-head"><div><div class="upcoming-name">'+esc(iaCandName(req))+'</div>'+
+    '<div class="upcoming-time">'+(c.email?esc(c.email)+' &middot; ':'')+'sent '+esc(iaAgo(req.created_at))+'</div></div></div>';
+  if(req.notify_error)html+='<div class="queue-note" style="color:#c0392b;">The staffing@ notice for this request did not send.</div>';
+  var prefIds=[];
+  if(req.kind==='picks'){
+    var prefs=iaReqPrefs(req.id);
+    for(var i=0;i<prefs.length;i++){
+      var p=prefs[i],slot=getSlot(p.slot_id);
+      prefIds.push(p.slot_id);
+      var note=!slot?'no longer listed':(isPast(slot.slot_date,slot.start_time)?'already passed':(getBookingForSlot(p.slot_id)?'booked by someone else':''));
+      html+='<div class="queue-pick"><span class="'+(note?'queue-pick-dead':'queue-pick-live')+'">'+p.rank+'. '+esc(iaSlotLabel(slot))+'</span>'+
+        (note?'<span class="queue-pick-why">'+note+'</span>':'<button class="btn btn-sm btn-green" onclick="iaConfirm(\''+req.id+'\',\''+p.slot_id+'\')">Confirm</button>')+'</div>';
     }
-    return null;
-  }).then(function(){
-    iaCloseModal(null);return loadData();
-  }).catch(iaModalError);
+  } else if(req.kind==='none_work'){
+    html+='<div class="queue-note"><strong>None of the open times work.</strong> '+(req.note?'Their note: '+esc(req.note):'No note left.')+'</div>';
+  } else {
+    html+='<div class="queue-note"><strong>No times were open</strong> when they opened their link. Add times, then use Ask for new times.</div>';
+  }
+  var other=iaBookable(prefIds);
+  html+='<div class="queue-actions">';
+  if(other.length>0){
+    html+='<select id="ia-other-'+req.id+'" class="queue-select"><option value="">Book a different time...</option>';
+    for(var j=0;j<other.length&&j<120;j++)html+='<option value="'+other[j].id+'">'+esc(iaSlotLabel(other[j]))+'</option>';
+    html+='</select><button class="btn btn-sm btn-primary" onclick="iaConfirmOther(\''+req.id+'\')">Confirm</button>';
+  }
+  html+='<button class="btn btn-sm" onclick="iaShowResolve(\''+req.id+'\',\'new_times\')">Ask for new times</button>'+
+    '<button class="btn btn-sm btn-danger" onclick="iaShowResolve(\''+req.id+'\',\'declined\')">Decline</button></div></div>';
+  return html;
+}
+
+function iaFindReq(rid){for(var i=0;i<iaRequests.length;i++){if(iaRequests[i].id===rid)return iaRequests[i];}return null;}
+
+function iaConfirm(requestId,slotId){
+  var req=iaFindReq(requestId),slot=getSlot(slotId);
+  if(!confirm('Book '+(req?iaCandName(req):'this candidate')+' for '+iaSlotLabel(slot)+'?\n\nThe confirmation email with the Google Meet link goes out right away.'))return;
+  iaStaff({action:'confirm',request_id:requestId,slot_id:slotId}).then(function(d){
+    if(!d.email_sent)alert('Booked, but the confirmation email did not send: '+(d.email_error||'unknown error')+'\n\nContact the candidate directly.');
+    return loadData();
+  }).catch(function(err){console.error('Confirm failed:',err);alert('Not booked. '+iaErrText(err));return loadData();});
+}
+function iaConfirmOther(requestId){
+  var sel=document.getElementById('ia-other-'+requestId);
+  if(!sel||!sel.value){alert('Choose a time first.');return;}
+  iaConfirm(requestId,sel.value);
+}
+
+function iaModalBusy(label){var b=document.getElementById('ia-modal-btn');if(b){b.disabled=true;b.textContent=label;}}
+function iaModalFail(err,label){iaModalError(err);var b=document.getElementById('ia-modal-btn');if(b){b.disabled=false;b.textContent=label;}}
+
+function iaShowResolve(requestId,kind){
+  var req=iaFindReq(requestId);var isNew=kind==='new_times';var name=req?iaCandName(req):'the candidate';
+  var html='<div class="modal-overlay" onclick="iaCloseModal(event)"><div class="modal-box"><h3>'+(isNew?'Ask for new times':'Decline request')+'</h3>'+
+    '<p>'+(isNew?'Closes this request and emails '+esc(name)+' a fresh link to pick again from your current times.'
+      :'Closes this request without booking and moves '+esc(name)+' back to Contacted. No email goes to the candidate, and their interview link stops working.')+'</p>'+
+    '<label class="field-lbl">Note for the record (optional)</label><textarea id="ia-resolve-note" maxlength="500" rows="3" style="width:100%;margin-bottom:10px;"></textarea>'+
+    '<div id="ia-modal-msg"></div><div style="display:flex;gap:8px;"><button class="btn" style="flex:1;" onclick="iaCloseModal(null)">Cancel</button>'+
+    '<button class="btn '+(isNew?'btn-primary':'btn-danger')+'" style="flex:1;" id="ia-modal-btn" onclick="iaResolve(\''+requestId+'\',\''+kind+'\')">'+(isNew?'Send new link':'Decline')+'</button></div></div></div>';
+  document.getElementById('ia-modal').innerHTML=html;
+}
+function iaResolve(requestId,kind){
+  var el=document.getElementById('ia-resolve-note');var note=el?el.value.trim():'';
+  var label=kind==='new_times'?'Send new link':'Decline';
+  iaModalBusy('Saving...');
+  iaStaff({action:kind==='new_times'?'new_times':'decline',request_id:requestId,note:note||null}).then(function(d){
+    iaCloseModal(null);
+    if(kind==='new_times'&&!d.email_sent)alert('The request was closed and a new link was created, but the email did not send: '+(d.email_error||'unknown error')+'\n\nUse Resend on their Pipeline card.');
+    return loadData();
+  }).catch(function(err){console.error('Resolve failed:',err);iaModalFail(err,label);});
+}
+
+function iaShowCancel(bookingId){
+  var html='<div class="modal-overlay" onclick="iaCloseModal(event)"><div class="modal-box"><h3>Cancel interview</h3>'+
+    '<p>Cancels the interview and frees the time. The candidate moves back to Contacted.</p>'+
+    '<label class="field-lbl">Reason (optional, internal)</label><input type="text" id="ia-cancel-reason" maxlength="500" style="width:100%;margin-bottom:10px;" />'+
+    '<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#333;margin-bottom:12px;cursor:pointer;"><input type="checkbox" id="ia-cancel-notify" checked /> Email the candidate that it is cancelled (removes it from their calendar)</label>'+
+    '<div id="ia-modal-msg"></div><div style="display:flex;gap:8px;"><button class="btn" style="flex:1;" onclick="iaCloseModal(null)">Keep interview</button>'+
+    '<button class="btn btn-danger" style="flex:1;" id="ia-modal-btn" onclick="iaCancelBooking(\''+bookingId+'\')">Cancel interview</button></div></div></div>';
+  document.getElementById('ia-modal').innerHTML=html;
+}
+function iaCancelBooking(bookingId){
+  var r=document.getElementById('ia-cancel-reason'),n=document.getElementById('ia-cancel-notify');
+  var notify=n?n.checked:true;
+  iaModalBusy('Cancelling...');
+  iaStaff({action:'cancel',booking_id:bookingId,reason:(r&&r.value.trim())||null,notify:notify,stage_to:'contacted'}).then(function(d){
+    iaCloseModal(null);
+    if(notify&&!d.email_sent)alert('The interview is cancelled, but the email to the candidate did not send: '+(d.email_error||'unknown error'));
+    return loadData();
+  }).catch(function(err){console.error('Cancel failed:',err);iaModalFail(err,'Cancel interview');});
+}
+function iaReschedule(bookingId){
+  var b=null;for(var i=0;i<iaBookings.length;i++){if(iaBookings[i].id===bookingId){b=iaBookings[i];break;}}
+  if(!confirm('Reschedule '+((b&&b.candidate_name)||'this candidate')+'?\n\nThis cancels the current interview (freeing the time) and emails them a new link to pick again, with a calendar update removing the old time.'))return;
+  iaStaff({action:'cancel',booking_id:bookingId,reason:'Rescheduled from the Interviews page',reschedule:true,stage_to:'contacted'}).then(function(d){
+    iaCloseModal(null);
+    if(!d.email_sent)alert('The interview was cancelled and a new link was created, but the email did not send: '+(d.email_error||'unknown error')+'\n\nUse Resend on their Pipeline card.');
+    return loadData();
+  }).catch(function(err){console.error('Reschedule failed:',err);iaModalError(err);alert('Not rescheduled. '+iaErrText(err));return loadData();});
 }
 
 function iaCloseModal(e){if(e?e.target===e.currentTarget:true)document.getElementById('ia-modal').innerHTML='';}
