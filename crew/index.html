@@ -2114,6 +2114,11 @@ body {
     certTypesById: {},
     // Card modal: whether the card history section is expanded
     historyOpen: false,
+    // Card modal: hiring record section (Session 6). Collapsed by default;
+    // data is fetched on first open and cached per candidate id.
+    hiringOpen: false,
+    hiringByCand: {},
+    hiringVenues: null,
     // Card modal: whether the signups section is expanded
     signupsOpen: false,
     // Card modal: whether the Performance Signals section is expanded.
@@ -2323,7 +2328,9 @@ body {
       'team_self_reported_cert,team_eligible_at,' +
       'ramp_training_requested,ramp_training_requested_at,ramp_training_contacted,' +
       'ramp_training_contacted_at,ramp_training_contacted_by,ramp_training_notes,' +
-      'ramp_self_reported_cert,ramp_eligible_at' +
+      'ramp_self_reported_cert,ramp_eligible_at,' +
+      // Link to the application record (Session 6) -- the hiring record section reads through it.
+      'candidate_id' +
       '&order=last_name.asc,first_name.asc';
     return authFetch(url, { method: 'GET', headers: pcAuth.headers() });
   }
@@ -3633,6 +3640,7 @@ body {
     state.modalEditDraft = null;
     state.onboardingOpen = false;
     state.historyOpen = false;
+    state.hiringOpen = false;
     state.signupsOpen = false;
     // Performance Signals defaults: open for cold-start (so the manager
     // sees rating progress immediately), closed otherwise (rating is in
@@ -3718,6 +3726,7 @@ body {
           renderRolesSection(emp, cand) +
           renderAlcoholTrainingSection(emp) +
           renderNotesSection(emp, cand) +
+          renderHiringSection(emp) +
           renderHistorySection(emp) +
           renderOnboardingSection(emp, cand) +
           renderCardFooter(emp, cand) +
@@ -4953,6 +4962,133 @@ body {
     '</div>';
   }
 
+
+  // ---- Hiring record (Session 6, Sept 25, 2026) ----
+  // Read-only view of the interview notes, references and interest
+  // captured on the Pipeline, reached through employees.candidate_id.
+  // Collapsed by default; fetched on first open and cached per candidate.
+  // Edits happen on the Pipeline only.
+  var HIRING_NOTE_LABELS = { interview: 'Interview', reference: 'Reference', general: 'General' };
+
+  function hiringStamp(iso) {
+    if (!iso) return '--';
+    return new Date(iso).toLocaleString('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+  }
+
+  function loadHiringVenues() {
+    if (state.hiringVenues) return Promise.resolve(state.hiringVenues);
+    return authFetch(SUPABASE_URL + '/rest/v1/venues?select=id,code&limit=500', { method: 'GET', headers: pcAuth.headers() })
+      .then(function(rows) {
+        var byId = {};
+        (rows || []).forEach(function(v) { if (v && v.id) byId[v.id] = v.code; });
+        state.hiringVenues = byId;
+        return byId;
+      });
+  }
+
+  function loadHiringRecord(empId, candId) {
+    var entry = { status: 'loading', data: null, err: '' };
+    state.hiringByCand[candId] = entry;
+    var h = { method: 'GET', headers: pcAuth.headers() };
+    var base = SUPABASE_URL + '/rest/v1/';
+    var rolesReady = (window.pcRoles && pcRoles.ready) ? pcRoles.ready() : Promise.resolve();
+    Promise.all([
+      rolesReady,
+      loadHiringVenues(),
+      authFetch(base + 'candidate_notes?candidate_id=eq.' + candId + '&deleted_at=is.null&select=id,note_type,body,created_by,created_at&order=created_at.desc&limit=200', h),
+      authFetch(base + 'candidate_references?candidate_id=eq.' + candId + '&deleted_at=is.null&select=id,name,relationship,phone,notes,checked_at,checked_by&order=created_at.asc&limit=50', h),
+      authFetch(base + 'candidate_interests?candidate_id=eq.' + candId + '&deleted_at=is.null&select=id,venue_id,role_id&order=created_at.asc&limit=200', h)
+    ]).then(function(res) {
+      if (state.hiringByCand[candId] !== entry) return;
+      entry.status = 'ok';
+      entry.data = { notes: res[2] || [], refs: res[3] || [], ints: res[4] || [] };
+      if (state.modalEmpId === empId) renderCardModal();
+    }).catch(function(err) {
+      if (err && err.authFailed) { handleAuthFailure(); return; }
+      console.error('Hiring record fetch failed:', err);
+      if (state.hiringByCand[candId] !== entry) return;
+      entry.status = 'error';
+      entry.err = (err && err.message) ? err.message : String(err);
+      if (state.modalEmpId === empId) renderCardModal();
+    });
+  }
+
+  function renderHiringSection(emp) {
+    var open = state.hiringOpen;
+    var candId = emp.candidate_id || null;
+    var head =
+      '<div class="card-section-head">' +
+        '<span class="section-title">Hiring record</span>' +
+        '<button class="expand-chevron' + (open ? ' open' : '') + '" data-hiring-toggle>' +
+          '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">' +
+            '<polyline points="9 18 15 12 9 6"></polyline>' +
+          '</svg>' +
+          (open ? 'Hide' : 'Show') +
+        '</button>' +
+      '</div>';
+    if (!open) return '<div class="card-section">' + head + '</div>';
+
+    var body;
+    var entry = candId ? state.hiringByCand[candId] : null;
+    if (!candId) {
+      body = '<div class="history-empty">This employee is not linked to an application record.</div>';
+    } else if (!entry || entry.status === 'loading') {
+      body = '<div class="history-empty">Loading…</div>';
+    } else if (entry.status === 'error') {
+      body = '<div class="history-empty" style="color:#8b1a1a;">Could not load the hiring record. ' + escapeHtml(entry.err) +
+        ' <button class="btn" data-hiring-retry style="margin-left:6px;">Try again</button></div>';
+    } else {
+      body = renderHiringBody(entry.data);
+    }
+    return '<div class="card-section">' + head +
+      '<div style="margin-top:6px;font-size:12px;color:#888;">From the Pipeline, read-only here. Edit on the candidate card in the Pipeline.</div>' +
+      body + '</div>';
+  }
+
+  function renderHiringBody(d) {
+    var sub = function(t) { return '<div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin:12px 0 4px;">' + t + '</div>'; };
+    var html = '';
+
+    html += sub('Interview notes');
+    if (!d.notes.length) {
+      html += '<div class="history-empty">No notes.</div>';
+    } else {
+      d.notes.forEach(function(n) {
+        html += '<div style="padding:6px 0;border-bottom:1px solid var(--border-lt);">' +
+          '<div style="font-size:12px;color:#888;"><strong style="color:#555;">' + escapeHtml(HIRING_NOTE_LABELS[n.note_type] || n.note_type) + '</strong> &middot; ' +
+            escapeHtml(hiringStamp(n.created_at)) + ' &middot; ' + escapeHtml(n.created_by) + '</div>' +
+          '<div style="font-size:13px;color:#333;line-height:1.5;white-space:pre-wrap;margin-top:2px;">' + escapeHtml(n.body) + '</div>' +
+        '</div>';
+      });
+    }
+
+    html += sub('References');
+    if (!d.refs.length) {
+      html += '<div class="history-empty">No references.</div>';
+    } else {
+      d.refs.forEach(function(r) {
+        html += '<div style="padding:6px 0;border-bottom:1px solid var(--border-lt);font-size:13px;">' +
+          '<strong>' + escapeHtml(r.name) + '</strong>' +
+          (r.relationship ? ' <span style="color:#888;">&middot; ' + escapeHtml(r.relationship) + '</span>' : '') +
+          (r.phone ? ' &middot; ' + escapeHtml(formatPhone(r.phone)) : '') +
+          (r.notes ? '<div style="font-size:12px;color:#555;white-space:pre-wrap;margin-top:2px;">' + escapeHtml(r.notes) + '</div>' : '') +
+          '<div style="font-size:12px;margin-top:2px;' + (r.checked_at ? 'color:#1D9E75;">&#10003; Checked ' + escapeHtml(hiringStamp(r.checked_at)) + (r.checked_by ? ' by ' + escapeHtml(r.checked_by) : '') : 'color:#aaa;">Not marked checked') + '</div>' +
+        '</div>';
+      });
+    }
+
+    html += sub('Interested in at interview');
+    var names = {};
+    try { pcRoles.getRoles({ includeRetired: true }).forEach(function(r) { names[r.id] = r.name; }); } catch (e) { names = {}; }
+    var venues = state.hiringVenues || {};
+    var tags = d.ints.map(function(it) {
+      var code = venues[it.venue_id];
+      return (code ? (VENUE_LABELS[code] || code) : 'Unknown venue') + ' ' + (names[it.role_id] || 'unknown role');
+    });
+    html += tags.length ? '<div class="tag-list">' + renderTags(tags) + '</div>' : '<div class="history-empty">No interest recorded.</div>';
+    return html;
+  }
+
   // ---- Onboarding history (collapsed by default) ----
   function renderOnboardingSection(emp, cand) {
     var c = cand || {};
@@ -5809,6 +5945,24 @@ body {
     if (ob) {
       ob.addEventListener('click', function() {
         state.onboardingOpen = !state.onboardingOpen;
+        renderCardModal();
+      });
+    }
+    // Hiring record toggle (Session 6) -- fetches on first open
+    var hrt = root.querySelector('[data-hiring-toggle]');
+    if (hrt) {
+      hrt.addEventListener('click', function() {
+        state.hiringOpen = !state.hiringOpen;
+        if (state.hiringOpen && emp.candidate_id && !state.hiringByCand[emp.candidate_id]) {
+          loadHiringRecord(emp.id, emp.candidate_id);
+        }
+        renderCardModal();
+      });
+    }
+    var hrr = root.querySelector('[data-hiring-retry]');
+    if (hrr) {
+      hrr.addEventListener('click', function() {
+        if (emp.candidate_id) loadHiringRecord(emp.id, emp.candidate_id);
         renderCardModal();
       });
     }
