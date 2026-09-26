@@ -318,8 +318,8 @@ function getFiltered(){
     var archived=isArchived(c);
     var isLegacy=c.legacy_import===true;
     if(pcFilter==='paperwork'){
-      // Paperwork open: hired AND stage onboarding AND W-4 not done. Defined by
-      // those three fields only, so archive age and the Legacy toggle do not apply.
+      // Paperwork open: hired AND stage onboarding AND W-4 or I-9 not done. Defined
+      // by those fields only, so archive age and the Legacy toggle do not apply.
       if(!pwIsOpen(c))continue;
     }else if(pcFilter==='archive'){
       // Archive view: only show archived rows, but exclude legacy rows here when the
@@ -408,7 +408,7 @@ function updateFilterPills(){
 
 function countStageVisible(stage){var n=0;for(var i=0;i<pcCandidates.length;i++){if(pcCandidates[i].pipeline_stage===stage&&!isArchived(pcCandidates[i]))n++;}return n;}
 
-function renderList(){var filtered=getFiltered();var bar=pcFilter==='paperwork'?renderPaperworkBulkBar(filtered):'';if(filtered.length===0)return bar+'<div class="empty-state" style="padding:30px 10px;">'+(pcFilter==='paperwork'?'No one in Onboarding has their W-4 open.':'No candidates found.')+'</div>';var html=bar;for(var i=0;i<filtered.length;i++){var c=filtered[i];var isSel=pcSelected&&pcSelected.id===c.id;var rejCls=(c.pipeline_stage==='rejected'||c.pipeline_stage==='inactive')?' rejected':'';var minor=c.is_minor?' <span class="badge badge-minor" style="font-size:10px;">Minor</span>':'';var srcPill='';if(c.hear_about_us){var sc='background:#e3f2fd;border:1px solid #90caf9;color:#0d47a1;';if(c.hear_about_us==='Indeed')sc='background:#fff8e1;border:1px solid #ffe082;color:#7a5c00;';else if(c.hear_about_us==='Friend or Family')sc='background:#eaf6ec;border:1px solid #7dc98a;color:#1e6b2e;';else if(c.hear_about_us==='Other')sc='background:#f3e8ff;border:1px solid #d8b4fe;color:#6b21a8;';srcPill=' <span class="badge" style="font-size:10px;'+sc+'">'+esc(c.hear_about_us)+'</span>';}html+='<div class="cand-row'+(isSel?' selected':'')+rejCls+'" onclick="pcPipeSelect(\''+c.id+'\')"><div style="display:flex;justify-content:space-between;align-items:center;gap:6px;"><div class="cand-name">'+esc(c.first_name)+' '+esc(c.last_name)+minor+srcPill+s6RefBadge(c)+'</div>'+stageBadge(c.pipeline_stage)+'</div><div class="cand-meta">'+formatDateShort(c.applied_at)+(c.roles&&c.roles.length>0?' &middot; '+esc(c.roles[0]):'')+'</div></div>';}html+='<div style="margin-top:10px;font-size:12px;color:#aaa;">'+filtered.length+' candidate'+(filtered.length!==1?'s':'')+'</div>';return html;}
+function renderList(){var filtered=getFiltered();var bar=pcFilter==='paperwork'?renderPaperworkBulkBar(filtered):'';if(filtered.length===0)return bar+'<div class="empty-state" style="padding:30px 10px;">'+(pcFilter==='paperwork'?'No one in Onboarding has paperwork open.':'No candidates found.')+'</div>';var html=bar;for(var i=0;i<filtered.length;i++){var c=filtered[i];var isSel=pcSelected&&pcSelected.id===c.id;var rejCls=(c.pipeline_stage==='rejected'||c.pipeline_stage==='inactive')?' rejected':'';var minor=c.is_minor?' <span class="badge badge-minor" style="font-size:10px;">Minor</span>':'';var srcPill='';if(c.hear_about_us){var sc='background:#e3f2fd;border:1px solid #90caf9;color:#0d47a1;';if(c.hear_about_us==='Indeed')sc='background:#fff8e1;border:1px solid #ffe082;color:#7a5c00;';else if(c.hear_about_us==='Friend or Family')sc='background:#eaf6ec;border:1px solid #7dc98a;color:#1e6b2e;';else if(c.hear_about_us==='Other')sc='background:#f3e8ff;border:1px solid #d8b4fe;color:#6b21a8;';srcPill=' <span class="badge" style="font-size:10px;'+sc+'">'+esc(c.hear_about_us)+'</span>';}html+='<div class="cand-row'+(isSel?' selected':'')+rejCls+'" onclick="pcPipeSelect(\''+c.id+'\')"><div style="display:flex;justify-content:space-between;align-items:center;gap:6px;"><div class="cand-name">'+esc(c.first_name)+' '+esc(c.last_name)+minor+srcPill+s6RefBadge(c)+'</div>'+stageBadge(c.pipeline_stage)+'</div><div class="cand-meta">'+formatDateShort(c.applied_at)+(c.roles&&c.roles.length>0?' &middot; '+esc(c.roles[0]):'')+'</div></div>';}html+='<div style="margin-top:10px;font-size:12px;color:#aaa;">'+filtered.length+' candidate'+(filtered.length!==1?'s':'')+'</div>';return html;}
 
 function renderCandidateCard(c){var stage=c.pipeline_stage,isOnb=stage==='onboarding',isAct=stage==='active',isRej=stage==='rejected';var isHiredPlus=stage==='hired'||isOnb||isAct||stage==='inactive';var html='<div class="card">';
 html+='<div class="card-section" style="display:flex;align-items:center;gap:12px;"><div class="avatar">'+getInitials(c.first_name,c.last_name)+'</div><div style="flex:1;"><div style="font-size:16px;font-weight:600;">'+esc(c.first_name)+' '+esc(c.last_name)+(c.is_minor?' <span class="badge badge-minor">Minor</span>':'')+s6RefBadge(c)+'</div><div style="font-size:12px;color:#888;margin-top:2px;">Applied '+formatDate(c.applied_at)+'</div></div>'+stageBadge(stage)+'</div>';
@@ -2169,7 +2169,7 @@ function ivCloseInterviews(cid,outcome){
 // ── Paperwork links (Email 2) ─────────────────────────────────────────
 // Sep 26 2026. The card's Email 2 is now the paperwork-link email, sent by
 // the paperwork-links edge function (staff token). Each send issues a
-// personal W-4 link (30 days, or until W-4 + I-9 are done) and kills the old
+// personal W-4 + I-9 link (30 days, or until W-4 + I-9 are done) and kills the old
 // one. paperwork_links is read with an explicit column list: token_hash is
 // not granted to staff, so select=* would fail.
 var PW_FN_URL=SUPABASE_URL+'/functions/v1/paperwork-links';
@@ -2195,8 +2195,9 @@ function pwAction(body){
 
 // Paperwork "done" = W-4 complete AND I-9 submitted or verified. Handbook never counts.
 function pwDone(c){return c.w4_complete===true&&(c.i9_submitted===true||c.i9_verified===true);}
-// "Paperwork open" filter = hired AND stage onboarding AND W-4 not complete.
-function pwIsOpen(c){return c.hired===true&&c.pipeline_stage==='onboarding'&&c.w4_complete!==true;}
+// "Paperwork open" filter = hired AND stage onboarding AND (W-4 not complete OR I-9 not submitted/verified).
+// Widened Sep 26 when the I-9 moved to the same link (decision 2.1). Handbook never counts.
+function pwIsOpen(c){return c.hired===true&&c.pipeline_stage==='onboarding'&&!pwDone(c);}
 function countPaperworkOpen(){var n=0;for(var i=0;i<pcCandidates.length;i++){if(pwIsOpen(pcCandidates[i]))n++;}return n;}
 function pwLinks(cid){var out=[];for(var i=0;i<pcPwLinks.length;i++){if(pcPwLinks[i].candidate_id===cid)out.push(pcPwLinks[i]);}return out;}
 function pwLive(cid){var ls=pwLinks(cid);for(var i=0;i<ls.length;i++){if(!ls[i].revoked_at)return ls[i];}return null;}
@@ -2239,7 +2240,7 @@ function renderPaperworkLinkButton(c){
       '<div class="eb-desc">'+(failed?'<span style="color:#c0392b;">Email failed '+esc(formatDateShort(live.created_at))+'</span>':'Sent '+esc(formatDateShort(live.created_at)))+'</div>'+
       '<span class="eb-resend" onclick="pcPwShowSend(true)">Resend link</span></div>';
   }
-  return'<div class="email-btn" onclick="pcPwShowSend('+(live?'true':'false')+')"><div class="eb-top">'+ico+'<span class="eb-title">'+title+'</span></div><div class="eb-desc">Welcome email with their personal W-4 link</div></div>';
+  return'<div class="email-btn" onclick="pcPwShowSend('+(live?'true':'false')+')"><div class="eb-top">'+ico+'<span class="eb-title">'+title+'</span></div><div class="eb-desc">Welcome email with their W-4 and I-9 link</div></div>';
 }
 
 // Paperwork section on hired cards.
@@ -2309,7 +2310,7 @@ function pcPwShowSend(isResend){
   var warn='';
   if(live&&!pwExpired(live))warn='<div style="font-size:12px;color:#d97706;margin-bottom:12px;">Their current link stops working the moment this sends. The email tells them it replaces the earlier one.</div>';
   var html='<div class="modal-overlay" onclick="pcPipeCloseModal(event)"><div class="modal-box"><h3>'+(isResend?'Resend':'Send')+' paperwork link</h3>'+
-    '<p>Emails '+esc(c.first_name||'them')+' the Popcorn Chez welcome email with a personal link to their W-4 and payroll page. The link works for 30 days, or until their W-4 and I-9 are done.</p>'+
+    '<p>Emails '+esc(c.first_name||'them')+' the Popcorn Chez welcome email with a personal link to their W-4 and I-9. The link works for 30 days, or until their W-4 and I-9 are done.</p>'+
     pwToBox(c)+warn+'<div id="iv-modal-err" class="error-msg" style="margin-bottom:8px;"></div>'+
     '<div style="display:flex;gap:8px;"><button class="btn" style="flex:1;" onclick="pcPipeCloseModal(null)">Cancel</button>'+
     '<button class="btn btn-primary" style="flex:1;" id="iv-modal-btn" onclick="pcPwSend()">'+(isResend?'Resend link':'Send link')+'</button></div></div></div>';
@@ -2350,7 +2351,7 @@ function pwSendable(list){var out=[];for(var i=0;i<list.length;i++){if(!pwBlockR
 
 function renderPaperworkBulkBar(list){
   var n=pwSendable(list).length;
-  var html='<div class="pw-bulk"><strong>'+list.length+'</strong> hired '+(list.length===1?'person':'people')+' in Onboarding with the W-4 still open.';
+  var html='<div class="pw-bulk"><strong>'+list.length+'</strong> hired '+(list.length===1?'person':'people')+' in Onboarding with the W-4 or I-9 still open.';
   if(list.length>n)html+='<div class="pw-warn">'+(list.length-n)+' cannot get a link (no email on file).</div>';
   if(n>PW_BULK_MAX){
     html+='<div class="pw-warn">Up to '+PW_BULK_MAX+' at a time. Narrow the list with the search box.</div><button class="btn btn-sm" disabled style="opacity:0.5;cursor:not-allowed;">Send links to these '+n+'</button>';
@@ -2383,7 +2384,7 @@ function pcPwShowBulk(){
   }
   var n=pcPwBulkIds.length;
   var html='<div class="modal-overlay" onclick="pcPipeCloseModal(event)"><div class="modal-box"><h3>Send paperwork links to '+n+' '+(n===1?'person':'people')+'</h3>'+
-    '<p>Each person gets the Popcorn Chez welcome email with their own W-4 link (CC staffing@camdenco.com'+(anyTest?'; the TEST address gets no CC':'')+'). Any earlier link stops working.</p>'+
+    '<p>Each person gets the Popcorn Chez welcome email with their own W-4 and I-9 link (CC staffing@camdenco.com'+(anyTest?'; the TEST address gets no CC':'')+'). Any earlier link stops working.</p>'+
     '<div class="pw-list">'+rows+'</div>'+
     '<p style="font-size:12px;color:#888;">This takes about a second per person. Keep this tab open until it finishes.</p>'+
     '<div id="iv-modal-err" class="error-msg" style="margin-bottom:8px;"></div>'+
