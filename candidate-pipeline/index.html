@@ -176,6 +176,34 @@ header { background: #fff; border-bottom: 1px solid #e8e8e4; padding: 0 32px; di
   .evr-editor { flex-direction: column; }
   .evr-venue-col { width: 100%; max-height: 150px; border-right: none; border-bottom: 1px solid #F0F0EC; }
 }
+/* Paperwork link (Email 2) -- Sep 26 2026 */
+.pw-strip { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.pw-chip { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 20px; border: 1px solid #ddd; background: #f5f5f5; color: #666; }
+.pw-chip.done { background: #eaf6ec; border-color: #7dc98a; color: #1e6b2e; }
+.pw-chip.open { background: #fffbeb; border-color: #fcd34d; color: #92400e; }
+.pw-chip.muted { background: #fafafa; border-color: #eee; color: #aaa; font-weight: 500; }
+.pw-state { font-size: 13px; line-height: 1.6; border-radius: 6px; padding: 8px 12px; margin-bottom: 10px; border: 1px solid #eee; background: #fafafa; color: #444; }
+.pw-state.ok { background: #f6fdf8; border-color: #b7e0c2; }
+.pw-state.warn { background: #fffbeb; border-color: #fde68a; }
+.pw-state.bad { background: #fdf3f2; border-color: #f4b8b8; }
+.pw-state .pw-main { font-weight: 600; }
+.pw-state .pw-sub { font-size: 12px; color: #777; }
+.pw-state.bad .pw-main { color: #c0392b; }
+.pw-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.pw-reason { font-size: 12px; color: #888; }
+.pw-hist { margin-top: 10px; font-size: 12px; color: #888; line-height: 1.7; }
+.pw-hist-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #aaa; margin-bottom: 2px; }
+.pw-bulk { background: #f0f6ff; border: 1px solid #b3d4f7; border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; font-size: 12px; color: #0c447c; line-height: 1.5; }
+.pw-bulk .btn { margin-top: 8px; width: 100%; }
+.pw-bulk .pw-warn { color: #92400e; margin-top: 6px; }
+.pw-list { border: 1px solid #eee; border-radius: 6px; margin-bottom: 14px; max-height: 320px; overflow-y: auto; }
+.pw-list-row { padding: 8px 12px; border-bottom: 1px solid #f2f2f2; font-size: 13px; }
+.pw-list-row:last-child { border-bottom: none; }
+.pw-list-row .pw-sub { font-size: 12px; color: #888; }
+.pw-list-row.skip { color: #aaa; }
+.pw-list-row .pw-ok { color: #1D9E75; font-weight: 600; }
+.pw-list-row .pw-bad { color: #c0392b; font-weight: 600; }
+.pw-list-row .pw-amber { color: #b45309; font-weight: 600; }
 </style>
 </head>
 <body>
@@ -202,7 +230,7 @@ var REFERRAL_RUNNER_ROLE='Event Runner';
 var REFERRAL_BONUS_RUNNER=50;
 var REFERRAL_BONUS_DEFAULT=25;
 var REFERRAL_EVENTS_REQUIRED=5;
-var EMAIL_INFO=[{num:1,title:'Email 1',desc:'Thanks for applying',field:'email1_sent_at'},{num:2,title:'Email 2',desc:'Welcome / onboarding',field:'email2_sent_at'},{num:3,title:'Email 3',desc:'Final steps / apps',field:'email3_sent_at'}];
+var EMAIL_INFO=[{num:1,title:'Email 1',desc:'Thanks for applying',field:'email1_sent_at'},{num:2,title:'Email 2',desc:'Now the paperwork link (paperwork-links)',field:'email2_sent_at'},{num:3,title:'Email 3',desc:'Final steps / apps',field:'email3_sent_at'}];
 var VENUE_STATE={FMP:'NJ',BWH:'NJ',ACCC:'NJ',Cure:'NJ',Mann:'PA',Subaru:'PA',Montage:'PA',Villanova:'PA',DE:'DE',SATB:'DE',Kirkwood:'DE'};
 var VENUE_LABELS={FMP:'Freedom Mortgage Pavilion',Mann:'Mann Music Center',BWH:'Boardwalk Hall',ACCC:'AC Convention Center',Cure:'Cure Insurance Arena',Subaru:'Subaru Park',DE:'DE Chase Field House',Montage:'Montage Mountain',SATB:'Sports at the Beach',Villanova:'Villanova',Kirkwood:'Kirkwood'};
 var VENUE_CODES=['FMP','Mann','BWH','ACCC','Cure','Subaru','DE','Montage','SATB','Villanova','Kirkwood'];
@@ -216,7 +244,7 @@ var SHIRT_SIZES=['XS','S','M','L','XL','2XL','3XL','4XL','5XL'];
 /* pcShowLegacy: when false (default), legacy_import rows are hidden from Active/Inactive/All
    filters on the pipeline page. Those employees live on the home-components page. The
    "Legacy" pill toggle lets a manager opt in to seeing them here for ad-hoc lookups. */
-var pcCandidates=[],pcPayRates=[],payRoleNames=[],pcBookings=[],pcRequests=[],pcPrefs=[],pcLinks=[],pcOpenSlots=[],pcLoadError='',pcSelected=null,pcFilter='all',pcSearch='',pcLoading=true,pcShowLegacy=false;
+var pcCandidates=[],pcPayRates=[],payRoleNames=[],pcBookings=[],pcRequests=[],pcPrefs=[],pcLinks=[],pcPwLinks=[],pcOpenSlots=[],pcLoadError='',pcSelected=null,pcFilter='all',pcSearch='',pcLoading=true,pcShowLegacy=false;
 // pcEvrByPunch: employee_venue_roles cache keyed by punch_id for the displayed
 //   hired candidate. undefined=never fetched, null=in-flight, []=loaded-none,
 //   [rows]=loaded. Lazy-filled from render() via pcPipeLoadEvrForSelected().
@@ -270,7 +298,7 @@ function sbFetch(path,opts){
 }
 
 function sbJsonList(path){return sbFetch(path).then(function(r){return r.json();});}
-function loadAll(){pcLoading=true;pcLoadError='';render();var today=new Date().toLocaleString('sv-SE',{timeZone:'America/New_York'}).slice(0,10);Promise.all([sbJsonList('/rest/v1/candidates?select=*&order=applied_at.desc'),sbJsonList('/rest/v1/pay_rates?select=*&order=state.asc,role.asc'),sbJsonList('/rest/v1/interview_bookings?select=*,interview_slots(*)&order=booked_at.desc&limit=2000'),sbJsonList('/rest/v1/interview_requests?select=id,candidate_id,kind,note,source,created_at,notified_at,notify_error&resolved_at=is.null&deleted_at=is.null&order=created_at.asc&limit=500'),sbJsonList('/rest/v1/interview_slot_preferences?select=request_id,slot_id,rank,retired_at,interview_slots(slot_date,start_time,duration_minutes)&order=created_at.desc&limit=3000'),sbJsonList('/rest/v1/interview_pick_links?select=id,candidate_id,created_at,created_by,expires_at,email_to,email_sent_at,email_error,first_opened_at,last_opened_at,open_count,used_at,retired_at,retired_reason&order=created_at.desc&limit=2000'),sbJsonList('/rest/v1/interview_slots?select=id,slot_date,start_time,duration_minutes&is_available=eq.true&slot_date=gte.'+today+'&order=slot_date.asc,start_time.asc&limit=400')]).then(function(res){pcCandidates=res[0]||[];pcPayRates=res[1]||[];pcBookings=res[2]||[];pcRequests=res[3]||[];pcPrefs=res[4]||[];pcLinks=res[5]||[];pcOpenSlots=res[6]||[];var roleSet={};pcPayRates.forEach(function(r){roleSet[r.role]=true;});payRoleNames=Object.keys(roleSet).sort();pcLoading=false;if(pcSelected){for(var i=0;i<pcCandidates.length;i++){if(pcCandidates[i].id===pcSelected.id){pcSelected=pcCandidates[i];break;}}}render();}).catch(function(err){console.error('Pipeline load failed:',err);pcLoading=false;pcLoadError=(err&&err.message)?err.message:String(err);render();});}
+function loadAll(){pcLoading=true;pcLoadError='';render();var today=new Date().toLocaleString('sv-SE',{timeZone:'America/New_York'}).slice(0,10);Promise.all([sbJsonList('/rest/v1/candidates?select=*&order=applied_at.desc'),sbJsonList('/rest/v1/pay_rates?select=*&order=state.asc,role.asc'),sbJsonList('/rest/v1/interview_bookings?select=*,interview_slots(*)&order=booked_at.desc&limit=2000'),sbJsonList('/rest/v1/interview_requests?select=id,candidate_id,kind,note,source,created_at,notified_at,notify_error&resolved_at=is.null&deleted_at=is.null&order=created_at.asc&limit=500'),sbJsonList('/rest/v1/interview_slot_preferences?select=request_id,slot_id,rank,retired_at,interview_slots(slot_date,start_time,duration_minutes)&order=created_at.desc&limit=3000'),sbJsonList('/rest/v1/interview_pick_links?select=id,candidate_id,created_at,created_by,expires_at,email_to,email_sent_at,email_error,first_opened_at,last_opened_at,open_count,used_at,retired_at,retired_reason&order=created_at.desc&limit=2000'),sbJsonList('/rest/v1/interview_slots?select=id,slot_date,start_time,duration_minutes&is_available=eq.true&slot_date=gte.'+today+'&order=slot_date.asc,start_time.asc&limit=400'),sbJsonList('/rest/v1/paperwork_links?select='+PW_LINK_COLS+'&order=created_at.desc&limit=3000')]).then(function(res){pcCandidates=res[0]||[];pcPayRates=res[1]||[];pcBookings=res[2]||[];pcRequests=res[3]||[];pcPrefs=res[4]||[];pcLinks=res[5]||[];pcOpenSlots=res[6]||[];pcPwLinks=res[7]||[];var roleSet={};pcPayRates.forEach(function(r){roleSet[r.role]=true;});payRoleNames=Object.keys(roleSet).sort();pcLoading=false;if(pcSelected){for(var i=0;i<pcCandidates.length;i++){if(pcCandidates[i].id===pcSelected.id){pcSelected=pcCandidates[i];break;}}}render();}).catch(function(err){console.error('Pipeline load failed:',err);pcLoading=false;pcLoadError=(err&&err.message)?err.message:String(err);render();});}
 
 function getBookingForCandidate(cid){for(var i=0;i<pcBookings.length;i++){if(pcBookings[i].candidate_id===cid&&pcBookings[i].status==='scheduled')return pcBookings[i];}return null;}
 function getInitials(f,l){return((f?f[0]:'?')+(l?l[0]:'?')).toUpperCase();}
@@ -289,7 +317,11 @@ function getFiltered(){
     var c=pcCandidates[i];
     var archived=isArchived(c);
     var isLegacy=c.legacy_import===true;
-    if(pcFilter==='archive'){
+    if(pcFilter==='paperwork'){
+      // Paperwork open: hired AND stage onboarding AND W-4 not done. Defined by
+      // those three fields only, so archive age and the Legacy toggle do not apply.
+      if(!pwIsOpen(c))continue;
+    }else if(pcFilter==='archive'){
       // Archive view: only show archived rows, but exclude legacy rows here when the
       // Legacy toggle is OFF. Legacy rows are always "archived" by their 2020 timestamp
       // and would dominate the Archive tab if we let them through unconditionally.
@@ -359,13 +391,13 @@ function updateStatCounts(){var el=document.getElementById('pcpipe-stats');if(!e
 function updateFilterPills(){
   var el=document.getElementById('pcpipe-pills');
   if(!el)return;
-  var stages=['all','applied','contacted','interview_requested','interview_scheduled','onboarding','active','inactive','rejected','archive'];
-  var stageNames={all:'All',applied:'Applied',contacted:'Contacted',interview_requested:'Requested',interview_scheduled:'Interview',onboarding:'Onboarding',active:'Active',inactive:'Inactive',rejected:'Rejected',archive:'Archive'};
+  var stages=['all','applied','contacted','interview_requested','interview_scheduled','onboarding','paperwork','active','inactive','rejected','archive'];
+  var stageNames={all:'All',applied:'Applied',contacted:'Contacted',interview_requested:'Requested',interview_scheduled:'Interview',onboarding:'Onboarding',paperwork:'Paperwork open ('+countPaperworkOpen()+')',active:'Active',inactive:'Inactive',rejected:'Rejected',archive:'Archive'};
   var html='';
   for(var si=0;si<stages.length;si++){
     html+='<span class="pill'+(pcFilter===stages[si]?' active':'')+'" onclick="pcPipeFilter(\''+stages[si]+'\')">'+stageNames[stages[si]]+'</span>';
   }
-  if(pcFilter!=='archive'&&pcFilter!=='rejected'){
+  if(pcFilter!=='archive'&&pcFilter!=='rejected'&&pcFilter!=='paperwork'){
     html+='<label class="legacy-toggle'+(pcShowLegacy?' on':'')+'" title="Show legacy-imported employees (people not hired through the pipeline)">'
       +'<input type="checkbox" '+(pcShowLegacy?'checked':'')+' onchange="pcPipeToggleShowLegacy(this.checked)" />'
       +'Legacy'
@@ -376,7 +408,7 @@ function updateFilterPills(){
 
 function countStageVisible(stage){var n=0;for(var i=0;i<pcCandidates.length;i++){if(pcCandidates[i].pipeline_stage===stage&&!isArchived(pcCandidates[i]))n++;}return n;}
 
-function renderList(){var filtered=getFiltered();if(filtered.length===0)return'<div class="empty-state" style="padding:30px 10px;">No candidates found.</div>';var html='';for(var i=0;i<filtered.length;i++){var c=filtered[i];var isSel=pcSelected&&pcSelected.id===c.id;var rejCls=(c.pipeline_stage==='rejected'||c.pipeline_stage==='inactive')?' rejected':'';var minor=c.is_minor?' <span class="badge badge-minor" style="font-size:10px;">Minor</span>':'';var srcPill='';if(c.hear_about_us){var sc='background:#e3f2fd;border:1px solid #90caf9;color:#0d47a1;';if(c.hear_about_us==='Indeed')sc='background:#fff8e1;border:1px solid #ffe082;color:#7a5c00;';else if(c.hear_about_us==='Friend or Family')sc='background:#eaf6ec;border:1px solid #7dc98a;color:#1e6b2e;';else if(c.hear_about_us==='Other')sc='background:#f3e8ff;border:1px solid #d8b4fe;color:#6b21a8;';srcPill=' <span class="badge" style="font-size:10px;'+sc+'">'+esc(c.hear_about_us)+'</span>';}html+='<div class="cand-row'+(isSel?' selected':'')+rejCls+'" onclick="pcPipeSelect(\''+c.id+'\')"><div style="display:flex;justify-content:space-between;align-items:center;gap:6px;"><div class="cand-name">'+esc(c.first_name)+' '+esc(c.last_name)+minor+srcPill+s6RefBadge(c)+'</div>'+stageBadge(c.pipeline_stage)+'</div><div class="cand-meta">'+formatDateShort(c.applied_at)+(c.roles&&c.roles.length>0?' &middot; '+esc(c.roles[0]):'')+'</div></div>';}html+='<div style="margin-top:10px;font-size:12px;color:#aaa;">'+filtered.length+' candidate'+(filtered.length!==1?'s':'')+'</div>';return html;}
+function renderList(){var filtered=getFiltered();var bar=pcFilter==='paperwork'?renderPaperworkBulkBar(filtered):'';if(filtered.length===0)return bar+'<div class="empty-state" style="padding:30px 10px;">'+(pcFilter==='paperwork'?'No one in Onboarding has their W-4 open.':'No candidates found.')+'</div>';var html=bar;for(var i=0;i<filtered.length;i++){var c=filtered[i];var isSel=pcSelected&&pcSelected.id===c.id;var rejCls=(c.pipeline_stage==='rejected'||c.pipeline_stage==='inactive')?' rejected':'';var minor=c.is_minor?' <span class="badge badge-minor" style="font-size:10px;">Minor</span>':'';var srcPill='';if(c.hear_about_us){var sc='background:#e3f2fd;border:1px solid #90caf9;color:#0d47a1;';if(c.hear_about_us==='Indeed')sc='background:#fff8e1;border:1px solid #ffe082;color:#7a5c00;';else if(c.hear_about_us==='Friend or Family')sc='background:#eaf6ec;border:1px solid #7dc98a;color:#1e6b2e;';else if(c.hear_about_us==='Other')sc='background:#f3e8ff;border:1px solid #d8b4fe;color:#6b21a8;';srcPill=' <span class="badge" style="font-size:10px;'+sc+'">'+esc(c.hear_about_us)+'</span>';}html+='<div class="cand-row'+(isSel?' selected':'')+rejCls+'" onclick="pcPipeSelect(\''+c.id+'\')"><div style="display:flex;justify-content:space-between;align-items:center;gap:6px;"><div class="cand-name">'+esc(c.first_name)+' '+esc(c.last_name)+minor+srcPill+s6RefBadge(c)+'</div>'+stageBadge(c.pipeline_stage)+'</div><div class="cand-meta">'+formatDateShort(c.applied_at)+(c.roles&&c.roles.length>0?' &middot; '+esc(c.roles[0]):'')+'</div></div>';}html+='<div style="margin-top:10px;font-size:12px;color:#aaa;">'+filtered.length+' candidate'+(filtered.length!==1?'s':'')+'</div>';return html;}
 
 function renderCandidateCard(c){var stage=c.pipeline_stage,isOnb=stage==='onboarding',isAct=stage==='active',isRej=stage==='rejected';var isHiredPlus=stage==='hired'||isOnb||isAct||stage==='inactive';var html='<div class="card">';
 html+='<div class="card-section" style="display:flex;align-items:center;gap:12px;"><div class="avatar">'+getInitials(c.first_name,c.last_name)+'</div><div style="flex:1;"><div style="font-size:16px;font-weight:600;">'+esc(c.first_name)+' '+esc(c.last_name)+(c.is_minor?' <span class="badge badge-minor">Minor</span>':'')+s6RefBadge(c)+'</div><div style="font-size:12px;color:#888;margin-top:2px;">Applied '+formatDate(c.applied_at)+'</div></div>'+stageBadge(stage)+'</div>';
@@ -391,18 +423,18 @@ if(pcEditingPhone){html+='<div class="phone-edit-inline"><input type="tel" id="p
 html+='</div></div><div><div class="detail-label">Date of birth</div><div class="detail-value">'+(c.date_of_birth?formatDate(c.date_of_birth):'--')+'</div></div><div><div class="detail-label">Earliest start</div><div class="detail-value">'+(c.earliest_start_date?formatDate(c.earliest_start_date):'--')+'</div></div><div><div class="detail-label">Uniform shirt size</div><div class="detail-value">'+(pcEditingShirtSize?('<div class="phone-edit-inline"><select id="shirt-edit-input" style="width:120px;padding:6px 8px;">'+buildShirtSizeOptions(c.shirt_size||'')+'</select><button class="btn btn-sm btn-primary" onclick="pcPipeSaveShirtSize()" style="padding:4px 10px;">Save</button><button class="btn btn-sm" onclick="pcPipeCancelShirtSizeEdit()" style="padding:4px 10px;">Cancel</button></div><div id="shirt-edit-err" class="error-msg"></div>'):((c.shirt_size?c.shirt_size:'--')+'<button class="edit-phone-btn" onclick="pcPipeEditShirtSize()" title="Edit shirt size">'+pencilSvg+'</button>'))+'</div></div></div><div style="margin-top:10px;"><div class="detail-label" style="margin-bottom:4px;">Roles applied for</div><div class="tag-list">'+renderTags(c.roles)+'</div></div><div style="margin-top:10px;"><div class="detail-label" style="margin-bottom:4px;">Locations</div><div class="tag-list">'+renderTags(c.locations)+'</div></div>'+(c.referral_source?'<div style="margin-top:10px;"><div class="detail-label">Referred by</div><div class="detail-value">'+esc(c.referral_source)+'</div></div>':'')+'<div style="margin-top:10px;"><div class="detail-label" style="margin-bottom:4px;">Experience</div><div style="font-size:13px;color:#444;line-height:1.6;">'+esc(c.experience_notes||'--')+'</div></div>'+(c.resume_url?'<div style="margin-top:10px;"><div class="detail-label" style="margin-bottom:4px;">Resume</div><button class="btn btn-sm" onclick="pcPipeOpenFile(\''+c.id+'\',\'resume\')">View resume</button></div>':'')+'</div>';
 html+='<div class="card-section"><div class="section-title">Internal notes</div><textarea class="notes-area" id="pipe-notes-field" placeholder="Add notes about this candidate...">'+esc(c.internal_notes||'')+'</textarea><button class="btn btn-sm" style="margin-top:6px;" onclick="pcPipeSaveNotes()">Save notes</button><div id="notes-saved-msg" style="font-size:12px;color:#1D9E75;display:none;margin-top:4px;">Saved</div></div>';
 html+=renderReferralSection(c);
-if(isHiredPlus){html+=renderHireDetails(c);html+=renderOnboardingChecklist(c);if(c.is_minor)html+=renderMinorChecklist(c);}
+if(isHiredPlus){html+=renderHireDetails(c);html+=renderPaperworkSection(c);html+=renderOnboardingChecklist(c);if(c.is_minor)html+=renderMinorChecklist(c);}
 if(!isRej&&!isAct&&stage!=='inactive')html+=renderPipelineActions(c,stage);
 if(isAct){html+='<div class="card-section"><div class="section-title">Employee status</div><p style="font-size:13px;color:#555;margin:0 0 10px;">This employee is currently active. Deactivating will remove them from the availability sign-up list immediately.</p><label style="font-size:13px;color:#555;display:block;margin-bottom:4px;">Reason (optional)</label><input type="text" id="deactivate-reason" placeholder="e.g. Resigned, terminated, seasonal end..." style="margin-bottom:10px;" /><button class="btn btn-danger btn-sm" onclick="pcPipeDeactivate()">Deactivate employee</button></div>';}
 if(isRej){html+='<div class="card-section"><div style="background:#fdecea;border-radius:6px;padding:10px 12px;font-size:13px;color:#8b1a1a;">Rejected'+(c.rejection_reason?' -- '+esc(c.rejection_reason):'')+(c.stage_updated_at?' on '+formatDate(c.stage_updated_at):'')+'</div><button class="btn btn-sm" style="margin-top:10px;" onclick="pcPipeMoveStage(\'applied\')">Restore to Applied</button></div>';}
 if(stage==='inactive'){html+='<div class="card-section"><div style="background:#f1efe8;border-radius:6px;padding:10px 12px;font-size:13px;color:#5f5e5a;">Inactive'+(c.deactivation_reason?' -- '+esc(c.deactivation_reason):'')+(c.stage_updated_at?' since '+formatDate(c.stage_updated_at):'')+'</div><button class="btn btn-green btn-sm" style="margin-top:10px;" onclick="pcPipeReactivate()">Reactivate employee</button></div>';}
 html+='</div>';return html;}
 
-function renderEmailButtons(c){var avail=getEmailAvailability(c);var hasEmail=!!c.email;var mailIco='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2d7dd2" stroke-width="2" style="flex-shrink:0;"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="M22 4L12 13L2 4"></path></svg>';var checkIco='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1D9E75" stroke-width="2" style="flex-shrink:0;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>';var offIco='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#bbb" stroke-width="2" style="flex-shrink:0;"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="M22 4L12 13L2 4"></path></svg>';var html='<div class="card-section" style="background:#fafafa;"><div class="section-title">Send email</div>';if(!hasEmail)html+='<div style="font-size:12px;color:#c0392b;margin-bottom:8px;">No email address on file -- emails cannot be sent until one is added.</div>';html+='<div class="email-btn-row">';for(var i=0;i<EMAIL_INFO.length;i++){var info=EMAIL_INFO[i];var isSent=!!c[info.field];var isAvail=info.num===1?avail.e1:(info.num===2?avail.e2:avail.e3);if(isSent){html+='<div class="email-btn sent"><div class="eb-top">'+checkIco+'<span class="eb-title">'+info.title+'</span></div><div class="eb-desc">Sent '+formatDateShort(c[info.field])+'</div>';if(hasEmail)html+='<span class="eb-resend" onclick="pcPipeShowEmailConfirm('+info.num+',true)">Resend</span>';html+='</div>';}else if(isAvail&&hasEmail){html+='<div class="email-btn" onclick="pcPipeShowEmailConfirm('+info.num+',false)"><div class="eb-top">'+mailIco+'<span class="eb-title">'+info.title+'</span></div><div class="eb-desc">'+info.desc+'</div></div>';}else{html+='<div class="email-btn disabled"><div class="eb-top">'+offIco+'<span class="eb-title" style="color:#bbb;">'+info.title+'</span></div><div class="eb-desc" style="color:#ccc;">'+info.desc+'</div></div>';}}html+=renderPickLinkButton(c);html+='</div></div>';return html;}
+function renderEmailButtons(c){var avail=getEmailAvailability(c);var hasEmail=!!c.email;var mailIco='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2d7dd2" stroke-width="2" style="flex-shrink:0;"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="M22 4L12 13L2 4"></path></svg>';var checkIco='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1D9E75" stroke-width="2" style="flex-shrink:0;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>';var offIco='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#bbb" stroke-width="2" style="flex-shrink:0;"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="M22 4L12 13L2 4"></path></svg>';var html='<div class="card-section" style="background:#fafafa;"><div class="section-title">Send email</div>';if(!hasEmail)html+='<div style="font-size:12px;color:#c0392b;margin-bottom:8px;">No email address on file -- emails cannot be sent until one is added.</div>';html+='<div class="email-btn-row">';for(var i=0;i<EMAIL_INFO.length;i++){var info=EMAIL_INFO[i];if(info.num===2){html+=renderPaperworkLinkButton(c);continue;}var isSent=!!c[info.field];var isAvail=info.num===1?avail.e1:(info.num===2?avail.e2:avail.e3);if(isSent){html+='<div class="email-btn sent"><div class="eb-top">'+checkIco+'<span class="eb-title">'+info.title+'</span></div><div class="eb-desc">Sent '+formatDateShort(c[info.field])+'</div>';if(hasEmail)html+='<span class="eb-resend" onclick="pcPipeShowEmailConfirm('+info.num+',true)">Resend</span>';html+='</div>';}else if(isAvail&&hasEmail){html+='<div class="email-btn" onclick="pcPipeShowEmailConfirm('+info.num+',false)"><div class="eb-top">'+mailIco+'<span class="eb-title">'+info.title+'</span></div><div class="eb-desc">'+info.desc+'</div></div>';}else{html+='<div class="email-btn disabled"><div class="eb-top">'+offIco+'<span class="eb-title" style="color:#bbb;">'+info.title+'</span></div><div class="eb-desc" style="color:#ccc;">'+info.desc+'</div></div>';}}html+=renderPickLinkButton(c);html+='</div></div>';return html;}
 
-function pcPipeShowEmailConfirm(emailNum,isResend){if(!pcSelected||!pcSelected.email)return;var info=EMAIL_INFO[emailNum-1];var label=isResend?'Resend '+info.title:'Send '+info.title;var desc='';if(emailNum===1)desc='This will send the "Thanks for Applying" email.';else if(emailNum===2)desc='This will send the "Welcome / Complete Onboarding Paperwork" email with a link to the W-4 and payroll page.';else desc='This will send the "Final Steps" email with app download links and onboarding training instructions.';var html='<div class="modal-overlay" onclick="pcPipeCloseModal(event)"><div class="modal-box"><h3>'+label+'</h3><p>'+desc+'</p><div style="background:#f0f6ff;border:1px solid #b3d4f7;border-radius:6px;padding:10px 14px;margin-bottom:14px;"><div style="font-size:11px;color:#666;margin-bottom:2px;">To:</div><div style="font-size:14px;font-weight:500;color:#0c447c;">'+esc(pcSelected.email)+'</div><div style="font-size:11px;color:#666;margin-top:6px;">CC: staffing@camdenco.com</div></div>'+(isResend?'<div style="font-size:12px;color:#d97706;margin-bottom:12px;">This email was already sent on '+formatDateShort(pcSelected[info.field])+'. Sending again will update the sent date.</div>':'')+'<div id="email-send-err" class="error-msg" style="margin-bottom:8px;"></div><div style="display:flex;gap:8px;"><button class="btn" style="flex:1;" onclick="pcPipeCloseModal(null)">Cancel</button><button class="btn btn-primary" style="flex:1;" id="email-send-btn" onclick="pcPipeConfirmSendEmail('+emailNum+')">'+(isResend?'Resend':'Send email')+'</button></div></div></div>';document.getElementById('pcpipe-modal').innerHTML=html;}
+function pcPipeShowEmailConfirm(emailNum,isResend){if(!pcSelected||!pcSelected.email||emailNum===2)return;var info=EMAIL_INFO[emailNum-1];var label=isResend?'Resend '+info.title:'Send '+info.title;var desc='';if(emailNum===1)desc='This will send the "Thanks for Applying" email.';else desc='This will send the "Final Steps" email with app download links and onboarding training instructions.';var html='<div class="modal-overlay" onclick="pcPipeCloseModal(event)"><div class="modal-box"><h3>'+label+'</h3><p>'+desc+'</p><div style="background:#f0f6ff;border:1px solid #b3d4f7;border-radius:6px;padding:10px 14px;margin-bottom:14px;"><div style="font-size:11px;color:#666;margin-bottom:2px;">To:</div><div style="font-size:14px;font-weight:500;color:#0c447c;">'+esc(pcSelected.email)+'</div><div style="font-size:11px;color:#666;margin-top:6px;">CC: staffing@camdenco.com</div></div>'+(isResend?'<div style="font-size:12px;color:#d97706;margin-bottom:12px;">This email was already sent on '+formatDateShort(pcSelected[info.field])+'. Sending again will update the sent date.</div>':'')+'<div id="email-send-err" class="error-msg" style="margin-bottom:8px;"></div><div style="display:flex;gap:8px;"><button class="btn" style="flex:1;" onclick="pcPipeCloseModal(null)">Cancel</button><button class="btn btn-primary" style="flex:1;" id="email-send-btn" onclick="pcPipeConfirmSendEmail('+emailNum+')">'+(isResend?'Resend':'Send email')+'</button></div></div></div>';document.getElementById('pcpipe-modal').innerHTML=html;}
 
-function pcPipeConfirmSendEmail(emailNum){if(!pcSelected)return;var btn=document.getElementById('email-send-btn');if(btn){btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Sending...';}var h=apiHeaders();h['Content-Type']='application/json';fetch(SUPABASE_URL+'/functions/v1/send-pipeline-email',{method:'POST',headers:h,body:JSON.stringify({email_number:emailNum,first_name:pcSelected.first_name,to_email:pcSelected.email,candidate_id:pcSelected.id})}).then(function(r){return r.json();}).then(function(data){if(data.success){pcPipeCloseModal(null);loadAll();}else{var e=document.getElementById('email-send-err');if(e)e.innerHTML='Failed to send: '+(data.error||'Unknown error');if(btn){btn.disabled=false;btn.innerHTML='Send email';}}}).catch(function(err){console.error('Email send error:',err);var e=document.getElementById('email-send-err');if(e)e.innerHTML='Network error. Please try again.';if(btn){btn.disabled=false;btn.innerHTML='Send email';}});}
+function pcPipeConfirmSendEmail(emailNum){if(!pcSelected)return;var btn=document.getElementById('email-send-btn');if(btn){btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Sending...';}var h=apiHeaders();h['Content-Type']='application/json';fetch(SUPABASE_URL+'/functions/v1/send-pipeline-email',{method:'POST',headers:h,body:JSON.stringify({email_number:emailNum,candidate_id:pcSelected.id})}).then(function(r){return r.json();}).then(function(data){if(data.success){pcPipeCloseModal(null);loadAll();}else{var e=document.getElementById('email-send-err');if(e)e.innerHTML='Failed to send: '+esc(data.error||'Unknown error');if(btn){btn.disabled=false;btn.innerHTML='Send email';}}}).catch(function(err){console.error('Email send error:',err);var e=document.getElementById('email-send-err');if(e)e.innerHTML='Network error. Please try again.';if(btn){btn.disabled=false;btn.innerHTML='Send email';}});}
 
 function renderPipelineActions(c,stage){var html='<div class="card-section"><div class="section-title">Pipeline actions</div><div class="stage-select-wrap">';if(stage==='onboarding'){var mpn=c.is_minor&&!c.working_papers_complete;if(mpn){html+='<div style="font-size:12px;color:#c0392b;margin-bottom:8px;flex-basis:100%;">Working papers must be marked complete before this minor can be marked active.</div><button class="btn btn-sm" disabled style="opacity:0.4;cursor:not-allowed;">Mark Active</button>';}else{html+='<button class="btn btn-green" onclick="pcPipeMoveStage(\'active\')">Mark Active</button>';}}else{html+='<div style="flex:1;min-width:160px;"><div class="detail-label" style="margin-bottom:4px;">Move to stage</div><select id="stage-move-select" style="margin-bottom:0;"><option value="">-- Select stage --</option>';if(stage==='applied')html+='<option value="contacted">Contacted</option><option value="hire_modal">Hired (assign venue + role)</option>';else if(stage==='contacted')html+='<option value="applied">Applied (move back)</option><option value="hire_modal">Hired (assign venue + role)</option>';else if(stage==='interview_requested')html+='<option value="applied">Applied (move back)</option><option value="contacted">Contacted (move back)</option><option value="hire_modal">Hired (assign venue + role)</option>';else if(stage==='interview_scheduled')html+='<option value="applied">Applied (move back)</option><option value="contacted">Contacted (move back)</option><option value="hire_modal">Hired (assign venue + role)</option>';html+='</select></div><button class="btn btn-primary" style="margin-top:18px;" onclick="pcPipeHandleStageMove()">Move</button>';}html+='<button class="btn btn-danger btn-sm" style="margin-top:18px;" onclick="pcPipeShowRejectModal()">Reject</button></div></div>';return html;}
 
@@ -2132,6 +2164,265 @@ function pcIvBook(){
 // Hire / reject tidy-up: closes open requests, links, and the booking.
 function ivCloseInterviews(cid,outcome){
   return staffAction({action:'close',candidate_id:cid,outcome:outcome});
+}
+
+// ── Paperwork links (Email 2) ─────────────────────────────────────────
+// Sep 26 2026. The card's Email 2 is now the paperwork-link email, sent by
+// the paperwork-links edge function (staff token). Each send issues a
+// personal W-4 link (30 days, or until W-4 + I-9 are done) and kills the old
+// one. paperwork_links is read with an explicit column list: token_hash is
+// not granted to staff, so select=* would fail.
+var PW_FN_URL=SUPABASE_URL+'/functions/v1/paperwork-links';
+var PW_LINK_COLS='id,candidate_id,created_at,created_by,expires_at,email_to,email_sent_at,email_error,revoked_at,revoked_by,revoke_reason,last_used_at,use_count';
+var PW_STAGES=['onboarding','active'];
+var PW_BULK_MAX=25;
+var PW_TEST_EMAIL='keith@camdenco.com';
+var pcPwBulkIds=[];
+var pcPwBulkNames={};
+
+function pwAction(body){
+  return fetch(PW_FN_URL,{method:'POST',headers:apiHeadersJson(),body:JSON.stringify(body)}).then(function(r){
+    return r.text().then(function(t){
+      var d=null;try{d=t?JSON.parse(t):null;}catch(e){d=null;}
+      if(!r.ok||!d||d.ok!==true){
+        var err=new Error((d&&d.message)?d.message:('HTTP '+r.status+' from paperwork-links'));
+        err.status=r.status;err.code=d?d.code:null;throw err;
+      }
+      return d;
+    });
+  });
+}
+
+// Paperwork "done" = W-4 complete AND I-9 submitted or verified. Handbook never counts.
+function pwDone(c){return c.w4_complete===true&&(c.i9_submitted===true||c.i9_verified===true);}
+// "Paperwork open" filter = hired AND stage onboarding AND W-4 not complete.
+function pwIsOpen(c){return c.hired===true&&c.pipeline_stage==='onboarding'&&c.w4_complete!==true;}
+function countPaperworkOpen(){var n=0;for(var i=0;i<pcCandidates.length;i++){if(pwIsOpen(pcCandidates[i]))n++;}return n;}
+function pwLinks(cid){var out=[];for(var i=0;i<pcPwLinks.length;i++){if(pcPwLinks[i].candidate_id===cid)out.push(pcPwLinks[i]);}return out;}
+function pwLive(cid){var ls=pwLinks(cid);for(var i=0;i<ls.length;i++){if(!ls[i].revoked_at)return ls[i];}return null;}
+function pwExpired(l){var t=new Date(l.expires_at).getTime();return isNaN(t)||t<=Date.now();}
+function pwEmailFailed(l){return !!l.email_error&&!l.email_sent_at;}
+function pwIsTest(c){return String(c.email||'').trim().toLowerCase()===PW_TEST_EMAIL;}
+function pwName(c){return((c.first_name||'')+' '+(c.last_name||'')).trim()||'(no name)';}
+
+// Why a link can't be sent right now ('' = it can). Mirrors pc_issue_paperwork_link.
+function pwBlockReason(c){
+  if(!c.email)return'No email on file';
+  if(c.hired!==true||PW_STAGES.indexOf(c.pipeline_stage)===-1)return'Only for hired people in Onboarding or Active';
+  if(pwDone(c))return'W-4 and I-9 are done';
+  return'';
+}
+
+// Plain-text state for one link row; callers esc() it.
+function pwLinkState(l){
+  if(l.revoked_at){
+    if(l.revoke_reason==='completed')return{text:'Done: paperwork complete ('+ivStamp(l.revoked_at)+')',tone:'ok'};
+    if(l.revoke_reason==='resent')return{text:'Replaced by a newer link '+ivStamp(l.revoked_at),tone:''};
+    return{text:'Cancelled '+ivStamp(l.revoked_at)+' by '+(l.revoked_by||'staff'),tone:''};
+  }
+  if(pwExpired(l))return{text:'Expired '+ivStamp(l.expires_at),tone:'warn'};
+  if(pwEmailFailed(l))return{text:'Email failed: '+String(l.email_error).slice(0,160),tone:'bad'};
+  return{text:'Active until '+formatDate(l.expires_at),tone:'ok'};
+}
+
+// Replaces the Email 2 tile in the "Send email" row.
+function renderPaperworkLinkButton(c){
+  var ico='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2d7dd2" stroke-width="2" style="flex-shrink:0;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>';
+  var offIco='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#bbb" stroke-width="2" style="flex-shrink:0;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>';
+  var title='Send paperwork link';
+  var reason=pwBlockReason(c);
+  if(reason)return'<div class="email-btn disabled"><div class="eb-top">'+offIco+'<span class="eb-title" style="color:#bbb;">'+title+'</span></div><div class="eb-desc" style="color:#ccc;">'+esc(reason)+'</div></div>';
+  var live=pwLive(c.id);
+  if(live&&!pwExpired(live)){
+    var failed=pwEmailFailed(live);
+    return'<div class="email-btn sent"'+(failed?' style="border-color:#f4b8b8;background:#fdf3f2;"':'')+'><div class="eb-top">'+ico+'<span class="eb-title">Paperwork link</span></div>'+
+      '<div class="eb-desc">'+(failed?'<span style="color:#c0392b;">Email failed '+esc(formatDateShort(live.created_at))+'</span>':'Sent '+esc(formatDateShort(live.created_at)))+'</div>'+
+      '<span class="eb-resend" onclick="pcPwShowSend(true)">Resend link</span></div>';
+  }
+  return'<div class="email-btn" onclick="pcPwShowSend('+(live?'true':'false')+')"><div class="eb-top">'+ico+'<span class="eb-title">'+title+'</span></div><div class="eb-desc">Welcome email with their personal W-4 link</div></div>';
+}
+
+// Paperwork section on hired cards.
+function renderPaperworkSection(c){
+  var w4=c.w4_complete===true;
+  var i9s=c.i9_submitted===true||c.i9_verified===true;
+  var html='<div class="card-section"><div class="section-title">Paperwork link</div>';
+  html+='<div class="pw-strip">'+
+    '<span class="pw-chip '+(w4?'done':'open')+'">W-4 '+(w4?'done':'open')+'</span>'+
+    '<span class="pw-chip '+(i9s?'done':'open')+'">I-9 '+(c.i9_verified===true?'verified':(i9s?'submitted':'open'))+'</span>'+
+    '<span class="pw-chip muted" title="The handbook does not count toward the link ending">Handbook '+(c.handbook_complete===true?'signed':'not signed')+'</span>'+
+    '</div>';
+
+  var links=pwLinks(c.id);
+  var live=pwLive(c.id);
+  var latest=live||links[0]||null;
+  if(!latest){
+    html+='<div class="pw-state"><div class="pw-main">No link sent yet.</div>'+
+      (c.email2_sent_at?'<div class="pw-sub">Old-style Email 2 (name + punch) went out '+esc(formatDate(c.email2_sent_at))+'. The W-4 page no longer accepts name + punch, so send a link.</div>':'')+'</div>';
+  }else{
+    var st=pwLinkState(latest);
+    html+='<div class="pw-state '+st.tone+'"><div class="pw-main">'+esc(st.text)+'</div>'+
+      '<div class="pw-sub">Sent '+esc(ivStamp(latest.created_at))+' by '+esc(latest.created_by||'staff')+(latest.email_to?' to '+esc(latest.email_to):'')+'</div>'+
+      (Number(latest.use_count)>0?'<div class="pw-sub">Opened '+esc(latest.use_count)+' time'+(Number(latest.use_count)===1?'':'s')+', last '+esc(ivStamp(latest.last_used_at))+'</div>':(latest.revoked_at?'':'<div class="pw-sub">Not opened yet</div>'))+
+      '</div>';
+  }
+
+  var reason=pwBlockReason(c);
+  var liveOk=live&&!pwExpired(live);
+  html+='<div class="pw-actions">';
+  if(reason){
+    html+='<span class="pw-reason">'+esc(reason==='W-4 and I-9 are done'?'W-4 and I-9 are done, so no link is needed.':reason+'.')+'</span>';
+  }else if(liveOk){
+    html+='<button class="btn btn-sm btn-primary" onclick="pcPwShowSend(true)">Resend link</button>';
+  }else{
+    html+='<button class="btn btn-sm btn-primary" onclick="pcPwShowSend('+(live?'true':'false')+')">Send paperwork link</button>';
+  }
+  if(liveOk)html+='<button class="btn btn-sm" onclick="pcPwShowCancel()">Cancel link</button>';
+  html+='</div>';
+
+  var older=[];
+  for(var i=0;i<links.length;i++){if(links[i]!==latest)older.push(links[i]);}
+  if(older.length>0){
+    html+='<div class="pw-hist"><div class="pw-hist-title">Earlier links</div>';
+    for(var j=0;j<older.length&&j<5;j++){
+      html+='<div>'+esc(ivStamp(older[j].created_at))+' by '+esc(older[j].created_by||'staff')+' &middot; '+esc(pwLinkState(older[j]).text)+'</div>';
+    }
+    if(older.length>5)html+='<div>+ '+(older.length-5)+' more</div>';
+    html+='</div>';
+  }
+  html+='</div>';
+  return html;
+}
+
+function pwToBox(c){
+  return'<div style="background:#f0f6ff;border:1px solid #b3d4f7;border-radius:6px;padding:10px 14px;margin-bottom:14px;"><div style="font-size:11px;color:#666;margin-bottom:2px;">To:</div>'+
+    '<div style="font-size:14px;font-weight:500;color:#0c447c;">'+esc(c.email)+'</div>'+
+    '<div style="font-size:11px;color:#666;margin-top:6px;">'+(pwIsTest(c)?'TEST address: [TEST] subject, no CC.':'CC: staffing@camdenco.com')+'</div></div>';
+}
+
+function pcPwShowSend(isResend){
+  if(!pcSelected)return;
+  var c=pcSelected;
+  var reason=pwBlockReason(c);
+  if(reason){alert(reason+'.');return;}
+  var live=pwLive(c.id);
+  var warn='';
+  if(live&&!pwExpired(live))warn='<div style="font-size:12px;color:#d97706;margin-bottom:12px;">Their current link stops working the moment this sends. The email tells them it replaces the earlier one.</div>';
+  var html='<div class="modal-overlay" onclick="pcPipeCloseModal(event)"><div class="modal-box"><h3>'+(isResend?'Resend':'Send')+' paperwork link</h3>'+
+    '<p>Emails '+esc(c.first_name||'them')+' the Popcorn Chez welcome email with a personal link to their W-4 and payroll page. The link works for 30 days, or until their W-4 and I-9 are done.</p>'+
+    pwToBox(c)+warn+'<div id="iv-modal-err" class="error-msg" style="margin-bottom:8px;"></div>'+
+    '<div style="display:flex;gap:8px;"><button class="btn" style="flex:1;" onclick="pcPipeCloseModal(null)">Cancel</button>'+
+    '<button class="btn btn-primary" style="flex:1;" id="iv-modal-btn" onclick="pcPwSend()">'+(isResend?'Resend link':'Send link')+'</button></div></div></div>';
+  document.getElementById('pcpipe-modal').innerHTML=html;
+}
+
+function pcPwSend(){
+  if(!pcSelected)return;
+  var label=(document.getElementById('iv-modal-btn')||{}).innerHTML||'Send link';
+  ivModalBusy('Sending...');
+  pwAction({action:'send',candidate_id:pcSelected.id}).then(function(d){
+    pcPipeCloseModal(null);
+    if(!d.email_sent)alert('The link was created, but the email did not send: '+(d.email_error||'unknown error')+'\n\nTry Resend link in a minute.');
+    loadAll();
+  }).catch(function(err){console.error('Send paperwork link failed:',err);ivModalFail(err,label);});
+}
+
+function pcPwShowCancel(){
+  if(!pcSelected)return;
+  var html='<div class="modal-overlay" onclick="pcPipeCloseModal(event)"><div class="modal-box"><h3>Cancel paperwork link</h3>'+
+    '<p>'+esc(pwName(pcSelected))+'&#39;s link stops working right away. They are not emailed. You can send a new link any time.</p>'+
+    '<div id="iv-modal-err" class="error-msg" style="margin-bottom:8px;"></div>'+
+    '<div style="display:flex;gap:8px;"><button class="btn" style="flex:1;" onclick="pcPipeCloseModal(null)">Keep link</button>'+
+    '<button class="btn btn-danger" style="flex:1;" id="iv-modal-btn" onclick="pcPwCancel()">Cancel link</button></div></div></div>';
+  document.getElementById('pcpipe-modal').innerHTML=html;
+}
+
+function pcPwCancel(){
+  if(!pcSelected)return;
+  ivModalBusy('Cancelling...');
+  pwAction({action:'revoke',candidate_id:pcSelected.id}).then(function(){
+    pcPipeCloseModal(null);loadAll();
+  }).catch(function(err){console.error('Cancel paperwork link failed:',err);ivModalFail(err,'Cancel link');if(err&&err.code==='no_live_link')loadAll();});
+}
+
+// ── Bulk send (Paperwork open filter) ─────────────────────────────────
+function pwSendable(list){var out=[];for(var i=0;i<list.length;i++){if(!pwBlockReason(list[i]))out.push(list[i]);}return out;}
+
+function renderPaperworkBulkBar(list){
+  var n=pwSendable(list).length;
+  var html='<div class="pw-bulk"><strong>'+list.length+'</strong> hired '+(list.length===1?'person':'people')+' in Onboarding with the W-4 still open.';
+  if(list.length>n)html+='<div class="pw-warn">'+(list.length-n)+' cannot get a link (no email on file).</div>';
+  if(n>PW_BULK_MAX){
+    html+='<div class="pw-warn">Up to '+PW_BULK_MAX+' at a time. Narrow the list with the search box.</div><button class="btn btn-sm" disabled style="opacity:0.5;cursor:not-allowed;">Send links to these '+n+'</button>';
+  }else if(n>0){
+    html+='<button class="btn btn-sm btn-primary" onclick="pcPwShowBulk()">Send links to these '+n+'</button>';
+  }
+  html+='</div>';
+  return html;
+}
+
+function pcPwShowBulk(){
+  if(pcFilter!=='paperwork')return;
+  var list=getFiltered();
+  var send=pwSendable(list);
+  if(send.length===0||send.length>PW_BULK_MAX)return;
+  pcPwBulkIds=[];pcPwBulkNames={};
+  var rows='',anyTest=false;
+  for(var i=0;i<list.length;i++){
+    var c=list[i];
+    var reason=pwBlockReason(c);
+    if(reason){
+      rows+='<div class="pw-list-row skip">'+esc(pwName(c))+'<div class="pw-sub">Skipped: '+esc(reason)+'</div></div>';
+      continue;
+    }
+    pcPwBulkIds.push(c.id);pcPwBulkNames[c.id]=pwName(c);
+    if(pwIsTest(c))anyTest=true;
+    var live=pwLive(c.id),note='';
+    if(live&&!pwExpired(live))note='<div class="pw-sub" style="color:#b45309;">Replaces the link sent '+esc(formatDateShort(live.created_at))+(pwEmailFailed(live)?' (that email failed)':'')+'</div>';
+    rows+='<div class="pw-list-row"><strong>'+esc(pwName(c))+'</strong><div class="pw-sub">'+esc(c.email)+(pwIsTest(c)?' &middot; TEST':'')+'</div>'+note+'</div>';
+  }
+  var n=pcPwBulkIds.length;
+  var html='<div class="modal-overlay" onclick="pcPipeCloseModal(event)"><div class="modal-box"><h3>Send paperwork links to '+n+' '+(n===1?'person':'people')+'</h3>'+
+    '<p>Each person gets the Popcorn Chez welcome email with their own W-4 link (CC staffing@camdenco.com'+(anyTest?'; the TEST address gets no CC':'')+'). Any earlier link stops working.</p>'+
+    '<div class="pw-list">'+rows+'</div>'+
+    '<p style="font-size:12px;color:#888;">This takes about a second per person. Keep this tab open until it finishes.</p>'+
+    '<div id="iv-modal-err" class="error-msg" style="margin-bottom:8px;"></div>'+
+    '<div style="display:flex;gap:8px;"><button class="btn" style="flex:1;" onclick="pcPipeCloseModal(null)">Cancel</button>'+
+    '<button class="btn btn-primary" style="flex:1;" id="iv-modal-btn" onclick="pcPwSendBulk()">Send '+n+' link'+(n===1?'':'s')+'</button></div></div></div>';
+  document.getElementById('pcpipe-modal').innerHTML=html;
+}
+
+function pcPwSendBulk(){
+  if(pcPwBulkIds.length===0)return;
+  var n=pcPwBulkIds.length;
+  ivModalBusy('Sending '+n+'...');
+  pwAction({action:'send_bulk',candidate_ids:pcPwBulkIds.slice()}).then(function(d){
+    pcPwShowBulkResults(d);
+    loadAll();
+  }).catch(function(err){
+    console.error('Bulk paperwork send failed:',err);
+    ivModalFail(new Error(ivErrMsg(err)+' Some links may already have gone out. Close this and check the list before sending again.'),'Send '+n+' link'+(n===1?'':'s'));
+    loadAll();
+  });
+}
+
+function pcPwShowBulkResults(d){
+  var results=Array.isArray(d.results)?d.results:[];
+  var rows='';
+  for(var i=0;i<results.length;i++){
+    var r=results[i]||{};
+    var name=pcPwBulkNames[r.candidate_id]||'(unknown)';
+    var line;
+    if(r.ok&&r.email_sent)line='<span class="pw-ok">Sent</span>';
+    else if(r.ok)line='<span class="pw-amber">Link created, but the email failed</span><div class="pw-sub">'+esc(String(r.email_error||'').slice(0,200))+' &middot; Use Resend link on their card.</div>';
+    else line='<span class="pw-bad">Not sent</span><div class="pw-sub">'+esc(r.message||'Unknown error')+'</div>';
+    rows+='<div class="pw-list-row"><strong>'+esc(name)+'</strong> &middot; '+line+'</div>';
+  }
+  var html='<div class="modal-overlay" onclick="pcPipeCloseModal(event)"><div class="modal-box"><h3>Sent '+esc(d.sent)+' of '+esc(d.total)+'</h3>'+
+    '<div class="pw-list">'+rows+'</div>'+
+    '<button class="btn btn-primary" style="width:100%;" onclick="pcPipeCloseModal(null)">Done</button></div></div>';
+  document.getElementById('pcpipe-modal').innerHTML=html;
+  pcPwBulkIds=[];
 }
 
 function init(){
