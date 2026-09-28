@@ -39,6 +39,11 @@ input:focus, select:focus { outline: none; border-color: #2d7dd2; }
 a.btn { text-decoration: none; }
 .meet-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: -4px 0 14px; }
 .upcoming-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.cal-status { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; border-radius: 8px; padding: 10px 14px; font-size: 13px; line-height: 1.5; margin: 0 0 16px; }
+.cal-status .cal-text { flex: 1; min-width: 220px; }
+.cal-ok { background: #eaf6ec; border: 1px solid #b7e0c0; color: #1e6b2e; }
+.cal-bad { background: #fdecea; border: 1px solid #f5c6c2; color: #8b1a1a; }
+.cal-warn { background: #fff8e1; border: 1px solid #ffe082; color: #7a5c00; }
 .error-msg { color: #c0392b; font-size: 12px; margin-top: 6px; }
 .success-msg { color: #1D9E75; font-size: 12px; margin-top: 6px; }
 
@@ -188,6 +193,8 @@ var iaWeekStart=null,iaLoaded=false,iaError=null;
 var iaDraft=null,iaRemovedRules=[],iaDirty=false,iaSaving=false;
 var iaMsg={weekly:'',blackout:'',oneoff:''};
 var iaOneOffOpen=false;
+var iaCal={loaded:false,connected:false,account:null,connected_at:null,connected_by:null,broken_reason:null,expected:null,error:null,busy:false};
+var iaCalResult=null; // outcome code from Google's redirect back (?calendar=...)
 
 function apiHeaders() { return Object.assign({}, pcAuth.headers(), {'Content-Type':'application/json'}); }
 
@@ -463,6 +470,7 @@ function renderMain(){
   if(iaError)return'<div class="section-card"><div class="load-error"><strong>Could not load interview data</strong>'+esc(iaError)+'</div></div>';
   var stats=countStats();
   var html='<p class="page-sub">Set when you interview. Candidates pick from these times using the interview link you send from the Pipeline.</p>';
+  html+=renderCalendarStatus();
   html+=renderAvailabilityBanner();
   html+='<div class="stat-row"><div class="stat-box"><div class="stat-num" style="color:#1D9E75;">'+stats.open+'</div><div class="stat-lbl">Open slots</div></div><div class="stat-box"><div class="stat-num" style="color:#d97706;">'+stats.booked+'</div><div class="stat-lbl">Booked</div></div><div class="stat-box"><div class="stat-num" style="color:#2d7dd2;">'+stats.thisWeek+'</div><div class="stat-lbl">This week</div></div></div>';
   html+=renderQueue();
@@ -934,6 +942,7 @@ function iaConfirm(requestId,slotId){
   if(!confirm('Book '+(req?iaCandName(req):'this candidate')+' for '+iaSlotLabel(slot)+'?\n\nThe confirmation email with the Google Meet link goes out right away.'))return;
   iaStaff({action:'confirm',request_id:requestId,slot_id:slotId}).then(function(d){
     if(!d.email_sent)alert('Booked, but the confirmation email did not send: '+(d.email_error||'unknown error')+'\n\nContact the candidate directly.');
+    if(d.calendar_error)alert('Booked, but Google did not send the candidate a calendar invitation: '+d.calendar_error+'\n\nThe confirmation email still has their Meet link.');
     return loadData();
   }).catch(function(err){console.error('Confirm failed:',err);alert('Not booked. '+iaErrText(err));return loadData();});
 }
@@ -983,6 +992,7 @@ function iaCancelBooking(bookingId){
   iaStaff({action:'cancel',booking_id:bookingId,reason:(r&&r.value.trim())||null,notify:notify,stage_to:'contacted'}).then(function(d){
     iaCloseModal(null);
     if(notify&&!d.email_sent)alert('The interview is cancelled, but the email to the candidate did not send: '+(d.email_error||'unknown error'));
+    if(d.calendar_error)alert('The interview is cancelled, but it could not be removed from the staffing@ Google Calendar: '+d.calendar_error+'\n\nDelete it there by hand.');
     return loadData();
   }).catch(function(err){console.error('Cancel failed:',err);iaModalFail(err,'Cancel interview');});
 }
@@ -1031,6 +1041,7 @@ function iaMove(bookingId){
   iaStaff({action:'move',booking_id:bookingId,slot_id:sel.value}).then(function(d){
     iaCloseModal(null);
     if(!d.email_sent)alert('Moved to '+(d.when||label)+', but the email did not send: '+(d.email_error||'unknown error')+'\n\nContact the candidate directly.');
+    if(d.calendar_error)alert('Moved to '+(d.when||label)+', but the Google Calendar event did not update: '+d.calendar_error+'\n\nChange the time on the staffing@ calendar by hand so the candidate\'s invite matches.');
     return loadData();
   }).catch(function(err){console.error('Move failed:',err);if(btn){btn.disabled=false;btn.textContent='Move';}iaModalError(err);});
 }
@@ -1072,7 +1083,8 @@ function iaMeetActionsHtml(b,small){
   var meet=iaMeetUrl(b),gcal=iaGcalUrl(b),cls=small?'btn btn-sm':'btn',h='';
   if(meet)h+='<a class="'+cls+'" href="'+esc(meet)+'" target="_blank" rel="noopener">Join Meet</a>';
   if(meet&&!small)h+='<button class="'+cls+'" onclick="iaCopyMeet(this,\''+b.id+'\')">Copy Meet link</button>';
-  if(gcal)h+='<a class="'+cls+'" href="'+esc(gcal)+'" target="_blank" rel="noopener">'+(small?'Add to calendar':'Add to my Google Calendar')+'</a>';
+  // Phase 2 bookings are already on the staffing@ calendar; only older ones need the manual add.
+  if(gcal&&!b.calendar_event_id)h+='<a class="'+cls+'" href="'+esc(gcal)+'" target="_blank" rel="noopener">'+(small?'Add to calendar':'Add to my Google Calendar')+'</a>';
   return h;
 }
 function iaCopyMeet(btn,bookingId){
@@ -1080,6 +1092,82 @@ function iaCopyMeet(btn,bookingId){
   function flash(){if(!btn)return;btn.textContent='Copied';setTimeout(function(){btn.textContent='Copy Meet link';},1500);}
   function fallback(){window.prompt('Copy the Google Meet link:',url);}
   if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(url).then(flash,fallback);}else{fallback();}
+}
+
+// ---- Google Calendar connection (Phase 2) ----------------------------------
+// google-calendar-connect holds staffing@'s approval. Without it, confirming or
+// booking is refused (nothing is ever booked on a shared Meet link again).
+var IA_CAL_FN_URL=SUPABASE_URL+'/functions/v1/google-calendar-connect';
+var IA_CAL_RESULTS={
+  connected:['ok','Google Calendar is connected. New interviews go on the staffing@ calendar with their own Meet link.'],
+  denied:['bad','Google Calendar was not connected: the approval was cancelled on the Google screen.'],
+  wrong_account:['bad','That Google account is not staffing@camdenco.com, so nothing was saved. Click Connect again and pick staffing@ on the Google screen.'],
+  missing_scope:['bad','Calendar access was not ticked on the Google screen, so nothing was saved. Click Connect again and allow calendar access.'],
+  no_refresh:['bad','Google did not return a lasting approval. Click Connect again.'],
+  expired:['bad','That approval took too long or was already used. Click Connect again.'],
+  invalid:['bad','That approval link was not valid. Click Connect again.'],
+  config:['bad','Google Calendar is not set up on the server yet. Ask Keith.'],
+  error:['bad','Something went wrong connecting Google Calendar. Click Connect again.']
+};
+function iaCalFn(body){
+  return fetch(IA_CAL_FN_URL,{method:'POST',headers:apiHeaders(),body:JSON.stringify(body)}).then(function(r){
+    return r.text().then(function(t){
+      var d=null;try{d=t?JSON.parse(t):null;}catch(e){d=null;}
+      if(!r.ok||!d||d.ok!==true){
+        var err=new Error((d&&d.message)?d.message:('HTTP '+r.status+' from google-calendar-connect'));
+        err.status=r.status;err.authFailed=(r.status===401);throw err;
+      }
+      return d;
+    });
+  });
+}
+function iaReadCalResult(){
+  var m=/[?&]calendar=([a-z_]+)/.exec(window.location.search);
+  if(!m)return;
+  iaCalResult=IA_CAL_RESULTS[m[1]]?m[1]:'error';
+  if(window.history&&window.history.replaceState)window.history.replaceState(null,'',window.location.pathname);
+}
+function iaLoadCalStatus(){
+  return iaCalFn({action:'status'}).then(function(d){
+    iaCal.loaded=true;iaCal.error=null;iaCal.connected=!!d.connected;iaCal.account=d.account||null;
+    iaCal.connected_at=d.connected_at||null;iaCal.connected_by=d.connected_by||null;
+    iaCal.broken_reason=d.broken_reason||null;iaCal.expected=d.expected_account||null;
+  }).catch(function(err){
+    console.error('Calendar status failed:',err);iaCal.loaded=true;iaCal.error=iaErrText(err);
+  }).then(function(){if(iaLoaded)render();});
+}
+function iaConnectCalendar(){
+  if(iaCal.busy)return;
+  iaCal.busy=true;render();
+  iaCalFn({action:'start'}).then(function(d){
+    window.location.href=d.url;
+  }).catch(function(err){
+    console.error('Calendar connect failed:',err);iaCal.busy=false;
+    iaCal.error='Could not start the Google approval: '+iaErrText(err);render();
+  });
+}
+function renderCalendarStatus(){
+  var html='';
+  if(iaCalResult){
+    var r=IA_CAL_RESULTS[iaCalResult];
+    html+='<div class="cal-status '+(r[0]==='ok'?'cal-ok':'cal-bad')+'"><div class="cal-text">'+esc(r[1])+'</div><button class="btn btn-sm" onclick="iaCalResult=null;render();">Dismiss</button></div>';
+  }
+  if(!iaCal.loaded)return html+'<div class="cal-status cal-warn"><div class="cal-text">Checking the Google Calendar connection...</div></div>';
+  var who=iaCal.expected||'staffing@camdenco.com';
+  var btn='<button class="btn '+(iaCal.connected?'btn-sm':'btn-primary')+'" '+(iaCal.busy?'disabled ':'')+'onclick="iaConnectCalendar()">'+
+    (iaCal.busy?'Opening Google...':(iaCal.connected?'Reconnect':'Connect Google Calendar'))+'</button>';
+  if(iaCal.error){
+    return html+'<div class="cal-status cal-warn"><div class="cal-text"><strong>Google Calendar:</strong> '+esc(iaCal.error)+'</div>'+btn+'</div>';
+  }
+  if(iaCal.connected){
+    var since=iaCal.connected_at?new Date(iaCal.connected_at).toLocaleDateString('en-US',{month:'short',day:'numeric'}):'';
+    return html+'<div class="cal-status cal-ok"><div class="cal-text"><strong>Google Calendar connected</strong> as '+esc(iaCal.account||who)+
+      (since?' since '+esc(since):'')+(iaCal.connected_by?' by '+esc(iaCal.connected_by):'')+
+      '. New interviews go on that calendar with their own Meet link, and Google sends the candidate the invitation.</div>'+btn+'</div>';
+  }
+  return html+'<div class="cal-status cal-bad"><div class="cal-text"><strong>Google Calendar is '+(iaCal.broken_reason?'disconnected':'not connected')+'.</strong> '+
+    'Confirming and booking interviews won\'t work until it is. Click Connect and, on the Google screen, choose <strong>'+esc(who)+'</strong>.'+
+    (iaCal.broken_reason?'<br><span style="font-size:12px;">'+esc(iaCal.broken_reason)+'</span>':'')+'</div>'+btn+'</div>';
 }
 
 function iaCloseModal(e){if(e?e.target===e.currentTarget:true)document.getElementById('ia-modal').innerHTML='';}
@@ -1091,7 +1179,9 @@ pcAuth.require({
     // Header + user pill painted by pc-nav.js — no manual setup here.
     pcActivity.init('interviews');
     initWeekStart();
+    iaReadCalResult();
     loadData();
+    iaLoadCalStatus();
   }
 });
 </script>
