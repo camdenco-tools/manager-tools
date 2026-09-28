@@ -535,6 +535,12 @@ var SB_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
 var HANDBOOK_VERSION = '2026-04-24'; // mirror /handbook-signatures/ — update if the handbook rolls
 var MAX_WINDOW_DAYS = 60;
 var NON_SALES_STANDS = { 'support staff': 1, 'hawking': 1, 'non-event labor': 1, 'client staffing needs': 1 };
+/* Placements on these stands never appear on a sign-in sheet. A live
+   (non-removed) placement is presumed to have shown for actual labor. */
+var PRESUMED_PRESENT_STANDS = { 'support staff': 1 };
+/* Venues that don't run sign-in sheets. Every live placement is presumed
+   present for actual labor, and the sign-in check reads n/a, not red. */
+var NO_SIGNIN_VENUES = {}; // rebuilt on every load from venues.uses_signin_sheets
 /* Someone on the sign-in sheet with no placement row has no role, so no rate.
    true  = price them at the event's average placed rate (disclosed in caption)
    false = leave them out entirely (actual payroll % reads low) */
@@ -754,7 +760,7 @@ async function loadData() {
       SB_URL + '/rest/v1/handbook_signatures?handbook_version=eq.' + HANDBOOK_VERSION +
         '&select=employee_first_name,employee_last_name&limit=5000',
       SB_URL + '/rest/v1/employees?is_active=eq.true&select=id,first_name,last_name,shirt_size,home_venue&limit=5000',
-      SB_URL + '/rest/v1/venues?select=id,code&limit=200',
+      SB_URL + '/rest/v1/venues?select=id,code,uses_signin_sheets&limit=200',
       SB_URL + '/rest/v1/roles?select=id,name&limit=200',
       SB_URL + '/rest/v1/employee_venue_roles?is_active=eq.true&pay_rate_override=not.is.null' +
         '&select=employee_id,venue_id,role_id,pay_rate_override&limit=5000',
@@ -766,7 +772,8 @@ async function loadData() {
         '&select=event_date,venue,sent_at,sender_name,resend_id&order=sent_at.asc&limit=5000',
       SB_URL + '/rest/v1/prep_wholesale_needs?need_date=gte.' + start + '&need_date=lte.' + endBound +
         '&deleted_at=is.null&select=venue_code,need_date&limit=5000',
-      SB_URL + '/rest/v1/prep_claims?is_active=eq.true&select=venue_code,week_start&limit=5000'
+      SB_URL + '/rest/v1/prep_claims?is_active=eq.true&select=venue_code,week_start&limit=5000',
+      SB_URL + '/rest/v1/v_sms_consent_state?select=first_name,last_name,state,is_sendable&limit=1000'
     ];
     var res = await Promise.all(urls.map(function(u) {
       return fetch(u, { headers: apiHeaders() }).then(function(r) { return r.json(); });
@@ -777,6 +784,8 @@ async function loadData() {
     // venue_id -> code, role_id -> name (so overrides can key on the same
     // venue code + canonical role name that getPayRate uses).
     var venueCodeById = {}; venuesArr.forEach(function(v) { venueCodeById[v.id] = v.code; });
+    NO_SIGNIN_VENUES = {};
+    venuesArr.forEach(function(v) { if (v.uses_signin_sheets === false && v.code) NO_SIGNIN_VENUES[v.code] = 1; });
     var roleNameById = {}; rolesArr.forEach(function(r) { roleNameById[r.id] = r.name; });
 
     // full name -> employee id (placements record staff_name, not id).
@@ -795,7 +804,7 @@ async function loadData() {
     // child rows keyed by sale_id
     var saleIds = sales.map(function(r) { return r.id; }).filter(Boolean);
     var photos = saleIds.length ? await fetchBySaleIds('sale_photos', 'sale_id,photo_type', saleIds) : [];
-    var ssa = saleIds.length ? await fetchBySaleIds('sale_staff_assignments', 'sale_id,raw_name_text', saleIds) : [];
+    var ssa = saleIds.length ? (await fetchBySaleIds('sale_staff_assignments', 'sale_id,raw_name_text,worked_cart', saleIds)).filter(function(a) { return a.worked_cart !== false; }) : [];
 
     // Indexes
     var salesByEvent = {};
@@ -823,6 +832,11 @@ async function loadData() {
     // ---- Planning band indexes ----
     var availRows = res[8] || [], palRows = res[9] || [], emailLog = res[10] || [],
         prepNeeds = res[11] || [], prepClaims = res[12] || [];
+    var smsRows = Array.isArray(res[13]) ? res[13] : [];
+    var smsByName = {};
+    smsRows.forEach(function(r) {
+      smsByName[normName((r.first_name || '') + ' ' + (r.last_name || ''))] = { state: r.state, sendable: r.is_sendable === true };
+    });
     var availByEvent = {};
     availRows.forEach(function(r) { (availByEvent[r.event_id] = availByEvent[r.event_id] || []).push(r); });
     var palByEvent = {};
@@ -850,6 +864,7 @@ async function loadData() {
       nameToEmpId: nameToEmpId, overrideRate: overrideRate,
       availByEvent: availByEvent, palByEvent: palByEvent, emailKeySet: emailKeySet, emailSendsByKey: emailSendsByKey,
       prepNeedsKeySet: prepNeedsKeySet, claimsByVenue: claimsByVenue, nameToHomeVenue: nameToHomeVenue,
+      smsByName: smsByName,
       ratesReady: ratesReady
     };
 
@@ -1156,17 +1171,35 @@ function buildEvent(ev, ctx) {
   var avgPlacedRate = placedRates.length
     ? placedRates.reduce(function(a, b) { return a + b; }, 0) / placedRates.length : null;
   var actualSumRate = 0, signinPriced = 0, walkOns = 0;
+  var countedSet = {};
   signinNames.forEach(function(n) {
+    countedSet[n] = 1;
     if (rateByName.hasOwnProperty(n)) { actualSumRate += rateByName[n]; signinPriced++; }
     else if (WALKON_AVG_RATE && avgPlacedRate != null) { actualSumRate += avgPlacedRate; walkOns++; }
   });
-  var actualLabor = (hours != null && (signinPriced + walkOns) > 0) ? actualSumRate * hours : null;
+  /* Support staff never sign a stand sheet. A live placement on a
+     PRESUMED_PRESENT stand counts as showed; Schedule Assistant removals set
+     removed_at and are already out of evPA. Anyone who also signed in on a
+     sales stand was counted above and is skipped here (counted once). */
+  var noSignin = !!NO_SIGNIN_VENUES[ev.venue];
+  var presumedPresent = [];
+  evPA.forEach(function(pp) {
+    if (!noSignin && !PRESUMED_PRESENT_STANDS[normName(pp.stand)]) return;
+    var k = normName(pp.staff_name);
+    if (!k || countedSet[k]) return;
+    var rt = ctx.ratesReady ? effectiveRate(pp, ctx) : null;
+    if (rt == null) return;
+    countedSet[k] = 1;
+    presumedPresent.push({ stand: pp.stand || '(unspecified)', rate: rt });
+    actualSumRate += rt;
+  });
+  var actualLabor = (hours != null && (signinNames.length > 0 || noSignin) && (signinPriced + walkOns + presumedPresent.length) > 0) ? actualSumRate * hours : null;
   var actualPayrollPct = (actualLabor != null && actualTotal > 0) ? (actualLabor / actualTotal * 100) : null;
   var actualReason = null;
   if (actualPayrollPct == null) {
-    if (!signinNames.length) actualReason = 'no sign-in names';
+    if (!signinNames.length && !noSignin) actualReason = 'no sign-in names';
     else if (hours == null) actualReason = 'missing gates/end time';
-    else if (signinPriced + walkOns === 0) actualReason = 'no sign-in name matched a priced placement';
+    else if (signinPriced + walkOns + presumedPresent.length === 0) actualReason = noSignin ? 'no priced placements' : 'no sign-in name matched a priced placement';
     else if (!(actualTotal > 0)) actualReason = 'no sales logged';
   }
 
@@ -1197,6 +1230,9 @@ function buildEvent(ev, ctx) {
         actualLaborByStand[st] = (actualLaborByStand[st] || 0) + rt * hours;
       });
     });
+    presumedPresent.forEach(function(p) {
+      actualLaborByStand[p.stand] = (actualLaborByStand[p.stand] || 0) + p.rate * hours;
+    });
   }
   Object.keys(plannedLaborByStand).forEach(function(st) {
     var found = false;
@@ -1211,7 +1247,7 @@ function buildEvent(ev, ctx) {
   });
 
   var scheduledHeadcount = placementsTotal;
-  var showedHeadcount = actualHeadcount;
+  var showedHeadcount = noSignin ? (actualHeadcount || presumedPresent.length) : actualHeadcount + presumedPresent.length;
 
   // ---- R1: staffed sales-stands logged ----
   var staffedStands = uniq(evPA.map(function(r) { return r.stand; })
@@ -1232,14 +1268,23 @@ function buildEvent(ev, ctx) {
     var sz = ctx.empShirt[normName(n)];
     return sz !== undefined && (!sz || !String(sz).trim());
   });
+  /* Scheduled but not textable. Mirrors the Text Consent page: sendable is
+     the view's is_sendable, nothing recomputed here. Names not found in the
+     view (inactive / unmatched) are skipped, same as the shirt-size check.
+     Informational only: does not affect the Reporting band. */
+  var notTextable = [];
+  schedNames.forEach(function(n) {
+    var s = ctx.smsByName[normName(n)];
+    if (s && !s.sendable) notTextable.push({ name: n, state: s.state });
+  });
 
   // ---- Planning band ----
   var planning = buildPlanning(ev, ctx, plannedHeadcount);
 
   // ---- bands + grade ----
   var finBand = noForecast ? 'na' : (actualTotal >= forecastTotal ? 'green' : 'amber');
-  var redReport = (standsLogged.total > 0 && missingLogged.length > 0) || register.state === 'none' || signin.state === 'none';
-  var amberReport = register.state === 'partial' || signin.state === 'partial' || missingHandbook.length > 0 || missingShirt.length > 0;
+  var redReport = (standsLogged.total > 0 && missingLogged.length > 0) || register.state === 'none' || (!noSignin && signin.state === 'none');
+  var amberReport = register.state === 'partial' || (!noSignin && signin.state === 'partial') || missingHandbook.length > 0 || missingShirt.length > 0;
   var reportBand = redReport ? 'red' : (amberReport ? 'amber' : 'green');
   var grade = gradeOf([finBand, planning.band, reportBand]);
 
@@ -1258,6 +1303,7 @@ function buildEvent(ev, ctx) {
       forecastPerPerson: forecastPerPerson, actualPerPerson: actualPerPerson,
       plannedPayrollPct: plannedPayrollPct, actualPayrollPct: actualPayrollPct,
       actualReason: actualReason, signinPriced: signinPriced, walkOns: walkOns,
+      presumedCount: presumedPresent.length, noSignin: noSignin,
       payrollReason: payrollReason, priced: priced, placementsTotal: placementsTotal,
       unpriced: unpriced, hours: hours, overridden: overridden,
       scheduledHeadcount: scheduledHeadcount, showedHeadcount: showedHeadcount,
@@ -1268,6 +1314,7 @@ function buildEvent(ev, ctx) {
       fields: { register: register, signin: signin, units: units },
       missingHandbook: missingHandbook,
       missingShirt: missingShirt,
+      notTextable: notTextable,
       eventNotes: ev.manager_notes || null
     },
     plan: planning
@@ -1342,15 +1389,18 @@ function renderFinancials(ev) {
   if (f.actualPayrollPct == null) {
     acap = 'Actual payroll % \u2014 can\u2019t compute (' + (f.actualReason || 'missing inputs') + ').';
   } else {
-    acap = 'Actual = the ' + (f.signinPriced + f.walkOns) + ' who signed in, at their own rate \u00d7 scheduled hours, over actual gross sales' +
-      (f.walkOns > 0 ? ' \u00b7 ' + f.walkOns + ' signed in without a placement, priced at the event average' : '') + '.';
+    acap = f.noSignin
+      ? 'Actual = all ' + f.presumedCount + ' still on the schedule (no sign-in sheets at this venue), at their own rate \u00d7 scheduled hours, over actual gross sales.'
+      : 'Actual = the ' + (f.signinPriced + f.walkOns) + ' who signed in, at their own rate \u00d7 scheduled hours, over actual gross sales' +
+      (f.walkOns > 0 ? ' \u00b7 ' + f.walkOns + ' signed in without a placement, priced at the event average' : '') +
+      (f.presumedCount > 0 ? ' \u00b7 ' + f.presumedCount + ' support staff presumed present (still on the schedule)' : '') + '.';
   }
   html += '<div style="font-size:11px;color:var(--label);margin-top:2px;font-style:italic;">' + acap +
     ' <strong>Hours are scheduled, not clocked.</strong></div>';
   if (f.scheduledHeadcount > 0 || f.showedHeadcount > 0) {
     var shColor = (f.showedHeadcount < f.scheduledHeadcount) ? 'var(--amber-dark)' : 'var(--slate)';
     html += '<div style="font-size:11px;color:' + shColor + ';margin-top:4px;font-weight:600;">' +
-      'Staffing: scheduled ' + f.scheduledHeadcount + ' \u00b7 showed ' + (f.showedHeadcount || 0) + ' (from sign-in)</div>';
+      'Staffing: scheduled ' + f.scheduledHeadcount + ' \u00b7 showed ' + (f.showedHeadcount || 0) + (f.noSignin ? ' (from staff count)' : ' (from sign-in)') + '</div>';
   }
   html += '<div class="payroll-pair perperson-pair">' +
     '<div class="payroll-one planned"><div class="po-num">' + (f.forecastPerPerson == null ? '\u2014' : money(f.forecastPerPerson)) + '</div><div class="po-sub">Forecast $/person</div></div>' +
@@ -1518,11 +1568,16 @@ function renderReporting(ev) {
     return h;
   }
   html += fieldRow('reg', r.fields.register, 'Register photo on file', '', false);
-  html += fieldRow('sign', r.fields.signin, 'Sign-in sheet attached', '(drives tips, $/person, showed-vs-scheduled)', false);
+  if (ev.fin.noSignin) {
+    html += '<div class="check-row">' + ckIco('na') + '<span class="ck-label">Sign-in sheet attached</span>' +
+      '<span class="ck-detail">Not used at this venue</span></div>';
+  } else {
+    html += fieldRow('sign', r.fields.signin, 'Sign-in sheet attached', '(drives tips, $/person, showed-vs-scheduled)', false);
+  }
   html += fieldRow('units', r.fields.units, 'Units photo on file', '(optional, low weight)', true);
   html += '</div>'; // check-list
 
-  if (r.fields.signin.state === 'none') {
+  if (r.fields.signin.state === 'none' && !ev.fin.noSignin) {
     html += '<div style="font-size:11px;color:var(--red);background:var(--red-light);border:1px solid var(--red-border);padding:8px 10px;border-radius:6px;margin-bottom:12px;">' +
       '\u26D4 No sign-in sheet means no tips report, no sales-per-person, and no showed-vs-scheduled for this event. This knocks out a whole chain.</div>';
   }
@@ -1542,6 +1597,44 @@ function renderReporting(ev) {
     html += '<div class="empty-good">\u2713 Everyone scheduled has a shirt size on file.</div>';
   } else {
     html += chipList(r.missingShirt, false);
+  }
+  html += '</div>';
+
+  // R8 — not opted in for texts, grouped by reason (informational).
+  // A group only renders when someone is in it.
+  var SMS_GROUPS = [
+    { key: 'not_consented', title: 'Not consented yet',
+      note: 'Talk with them and have them visit the availability page and check the \u201cText me about my shifts\u201d box. Consent has to come from them \u2014 a manager can\u2019t record it.' },
+    { key: 'no_phone', title: 'No phone number on file',
+      note: 'Get a phone number on their employee record first, then have them opt in on the availability page.' },
+    { key: 'recheck', title: 'Needs recheck',
+      note: 'They consented to a different number than the one now on file. Have them re-check the box on the availability page so consent attaches to their current number.' },
+    { key: 'opted_out', title: 'Opted out (replied STOP)',
+      note: 'The availability page can\u2019t undo this. They can only turn texts back on by texting START to (856) 454-8949 from their own phone.' }
+  ];
+  function smsGroupHtml(title, names, note, red) {
+    return '<div style="margin:8px 0 12px;">' +
+      '<div style="font-size:11px;font-weight:700;color:' + (red ? 'var(--red)' : 'var(--primary)') + ';margin-bottom:5px;">' +
+        escapeHtml(title) + ' <span style="font-weight:400;color:var(--label);">(' + names.length + ')</span></div>' +
+      chipList(names, red) +
+      (note ? '<div style="font-size:11px;color:var(--label);font-style:italic;margin-top:5px;line-height:1.5;">' + escapeHtml(note) + '</div>' : '') +
+      '</div>';
+  }
+  html += '<div class="history-block"><div class="hb-title">On schedule, not opted in for texts</div>';
+  if (!r.notTextable.length) {
+    html += '<div class="empty-good">\u2713 Everyone scheduled can receive scheduling texts.</div>';
+  } else {
+    var smsKnown = {};
+    SMS_GROUPS.forEach(function(g) {
+      smsKnown[g.key] = 1;
+      var names = r.notTextable.filter(function(p) { return p.state === g.key; })
+        .map(function(p) { return p.name; });
+      if (names.length) html += smsGroupHtml(g.title, names, g.note, g.key === 'opted_out');
+    });
+    // Safety net: a state the view adds later still shows, rather than vanishing.
+    var otherNames = r.notTextable.filter(function(p) { return !smsKnown[p.state]; })
+      .map(function(p) { return p.name; });
+    if (otherNames.length) html += smsGroupHtml('Not sendable', otherNames, 'Check the Text Consent page for details.', false);
   }
   html += '</div>';
 
