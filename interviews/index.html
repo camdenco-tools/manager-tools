@@ -36,6 +36,9 @@ input:focus, select:focus { outline: none; border-color: #2d7dd2; }
 .btn-danger { background: #e74c3c; color: #fff; border-color: #e74c3c; }
 .btn-danger:hover { background: #c0392b; }
 .btn-sm { padding: 4px 10px; font-size: 12px; }
+a.btn { text-decoration: none; }
+.meet-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: -4px 0 14px; }
+.upcoming-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .error-msg { color: #c0392b; font-size: 12px; margin-top: 6px; }
 .success-msg { color: #1D9E75; font-size: 12px; margin-top: 6px; }
 
@@ -623,7 +626,7 @@ function renderUpcoming(){
       var nameParts=name.split(' ');var initials=((nameParts[0]?nameParts[0][0]:'')+(nameParts.length>1?nameParts[nameParts.length-1][0]:'')).toUpperCase();
       var slotDate=parseDate(slot.slot_date);var diffDays=Math.ceil((slotDate.getTime()-new Date().getTime())/86400000);
       var badge=diffDays<=0?'<span class="upcoming-badge" style="background:#fdecea;color:#8b1a1a;">Today</span>':diffDays===1?'<span class="upcoming-badge" style="background:#fff8e1;color:#7a5c00;">Tomorrow</span>':'<span class="upcoming-badge" style="background:#e6f1fb;color:#185fa5;">In '+diffDays+' days</span>';
-      html+='<div class="upcoming-row"><div class="upcoming-avatar">'+esc(initials)+'</div><div style="flex:1;"><div class="upcoming-name">'+esc(name)+'</div><div class="upcoming-time">'+formatDateNice(slot.slot_date)+' at '+formatTime12(hhmm(slot.start_time))+'</div>'+(b.candidate_phone?'<div class="upcoming-phone">'+esc(b.candidate_phone)+'</div>':'')+(b.invite_sent_at?'':'<div class="upcoming-phone" style="color:#c0392b;font-weight:600;">Confirmation email not sent</div>')+'</div>'+badge+'<button class="btn btn-sm" onclick="iaSlotClick(\''+b.slot_id+'\')">View</button></div>';
+      html+='<div class="upcoming-row"><div class="upcoming-avatar">'+esc(initials)+'</div><div style="flex:1;"><div class="upcoming-name">'+esc(name)+'</div><div class="upcoming-time">'+formatDateNice(slot.slot_date)+' at '+formatTime12(hhmm(slot.start_time))+'</div>'+(b.candidate_phone?'<div class="upcoming-phone">'+esc(b.candidate_phone)+'</div>':'')+(b.invite_sent_at?'':'<div class="upcoming-phone" style="color:#c0392b;font-weight:600;">Confirmation email not sent</div>')+'</div>'+badge+'<div class="upcoming-actions">'+iaMeetActionsHtml(b,true)+'<button class="btn btn-sm" onclick="iaSlotClick(\''+b.slot_id+'\')">View</button></div></div>';
     }
   }
   html+='</div>';
@@ -784,7 +787,7 @@ function iaSlotClick(slotId){
   var html='<div class="modal-overlay" onclick="iaCloseModal(event)"><div class="modal-box"><h3>'+formatDateNice(slot.slot_date)+' at '+t12+'</h3><p>'+slot.duration_minutes+' minute slot &middot; '+(isRule?'&#8635; from your weekly schedule':'one-off time')+(pc?' &middot; '+plural(pc,'candidate request'):'')+'</p>';
   var close='<button class="btn" style="flex:1;" onclick="iaCloseModal(null)">Close</button>';
   if(booking){
-    html+='<div style="background:#fff8e1;border:1px solid #ffe082;border-radius:6px;padding:12px;margin-bottom:14px;"><div style="font-size:11px;color:#7a5c00;font-weight:600;text-transform:uppercase;margin-bottom:6px;">Booked by</div><div style="font-size:15px;font-weight:500;color:#78350f;">'+esc(booking.candidate_name||'')+'</div>'+(booking.candidate_phone?'<div style="font-size:13px;color:#92400e;margin-top:2px;">'+esc(booking.candidate_phone)+'</div>':'')+(booking.candidate_email?'<div style="font-size:13px;color:#92400e;margin-top:2px;">'+esc(booking.candidate_email)+'</div>':'')+(booking.booked_at?'<div style="font-size:11px;color:#a16207;margin-top:6px;">Booked '+new Date(booking.booked_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+'</div>':'')+(booking.invite_sent_at?'<div style="font-size:11px;color:#a16207;margin-top:2px;">Confirmation emailed '+new Date(booking.invite_sent_at).toLocaleDateString('en-US',{month:'short',day:'numeric'})+'</div>':'<div style="font-size:12px;color:#c0392b;font-weight:600;margin-top:4px;">Confirmation email was not sent. Contact the candidate.</div>')+'</div>'+iaChangeTimeHtml(booking)+'<div id="ia-modal-msg"></div><div style="display:flex;gap:8px;flex-wrap:wrap;">'+close+'<button class="btn" style="flex:1;" onclick="iaReschedule(\''+booking.id+'\')">Reschedule (new link)</button><button class="btn btn-danger" style="flex:1;" onclick="iaShowCancel(\''+booking.id+'\')">Cancel interview</button></div>';
+    html+='<div style="background:#fff8e1;border:1px solid #ffe082;border-radius:6px;padding:12px;margin-bottom:14px;"><div style="font-size:11px;color:#7a5c00;font-weight:600;text-transform:uppercase;margin-bottom:6px;">Booked by</div><div style="font-size:15px;font-weight:500;color:#78350f;">'+esc(booking.candidate_name||'')+'</div>'+(booking.candidate_phone?'<div style="font-size:13px;color:#92400e;margin-top:2px;">'+esc(booking.candidate_phone)+'</div>':'')+(booking.candidate_email?'<div style="font-size:13px;color:#92400e;margin-top:2px;">'+esc(booking.candidate_email)+'</div>':'')+(booking.booked_at?'<div style="font-size:11px;color:#a16207;margin-top:6px;">Booked '+new Date(booking.booked_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+'</div>':'')+(booking.invite_sent_at?'<div style="font-size:11px;color:#a16207;margin-top:2px;">Confirmation emailed '+new Date(booking.invite_sent_at).toLocaleDateString('en-US',{month:'short',day:'numeric'})+'</div>':'<div style="font-size:12px;color:#c0392b;font-weight:600;margin-top:4px;">Confirmation email was not sent. Contact the candidate.</div>')+'</div>'+'<div class="meet-actions">'+iaMeetActionsHtml(booking,false)+'</div>'+(iaMeetUrl(booking)?'':'<div style="font-size:12px;color:#c0392b;font-weight:600;margin:-8px 0 14px;">No Google Meet link is saved on this booking.</div>')+iaChangeTimeHtml(booking)+'<div id="ia-modal-msg"></div><div style="display:flex;gap:8px;flex-wrap:wrap;">'+close+'<button class="btn" style="flex:1;" onclick="iaReschedule(\''+booking.id+'\')">Reschedule (new link)</button><button class="btn btn-danger" style="flex:1;" onclick="iaShowCancel(\''+booking.id+'\')">Cancel interview</button></div>';
   }else if(pc){
     html+=iaSlotPickersHtml(slotId)+'<div id="ia-modal-msg"></div><div style="display:flex;gap:8px;">'+close+'</div>';
   }else if(isPast(slot.slot_date,slot.start_time)){
@@ -1039,6 +1042,44 @@ function iaReschedule(bookingId){
     if(!d.email_sent)alert('The interview was cancelled and a new link was created, but the email did not send: '+(d.email_error||'unknown error')+'\n\nUse Resend on their Pipeline card.');
     return loadData();
   }).catch(function(err){console.error('Reschedule failed:',err);iaModalError(err);alert('Not rescheduled. '+iaErrText(err));return loadData();});
+}
+
+// ---- Google Meet link + "Add to my Google Calendar" -------------------------
+// Fallback until the Calendar API (Phase 2) puts interviews on the calendar
+// automatically. meet_url is stamped on each booking by the column default.
+// Slot times are Eastern wall-clock, so the calendar link sends them with
+// ctz=America/New_York rather than converting to UTC here.
+function getBookingById(id){for(var i=0;i<iaBookings.length;i++){if(iaBookings[i].id===id)return iaBookings[i];}return null;}
+function iaMeetUrl(b){var u=(b&&b.meet_url)?String(b.meet_url).trim():'';return /^https:\/\/meet\.google\.com\/[a-z0-9-]+$/i.test(u)?u:'';}
+function iaGcalStamp(d){return d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')+'T'+String(d.getHours()).padStart(2,'0')+String(d.getMinutes()).padStart(2,'0')+'00';}
+function iaGcalUrl(b){
+  var slot=b?b.interview_slots:null;if(!slot||!slot.slot_date||!slot.start_time)return'';
+  var p=String(slot.start_time).split(':');var sd=parseDate(slot.slot_date);
+  var h=parseInt(p[0]),m=parseInt(p[1]),dur=slot.duration_minutes||30;
+  var start=new Date(sd.getFullYear(),sd.getMonth(),sd.getDate(),h,m);
+  var end=new Date(sd.getFullYear(),sd.getMonth(),sd.getDate(),h,m+dur);
+  var name=b.candidate_name||'Candidate';var meet=iaMeetUrl(b);
+  var lines=[name,b.candidate_phone||'',b.candidate_email||'',meet?'Google Meet: '+meet:''];
+  var details=lines.filter(function(x){return x;}).join('\n');
+  return 'https://calendar.google.com/calendar/render?action=TEMPLATE'+
+    '&text='+encodeURIComponent('Popcorn Chez interview - '+name)+
+    '&dates='+iaGcalStamp(start)+'/'+iaGcalStamp(end)+
+    '&ctz='+encodeURIComponent('America/New_York')+
+    (meet?'&location='+encodeURIComponent(meet):'')+
+    '&details='+encodeURIComponent(details);
+}
+function iaMeetActionsHtml(b,small){
+  var meet=iaMeetUrl(b),gcal=iaGcalUrl(b),cls=small?'btn btn-sm':'btn',h='';
+  if(meet)h+='<a class="'+cls+'" href="'+esc(meet)+'" target="_blank" rel="noopener">Join Meet</a>';
+  if(meet&&!small)h+='<button class="'+cls+'" onclick="iaCopyMeet(this,\''+b.id+'\')">Copy Meet link</button>';
+  if(gcal)h+='<a class="'+cls+'" href="'+esc(gcal)+'" target="_blank" rel="noopener">'+(small?'Add to calendar':'Add to my Google Calendar')+'</a>';
+  return h;
+}
+function iaCopyMeet(btn,bookingId){
+  var url=iaMeetUrl(getBookingById(bookingId));if(!url)return;
+  function flash(){if(!btn)return;btn.textContent='Copied';setTimeout(function(){btn.textContent='Copy Meet link';},1500);}
+  function fallback(){window.prompt('Copy the Google Meet link:',url);}
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(url).then(flash,fallback);}else{fallback();}
 }
 
 function iaCloseModal(e){if(e?e.target===e.currentTarget:true)document.getElementById('ia-modal').innerHTML='';}
