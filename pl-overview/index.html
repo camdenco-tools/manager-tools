@@ -146,6 +146,15 @@
     font-weight: 500; white-space: nowrap; width: 110px;
   }
   .detail-more { padding: 8px 10px; font-size: 12px; color: #888; font-style: italic; }
+  .detail-table th.is-sortable { cursor: pointer; user-select: none; }
+  .detail-table th.is-sortable:hover { color: #1a1a1a; }
+  .detail-table th.is-sorted { color: #1a1a1a; }
+  .link-btn {
+    background: transparent; border: 0; padding: 0; font-family: inherit;
+    font-size: 12px; font-style: normal; color: #1a1a1a; cursor: pointer;
+    text-decoration: underline; text-underline-offset: 3px;
+  }
+  .link-btn:hover { color: #555; }
   .detail-table td.d-act { text-align: right; white-space: nowrap; width: 140px; }
   .detail-table th.is-act { width: 140px; }
   .mini-btn {
@@ -726,19 +735,42 @@
       '<td class="col-pct">' + pctOfRevenue(group.total, revenueTotal) + '</td>' +
     '</tr>';
 
-    if (isOpen) html += detailRowHtml(group);
+    if (isOpen) html += detailRowHtml(group, key);
     return html;
   }
 
-  function detailRowHtml(group) {
+  function detailRowHtml(group, key) {
+    if (!state.detailSort) state.detailSort = {};
+    if (!state.showAll) state.showAll = {};
+    var sort = state.detailSort[key] || { col: 'amount', dir: 'desc' };
+
     var rows = group.rows.slice().sort(function (a, b) {
-      return Math.abs(Number(b.amount || 0)) - Math.abs(Number(a.amount || 0));
+      var cmp;
+      if (sort.col === 'date') {
+        cmp = String(a.txn_date || '').localeCompare(String(b.txn_date || ''));
+      } else if (sort.col === 'desc') {
+        cmp = String(a.description || '').toLowerCase()
+          .localeCompare(String(b.description || '').toLowerCase());
+      } else {
+        cmp = Math.abs(Number(a.amount || 0)) - Math.abs(Number(b.amount || 0));
+      }
+      return sort.dir === 'asc' ? cmp : -cmp;
     });
-    var shown = rows.slice(0, DETAIL_CAP);
+    var showAll = !!state.showAll[key];
+    var shown = showAll ? rows : rows.slice(0, DETAIL_CAP);
+
+    function sortTh(col, label, extraCls) {
+      var active = sort.col === col;
+      var arrow = active ? (sort.dir === 'asc' ? ' \u25B2' : ' \u25BC') : '';
+      return '<th class="is-sortable' + (active ? ' is-sorted' : '') + (extraCls ? ' ' + extraCls : '') +
+        '" data-act="sort" data-key="' + esc(key) + '" data-col="' + col + '">' +
+        esc(label) + arrow + '</th>';
+    }
 
     var inner = '<table class="detail-table"><thead><tr>' +
-      '<th>Date</th><th>Description</th><th>Venue</th><th>Source</th>' +
-      '<th class="is-amt">Amount</th><th class="is-act"></th>' +
+      sortTh('date', 'Date') + sortTh('desc', 'Description') +
+      '<th>Venue</th><th>Source</th>' +
+      sortTh('amount', 'Amount', 'is-amt') + '<th class="is-act"></th>' +
       '</tr></thead><tbody>';
 
     shown.forEach(function (r) {
@@ -770,12 +802,36 @@
 
     inner += '</tbody></table>';
 
-    if (rows.length > shown.length) {
-      inner += '<div class="detail-more">+ ' + (rows.length - shown.length) +
-        ' more, largest ' + DETAIL_CAP + ' shown</div>';
+    if (rows.length > DETAIL_CAP) {
+      inner += '<div class="detail-more">' + (showAll
+        ? 'Showing all ' + rows.length + ' \u00b7 <button type="button" class="link-btn" ' +
+          'data-act="show-less" data-key="' + esc(key) + '">Show first ' + DETAIL_CAP + ' only</button>'
+        : 'Showing ' + DETAIL_CAP + ' of ' + rows.length + ' \u00b7 <button type="button" class="link-btn" ' +
+          'data-act="show-all" data-key="' + esc(key) + '">Show all ' + rows.length + '</button>') +
+        '</div>';
     }
 
     return '<tr class="detail-row"><td colspan="3"><div class="detail-wrap">' + inner + '</div></td></tr>';
+  }
+
+  // Sort + show-all state is kept per expanded line, keyed like openKeys.
+  function handleDetailView(act, key, col) {
+    if (!key) return;
+    if (!state.detailSort) state.detailSort = {};
+    if (!state.showAll) state.showAll = {};
+    if (act === 'show-all') {
+      state.showAll[key] = true;
+    } else if (act === 'show-less') {
+      delete state.showAll[key];
+    } else if (act === 'sort' && col) {
+      var cur = state.detailSort[key] || { col: 'amount', dir: 'desc' };
+      if (cur.col === col) {
+        state.detailSort[key] = { col: col, dir: cur.dir === 'asc' ? 'desc' : 'asc' };
+      } else {
+        state.detailSort[key] = { col: col, dir: col === 'desc' ? 'asc' : 'desc' };
+      }
+    }
+    renderStatement();
   }
 
   function sectionHeadHtml(label) {
@@ -1340,6 +1396,10 @@
       // Don't let the click bubble up and collapse the expanded line.
       ev.stopPropagation();
       var act = btn.getAttribute('data-act');
+      if (act === 'sort' || act === 'show-all' || act === 'show-less') {
+        handleDetailView(act, btn.getAttribute('data-key'), btn.getAttribute('data-col'));
+        return;
+      }
       var st  = btn.getAttribute('data-st');
       var sid = btn.getAttribute('data-sid');
       if (act === 'recat') openRecatModal(st, sid);
