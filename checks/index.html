@@ -1690,8 +1690,23 @@
         if (e && e.authFailed) { handleAuthFailure(); return; }
         console.error('[checks] print/log failed:', e);
         var msg = (e && e.message) ? e.message.substring(0, 140) : 'Failed';
+        // If the check itself never saved, retire any expense rows this attempt created
+        // so a retry does not leave duplicates behind.
+        if (!ctx.registerId) {
+          var orphanIds = [];
+          if (ctx.standaloneExpenseId) orphanIds.push(ctx.standaloneExpenseId);
+          if (ctx.expenseFanoutIds && ctx.expenseFanoutIds.length) orphanIds = orphanIds.concat(ctx.expenseFanoutIds);
+          if (orphanIds.length) {
+            var orphanList = orphanIds.map(function (i) { return encodeURIComponent(i); }).join(',');
+            authFetch(SB_REST + 'expenses?id=in.(' + orphanList + ')&deleted_at=is.null', {
+              method: 'PATCH', headers: minimalHdrs,
+              body: JSON.stringify({ deleted_at: new Date().toISOString(), deleted_by: actor })
+            }).catch(function (e2) { console.error('[checks] orphan expense cleanup failed:', e2); });
+          }
+        }
         showToast('Failed · ' + msg, 4000);
       })
+
       .then(function () {
         pcSubmitting = false;
         if (btn) { btn.disabled = false; btn.textContent = '🖨 Print & log check'; }
