@@ -1987,6 +1987,21 @@
       }
     )
     .then(function () {
+      // The reprint creates fresh expense rows, so retire the ones the voided check made.
+      var ids = [];
+      if (lp.standaloneExpenseId) ids.push(lp.standaloneExpenseId);
+      if (lp.expenseFanoutIds && lp.expenseFanoutIds.length) ids = ids.concat(lp.expenseFanoutIds);
+      if (!ids.length) return null;
+      var idList = ids.map(function (i) { return encodeURIComponent(i); }).join(',');
+      return authFetch(
+        SB_REST + 'expenses?id=in.(' + idList + ')&deleted_at=is.null',
+        {
+          method: 'PATCH', headers: minimalHdrs,
+          body: JSON.stringify({ deleted_at: new Date().toISOString(), deleted_by: actorName() })
+        }
+      );
+    })
+    .then(function () {
       document.getElementById('fldPayee').value     = lp.payee || '';
       document.getElementById('fldAddress').value   = lp.addr  || '';
       document.getElementById('fldAmount').value    = String(lp.amount || '');
