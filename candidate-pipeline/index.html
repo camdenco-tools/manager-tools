@@ -227,7 +227,7 @@ var SUPABASE_URL='https://aoazlttdjowhlfcksoyl.supabase.co';
 var NJ_EMPLOYER_CODE='00283683';
 var ALCOHOL_ROLES=['Bartender','Bar Lead'];
 var REFERRAL_RUNNER_ROLE='Event Runner';
-var REFERRAL_BONUS_RUNNER=50;
+var REFERRAL_BONUS_RUNNER=25;
 var REFERRAL_BONUS_DEFAULT=25;
 var REFERRAL_EVENTS_REQUIRED=5;
 var EMAIL_INFO=[{num:1,title:'Email 1',desc:'Thanks for applying',field:'email1_sent_at'},{num:2,title:'Email 2',desc:'Now the paperwork link (paperwork-links)',field:'email2_sent_at'},{num:3,title:'Email 3',desc:'Final steps / apps',field:'email3_sent_at'}];
@@ -491,12 +491,33 @@ function renderTags(arr){if(!arr||arr.length===0)return'<span style="font-size:1
 
 function renderReferralSection(c){
   if(!c.referred_by_employee_id)return '';
-  var stage=c.pipeline_stage;
-  var isHired=stage==='hired'||stage==='onboarding'||stage==='active'||stage==='inactive';
   var html='<div class="card-section"><div class="section-title">Referral</div>';
   html+='<div class="detail-grid"><div><div class="detail-label">Referred by</div><div class="detail-value">'+esc(c.referred_by_name||'--')+'</div></div></div>';
+  var note=function(t){return '<div style="margin-top:10px;font-size:13px;color:#888;">'+t+'</div>';};
+  if(!pcAuth.isAdmin()){
+    html+=note('Referral bonuses are tracked on the Referrals page (admin only).')+'</div>';
+    return html;
+  }
+  var ref0=pcReferralByCand[c.id];
+  if(ref0===undefined||ref0===null){
+    html+=note('Checking bonus record&hellip;')+'</div>';
+    return html;
+  }
+  if(ref0==='error'){
+    html+='<div class="error-msg" style="margin-top:10px;">Could not check the bonus record. Refresh the page to try again.</div></div>';
+    return html;
+  }
+  if(ref0&&ref0.id){
+    var labels={pending:'Pending',approved:'Approved',paid:'Paid',void:'Void'};
+    var st=labels[ref0.status]||ref0.status||'Pending';
+    html+='<div style="margin-top:10px;background:#eaf6ec;border:1px solid #7dc98a;border-radius:6px;padding:10px 12px;font-size:13px;color:#1e6b2e;">Bonus record: <strong>'+esc(st)+'</strong> &middot; $'+Number(ref0.bonus_amount||0).toFixed(2)+' &middot; '+esc(ref0.events_required||REFERRAL_EVENTS_REQUIRED)+' events required. Progress and payout are on the Referrals page.</div></div>';
+    return html;
+  }
+  html+=note('No bonus record. Bonuses are only created when the referrer is named on the application, the application is dated June 28, 2026 or later, and the referrer is bonus-eligible.')+'</div>';
+  return html;
+  // Old create-record path below is unreachable and kept only until cleanup.
+  var isHired=false;
   if(!isHired){
-    html+='<div style="margin-top:10px;font-size:13px;color:#888;">A referral record is created after this candidate is hired, so the bonus can be tracked.</div></div>';
     return html;
   }
   var ref=pcReferralByCand[c.id];
@@ -539,9 +560,7 @@ function pcReferralCreatorLabel(){
 function pcPipeLoadReferralForSelected(){
   var c=pcSelected;
   if(!c||!c.referred_by_employee_id)return;
-  var stage=c.pipeline_stage;
-  var isHired=stage==='hired'||stage==='onboarding'||stage==='active'||stage==='inactive';
-  if(!isHired)return;
+  if(!pcAuth.isAdmin())return;
   if(pcReferralByCand.hasOwnProperty(c.id))return;
   pcReferralByCand[c.id]=null;
   sbFetch('/rest/v1/referrals?referred_candidate_id=eq.'+c.id+'&deleted_at=is.null&select=id,bonus_amount,events_required,status&limit=1')
@@ -551,8 +570,8 @@ function pcPipeLoadReferralForSelected(){
       if(pcSelected&&pcSelected.id===c.id)render();
     })
     .catch(function(err){
-      console.warn('Referral fetch failed (non-blocking):',err);
-      pcReferralByCand[c.id]=false;
+      console.error('Referral fetch failed:',err);
+      pcReferralByCand[c.id]='error';
       if(pcSelected&&pcSelected.id===c.id)render();
     });
 }
