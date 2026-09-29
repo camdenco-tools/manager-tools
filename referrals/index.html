@@ -158,7 +158,7 @@
 <div class="ref-wrap">
   <div class="ref-head">
     <h1>Referrals</h1>
-    <p>Each card is an employee who referred someone, with everyone they referred listed underneath. A referral becomes eligible once the new hire has worked the required number of events, counted from verified sign-in sheets. Candidates rejected in the Pipeline move to Not hired automatically.</p>
+    <p>Each card is an employee who referred someone, with everyone they referred listed underneath. A referral becomes eligible once the new hire has worked the required number of events, counted from verified sign-in sheets. Candidates rejected in the Pipeline move to Not hired automatically. Managers can view this page; only admins can approve, pay, or change bonuses.</p>
   </div>
   <div id="ref-rules"></div>
   <div id="ref-root">
@@ -486,6 +486,7 @@
   }
 
   function patchReferral(id, body, btn, restoreLabel) {
+    if (!pcIsAdmin) { alert('Only admins can change referral bonuses.'); return Promise.resolve(); }
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Saving...'; }
     return sendPatch(id, body).then(function () {
       render();
@@ -522,7 +523,7 @@
 
   // Approve every eligible referral under one referrer, one at a time.
   window.refApproveAll = function (idx, btnEl) {
-    if (bulkBusy) { return; }
+    if (bulkBusy || !pcIsAdmin) { return; }
     var g = lastGroups[idx];
     if (!g) { return; }
     var key = g.key;
@@ -597,6 +598,7 @@
 
   function rulesRun(work) {
     if (rulesBusy) { return; }
+    if (!pcIsAdmin) { rulesErr = 'Only admins can change bonus rules.'; renderRules(); return; }
     rulesBusy = true; rulesErr = ''; renderRules();
     Promise.resolve().then(work).then(function () {
       return loadRules();
@@ -738,7 +740,6 @@
   function renderRules() {
     var el = document.getElementById('ref-rules');
     if (!el) { return; }
-    if (!pcIsAdmin) { el.innerHTML = ''; return; }
     var live = livePromos();
     var running = 0, scheduled = 0;
     live.forEach(function (p) { var st = promoState(p); if (st === 'running') { running++; } else if (st === 'scheduled') { scheduled++; } });
@@ -747,12 +748,12 @@
     if (scheduled) { sub += ' ' + scheduled + ' scheduled.'; }
 
     var html = '<div class="rules"><div class="rules-head"><div><div class="rules-title">Bonus rules</div><div class="rules-sub">' + sub + '</div></div>'
-      + '<button class="btn btn-ghost" onclick="refRulesToggle()" aria-expanded="' + rulesOpen + '">' + (rulesOpen ? 'Hide' : 'Manage') + '</button></div>';
+      + '<button class="btn btn-ghost" onclick="refRulesToggle()" aria-expanded="' + rulesOpen + '">' + (rulesOpen ? 'Hide' : (pcIsAdmin ? 'Manage' : 'View')) + '</button></div>';
 
     if (rulesOpen) {
       var dis = rulesBusy ? ' disabled' : '';
       html += '<div class="rules-body">';
-      if (settingsEditing) {
+      if (pcIsAdmin && settingsEditing) {
         html += '<div class="rules-inline">'
           + '<div><label for="std-bonus">Standard bonus ($)</label><input type="number" id="std-bonus" min="0" step="1" value="' + esc(stdBonus()) + '"></div>'
           + '<div><label for="std-events">Events required</label><input type="number" id="std-events" min="1" step="1" value="' + esc(stdEvents()) + '"></div>'
@@ -760,7 +761,7 @@
           + '<button class="btn btn-ghost" onclick="refEditStandard(false)">Cancel</button></div>';
       } else {
         html += '<div class="rules-line">Standard bonus: <strong>' + money(stdBonus()) + '</strong> after <strong>' + stdEvents() + '</strong> events worked.'
-          + '<button class="btn btn-ghost" onclick="refEditStandard(true)">Change</button></div>';
+          + (pcIsAdmin ? '<button class="btn btn-ghost" onclick="refEditStandard(true)">Change</button>' : '') + '</div>';
       }
 
       var order = { running: 0, scheduled: 1, ended: 2 };
@@ -769,20 +770,22 @@
         return d !== 0 ? d : (a.starts_on < b.starts_on ? 1 : -1);
       });
       live.forEach(function (p) {
-        if (promoFormId === p.id) { html += renderPromoForm(); return; }
+        if (pcIsAdmin && promoFormId === p.id) { html += renderPromoForm(); return; }
         var st = promoState(p);
         var label = st === 'running' ? 'Running' : (st === 'scheduled' ? 'Scheduled' : 'Ended');
         html += '<div class="promo' + (st === 'ended' ? ' ended' : '') + '">'
           + '<div class="promo-top"><div class="promo-name">' + esc(p.name) + '</div><div class="promo-state ' + st + '">' + label + '</div></div>'
           + '<div class="promo-meta"><strong>' + money(p.bonus_amount) + '</strong> after ' + (p.events_required || stdEvents()) + ' events, for applications ' + fmtDay(p.starts_on) + ' through ' + fmtDay(p.ends_on) + '.<br>'
           + 'Positions: ' + filterText(p.roles, 'position') + '. Locations: ' + filterText(p.locations, 'location') + '.</div>'
-          + '<div class="ref-actions">'
+          + (!pcIsAdmin ? '' : '<div class="ref-actions">'
           + '<button class="btn btn-ghost" onclick="refPromoForm(\'' + p.id + '\')"' + dis + '>Edit</button>'
           + (st === 'running' ? '<button class="btn btn-ghost" onclick="refEndPromo(\'' + p.id + '\')"' + dis + '>End today</button>' : '')
           + '<button class="btn btn-danger-ghost" onclick="refRemovePromo(\'' + p.id + '\')"' + dis + '>Remove</button>'
-          + '</div></div>';
+          + '</div>') + '</div>';
       });
-      if (promoFormId === 'new') {
+      if (!pcIsAdmin) {
+        if (live.length === 0) { html += '<div class="rules-hint">No specials set up.</div>'; }
+      } else if (promoFormId === 'new') {
         html += renderPromoForm();
       } else {
         html += '<div class="ref-actions" style="margin-top:12px;"><button class="btn btn-blue" onclick="refPromoForm(\'new\')"' + dis + '>Add a special</button></div>';
@@ -875,7 +878,8 @@
     if (row.notes) { stampHtml += (stampHtml ? '<br>' : '') + 'Note: ' + esc(row.notes); }
     if (stampHtml) { html += '<div class="rr-stamp">' + stampHtml + '</div>'; }
 
-    // actions
+    // actions (admin only; managers see the page read-only)
+    if (pcIsAdmin) {
     html += '<div class="ref-actions">';
     if (row.status === 'pending' && ds !== 'not_hired') {
       var approveLabel = (ds === 'eligible') ? 'Approve bonus' : 'Approve early';
@@ -904,6 +908,7 @@
       html += '<button class="btn btn-green" onclick="refSaveEdit(\'' + row.id + '\', this)">Save changes</button>';
       html += '<button class="btn btn-ghost" onclick="refToggleEdit(\'' + row.id + '\')">Cancel</button>';
       html += '</div></div>';
+    }
     }
 
     html += '</div>';
@@ -981,7 +986,7 @@
     }
     html += '</div></div>';
 
-    if (g.eligibleCount > 1) {
+    if (pcIsAdmin && g.eligibleCount > 1) {
       html += '<div class="rc-bulk"><button class="btn btn-green" onclick="refApproveAll(' + idx + ', this)"'
         + (bulkBusy ? ' disabled' : '') + '>Approve all ' + g.eligibleCount + ' eligible</button></div>';
     }
@@ -1038,13 +1043,6 @@
     var root = document.getElementById('ref-root');
     if (!root) { return; }
 
-    if (!pcIsAdmin) {
-      root.innerHTML = '<div class="ref-access">Referral records are admin-only. '
-        + 'You\'re signed in, but this page needs admin access to view and manage payouts. '
-        + 'Ask an admin to grant access if you need it.</div>';
-      return;
-    }
-
     var counts = { all: 0, pending: 0, eligible: 0, approved: 0, paid: 0, void: 0, not_hired: 0 };
     var outstanding = 0, paidTotal = 0;
     for (var i = 0; i < refRows.length; i++) {
@@ -1093,7 +1091,6 @@
     onReady: function (user) {
       pcUser = user || pcAuth.getUser();
       pcIsAdmin = pcAuth.isAdmin();
-      if (!pcIsAdmin) { render(); return; }
       loadReferrals()
         .then(loadRules)
         .then(renderRules)
