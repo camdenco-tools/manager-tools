@@ -2682,7 +2682,11 @@
   // persists. 2b enables toggling + writes ar_invoice_stands on save.
   // =====================================================================
 
-  var COVERAGE_EXCLUDE = ['Client Staffing Needs', 'Support Staff', 'Non-Event Labor'];
+  // Client Staffing Needs was excluded here until Sep 2026. It is now a real
+  // billable line: ticking it clears the client-staffed row on the Coverage
+  // page and pulls the client-staffed tips into the Tips Payout auto-fill.
+  var COVERAGE_EXCLUDE = ['Support Staff', 'Non-Event Labor'];
+  var CLIENT_STAND_NAME = 'Client Staffing Needs';
 
   /** Planned-open stand NAMES for an event (deduped, exclusions removed). */
   function fetchPlannedOpenStands(eventId) {
@@ -2980,6 +2984,14 @@
       var names = results[1] || [];
       var coverageRows = results[2] || [];
       formState.coverage_tips_by_stand = results[3] || {};
+
+      // Client-staffed tips entered day-of have a sales row but no plan row,
+      // so the planned-open list alone would miss them. Add the client stand
+      // whenever the event has a client-staffed sale.
+      if (formState.coverage_tips_by_stand.hasOwnProperty(CLIENT_STAND_NAME) &&
+          names.indexOf(CLIENT_STAND_NAME) === -1) {
+        names.push(CLIENT_STAND_NAME);
+      }
 
       // stand_id -> { invoice_id, invoice_number, is_self }
       var coveredBy = {};
