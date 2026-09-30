@@ -68,7 +68,7 @@
   .csr-warn[hidden] { display: none; }
 
   /* Stat cards */
-  .csr-stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 22px; }
+  .csr-stats { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 22px; }
   .csr-card {
     background: #fff; border: 0.5px solid #e0dfd8; border-radius: 10px;
     padding: 16px 18px;
@@ -84,6 +84,7 @@
   .csr-card-sub a { color: #0C447C; text-decoration: none; }
   .csr-card-sub a:hover { text-decoration: underline; }
 
+  @media (max-width: 1100px) { .csr-stats { grid-template-columns: repeat(3, 1fr); } }
   @media (max-width: 760px) { .csr-stats { grid-template-columns: 1fr; } }
 
   /* Filter row */
@@ -154,6 +155,19 @@
   .csr-month-wrap .csr-table tr.total-row td { color: #0C447C; }
   .csr-month-wrap td.col-month { font-weight: 600; white-space: nowrap; }
   .csr-month-meta { color: #888; font-size: 12px; font-variant-numeric: tabular-nums; }
+
+  /* Client-staffed table (Sep 2026) — purple, matching the Tips Report's
+     client-staffed section, so the two read as the same thing. */
+  .csr-client-wrap { border-color: #D9D5F2; }
+  .csr-client-wrap .csr-table-head { background: #f7f6fd; border-bottom-color: #e6e3f7; }
+  .csr-client-wrap .csr-table thead tr { background: #f7f6fd; border-bottom-color: #e6e3f7; }
+  .csr-client-wrap .csr-table tr.total-row { background: #f7f6fd; border-top-color: #3C3489; }
+  .csr-client-wrap .csr-table tr.total-row td { color: #3C3489; }
+  .csr-client-tag {
+    display: inline-block; font-size: 10px; font-weight: 500; margin-left: 6px;
+    padding: 1px 6px; border-radius: 4px; background: #f1f0eb; color: #888;
+  }
+  .csr-client-tag.is-warn { background: #fceaea; color: #791F1F; }
 
   /* Red / fail-loud table */
   .csr-red-wrap { border-color: #f0cccc; }
@@ -265,6 +279,11 @@
         <div class="csr-card-sub" id="statTipsSub">Tips fronted, not yet recovered</div>
       </div>
       <div class="csr-card">
+        <div class="csr-card-label">Client labor (est.)</div>
+        <div class="csr-card-value" id="statClient">—</div>
+        <div class="csr-card-sub" id="statClientSub">Our staff on client stands, not yet billed</div>
+      </div>
+      <div class="csr-card">
         <div class="csr-card-label">AR open</div>
         <div class="csr-card-value" id="statAr">—</div>
         <div class="csr-card-sub">Statemented &amp; invoiced · <a href="/accounts-receivable/">see Receivables</a></div>
@@ -277,7 +296,7 @@
       <div class="csr-card">
         <div class="csr-card-label">Combined expected</div>
         <div class="csr-card-value" id="statCombined">—</div>
-        <div class="csr-card-sub">Awaiting + tips + AR open + monthly</div>
+        <div class="csr-card-sub">Awaiting + tips + client labor + AR open + monthly</div>
       </div>
     </div>
 
@@ -315,6 +334,33 @@
       <div class="csr-show-older" id="showOlderWrap" hidden>
         <button type="button" class="btn-link" id="btnShowOlder">Show events before this fiscal year →</button>
       </div>
+    </div>
+
+    <!-- Client-staffed events: our people worked a client stand. The client
+         owes us their labor plus the tips we paid them. A row clears when an
+         invoice ticks Client Staffing Needs for that event. -->
+    <div class="csr-table-wrap csr-client-wrap" id="clientWrap" hidden>
+      <div class="csr-table-head">
+        <div>
+          <div class="csr-table-title">Client-staffed events — bill the client for labor and tips</div>
+          <div class="csr-table-subtitle" id="clientSubtitle">Labor is an estimate: people × scheduled hours × $30/hr. The client’s statement sets the real amount. A row clears when an invoice ticks Client Staffing Needs for that event.</div>
+        </div>
+      </div>
+      <table class="csr-table">
+        <thead>
+          <tr>
+            <th class="col-date">Event date</th>
+            <th>Venue</th>
+            <th>Event</th>
+            <th class="r">People</th>
+            <th class="r">Sched. hours</th>
+            <th class="r">Est. labor</th>
+            <th class="r">Tips</th>
+            <th class="col-x" aria-label="Dismiss row"></th>
+          </tr>
+        </thead>
+        <tbody id="clientBody"></tbody>
+      </table>
     </div>
 
     <!-- Red table: sales logged but not estimable (no deal / not in catalog) -->
@@ -385,7 +431,8 @@
 
   // Stands that are never revenue-commission — mirror the Commission
   // Tracker's skip set so the red list stays meaningful (genuine no-deal
-  // anomalies, not the expected pseudo-stands).
+  // anomalies, not the expected pseudo-stands). Client Staffing Needs is
+  // skipped HERE but handled by its own client-staffed table below.
   var SKIP_SET = {
     'Support Staff': true,
     'Hawking': true,
@@ -395,6 +442,17 @@
   };
 
   var DEAL_LABELS = { rev_split: 'Rev split', rev_bev: 'Rev + bev', labor: 'Labor', reimb: 'Reimb' };
+
+  // ── Client-staffed billing (Sep 2026) ─────────────────────────────────
+  // Our people loaned to a client's stand. The client owes us their labor
+  // plus the tips we paid them. This page shows that as an expected amount
+  // so it gets billed; the client's statement sets the real number.
+  //
+  // CLIENT_LABOR_RATE is a deliberately flat estimate, not a bill rate.
+  // clientShiftHours() is the ONE place hours come from. When time clocking
+  // lands, swap it for each person's clocked hours and nothing else changes.
+  var CLIENT_STAND = 'Client Staffing Needs';
+  var CLIENT_LABOR_RATE = 30;
 
   // Hard floor: events before this date that were NEVER invoiced are treated
   // as settled off-book (pre-ledger) and hidden. Events that WERE invoiced
@@ -437,6 +495,8 @@
   var state = {
     sales: [],
     events: [],
+    eventsById: {},      // id -> event row (built from state.events)
+    clientPlacements: [],// live position_assignments on CLIENT_STAND
     coveredSet: {},      // 'eventId||standId' -> true (active per-stand coverage)
     perStandEventSet: {},// 'eventId' -> true (events that USE per-stand coverage)
     invoicedEventKeys: {},// 'venue||period_start' -> true (event has a non-voided invoice)
@@ -454,7 +514,8 @@
     mainRows: [],
     redRows: [],
     deRows: [],
-    monthRows: []
+    monthRows: [],
+    clientRows: []
   };
 
   // =====================================================================
@@ -494,6 +555,29 @@
     if (s == null) return '';
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  // "HH:MM[:SS]" -> minutes since midnight, or null.
+  function timeToMin(t) {
+    var m = String(t == null ? '' : t).match(/(\d{1,2}):(\d{2})/);
+    if (!m) return null;
+    return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+  }
+  // Scheduled shift length for one person at this event, in hours — the same
+  // rule Popfax prices planned labor with: report = gates_open minus one hour,
+  // end = estimated_end_time (falls back to show_time). null when either end
+  // is missing. Swap this for clocked hours once the time clock is live.
+  function clientShiftHours(ev) {
+    if (!ev) return null;
+    var g = timeToMin(ev.gates_open);
+    var e = timeToMin(ev.estimated_end_time || ev.show_time);
+    if (g == null || e == null) return null;
+    var start = g - 60;
+    if (start < 0) start += 1440;
+    var diff = e - start;
+    if (diff < 0) diff += 1440;          // crosses midnight
+    if (diff <= 0) return null;
+    return diff / 60;
   }
 
   // Canonical dismissal key. MUST be built from the post-alias venue and
@@ -627,7 +711,7 @@
   // headroom. If it ever truncates, move aggregation server-side.
   // =====================================================================
   function fetchSales() {
-    var url = SB_REST + 'sales?select=venue,stand,amount,tip_amount,event_date,event_name' +
+    var url = SB_REST + 'sales?select=venue,stand,amount,tip_amount,staff_count,event_date,event_name' +
       '&event_date=lte.' + todayIso();
     if (state.dateFloorActive && state.fyStartIso) {
       url += '&event_date=gte.' + state.fyStartIso;
@@ -643,7 +727,10 @@
     // "TBA" shadowed "Chicago & Styx" and falsely flagged 9 covered stands.
     // Cancelled events are deliberately NOT excluded — a cancelled show can
     // still have logged sales that are genuinely owed.
-    var url = SB_REST + 'events?select=id,venue,event_date,event_name' +
+    //
+    // gates_open / show_time / estimated_end_time feed the client-staffed
+    // labor estimate (clientShiftHours).
+    var url = SB_REST + 'events?select=id,venue,event_date,event_name,gates_open,show_time,estimated_end_time' +
       '&deleted_at=is.null' +
       '&event_date=lte.' + todayIso();
 
@@ -652,6 +739,16 @@
     }
     url += '&order=event_date.desc&limit=10000';
     return authFetch(url, { headers: pcAuth.headers() });
+  }
+  // Live placements on the client stand. Not date-bounded here — they are
+  // joined to the date-bounded events list in computeClientRows(), which is
+  // what applies the window. Small table slice (tens of rows).
+  function fetchClientPlacements() {
+    return authFetch(
+      SB_REST + 'position_assignments?stand=eq.' + encodeURIComponent(CLIENT_STAND) +
+      '&removed_at=is.null&select=event_id,staff_name&limit=20000',
+      { headers: pcAuth.headers() }
+    );
   }
   function fetchCoverage() {
     return authFetch(
@@ -728,6 +825,11 @@
       var mk = String(row.period_month).slice(0, 7);
       state.coveredMonths[row.venue_code + '||' + mk] = inv.internal_invoice_number || '';
     });
+  }
+
+  function indexEvents() {
+    state.eventsById = {};
+    state.events.forEach(function (e) { state.eventsById[e.id] = e; });
   }
 
   // =====================================================================
@@ -859,6 +961,105 @@
     state.redRows = redRows;
     state.deRows = deRows;
     state.monthRows = buildMonthRows(deRows);
+    state.clientRows = computeClientRows(evByVD);
+  }
+
+  // =====================================================================
+  // CLIENT-STAFFED ROWS (Sep 2026)
+  //
+  // One row per event where our people worked a client stand. Two sources,
+  // merged per event:
+  //   - live placements on CLIENT_STAND (the plan) — shows the row the day
+  //     after the show even before anyone enters tips, which is the point:
+  //     it's the reminder to bill.
+  //   - the client-staffed sales row the Tips Report writes — carries the
+  //     real tip total and the real headcount (staff_count = the people who
+  //     actually worked for the client). When it exists it wins on headcount,
+  //     and it covers day-of cases that were never on the plan.
+  //
+  // Clears exactly like a stand does: an invoice that ticks Client Staffing
+  // Needs for the event (ar_invoice_stands), a claimed month at a settlement
+  // venue, the pre-ledger floor, or a manual dismiss.
+  // =====================================================================
+  function computeClientRows(evByVD) {
+    var byKey = {};
+    function slot(ev, venue, date, fallbackName) {
+      var key = ev ? ev.id : (venue + '||' + date);
+      if (!byKey[key]) {
+        byKey[key] = {
+          eventId: ev ? ev.id : null, ev: ev || null,
+          venue: venue, date: date,
+          eventName: (ev && ev.event_name) || fallbackName || '',
+          placedNames: {}, placed: 0,
+          hasSale: false, saleStaff: 0, tips: 0
+        };
+      }
+      return byKey[key];
+    }
+
+    state.clientPlacements.forEach(function (p) {
+      var ev = state.eventsById[p.event_id];
+      if (!ev) return;                              // outside the date window
+      if (!p.staff_name || p.staff_name === 'JMAC') return;
+      var v = resolveVenue(ev.venue) || ev.venue;
+      var s = slot(ev, v, ev.event_date);
+      var k = String(p.staff_name).toLowerCase().replace(/\s+/g, ' ').trim();
+      if (s.placedNames[k]) return;
+      s.placedNames[k] = true;
+      s.placed++;
+    });
+
+    state.sales.forEach(function (sale) {
+      if (!sale.event_date) return;
+      var v = resolveVenue(sale.venue);
+      if (!v) return;
+      if (resolveStand(v, sale.stand) !== CLIENT_STAND) return;
+      var ev = evByVD[v + '||' + sale.event_date] || null;
+      var s = slot(ev, v, sale.event_date, sale.event_name);
+      s.hasSale = true;
+      s.saleStaff += parseInt(sale.staff_count, 10) || 0;
+      s.tips += parseFloat(sale.tip_amount) || 0;
+    });
+
+    var rows = [];
+    Object.keys(byKey).forEach(function (key) {
+      var s = byKey[key];
+      if (EXCLUDE_VENUES[s.venue]) return;
+      if (state.dismissedMap[dismissKey(s.venue, s.date, CLIENT_STAND)]) return;
+      if (SETTLEMENT_VENUES[s.venue] &&
+          state.coveredMonths[s.venue + '||' + s.date.slice(0, 7)]) return;
+
+      var standObj = pcCatalog.getStand(s.venue, CLIENT_STAND);   // inactive rows included
+      if (standObj && s.eventId && state.coveredSet[s.eventId + '||' + standObj.id]) return;
+
+      var lumpRuleApplies = !LUMP_RULE_UNTIL || s.date < LUMP_RULE_UNTIL;
+      var eventIsPerStand = s.eventId && state.perStandEventSet[s.eventId];
+      if (lumpRuleApplies && !eventIsPerStand &&
+          state.invoicedEventKeys[s.venue + '||' + s.date]) return;
+
+      if (state.dateFloorActive && COVERAGE_START && s.date < COVERAGE_START) return;
+
+      var people = s.hasSale ? s.saleStaff : s.placed;
+      if (people <= 0 && s.tips < 0.005) return;   // everyone removed, nothing owed
+
+      var hours = clientShiftHours(s.ev);
+      rows.push({
+        venue: s.venue, date: s.date, eventName: s.eventName,
+        stand: CLIENT_STAND,
+        people: people,
+        fromPlan: !s.hasSale,
+        hours: hours,
+        labor: hours != null ? people * hours * CLIENT_LABOR_RATE : null,
+        tips: Math.round(s.tips * 100) / 100,
+        noCatalogStand: !standObj
+      });
+    });
+
+    rows.sort(function (a, b) {
+      if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+      return a.venue < b.venue ? -1 : 1;
+    });
+    return rows;
   }
 
   // Roll the surviving settlement-venue stand rows up into one row per
@@ -1084,6 +1285,58 @@
     body.innerHTML = html;
   }
 
+  // Client-staffed table. Dismissable like a stand row (same venue||date||stand
+  // key, with stand = Client Staffing Needs), because a genuine "the client
+  // covered this another way" case needs somewhere to go.
+  function renderClientTable(clientRows, laborTotal, tipsTotal) {
+    var wrap = document.getElementById('clientWrap');
+    var body = document.getElementById('clientBody');
+    if (!wrap || !body) return;
+
+    if (!clientRows || clientRows.length === 0) {
+      wrap.hidden = true;
+      body.innerHTML = '';
+      return;
+    }
+    wrap.hidden = false;
+
+    var html = clientRows.map(function (r) {
+      var label = pcCatalog.getVenueLabel(r.venue) || r.venue;
+      var tags = '';
+      if (r.fromPlan) {
+        tags += '<span class="csr-client-tag" title="No client-staffed tips entered on the Tips Report yet — headcount is from the plan">from plan</span>';
+      }
+      if (r.noCatalogStand) {
+        tags += '<span class="csr-client-tag is-warn" title="This venue has no Client Staffing Needs catalog stand, so an invoice cannot mark this row covered">no catalog stand</span>';
+      }
+      var hoursTxt = r.hours == null
+        ? '<span class="csr-month-meta" title="The event is missing its gates-open or end time">—</span>'
+        : (Math.round(r.hours * 10) / 10) + 'h';
+      var laborTxt = r.labor == null
+        ? '<span class="csr-month-meta" title="Needs scheduled hours to estimate">—</span>'
+        : esc(fmtMoney(r.labor));
+      return '<tr>' +
+        '<td class="col-date">' + esc(fmtDate(r.date)) + '</td>' +
+        '<td><span class="venue-chip">' + esc(r.venue) + '</span>' + esc(label) + '</td>' +
+        '<td>' + (r.eventName ? esc(r.eventName) : '<span class="csr-month-meta">—</span>') + tags + '</td>' +
+        '<td class="r">' + r.people + '</td>' +
+        '<td class="r">' + hoursTxt + '</td>' +
+        '<td class="r">' + laborTxt + '</td>' +
+        '<td class="r">' + (r.tips > 0.005 ? esc(fmtMoney(r.tips)) : '<span class="csr-month-meta">—</span>') + '</td>' +
+        dismissCell(r) +
+      '</tr>';
+    }).join('');
+
+    html += '<tr class="total-row">' +
+      '<td colspan="5">Total to bill clients (labor est. + tips)</td>' +
+      '<td class="r">' + esc(fmtMoney(laborTotal)) + '</td>' +
+      '<td class="r">' + esc(fmtMoney(tipsTotal)) + '</td>' +
+      '<td class="col-x"></td>' +
+    '</tr>';
+
+    body.innerHTML = html;
+  }
+
   function render() {
     var vf = state.filters.venue;
     function venuePass(code) { return vf === 'all' || code === vf; }
@@ -1092,12 +1345,16 @@
     var red  = state.redRows.filter(function (r) { return venuePass(r.venue); });
     var de   = (state.deRows || []).filter(function (r) { return venuePass(r.venue); });
     var months = (state.monthRows || []).filter(function (m) { return venuePass(m.venue); });
+    var clientRows = (state.clientRows || []).filter(function (r) { return venuePass(r.venue); });
     var arOpen = state.arOpen.filter(function (r) { return venuePass(r.venue_code); });
 
     var csrTotal = 0, redTotal = 0, arTotal = 0, deTotal = 0, tipsTotal = 0;
+    var clientLabor = 0, clientTips = 0;
     main.forEach(function (r) { csrTotal += r.commission; tipsTotal += (r.tips || 0); });
     red.forEach(function (r) { redTotal += r.gross; tipsTotal += (r.tips || 0); });
     de.forEach(function (r) { deTotal += r.commission; tipsTotal += (r.tips || 0); });
+    clientRows.forEach(function (r) { clientLabor += (r.labor || 0); clientTips += (r.tips || 0); });
+    tipsTotal += clientTips;   // tips we fronted to client-staffed people are fronted tips too
     arOpen.forEach(function (r) { arTotal += (parseFloat(r.net_amount_due) || 0); });
     tipsTotal = Math.round(tipsTotal * 100) / 100;
 
@@ -1122,12 +1379,22 @@
     var tipsSubEl = document.getElementById('statTipsSub');
     if (tipsSubEl) {
       var tipStandCount = 0;
-      main.concat(red).concat(de).forEach(function (r) { if ((r.tips || 0) > 0.005) tipStandCount++; });
+      main.concat(red).concat(de).concat(clientRows).forEach(function (r) { if ((r.tips || 0) > 0.005) tipStandCount++; });
       tipsSubEl.textContent = tipStandCount > 0
         ? (tipStandCount + ' stand' + (tipStandCount === 1 ? '' : 's') + ' · fronted, not yet recovered')
         : 'Tips fronted, not yet recovered';
     }
-    document.getElementById('statCombined').textContent = fmtMoney(csrTotal + arTotal + deTotal + tipsTotal);
+    var clientEl = document.getElementById('statClient');
+    if (clientEl) clientEl.textContent = fmtMoney(clientLabor);
+    var clientSubEl = document.getElementById('statClientSub');
+    if (clientSubEl) {
+      clientSubEl.textContent = clientRows.length
+        ? (clientRows.length + ' event' + (clientRows.length === 1 ? '' : 's') +
+           ' · $' + CLIENT_LABOR_RATE + '/hr estimate · tips counted under Tips awaiting')
+        : 'Our staff on client stands, not yet billed';
+    }
+    document.getElementById('statCombined').textContent =
+      fmtMoney(csrTotal + arTotal + deTotal + tipsTotal + clientLabor);
 
     // Distinct events feeding the estimate
     var evSet = {};
@@ -1221,6 +1488,7 @@
       redBody.innerHTML = redHtml;
     }
 
+    renderClientTable(clientRows, clientLabor, clientTips);
     renderMonthTable(months, deTotal);
     renderDismissed();
   }
@@ -1242,9 +1510,9 @@
       reload();
     });
   }
-  // Delegated so it survives every innerHTML rebuild of either tbody.
+  // Delegated so it survives every innerHTML rebuild of each tbody.
   function wireDismiss() {
-    ['mainWrap', 'redWrap'].forEach(function (id) {
+    ['mainWrap', 'redWrap', 'clientWrap'].forEach(function (id) {
       var host = document.getElementById(id);
       if (!host) return;
       host.addEventListener('click', function (ev) {
@@ -1321,14 +1589,15 @@
   }
 
   // Re-fetch the date-bounded data (sales + events) and recompute. Coverage,
-  // aliases, AR-open, month claims, and dismissals don't depend on the date
-  // floor, so they're fetched once at boot and reused.
+  // aliases, AR-open, month claims, dismissals and client placements don't
+  // depend on the date floor, so they're fetched once at boot and reused.
   function reload() {
     setLoading(true);
     return Promise.all([fetchSales(), fetchEvents()])
       .then(function (res) {
         state.sales = res[0] || [];
         state.events = res[1] || [];
+        indexEvents();
         compute();
         render();
       })
@@ -1367,7 +1636,8 @@
       fetchEvents(),
       fetchInvoicedEventKeys(),
       fetchDismissals(),
-      fetchInvoicePeriods()
+      fetchInvoicePeriods(),
+      fetchClientPlacements()
     ]).then(function (res) {
       // res[0], res[1] = ready() (undefined)
 
@@ -1389,6 +1659,7 @@
       state.arOpen = res[5] || [];
       state.sales = res[6] || [];
       state.events = res[7] || [];
+      indexEvents();
       (res[8] || []).forEach(function (row) {
         if (row.venue_code && row.period_start) {
           state.invoicedEventKeys[row.venue_code + '||' + row.period_start] = true;
@@ -1396,6 +1667,7 @@
       });
       applyDismissalRows(res[9] || []);
       applyPeriodRows(res[10] || []);
+      state.clientPlacements = res[11] || [];
 
       populateVenueFilter();
       compute();
