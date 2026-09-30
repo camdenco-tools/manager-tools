@@ -299,6 +299,50 @@ header { background: #fff; border-bottom: 1px solid #e8e8e4; padding: 0 32px; di
 .bb-modal-save { padding: 8px 16px; background: #1a1a1a; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; color: #fff; cursor: pointer; font-family: inherit; }
 @media print { .barback-section .bb-edit-btn, .bb-modal-overlay { display: none !important; } .barback-section { break-inside: avoid; box-shadow: none; border: 1px solid #ddd; } }
 @media (max-width: 700px) { .barback-grid { grid-template-columns: 1fr; } }
+
+/* ── Client-staffed tips (Sep 2026) ──────────────────────────────────────────
+   Staff we loaned to a client's stand. The client reports each person's tips
+   and reimburses us, so these people keep their own amount: never pooled,
+   never in any pool headcount. Purple, matching the pool-notice vocabulary. */
+.client-section { margin-top: 18px; background: #fff; border-radius: 14px; padding: 16px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); border: 1px solid #D9D5F2; }
+.cs-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+.cs-title { font-size: 13px; font-weight: 700; color: #1a1a1a; }
+.cs-total { font-size: 16px; font-weight: 700; color: #3C3489; }
+.cs-sub { font-size: 11px; color: #999; margin-bottom: 12px; line-height: 1.5; }
+.cs-colhead { display: grid; grid-template-columns: minmax(160px, 1.4fr) minmax(120px, 1fr) 110px 28px; gap: 8px; font-size: 10px; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 0.06em; padding-bottom: 4px; border-bottom: 1px solid #f0f0f0; }
+.cs-row { display: grid; grid-template-columns: minmax(160px, 1.4fr) minmax(120px, 1fr) 110px 28px; gap: 8px; align-items: start; padding: 7px 0; border-bottom: 1px solid #f6f6f3; }
+.cs-row.removed { opacity: 0.45; }
+.cs-row.removed .cs-name { text-decoration: line-through; }
+.cs-name { font-size: 13px; font-weight: 600; color: #1a1a1a; padding-top: 6px; word-break: break-word; }
+.cs-chip { display: inline-block; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 20px; margin-left: 5px; vertical-align: 1px; }
+.cs-chip.role { background: #f0f0f0; color: #888; }
+.cs-chip.unmatched { background: #FCEBEB; color: #791F1F; }
+.cs-chip.fresh { background: #FAEEDA; color: #633806; }
+.cs-input { width: 100%; padding: 6px 8px; border: 1px solid #ddd; border-radius: 7px; font-family: inherit; font-size: 12px; color: #1a1a1a; background: #fff; }
+.cs-input.tip { text-align: right; }
+.cs-input:focus { outline: none; border-color: #1a1a1a; }
+.cs-input:disabled { background: #f7f7f5; color: #bbb; }
+.cs-pick { margin-top: 5px; }
+.cs-row .row-btn { margin-top: 3px; }
+.cs-empty { font-size: 12px; color: #aaa; font-style: italic; padding: 10px 0; }
+.cs-actions { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+.cs-status { font-size: 12px; color: #888; }
+.cs-status.dirty { color: #633806; font-weight: 600; }
+.cs-status.err { color: #791F1F; font-weight: 600; }
+.cs-save { padding: 8px 18px; background: #1a1a1a; color: #fff; border: none; border-radius: 8px; font-family: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.cs-save:disabled { background: #ccc; cursor: not-allowed; }
+.cs-open-btn { margin-top: 18px; font-size: 12px; font-weight: 600; padding: 8px 14px; border-radius: 10px; border: 1px dashed #AFA9EC; background: #fff; color: #3C3489; cursor: pointer; font-family: inherit; }
+.cs-open-btn:hover { background: #EEEDFE; }
+@media print {
+  .cs-actions, .cs-open-btn, .cs-pick, .cs-row .row-btn { display: none !important; }
+  .client-section { break-inside: avoid; box-shadow: none; border: 1px solid #ddd; }
+  .cs-input { border: none; padding: 6px 0; }
+}
+@media (max-width: 700px) {
+  .cs-colhead { display: none; }
+  .cs-row { grid-template-columns: 1fr 1fr 28px; }
+  .cs-row .cs-name { grid-column: 1 / -1; }
+}
 </style>
 </head>
 <body>
@@ -389,7 +433,7 @@ header { background: #fff; border-bottom: 1px solid #e8e8e4; padding: 0 32px; di
 var SUPA_URL = 'https://aoazlttdjowhlfcksoyl.supabase.co';
 var POOL_VENUES = ['FMP'];
 
-// Stand categorization for tip-pool math. Each stand falls into ONE of three
+// Stand categorization for tip-pool math. Each stand falls into ONE of these
 // buckets based on its stand_type from the catalog:
 //
 //   'main'       → revenue stands. At pool venues these combine into the
@@ -404,7 +448,13 @@ var POOL_VENUES = ['FMP'];
 //                  own tips, never pooled. Renders in the main grid alongside
 //                  other revenue stands.
 //
-//   'labor'      → support, client, nonevent. Excluded from all pools.
+//   'client'     → Client Staffing Needs (Sep 2026). Our people loaned to a
+//                  client's stand. The client reports each person's tips and
+//                  reimburses us; each person keeps exactly their amount.
+//                  Never pooled, never in any pool headcount, kept out of the
+//                  top-line "Total tips". Renders in its own section.
+//
+//   'labor'      → support, nonevent. Excluded from all pools.
 //                  Their tips (if any) are flagged as "review" because labor
 //                  stands aren't supposed to generate tips. Render in the
 //                  "Labor (not in tip pool)" section below the main grid.
@@ -417,10 +467,15 @@ var POOL_VENUES = ['FMP'];
 // Fallback name-based check kicks in if the stand isn't in the catalog
 // (legacy data referencing a retired stand). The fallback is conservative:
 // known labor names are flagged labor, everything else defaults to 'main'.
-var _LEGACY_LABOR_NAMES = ['Support Staff', 'Client Staffing Needs', 'Non-Event Labor'];
+var CLIENT_STAND = 'Client Staffing Needs';
+var _LEGACY_LABOR_NAMES = ['Support Staff', 'Non-Event Labor'];
 var _LEGACY_HAWKING_NAMES = ['Hawking'];
 function getStandBucket(stand) {
   if (!stand) return 'main';
+  // Client stand is checked by name FIRST. Placements, Event Workspace and
+  // this page all write the exact CLIENT_STAND string, and the catalog row
+  // (stand_type 'client', inactive) was renamed to match on Sep 30, 2026.
+  if (stand === CLIENT_STAND) return 'client';
   // Catalog-driven check (preferred). pcCatalog might not be ready yet
   // during the very first render — fall back to name-based check.
   if (typeof pcCatalog !== 'undefined' && pcCatalog && currentVenue) {
@@ -431,7 +486,8 @@ function getStandBucket(stand) {
         if (t === 'revenue') return 'main';
         if (t === 'mobilecart') return 'mobilecart';
         if (t === 'hawking') return 'hawking';
-        return 'labor'; // support, client, nonevent, or anything unrecognized non-revenue
+        if (t === 'client') return 'client';
+        return 'labor'; // support, nonevent, or anything unrecognized non-revenue
       }
     } catch (e) { /* fall through */ }
   }
@@ -441,7 +497,7 @@ function getStandBucket(stand) {
   return 'main';
 }
 // Backward-compat shim. Some code paths still check "is this labor?" as a
-// binary. Labor is now strictly the support/client/nonevent bucket.
+// binary. Labor is now strictly the support/nonevent bucket.
 function isLaborStand(stand) {
   return getStandBucket(stand) === 'labor';
 }
@@ -476,6 +532,23 @@ var pendingEdits = {};
 var removedRows = {};
 var addingForSaleId = null;
 var addPending = null;
+
+// ── Client-staffed state (Sep 2026) ─────────────────────────────────────────
+// clientPlaced:  live position_assignments on CLIENT_STAND for this event
+//                ({ staff_name, role }). Seeds the section from the plan.
+// clientDraft:   working copy of the section while it's on screen.
+//                { saleId, rows:[...], dirty }. Built lazily from the saved
+//                client sale (if any) plus any placed names not yet saved.
+//                Reset to null on every event load and after every save.
+// clientSectionOpen: true once "+ Add client-staffed tips" is clicked on an
+//                event that has no placements and no saved client sale.
+var clientPlaced = [];
+var clientDraft = null;
+var clientSectionOpen = false;
+var clientAddOpen = false;
+var clientSaving = false;
+var clientError = null;
+var clientRowSeq = 0;
 
 // Load-generation token (Sep 2026). Every entry into loadEventsForVenue() and
 // loadEvent() bumps this and captures the value; after each await the run bails
@@ -669,9 +742,12 @@ pcAuth.require({
 // ── Roster ────────────────────────────────────────────────────────────────────
 async function fetchRoster() {
   try {
-    var res = await fetch(SUPA_URL + '/rest/v1/employees?is_active=eq.true&select=id,first_name,last_name&order=last_name.asc', { headers: apiHeaders() });
+    var res = await fetch(SUPA_URL + '/rest/v1/employees?is_active=eq.true&select=id,first_name,last_name&order=last_name.asc&limit=5000', { headers: apiHeaders() });
     var rows = await res.json();
     if (Array.isArray(rows)) roster = rows;
+    // Client-staffed rows seeded from placements before the roster arrived
+    // can now be matched to an employee. Repaint only if the section is up.
+    if (clientDraft) renderPage();
   } catch(e) {}
 }
 
@@ -811,6 +887,8 @@ async function loadEvent() {
   currentEventName = parts[1] || null;
   editingRowId = null; pendingEdits = {}; addingForSaleId = null; addPending = null;
   barbackModalName = null; barbackModalPending = {};
+  clientDraft = null; clientSectionOpen = false; clientAddOpen = false;
+  clientSaving = false; clientError = null;
   document.getElementById('main-content').innerHTML = '<div class="loading-card">Loading...</div>';
   document.getElementById('summary-strip').style.display = 'none';
   document.getElementById('pool-notice').style.display = 'none';
@@ -825,6 +903,7 @@ async function loadEvent() {
   // and a superseded run leaves the page exactly as it found it.
   var _sales = [], _photos = {}, _assigns = {}, _removed = {}, _reqs = {};
   var _eventId = null, _barbacks = [], _barbackRoles = {}, _coverage = [];
+  var _clientPlaced = [];
   // Dedupe backstops, keyed by primary key. Belt-and-braces: even if a guard is
   // ever missed on a future edit, the same row physically cannot land twice.
   var _seenPhoto = {}, _seenAssign = {};
@@ -958,6 +1037,29 @@ async function loadEvent() {
           if (mySeq !== loadSeq) return;
           if (Array.isArray(covRows)) _coverage = covRows;
         } catch(e) {}
+        // Client-staffed placements (Sep 2026) — people the plan loaned to a
+        // client stand. They seed the client-staffed section below.
+        try {
+          var cpRes = await fetch(
+            SUPA_URL + '/rest/v1/position_assignments?event_id=eq.' + eventId +
+            '&stand=eq.' + encodeURIComponent(CLIENT_STAND) +
+            '&removed_at=is.null&select=staff_name,role&limit=500',
+            { headers: apiHeaders() }
+          );
+          if (mySeq !== loadSeq) return;
+          var cpRows = await cpRes.json();
+          if (mySeq !== loadSeq) return;
+          if (Array.isArray(cpRows)) {
+            var cpSeen = {};
+            cpRows.forEach(function(r) {
+              var k = bbNormName(r.staff_name);
+              if (!k || cpSeen[k]) return;
+              if (r.staff_name === 'JMAC') return; // agency slot, not a person
+              cpSeen[k] = true;
+              _clientPlaced.push({ staff_name: r.staff_name, role: r.role || '' });
+            });
+          }
+        } catch(e) {}
       }
     } catch(e) {}
 
@@ -975,6 +1077,7 @@ async function loadEvent() {
     barbackRoles = _barbackRoles;   // was never reset per-event before; stale
                                     // role chips could carry across events
     coverage = _coverage;
+    clientPlaced = _clientPlaced;
     renderPage();
   } catch(e) {
     if (mySeq !== loadSeq) return;
@@ -1044,19 +1147,33 @@ function renderPage() {
   });
 
   // ── Bucket sales by stand type ────────────────────────────────────────────
-  // Each sale gets sorted into one of four buckets based on its stand's type
-  // in the catalog. This drives all downstream tip-pool math and rendering.
+  // Each sale gets sorted into one bucket based on its stand's type in the
+  // catalog. This drives all downstream tip-pool math and rendering.
   var mainSales = [];        // 'revenue' stands — main building pool (or per-stand at non-pool venues)
   var cartSales = [];        // 'mobilecart' stands — separate Mobile Cart pool at pool venues
   var hawkingSales = [];     // 'hawking' stands — always per-row (never pooled)
-  var laborSales = [];       // 'support'/'client'/'nonevent' — excluded entirely
+  var laborSales = [];       // 'support'/'nonevent' — excluded entirely
+  var clientSales = [];      // 'client' — reimbursed by the client, own section
   salesData.forEach(function(r) {
     var b = getStandBucket(r.stand);
     if (b === 'main') mainSales.push(r);
     else if (b === 'mobilecart') cartSales.push(r);
     else if (b === 'hawking') hawkingSales.push(r);
+    else if (b === 'client') clientSales.push(r);
     else laborSales.push(r);
   });
+  // Primary client sale = earliest submission. The section only ever writes
+  // one; a second would only come from someone logging it by hand elsewhere.
+  var clientSale = null;
+  if (clientSales.length) {
+    clientSales.sort(function(a, b) {
+      var ta = a.submitted_at || '', tb = b.submitted_at || '';
+      if (ta !== tb) return ta < tb ? -1 : 1;
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+    });
+    clientSale = clientSales[0];
+  }
+  var clientStats = clientSummary(clientSale);
 
   // ── Helper: sum tips and staff counts for a bucket ───────────────────────
   function bucketTotals(sales) {
@@ -1115,13 +1232,17 @@ function renderPage() {
   var poolTips = mainTotals.tips;
   var poolStaff = mainTotals.staff;
 
-  // ── Overall totals (all sales — used for the top-line summary cards) ──────
+  // ── Overall totals (our stands only — client sales are excluded) ──────────
+  // Client tips are the client's money passing through to our people; they'd
+  // distort "tips as % of sales" (the client's tips over OUR gross), so they
+  // live in the client-staffed section and never touch this strip.
   var totalSales = 0, totalTips = 0, totalVerified = 0, totalAssigned = 0;
-  salesData.forEach(function(r) {
+  var ourSales = salesData.filter(function(r) { return getStandBucket(r.stand) !== 'client'; });
+  ourSales.forEach(function(r) {
     totalSales += parseFloat(r.amount) || 0;
     totalTips += parseFloat(r.tip_amount) || 0;
   });
-  salesData.forEach(function(r) {
+  ourSales.forEach(function(r) {
     var assigns = (assignmentsData[r.id] || []).filter(function(a) { return !removedRows[a.id]; });
     assigns.forEach(function(a) { if (a.verified) totalVerified++; totalAssigned++; });
   });
@@ -1151,18 +1272,22 @@ function renderPage() {
     });
     if (hawkStaff > 0) staffSubBits.push('+ ' + hawkStaff + ' hawking (own tips)');
   }
+  if (clientStats.people > 0) staffSubBits.push('+ ' + clientStats.people + ' client-staffed (client reimburses)');
   if (laborStaff > 0) staffSubBits.push('+ ' + laborStaff + ' labor (not in pool)');
   staffSubEl.textContent = staffSubBits.join(' · ');
   staffSubEl.className = 's-sub ' + (reqTotal > 0 && poolStaff < reqTotal ? 'amber' : '');
-  // "Stands reported" counts ALL non-labor stands (main + mobilecart + hawking)
-  // since they all generate sales/tips, just into different pools. Labor is
-  // the only bucket excluded from this count.
+  // "Stands reported" counts ALL of OUR non-labor stands (main + mobilecart +
+  // hawking) since they all generate sales/tips, just into different pools.
+  // Labor and the client stand are excluded from this count.
   var distinctReportedStands = {};
   mainSales.forEach(function(r) { distinctReportedStands[r.stand] = true; });
   cartSales.forEach(function(r) { distinctReportedStands[r.stand] = true; });
   hawkingSales.forEach(function(r) { distinctReportedStands[r.stand] = true; });
   var distinctReportedStandsCount = Object.keys(distinctReportedStands).length;
-  var reportableStandTotal = stands.filter(function(s) { return getStandBucket(s) !== 'labor'; }).length;
+  var reportableStandTotal = stands.filter(function(s) {
+    var b = getStandBucket(s);
+    return b !== 'labor' && b !== 'client';
+  }).length;
   document.getElementById('sum-stands').textContent = distinctReportedStandsCount + ' of ' + reportableStandTotal;
   document.getElementById('sum-stands-sub').textContent = (reportableStandTotal - distinctReportedStandsCount) + ' not submitted';
   document.getElementById('sum-verified').textContent = totalVerified + ' of ' + totalAssigned;
@@ -1174,8 +1299,9 @@ function renderPage() {
 
   // ── Pool notice ───────────────────────────────────────────────────────────
   // At pool venues, surface BOTH the main pool rate AND the Mobile Cart pool
-  // rate (when there are cart submissions). Hawking and labor are mentioned
-  // as carve-outs so the manager knows why those people aren't in the count.
+  // rate (when there are cart submissions). Hawking, client-staffed and labor
+  // are mentioned as carve-outs so the manager knows why those people aren't
+  // in the count.
   var poolEl = document.getElementById('pool-notice');
   if (isPool) {
     var lines = [];
@@ -1189,6 +1315,10 @@ function renderPage() {
     if (hawkingSales.length > 0) {
       lines.push('<strong>Hawking:</strong> ' + hawkingSales.length + ' submission' + (hawkingSales.length > 1 ? 's' : '') + ' — each Hawker keeps their own tips, not pooled.');
     }
+    // Client-staffed carve-out line
+    if (clientStats.people > 0) {
+      lines.push('<strong>Client-staffed:</strong> ' + clientStats.people + ' ' + (clientStats.people === 1 ? 'person' : 'people') + ' — each keeps the tips the client reported for them, not pooled.');
+    }
     // Labor carve-out line
     if (laborStaff > 0) {
       lines.push('<strong>Support staff:</strong> ' + laborStaff + ' people — not in any pool.');
@@ -1198,13 +1328,16 @@ function renderPage() {
   } else { poolEl.style.display = 'none'; }
 
   // ── Confirm bar ───────────────────────────────────────────────────────────
-  var unverifiedStands = salesData.filter(function(r) {
+  var unverifiedStands = ourSales.filter(function(r) {
     var assigns = (assignmentsData[r.id] || []).filter(function(a) { return !removedRows[a.id]; });
     return assigns.length > 0 && assigns.some(function(a) { return !a.verified; });
   });
-  // Detect duplicate-stand submissions (any stand with > 1 sale)
+  // Detect duplicate-stand submissions (any of OUR stands with > 1 sale)
   var dupStandsCount = 0;
-  Object.keys(salesByStand).forEach(function(s) { if (salesByStand[s].length > 1) dupStandsCount++; });
+  Object.keys(salesByStand).forEach(function(s) {
+    if (getStandBucket(s) === 'client') return;
+    if (salesByStand[s].length > 1) dupStandsCount++;
+  });
   // Detect labor sales with non-zero tips (the "tips against support staff" flag)
   var flaggedLaborTips = laborSales.filter(function(r) { return (parseFloat(r.tip_amount) || 0) > 0; }).length;
   var confirmBar = document.getElementById('confirm-bar');
@@ -1213,6 +1346,8 @@ function renderPage() {
   if (unverifiedStands.length > 0) alerts.push('<strong>' + unverifiedStands.length + ' stand' + (unverifiedStands.length > 1 ? 's' : '') + '</strong> with unverified names');
   if (dupStandsCount > 0) alerts.push('<strong>' + dupStandsCount + ' stand' + (dupStandsCount > 1 ? 's' : '') + '</strong> with duplicate submissions');
   if (flaggedLaborTips > 0) alerts.push('<strong>' + flaggedLaborTips + '</strong> labor submission' + (flaggedLaborTips > 1 ? 's' : '') + ' with tips entered (review)');
+  if (clientPlaced.length > 0 && !clientSale) alerts.push('<strong>' + clientPlaced.length + ' client-staffed</strong> ' + (clientPlaced.length === 1 ? 'person' : 'people') + ' with no tips entered');
+  if (clientSales.length > 1) alerts.push('<strong>' + clientSales.length + '</strong> client-staffed submissions (only the first is shown — resolve in Sales History)');
   if (alerts.length > 0) {
     confirmBar.style.display = 'flex';
     confirmText.innerHTML = alerts.join(' &middot; ') + ' — review before printing';
@@ -1234,10 +1369,11 @@ function renderPage() {
   //   - 'main' revenue stands: main pool rate (or per-stand at non-pool venues)
   //   - 'mobilecart' stands: cart pool rate (or per-stand at non-pool venues)
   //   - 'hawking' stands: ALWAYS per-stand (isPool=false), never pooled
+  // The client stand and labor stands render in their own sections below.
   var html = '<div class="stands-grid">';
   stands.forEach(function(stand) {
     var bucket = getStandBucket(stand);
-    if (bucket === 'labor') return; // labor renders in separate section below
+    if (bucket === 'labor' || bucket === 'client') return; // own sections below
     var standSales = salesByStand[stand];
     if (!standSales || !standSales.length) {
       var requested = staffingRequested[stand] || 0;
@@ -1269,6 +1405,9 @@ function renderPage() {
   // ── Render Barbacks band (tip-out earners — not in any worker pool) ───────
   html += renderBarbackBand(salesByStand);
 
+  // ── Render client-staffed section (reimbursed by the client) ─────────────
+  html += renderClientSection(clientSale);
+
   // ── Render labor section (Support Staff, etc — not in pool) ──────────────
   if (laborSales.length > 0) {
     // Group labor sales by stand so duplicates surface there too
@@ -1299,6 +1438,7 @@ function renderPage() {
   if (barbackModalName) html += renderBarbackModal(salesByStand);
 
   document.getElementById('main-content').innerHTML = html;
+  updateClientStatus();
 }
 
 // Renders the duplicate-sales warning banner inside a card. Click to expand the list.
@@ -1333,7 +1473,7 @@ function toggleDupBanner(saleId, evt) {
   el.classList.toggle('expanded');
 }
 
-// Renders a labor sale (Support Staff, Client Staffing Needs, Non-Event Labor).
+// Renders a labor sale (Support Staff, Non-Event Labor).
 // Labor sales show names but NO tip share — those people are not in the pool.
 // Tips entered against a labor stand are flagged in red as "review".
 function renderLaborCard(sale, dupes) {
@@ -1753,6 +1893,9 @@ async function confirmAll() {
 }
 
 // ── Autocomplete helper ───────────────────────────────────────────────────────
+// onFree is optional. Pass null to hide the "Save as … not on roster" option —
+// the client-staffed section does this, because those tips must land on a real
+// employee for payroll.
 function showAc(acId, val, onSelect, onFree) {
   var ac = document.getElementById(acId);
   if (!ac) return;
@@ -1765,8 +1908,11 @@ function showAc(acId, val, onSelect, onFree) {
     var name = r.first_name + ' ' + r.last_name;
     html += '<div class="ac-item" onclick="(function(){var f=window[\'' + acId + '_sel\'];if(f)f(\'' + r.id + '\',\'' + name.replace(/'/g,"\\'") + '\');})()"><div>' + name + '</div></div>';
   });
-  if (val.length > 1) {
+  if (onFree && val.length > 1) {
     html += '<div class="ac-free" onclick="(function(){var f=window[\'' + acId + '_free\'];if(f)f(\'' + val.replace(/'/g,"\\'").replace(/"/g,'&quot;') + '\');})()">Save as &ldquo;' + val + '&rdquo; &mdash; not on roster</div>';
+  }
+  if (!matches.length && !onFree) {
+    html += '<div class="ac-item" style="cursor:default;color:#999;">No active employee matches &ldquo;' + bbEscHtml(val) + '&rdquo;</div>';
   }
   window[acId + '_sel'] = onSelect;
   window[acId + '_free'] = onFree;
@@ -1796,6 +1942,398 @@ function renderCartPicker(sale, allAssigns) {
   });
   html += '</div></div>';
   return html;
+}
+
+// ── Client-staffed tips (Sep 2026) ──────────────────────────────────────────
+// Our people loaned to a client's stand. The client emails or texts each
+// person's tip amount; we pay it and the client reimburses us.
+//
+// Storage (Option A): ONE sales row per event on CLIENT_STAND with amount 0
+// and tip_amount = the sum of everyone's tips, plus one sale_staff_assignments
+// row per person carrying:
+//   tip_share          that person's exact amount (never a pool split)
+//   client_stand_label the client stand they worked, free text ("Bar 3")
+//   employee_id        REQUIRED here — the roster lookup has no free-text
+//                      option, so these tips always land on a real employee
+//   worked_cart=false  the soft-remove, same flag every other card uses
+//
+// The sales row is what lets AR's tips auto-fill and the Coverage page see
+// the reimbursement without learning a new table.
+
+function csAttr(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function csRosterName(r) { return ((r.first_name || '') + ' ' + (r.last_name || '')).trim(); }
+function csMatchRoster(name) {
+  var k = bbNormName(name);
+  if (!k) return null;
+  for (var i = 0; i < roster.length; i++) {
+    if (bbNormName(csRosterName(roster[i])) === k) return roster[i];
+  }
+  return null;
+}
+function csPlacedRole(name) {
+  var k = bbNormName(name);
+  for (var i = 0; i < clientPlaced.length; i++) {
+    if (bbNormName(clientPlaced[i].staff_name) === k) return clientPlaced[i].role || '';
+  }
+  return '';
+}
+// '' -> 0 (tips not reported yet is a legitimate state). Garbage -> null.
+function csParseTip(v) {
+  var s = String(v == null ? '' : v).replace(/[$,\s]/g, '');
+  if (s === '') return 0;
+  var n = parseFloat(s);
+  if (isNaN(n) || n < 0 || !/^\d*\.?\d*$/.test(s)) return null;
+  return Math.round(n * 100) / 100;
+}
+function csRow(key) {
+  if (!clientDraft) return null;
+  for (var i = 0; i < clientDraft.rows.length; i++) {
+    if (clientDraft.rows[i].key === key) return clientDraft.rows[i];
+  }
+  return null;
+}
+
+// Headcount + tips for the summary strip and pool notice. Uses the saved rows
+// once they exist; before that, the plan's placements.
+function clientSummary(sale) {
+  if (sale) {
+    var people = (assignmentsData[sale.id] || []).filter(function(a) { return a.worked_cart !== false; }).length;
+    return { people: people, tips: parseFloat(sale.tip_amount) || 0 };
+  }
+  return { people: clientPlaced.length, tips: 0 };
+}
+
+// Build the working copy: every saved row, then any placed name that has no
+// saved row yet (flagged "not saved"). A placed person who was removed and
+// saved stays removed — their worked_cart=false row is what stops the re-seed.
+function buildClientDraft(sale) {
+  var rows = [];
+  var seen = {};
+  if (sale) {
+    (assignmentsData[sale.id] || []).forEach(function(a) {
+      var k = bbNormName(a.raw_name_text);
+      if (k) seen[k] = true;
+      rows.push({
+        key: 's-' + a.id,
+        id: a.id,
+        name: a.raw_name_text || '',
+        employee_id: a.employee_id || null,
+        label: a.client_stand_label || '',
+        tip: a.tip_share != null ? String(a.tip_share) : '',
+        removed: a.worked_cart === false,
+        manual: !!a.manual,
+        role: csPlacedRole(a.raw_name_text),
+        fresh: false,
+        newManual: false
+      });
+    });
+  }
+  clientPlaced.forEach(function(p) {
+    var k = bbNormName(p.staff_name);
+    if (!k || seen[k]) return;
+    seen[k] = true;
+    var m = csMatchRoster(p.staff_name);
+    rows.push({
+      key: 'p-' + (++clientRowSeq),
+      id: null,
+      name: m ? csRosterName(m) : p.staff_name,
+      employee_id: m ? m.id : null,
+      label: '',
+      tip: '',
+      removed: false,
+      manual: false,
+      role: p.role || '',
+      fresh: true,
+      newManual: false
+    });
+  });
+  clientDraft = {
+    saleId: sale ? sale.id : null,
+    rows: rows,
+    dirty: rows.some(function(r) { return r.fresh; })
+  };
+}
+
+// The roster arrives on its own fetch and can land after the draft is built.
+// Re-try the match on every render for anyone still unmatched.
+function csResolveUnmatched() {
+  if (!clientDraft) return;
+  clientDraft.rows.forEach(function(r) {
+    if (r.employee_id || r.removed) return;
+    var m = csMatchRoster(r.name);
+    if (m) { r.employee_id = m.id; r.name = csRosterName(m); }
+  });
+}
+
+function renderClientSection(sale) {
+  var hasAnything = sale || clientPlaced.length > 0 || clientSectionOpen || clientDraft;
+  if (!hasAnything) {
+    return '<button class="cs-open-btn" onclick="openClientSection()">+ Add client-staffed tips</button>';
+  }
+  if (!clientDraft) buildClientDraft(sale);
+  csResolveUnmatched();
+
+  var html = '<div class="client-section">';
+  html += '<div class="cs-head"><div class="cs-title">&#129309; Client-staffed &mdash; tips reimbursed by the client</div>';
+  html += '<div class="cs-total" id="cs-total">$0.00</div></div>';
+  html += '<div class="cs-sub">Our people working a client&rsquo;s stand. Enter the tip amount the client reported for each person. They keep exactly that amount &mdash; it isn&rsquo;t pooled, and they don&rsquo;t count in any pool. Names come from the Client Staffing Needs placements on the plan; add anyone the client took day-of below.</div>';
+
+  var rows = clientDraft.rows;
+  if (!rows.length) {
+    html += '<div class="cs-empty">No one listed yet. Add the people the client took.</div>';
+  } else {
+    html += '<div class="cs-colhead"><div>Employee</div><div>Worked at</div><div style="text-align:right;">Tips</div><div></div></div>';
+    rows.forEach(function(r) {
+      var dis = r.removed ? ' disabled' : '';
+      html += '<div class="cs-row' + (r.removed ? ' removed' : '') + '">';
+      html += '<div><div class="cs-name">' + bbEscHtml(r.name || 'Unnamed');
+      if (r.role) html += '<span class="cs-chip role">' + bbEscHtml(r.role) + '</span>';
+      if (!r.removed && !r.employee_id) html += '<span class="cs-chip unmatched">not matched</span>';
+      if (!r.removed && r.fresh) html += '<span class="cs-chip fresh">not saved</span>';
+      html += '</div>';
+      if (!r.removed && !r.employee_id) {
+        html += '<div class="cs-pick"><input class="cs-input" id="cs-pick-' + r.key + '" placeholder="Pick the employee from the roster&hellip;" autocomplete="off" oninput="onClientPickInput(\'' + r.key + '\', this.value)">';
+        html += '<div class="ac-list" id="cs-pac-' + r.key + '" style="display:none;"></div></div>';
+      }
+      html += '</div>';
+      html += '<div><input class="cs-input" placeholder="e.g. Bar 3" value="' + csAttr(r.label) + '" oninput="onClientField(\'' + r.key + '\', \'label\', this.value)"' + dis + '></div>';
+      html += '<div><input class="cs-input tip" inputmode="decimal" placeholder="$0.00" value="' + csAttr(r.tip) + '" oninput="onClientField(\'' + r.key + '\', \'tip\', this.value)"' + dis + '></div>';
+      if (r.removed) {
+        html += '<div><button class="row-btn undo" onclick="toggleClientRow(\'' + r.key + '\')" title="Put back">&#8635;</button></div>';
+      } else {
+        html += '<div><button class="row-btn danger" onclick="toggleClientRow(\'' + r.key + '\')" title="Didn&rsquo;t work for the client">&#215;</button></div>';
+      }
+      html += '</div>';
+    });
+  }
+
+  if (clientAddOpen) {
+    html += '<div class="edit-panel">';
+    html += '<div class="ep-label">Search the roster &mdash; client-staffed tips must go to an active employee</div>';
+    html += '<input class="ep-input" id="cs-add-input" placeholder="Start typing a name&hellip;" oninput="onClientAddInput(this.value)" autocomplete="off">';
+    html += '<div class="ac-list" id="cs-add-ac" style="display:none;"></div>';
+    html += '<div class="ep-actions"><button class="ep-cancel" onclick="cancelClientAdd()">Cancel</button></div>';
+    html += '</div>';
+  } else {
+    html += '<div class="add-row" onclick="openClientAdd()"><div class="add-icon">+</div>Add someone the client took</div>';
+  }
+
+  html += '<div class="cs-actions"><div class="cs-status" id="cs-status"></div>';
+  html += '<button class="cs-save" id="cs-save" onclick="saveClientTips()">Save client-staffed tips</button></div>';
+  html += '</div>';
+  return html;
+}
+
+// Paints the total, status line and Save button WITHOUT a full re-render, so
+// typing into a tip or label field never loses focus.
+function updateClientStatus() {
+  if (!clientDraft) return;
+  var totalEl = document.getElementById('cs-total');
+  var statusEl = document.getElementById('cs-status');
+  var saveBtn = document.getElementById('cs-save');
+  var total = 0, badTip = false, unmatched = 0;
+  clientDraft.rows.forEach(function(r) {
+    if (r.removed) return;
+    var t = csParseTip(r.tip);
+    if (t === null) badTip = true; else total += t;
+    if (!r.employee_id) unmatched++;
+  });
+  if (totalEl) totalEl.textContent = fmtD(total);
+  var msg, cls = 'cs-status';
+  if (clientSaving) { msg = 'Saving&hellip;'; }
+  else if (clientError) { msg = bbEscHtml(clientError); cls += ' err'; }
+  else if (unmatched) { msg = unmatched + ' name' + (unmatched === 1 ? '' : 's') + ' still need an employee picked'; cls += ' err'; }
+  else if (badTip) { msg = 'Tip amounts must be dollar amounts, like 42.50'; cls += ' err'; }
+  else if (clientDraft.dirty) { msg = 'Unsaved changes'; cls += ' dirty'; }
+  else { msg = clientDraft.saleId ? 'Saved' : 'Nothing entered yet'; }
+  if (statusEl) { statusEl.innerHTML = msg; statusEl.className = cls; }
+  if (saveBtn) saveBtn.disabled = clientSaving || !clientDraft.dirty || unmatched > 0 || badTip;
+}
+
+function openClientSection() {
+  clientSectionOpen = true;
+  renderPage();
+}
+
+function onClientField(key, field, val) {
+  var r = csRow(key);
+  if (!r) return;
+  r[field] = val;
+  clientDraft.dirty = true;
+  clientError = null;
+  updateClientStatus();
+}
+
+function toggleClientRow(key) {
+  var r = csRow(key);
+  if (!r) return;
+  if (r.newManual && !r.id) {
+    // Added this session and never saved — just drop it.
+    clientDraft.rows = clientDraft.rows.filter(function(x) { return x.key !== key; });
+  } else {
+    r.removed = !r.removed;
+  }
+  clientDraft.dirty = true;
+  clientError = null;
+  renderPage();
+}
+
+function onClientPickInput(key, val) {
+  showAc('cs-pac-' + key, val, function(empId, empName) {
+    var r = csRow(key);
+    if (!r) return;
+    r.employee_id = empId;
+    r.name = empName;
+    clientDraft.dirty = true;
+    clientError = null;
+    renderPage();
+  }, null);
+}
+
+function openClientAdd() {
+  clientAddOpen = true;
+  renderPage();
+  setTimeout(function() { var inp = document.getElementById('cs-add-input'); if (inp) inp.focus(); }, 30);
+}
+
+function cancelClientAdd() {
+  clientAddOpen = false;
+  renderPage();
+}
+
+function onClientAddInput(val) {
+  showAc('cs-add-ac', val, function(empId, empName) { addClientPerson(empId, empName); }, null);
+}
+
+function addClientPerson(empId, empName) {
+  if (!clientDraft) return;
+  var dup = null;
+  clientDraft.rows.forEach(function(r) { if (r.employee_id === empId) dup = r; });
+  if (dup) {
+    if (dup.removed) dup.removed = false;   // re-adding someone struck earlier
+    clientDraft.dirty = true;
+    clientAddOpen = false;
+    renderPage();
+    return;
+  }
+  clientDraft.rows.push({
+    key: 'm-' + (++clientRowSeq),
+    id: null,
+    name: empName,
+    employee_id: empId,
+    label: '',
+    tip: '',
+    removed: false,
+    manual: true,
+    role: '',
+    fresh: true,
+    newManual: true
+  });
+  clientDraft.dirty = true;
+  clientAddOpen = false;
+  clientError = null;
+  renderPage();
+}
+
+// One authenticated write. Throws on any non-2xx so a failure is visible,
+// never silent. Returns parsed rows when asked for a representation.
+async function csWrite(url, method, body, prefer) {
+  var h = Object.assign({}, apiHeaders());
+  h['Content-Type'] = 'application/json';
+  h['Prefer'] = prefer || 'return=minimal';
+  var res = await fetch(url, { method: method, headers: h, body: JSON.stringify(body) });
+  if (!res.ok) {
+    var t = '';
+    try { t = await res.text(); } catch (e) {}
+    if (res.status === 401 || t.indexOf('JWT expired') !== -1) throw new Error('your session expired — reload the page and try again');
+    throw new Error(t || ('HTTP ' + res.status));
+  }
+  if ((prefer || '').indexOf('representation') !== -1) return res.json();
+  return null;
+}
+
+async function saveClientTips() {
+  if (!clientDraft || clientSaving) return;
+  csResolveUnmatched();
+
+  var active = clientDraft.rows.filter(function(r) { return !r.removed; });
+  var unmatched = active.filter(function(r) { return !r.employee_id; });
+  if (unmatched.length) { clientError = 'Pick the employee for every name before saving.'; updateClientStatus(); return; }
+  var seenEmp = {}, dupName = null;
+  active.forEach(function(r) { if (seenEmp[r.employee_id]) dupName = r.name; seenEmp[r.employee_id] = true; });
+  if (dupName) { clientError = dupName + ' is listed twice. Remove one before saving.'; updateClientStatus(); return; }
+  var total = 0, bad = false;
+  active.forEach(function(r) { var t = csParseTip(r.tip); if (t === null) bad = true; else total += t; });
+  if (bad) { clientError = 'Tip amounts must be dollar amounts, like 42.50.'; updateClientStatus(); return; }
+  total = Math.round(total * 100) / 100;
+
+  var user = pcAuth.getUser ? pcAuth.getUser() : null;
+  var who = (user && (user.display_name || user.email)) || null;
+  var now = new Date().toISOString();
+
+  clientSaving = true; clientError = null; updateClientStatus();
+  try {
+    // 1. The sales row — create it on first save, keep its totals current after.
+    if (!clientDraft.saleId) {
+      var created = await csWrite(SUPA_URL + '/rest/v1/sales', 'POST', {
+        event_date: currentEventDate,
+        event_name: currentEventName,
+        venue: currentVenue,
+        stand: CLIENT_STAND,
+        amount: 0,
+        tip_amount: total,
+        staff_count: active.length,
+        submitted_by: who
+      }, 'return=representation');
+      if (!Array.isArray(created) || !created[0] || !created[0].id) throw new Error('the sales row was not created');
+      clientDraft.saleId = created[0].id;
+    } else {
+      await csWrite(SUPA_URL + '/rest/v1/sales?id=eq.' + encodeURIComponent(clientDraft.saleId), 'PATCH', {
+        tip_amount: total,
+        staff_count: active.length
+      }, 'return=minimal');
+    }
+
+    // 2. One row per person. New rows capture their id immediately, so a
+    //    retry after a partial failure PATCHes instead of inserting twice.
+    for (var i = 0; i < clientDraft.rows.length; i++) {
+      var r = clientDraft.rows[i];
+      if (!r.id && r.newManual && r.removed) continue;
+      var tip = csParseTip(r.tip);
+      var body = {
+        raw_name_text: r.name,
+        employee_id: r.employee_id || null,
+        tip_share: tip === null ? 0 : tip,
+        client_stand_label: (r.label || '').trim() || null,
+        worked_cart: !r.removed,
+        manual: !!r.manual,
+        verified: true,
+        verified_by: who,
+        verified_at: now
+      };
+      if (r.id) {
+        await csWrite(SUPA_URL + '/rest/v1/sale_staff_assignments?id=eq.' + encodeURIComponent(r.id), 'PATCH', body, 'return=minimal');
+      } else {
+        body.sale_id = clientDraft.saleId;
+        body.confidence = 'high';
+        var ins = await csWrite(SUPA_URL + '/rest/v1/sale_staff_assignments', 'POST', body, 'return=representation');
+        if (!Array.isArray(ins) || !ins[0] || !ins[0].id) throw new Error('a name row was not saved');
+        r.id = ins[0].id;
+        r.fresh = false;
+      }
+    }
+
+    clientSaving = false;
+    scheduleRatingRecompute();
+    await loadEvent();   // repaint from the database, not from local state
+  } catch (e) {
+    clientSaving = false;
+    clientError = 'Not saved: ' + (e && e.message ? e.message : 'unknown error') + '. Nothing was lost — press Save to try again.';
+    updateClientStatus();
+  }
 }
 
 // ── Barback band + coverage modal ───────────────────────────────────────────
@@ -1886,8 +2424,13 @@ function renderBarbackBand(salesByStand) {
 function renderBarbackModal(salesByStand) {
   var name = barbackModalName;
   var covMap = coverageByStand();
-  // Eligible = non-labor stands that actually reported a sale (can't pull from tips that don't exist)
-  var eligible = Object.keys(salesByStand).filter(function(s) { return getStandBucket(s) !== 'labor'; });
+  // Eligible = our non-labor stands that actually reported a sale (can't pull
+  // from tips that don't exist). The client stand is never eligible — those
+  // tips belong to the client-staffed person, not to any tip-out.
+  var eligible = Object.keys(salesByStand).filter(function(s) {
+    var b = getStandBucket(s);
+    return b !== 'labor' && b !== 'client';
+  });
   var catalogOrder = VENUE_STANDS[currentVenue] || [];
   var orderIndex = {}; catalogOrder.forEach(function(s, i) { orderIndex[s] = i; });
   eligible.sort(function(a, b) {
