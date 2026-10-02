@@ -1643,7 +1643,8 @@ async function uploadPhoto(file, path) {
   var r = await fetch(SUPA_URL + '/storage/v1/object/purchase-receipts/' + path, {
     method: 'POST', headers: {'Authorization': hdrs['Authorization'], 'Content-Type': file.type}, body: file
   });
-  return r.ok ? SUPA_URL + '/storage/v1/object/public/purchase-receipts/' + path : null;
+  if (!r.ok) { console.error('[purchases] photo upload failed', r.status, await r.text()); return null; }
+  return SUPA_URL + '/storage/v1/object/public/purchase-receipts/' + path;
 }
 
 // ── Duplicate invoice detection ──
@@ -3139,7 +3140,13 @@ function openEdit(id) {
   document.getElementById('edit-modal').classList.add('open');
 }
 
-function handleEditFile(input) { if (input.files && input.files[0]) { editPhotoFile = input.files[0]; document.getElementById('edit-photo-label').textContent = 'New: ' + editPhotoFile.name; editPhotoClear = false; } }
+function handleEditFile(input) {
+  if (!input.files || !input.files[0]) return;
+  if (isBlockedFile(input.files[0])) { alert('HEIC not supported -- use JPG or PNG.'); input.value = ''; return; }
+  editPhotoFile = input.files[0];
+  document.getElementById('edit-photo-label').textContent = 'New: ' + editPhotoFile.name;
+  editPhotoClear = false;
+}
 function clearEditPhoto() { editPhotoClear = true; editPhotoFile = null; document.getElementById('edit-photo-label').textContent = 'Will be removed on save'; document.getElementById('edit-photo-clear').style.display = 'none'; }
 function closeEditModal() { document.getElementById('edit-modal').classList.remove('open'); }
 
@@ -3157,7 +3164,15 @@ async function saveEdit() {
 
   var photoUrl = original ? (original.photo_url || null) : null;
   if (editPhotoClear) photoUrl = null;
-  if (editPhotoFile) photoUrl = await uploadPhoto(editPhotoFile, id + '.' + editPhotoFile.name.split('.').pop());
+  if (editPhotoFile) {
+    var newUrl = await uploadPhoto(editPhotoFile, id + '-e' + Date.now() + '.' + editPhotoFile.name.split('.').pop());
+    if (!newUrl) {
+      errEl.textContent = 'File upload failed -- nothing was saved. Try again.';
+      errEl.style.display = 'block';
+      return;
+    }
+    photoUrl = newUrl;
+  }
 
   try {
     var hdrs = apiHeaders();
