@@ -82,6 +82,7 @@
       { label: 'Bank review',                    href: '/bank-review/',            slug: 'bank-review' },
       { label: 'Bank accounts',                  href: '/bank-accounts/',          slug: 'bank-accounts' },
       { label: 'P&L overview',                   href: '/pl-overview/',            slug: 'pl-overview' },
+      { label: 'Business overview',              href: '/business-overview/',      slug: 'business-overview' },
       { label: 'Sales by item',                  href: '/sales-by-item/',          slug: 'sales-by-item' },
       { label: 'Luciano payments',               href: '/luciano-payments/',       slug: 'luciano-payments' }
     ],
